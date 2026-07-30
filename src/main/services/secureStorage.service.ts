@@ -6,6 +6,21 @@ import MainDatabaseService from './mainDatabase.service';
 const execFileAsync = promisify(execFile);
 const MAC_KEYCHAIN_DELETE_LIMIT = 10_000;
 
+const isMacKeychainItemNotFound = (error: unknown): boolean => {
+  if (!(error instanceof Error)) return false;
+  const commandError = error as Error & {
+    code?: number | string;
+    stderr?: string;
+  };
+  return (
+    commandError.code === 44 ||
+    commandError.code === '44' ||
+    commandError.stderr?.includes(
+      'The specified item could not be found in the keychain',
+    ) === true
+  );
+};
+
 // AI Provider types for secure storage
 export type AIProviderType =
   | 'openai'
@@ -99,27 +114,12 @@ class SecureStorageService {
           this.serviceName,
         ]);
       } catch (error) {
-        if (this.isMacKeychainItemNotFound(error)) return;
+        if (isMacKeychainItemNotFound(error)) return;
         throw new Error('Failed to delete secure credential accounts');
       }
     }
 
     throw new Error('Failed to verify secure credential account removal');
-  }
-
-  private isMacKeychainItemNotFound(error: unknown): boolean {
-    if (!(error instanceof Error)) return false;
-    const commandError = error as Error & {
-      code?: number | string;
-      stderr?: string;
-    };
-    return (
-      commandError.code === 44 ||
-      commandError.code === '44' ||
-      commandError.stderr?.includes(
-        'The specified item could not be found in the keychain',
-      ) === true
-    );
   }
 
   async getEnvironments(): Promise<string[]> {
