@@ -199,6 +199,69 @@ describe('SecondBrainRefreshService', () => {
     expect(stateAfter).toBe(stateBefore);
   });
 
+  it('preserves trusted replace metadata and sorts grounded sources by stable ID', async () => {
+    const existing = await secondBrain.writePage({
+      pageId: durableOperation.pageId,
+      content: `---
+type: Project Knowledge
+verified: { by: human:nuri, at: 2026-07-14T11:00:00Z }
+usage_window: { from: 2026-07-01, to: 2026-07-15 }
+---
+
+# Revenue validation
+
+Existing guidance.
+`,
+      actor: 'user',
+    });
+    const earlierRow = {
+      ...sessionRow,
+      stableId: '10',
+      conversationId: 6,
+    };
+    const replaceOperation: SecondBrainRefreshOperation = {
+      ...durableOperation,
+      type: 'replace',
+      expectedHash: existing.hash,
+      provenanceIds: [
+        `conversation:${sessionRow.conversationId}:message:${sessionRow.stableId}`,
+        `conversation:${earlierRow.conversationId}:message:${earlierRow.stableId}`,
+      ],
+    };
+    const refresh = new SecondBrainRefreshService(secondBrain, {
+      ...emptyAdditionalSources,
+      generateOperations: jest.fn(async () => [replaceOperation]),
+      collectSessions: jest.fn(async () => [sessionRow, earlierRow]) as any,
+      collectAnalytics: jest.fn(async () => []) as any,
+      loadProjects: jest.fn(async () => []),
+    });
+
+    const result = await refresh.refresh({});
+    const page = await secondBrain.readPage(durableOperation.pageId);
+
+    expect(result).toMatchObject({
+      status: 'completed',
+      operationsApplied: 1,
+    });
+    expect(page.frontmatter.verified).toEqual([
+      { by: 'human:nuri', at: '2026-07-14T11:00:00Z' },
+    ]);
+    expect(page.frontmatter.usage_window).toEqual({
+      from: '2026-07-01',
+      to: '2026-07-15',
+    });
+    expect(page.frontmatter.sources).toEqual([
+      {
+        id: expect.stringMatching(/^source-[a-f0-9]{12}$/u),
+        resource: 'session://6/summary',
+      },
+      {
+        id: expect.stringMatching(/^source-[a-f0-9]{12}$/u),
+        resource: 'session://7/summary',
+      },
+    ]);
+  });
+
   it('does not advance source state or write pages during a dry run', async () => {
     const refresh = new SecondBrainRefreshService(secondBrain, {
       ...emptyAdditionalSources,

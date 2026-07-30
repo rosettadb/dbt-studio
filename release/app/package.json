@@ -19,6 +19,7 @@
     "@duckdb/node-api": "^1.5.2-r.1",
     "better-sqlite3": "^12.2.0",
     "drizzle-orm": "^0.44.4",
+    "fs-extra": "^11.4.0",
     "keytar": "^7.9.0"
   }
 }

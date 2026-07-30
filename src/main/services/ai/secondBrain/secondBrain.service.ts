@@ -668,6 +668,25 @@ export default class SecondBrainService {
           pageId,
         });
       }
+      if (input.actor === 'refresh') {
+        const nextFrontmatter = parseSecondBrainDocument(content).frontmatter;
+        const currentFrontmatter = previousContent
+          ? parseSecondBrainDocument(previousContent.toString('utf8'))
+              .frontmatter
+          : {};
+        const changedPreservedMetadata = ['verified', 'usage_window'].some(
+          (field) =>
+            JSON.stringify(nextFrontmatter[field]) !==
+            JSON.stringify(currentFrontmatter[field]),
+        );
+        if (changedPreservedMetadata) {
+          throw new SecondBrainError(
+            'INVALID_FRONTMATTER',
+            'Refresh changes cannot add or modify verification or usage-window metadata.',
+            { pageId },
+          );
+        }
+      }
       if (input.actor === 'agent') {
         const nextFrontmatter = parseSecondBrainDocument(content).frontmatter;
         const currentFrontmatter = previousContent
@@ -955,12 +974,11 @@ export default class SecondBrainService {
     if (
       actor === 'refresh' &&
       (!isRecord(frontmatter.generated) ||
-        frontmatter.generated.by !== 'process:rosetta-agent-memory-refresh' ||
-        frontmatter.verified !== undefined)
+        frontmatter.generated.by !== 'process:rosetta-agent-memory-refresh')
     ) {
       throw new SecondBrainError(
         'INVALID_FRONTMATTER',
-        'Refresh concepts require backend-grounded generation metadata and cannot claim verification.',
+        'Refresh concepts require backend-grounded generation metadata.',
         { pageId },
       );
     }

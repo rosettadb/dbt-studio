@@ -28,6 +28,7 @@ import {
 } from './secondBrainSecrets';
 import { SecondBrainError, SecondBrainState } from './secondBrain.types';
 import { SECOND_BRAIN_ENTRY_PAGE } from './secondBrainPolicy';
+import type { SecondBrainFrontmatter } from '../../../../types/backend';
 
 const SOURCE_ITEM_LIMIT = 100;
 const SOURCE_ITEM_CHAR_LIMIT = 8_000;
@@ -316,6 +317,7 @@ const evidenceResource = (item: SecondBrainEvidenceItem): string => {
 const groundRefreshContent = (
   operation: SecondBrainRefreshOperation,
   evidenceByProvenance: Map<string, SecondBrainEvidenceItem>,
+  existingFrontmatter?: SecondBrainFrontmatter,
 ): string => {
   const parsed = parseSecondBrainDocument(operation.content);
   const frontmatter = { ...parsed.frontmatter };
@@ -323,9 +325,16 @@ const groundRefreshContent = (
   delete frontmatter.generated;
   delete frontmatter.verified;
   delete frontmatter.usage_window;
+  if (existingFrontmatter?.verified !== undefined) {
+    frontmatter.verified = existingFrontmatter.verified;
+  }
+  if (existingFrontmatter?.usage_window !== undefined) {
+    frontmatter.usage_window = existingFrontmatter.usage_window;
+  }
   frontmatter.sources = [...new Set(operation.provenanceIds)]
     .map((provenanceId) => evidenceByProvenance.get(provenanceId))
     .filter((item): item is SecondBrainEvidenceItem => Boolean(item))
+    .sort((left, right) => left.stableId.localeCompare(right.stableId))
     .map((item) => ({
       id: `source-${hashValue(item.provenance).slice(0, 12)}`,
       resource: evidenceResource(item),
@@ -1516,6 +1525,7 @@ export default class SecondBrainRefreshService {
         });
         continue;
       }
+      let existingFrontmatter: SecondBrainFrontmatter | undefined;
       if (operation.type === 'replace') {
         if (!exists || !operation.expectedHash) {
           warnRefresh('operation-rejected', {
@@ -1534,9 +1544,14 @@ export default class SecondBrainRefreshService {
           });
           continue;
         }
+        existingFrontmatter = page.frontmatter;
       }
       seenPages.add(pageId);
-      const content = groundRefreshContent(operation, evidenceByProvenance);
+      const content = groundRefreshContent(
+        operation,
+        evidenceByProvenance,
+        existingFrontmatter,
+      );
       try {
         SecondBrainService.assertValidOkfConcept(pageId, content, 'refresh');
       } catch (error) {
