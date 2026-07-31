@@ -170,7 +170,7 @@ const Settings: React.FC = () => {
             height: '100%',
           }}
         >
-          <Box>
+          <Box sx={{ flex: 1, minHeight: 0, overflowX: 'hidden', overflowY: 'auto' }}>
             <Box
               sx={{
                 display: 'flex',
