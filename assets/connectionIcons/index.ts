@@ -13,6 +13,7 @@ import mssql from './mssql.png';
 import kinetica from './kinetica.png';
 import googlecloud from './googlecloud.png';
 import azureBlob from './azure_blob.png';
+import fabricspark from './fabricspark.svg';
 import s3Bucket from './s3_bucktet.png';
 import minio from './minio.png';
 import cloudflareR2 from './cloudflare_r2.png';
@@ -78,6 +79,7 @@ const obj: { images: Image } = {
     mssql,
     kinetica,
     googlecloud,
+    fabricspark,
   },
 };
 

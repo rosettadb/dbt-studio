@@ -13,9 +13,11 @@ import type {
   BigQueryTestResponse,
   ConnectionModel,
   QueryResponseType,
+  ExecuteConnectionQueryRequest,
 } from '../../types/backend';
 import type {
   ConfigureConnectionBody,
+  TestConnectionBody,
   UpdateConnectionBody,
 } from '../../types/ipc';
 import { QUERY_KEYS } from '../config/constants';
@@ -140,12 +142,12 @@ export const useTestConnection = (
   customOptions?: UseMutationOptions<
     boolean | BigQueryTestResponse,
     CustomError,
-    ConnectionInput
+    TestConnectionBody
   >,
 ): UseMutationResult<
   boolean | BigQueryTestResponse,
   CustomError,
-  ConnectionInput
+  TestConnectionBody
 > => {
   const { onSuccess: onCustomSuccess, onError: onCustomError } =
     customOptions || {};
@@ -153,9 +155,9 @@ export const useTestConnection = (
   return useMutation<
     boolean | BigQueryTestResponse,
     CustomError,
-    ConnectionInput
+    TestConnectionBody
   >({
-    mutationFn: async (data: ConnectionInput) => {
+    mutationFn: async (data: TestConnectionBody) => {
       return connectorsServices.testConnection(data);
     },
     onSuccess: onCustomSuccess,
@@ -214,12 +216,12 @@ export const useExecuteConnectionQuery = (
   customOptions?: UseMutationOptions<
     QueryResponseType,
     CustomError,
-    { connectionId: string; query: string; queryId?: string }
+    ExecuteConnectionQueryRequest
   >,
 ): UseMutationResult<
   QueryResponseType,
   CustomError,
-  { connectionId: string; query: string; queryId?: string }
+  ExecuteConnectionQueryRequest
 > => {
   const { onSuccess: onCustomSuccess, onError: onCustomError } =
     customOptions || {};

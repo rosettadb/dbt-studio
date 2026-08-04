@@ -10,6 +10,13 @@ import fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
 import { ConnectionInput } from '../../types/backend';
+import { buildFabricProfileOutput } from '../../shared/connections/fabricConnection';
+
+const assertNever = (_value: never, context: string): never => {
+  throw new Error(
+    `UNSUPPORTED_CONNECTION_TYPE: ${context} received an unsupported connection type.`,
+  );
+};
 
 /**
  * Extracts the database name from a file path (filename without extension)
@@ -38,6 +45,8 @@ export class PartialUpdateError extends Error {
  */
 function generateProfileOutputFields(
   connection: ConnectionInput,
+  connectionId?: string,
+  profileCredentials?: Record<string, string | undefined>,
 ): Record<string, any> {
   const envVar = (field: string) =>
     `{{ env_var("db-${field}-${connection.name}") }}`;
@@ -119,9 +128,24 @@ function generateProfileOutputFields(
         schema: 'main',
       };
 
+    case 'kinetica':
+      throw new Error(
+        'CONNECTION_FEATURE_NOT_IMPLEMENTED: Kinetica partial profile generation is not implemented.',
+      );
+
+    case 'fabricspark':
+      if (!connectionId) {
+        throw new Error(
+          'Microsoft Fabric partial profile update requires a connection ID',
+        );
+      }
+      return buildFabricProfileOutput(
+        connection,
+        profileCredentials?.clientSecret,
+      );
+
     default:
-      // @ts-ignore
-      throw new Error(`Unsupported connection type: ${connection.type}`);
+      return assertNever(connection, 'partial profile generation');
   }
 }
 
@@ -158,9 +182,19 @@ function generateJdbcUrl(
     case 'ducklake':
       return `jdbc:duckdb:`; // In-memory DuckDB
 
+    case 'kinetica': {
+      throw new Error(
+        'CONNECTION_FEATURE_NOT_IMPLEMENTED: Kinetica partial Rosetta JDBC generation is not implemented.',
+      );
+    }
+
+    case 'fabricspark':
+      throw new Error(
+        'Microsoft Fabric Lakehouse does not have a Rosetta JDBC URL',
+      );
+
     default:
-      // @ts-ignore
-      throw new Error(`Unsupported connection type: ${connection.type}`);
+      return assertNever(connection, 'partial JDBC URL generation');
   }
 }
 
@@ -176,6 +210,8 @@ export async function updateProfilesYml(
   projectPath: string,
   projectName: string,
   connection: ConnectionInput,
+  connectionId?: string,
+  profileCredentials?: Record<string, string | undefined>,
 ): Promise<void> {
   const profilesPath = path.join(projectPath, 'profiles.yml');
 
@@ -217,13 +253,33 @@ export async function updateProfilesYml(
     }
 
     // Get new connection fields
-    const newFields = generateProfileOutputFields(connection);
+    const newFields = generateProfileOutputFields(
+      connection,
+      connectionId,
+      profileCredentials,
+    );
 
     // Merge new fields into existing dev output, preserving custom fields
     profiles[projectName].outputs.dev = {
       ...profiles[projectName].outputs.dev, // Keep existing custom fields
       ...newFields, // Override with new connection fields
     };
+
+    if (connection.type === 'fabricspark') {
+      const managedFabricFields = [
+        'client_id',
+        'tenant_id',
+        'client_secret',
+        'workspace_name',
+        'environmentId',
+        'high_concurrency',
+      ];
+      managedFabricFields.forEach((field) => {
+        if (!(field in newFields)) {
+          delete profiles[projectName].outputs.dev[field];
+        }
+      });
+    }
 
     // Write back to file
     const updatedContent = yaml.dump(profiles, {
@@ -259,7 +315,7 @@ export async function updateMainConf(
   projectName: string,
   connection: ConnectionInput,
 ): Promise<void> {
-  if (connection.type === 'ducklake') {
+  if (connection.type === 'ducklake' || connection.type === 'fabricspark') {
     return;
   }
   const mainConfPath = path.join(projectPath, 'rosetta', 'main.conf');
@@ -367,6 +423,8 @@ export async function updateProjectConfigFiles(
   projectPath: string,
   projectName: string,
   connection: ConnectionInput,
+  connectionId?: string,
+  profileCredentials?: Record<string, string | undefined>,
 ): Promise<{ success: boolean; errors: string[] }> {
   if (connection.type === 'ducklake') {
     return { success: true, errors: [] };
@@ -375,7 +433,13 @@ export async function updateProjectConfigFiles(
 
   // Update profiles.yml
   try {
-    await updateProfilesYml(projectPath, projectName, connection);
+    await updateProfilesYml(
+      projectPath,
+      projectName,
+      connection,
+      connectionId,
+      profileCredentials,
+    );
   } catch (error) {
     if (error instanceof PartialUpdateError) {
       errors.push(`profiles.yml: ${error.message}`);
@@ -387,15 +451,17 @@ export async function updateProjectConfigFiles(
   }
 
   // Update main.conf
-  try {
-    await updateMainConf(projectPath, projectName, connection);
-  } catch (error) {
-    if (error instanceof PartialUpdateError) {
-      errors.push(`main.conf: ${error.message}`);
-    } else {
-      errors.push(
-        `main.conf: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
+  if (connection.type !== 'fabricspark') {
+    try {
+      await updateMainConf(projectPath, projectName, connection);
+    } catch (error) {
+      if (error instanceof PartialUpdateError) {
+        errors.push(`main.conf: ${error.message}`);
+      } else {
+        errors.push(
+          `main.conf: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        );
+      }
     }
   }
 

@@ -87,6 +87,7 @@ class SecureStorageService {
       `db-dataset-${connectionId}`,
       `db-httppath-${connectionId}`,
       `db-catalog-${connectionId}`,
+      `db-fabricspark-client-secret-${connectionId}`,
     ];
 
     await Promise.all(

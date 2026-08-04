@@ -1,4 +1,4 @@
-/* eslint-disable no-case-declarations, @typescript-eslint/no-shadow, no-restricted-syntax, no-await-in-loop */
+/* eslint-disable no-case-declarations, @typescript-eslint/no-shadow, no-restricted-syntax, no-await-in-loop, no-continue */
 import yaml from 'js-yaml';
 import path from 'path';
 import fs from 'fs';
@@ -15,18 +15,26 @@ import {
   DuckDBConnection,
   DuckLakeConnectionConfig,
   ExecuteStatementType,
+  ExecuteConnectionQueryRequest,
+  FabricSparkConnection,
   KineticaConnection,
   PostgresConnection,
   Project,
   QueryResponseType,
+  QueryProgressStage,
   RedshiftConnection,
   RosettaConnection,
   SnowflakeConnection,
+  Table,
 } from '../../types/backend';
 import { loadDatabaseFile, updateDatabase } from '../utils/fileHelper';
 import { ProjectsService } from './index';
 import MainDatabaseService from './mainDatabase.service';
-import { ConfigureConnectionBody, UpdateConnectionBody } from '../../types/ipc';
+import {
+  ConfigureConnectionBody,
+  TestConnectionBody,
+  UpdateConnectionBody,
+} from '../../types/ipc';
 import {
   executeBigQueryQuery,
   executeDatabricksQuery,
@@ -48,11 +56,219 @@ import { CloudConnection, RecentItem } from '../../types/frontend';
 import { updateProjectConfigFiles } from '../utils/yamlPartialUpdate';
 import DuckLakeService from './duckLake.service';
 import DuckLakeInstanceStore from './duckLake/instanceStore.service';
+import {
+  buildFabricProfileOutput,
+  FABRIC_API_ENDPOINT,
+} from '../../shared/connections/fabricConnection';
+import FabricRuntime from './fabric/fabricRuntime';
+import { DbtCoreVersionService } from './dbtCoreVersion.service';
+
+const FABRIC_ROSETTA_README = `Microsoft Fabric Lakehouse projects use dbt-fabricspark through the Fabric
+Livy API. Use profiles.yml and DBT Studio's dbt commands for this project.
+
+Rosetta CLI configuration is intentionally not generated. See
+ROSETTA_CLI_UNSUPPORTED.txt for the current limitation.
+`;
+
+const FABRIC_ROSETTA_UNSUPPORTED = `Rosetta CLI does not currently support Microsoft Fabric Lakehouse
+(dbt-fabricspark/Livy).
+
+DBT Studio has not generated rosetta/main.conf because there is no supported
+Rosetta JDBC connection for this target. Rosetta run, extraction, and
+translation are unavailable for this connection. Standard dbt Core v1 commands
+remain supported through dbt-fabricspark. SQL Editor, SQL Notebook, and schema
+operations use DBT Studio's native Microsoft Fabric runtime.
+`;
+
+const assertNever = (_value: never, context: string): never => {
+  throw new Error(
+    `UNSUPPORTED_CONNECTION_TYPE: ${context} received an unsupported connection type.`,
+  );
+};
 
 export default class ConnectorsService {
   private static readonly bigQueryKeyFiles = new Map<string, string>();
 
   private static isBigQueryCleanupRegistered = false;
+
+  private static safeOperationError(error: unknown): string {
+    const message =
+      error instanceof Error ? error.message : 'Connection operation failed';
+    return message
+      .replace(/\[[0-9;]*m/g, '')
+      .replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer [REDACTED]')
+      .replace(/client_secret\s*[=:]\s*[^\s,;]+/gi, 'client_secret=[REDACTED]')
+      .replace(/\/(?:Users|home)\/[^\s:'"]+/g, '[LOCAL_PATH]')
+      .slice(0, 2_000);
+  }
+
+  static async validateConnectionResult(
+    connection: ConnectionInput,
+  ): Promise<{ valid: boolean; error?: string }> {
+    try {
+      await this.validateConnection(connection);
+      return { valid: true };
+    } catch (error) {
+      return { valid: false, error: this.safeOperationError(error) };
+    }
+  }
+
+  static async executeSelectStatementResult(
+    body: ExecuteStatementType,
+  ): Promise<QueryResponseType> {
+    try {
+      return await this.executeSelectStatement(body);
+    } catch (error) {
+      return { success: false, error: this.safeOperationError(error) };
+    }
+  }
+
+  static async extractSchemaFromConnectionResult(
+    connectionId: string,
+    forceRefresh = false,
+  ): Promise<{ tables: Table[]; error?: string }> {
+    try {
+      return await this.extractSchemaFromConnection(connectionId, forceRefresh);
+    } catch (error) {
+      return { tables: [], error: this.safeOperationError(error) };
+    }
+  }
+
+  private static fabricFeatureNotImplemented(feature: string): never {
+    throw new Error(
+      `CONNECTION_FEATURE_NOT_IMPLEMENTED: Microsoft Fabric Lakehouse ${feature} is not implemented yet.`,
+    );
+  }
+
+  private static fabricClientSecretAccount(connectionId: string): string {
+    return `db-fabricspark-client-secret-${connectionId}`;
+  }
+
+  private static async hasFabricClientSecret(
+    connectionId: string,
+  ): Promise<boolean> {
+    return !!(await SecureStorageService.getCredential(
+      this.fabricClientSecretAccount(connectionId),
+    ));
+  }
+
+  private static async getFabricRuntimeAuth(
+    connectionId: string,
+    connection: FabricSparkConnection,
+    suppliedClientSecret?: string,
+  ): Promise<{ clientSecret?: string }> {
+    if (connection.authentication === 'CLI') return {};
+    const clientSecret =
+      suppliedClientSecret ??
+      (await SecureStorageService.getCredential(
+        this.fabricClientSecretAccount(connectionId),
+      )) ??
+      undefined;
+    if (!clientSecret) {
+      throw new Error(
+        'Microsoft Fabric service principal secret is missing. Edit the connection and replace the secret.',
+      );
+    }
+    return { clientSecret };
+  }
+
+  private static getWriteOnlyCredential(
+    credentials: Record<string, string | undefined> | undefined,
+    key: string,
+  ): string | undefined {
+    const value = credentials?.[key]?.trim();
+    return value || undefined;
+  }
+
+  private static isReadOnlyQuery(query: string): boolean {
+    const withoutComments = query
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .replace(/--[^\r\n]*/g, ' ')
+      .trim()
+      .replace(/;+\s*$/, '');
+    if (!withoutComments || withoutComments.includes(';')) return false;
+    const upper = withoutComments.toUpperCase();
+    if (!/^(SELECT|WITH|SHOW|DESCRIBE|DESC|EXPLAIN)\b/.test(upper)) {
+      return false;
+    }
+    return !/\b(INSERT|UPDATE|DELETE|MERGE|CREATE|ALTER|DROP|TRUNCATE|REPLACE|GRANT|REVOKE|CALL|COPY)\b/.test(
+      upper,
+    );
+  }
+
+  private static hasMultipleSqlStatements(query: string): boolean {
+    let state: 'normal' | 'single' | 'double' | 'backtick' | 'line' | 'block' =
+      'normal';
+    let statementHasContent = false;
+    let statementCount = 0;
+    for (let index = 0; index < query.length; index += 1) {
+      const character = query[index];
+      const next = query[index + 1];
+      if (state === 'line') {
+        if (character === '\n' || character === '\r') state = 'normal';
+        continue;
+      }
+      if (state === 'block') {
+        if (character === '*' && next === '/') {
+          state = 'normal';
+          index += 1;
+        }
+        continue;
+      }
+      if (state !== 'normal') {
+        const quote = { single: "'", double: '"', backtick: '`' }[state];
+        if (character === quote) {
+          if (next === quote) index += 1;
+          else state = 'normal';
+        }
+        continue;
+      }
+      if (character === '-' && next === '-') {
+        state = 'line';
+        index += 1;
+      } else if (character === '/' && next === '*') {
+        state = 'block';
+        index += 1;
+      } else if (character === "'") {
+        state = 'single';
+        statementHasContent = true;
+      } else if (character === '"') {
+        state = 'double';
+        statementHasContent = true;
+      } else if (character === '`') {
+        state = 'backtick';
+        statementHasContent = true;
+      } else if (character === ';') {
+        if (statementHasContent) statementCount += 1;
+        statementHasContent = false;
+      } else if (!/\s/.test(character)) {
+        statementHasContent = true;
+      }
+      if (statementCount > 1) return true;
+    }
+    if (statementHasContent) statementCount += 1;
+    return statementCount > 1;
+  }
+
+  private static async writeFabricRosettaNotices(
+    projectPath: string,
+  ): Promise<void> {
+    const rosettaDir = path.join(projectPath, 'rosetta');
+    await fs.promises.mkdir(rosettaDir, { recursive: true });
+    await fs.promises.rm(path.join(rosettaDir, 'main.conf'), { force: true });
+    await Promise.all([
+      fs.promises.writeFile(
+        path.join(rosettaDir, 'README.txt'),
+        FABRIC_ROSETTA_README,
+        'utf8',
+      ),
+      fs.promises.writeFile(
+        path.join(rosettaDir, 'ROSETTA_CLI_UNSUPPORTED.txt'),
+        FABRIC_ROSETTA_UNSUPPORTED,
+        'utf8',
+      ),
+    ]);
+  }
 
   private static registerBigQueryCleanup(): void {
     if (this.isBigQueryCleanupRegistered) return;
@@ -272,8 +488,30 @@ export default class ConnectorsService {
             (conn2 as KineticaConnection).bypassSslCertCheck
         );
 
+      case 'fabricspark': {
+        const fabric1 = conn1 as FabricSparkConnection;
+        const fabric2 = conn2 as FabricSparkConnection;
+        return (
+          fabric1.endpoint === fabric2.endpoint &&
+          fabric1.workspaceId === fabric2.workspaceId &&
+          fabric1.lakehouseId === fabric2.lakehouseId &&
+          fabric1.lakehouse === fabric2.lakehouse &&
+          fabric1.schemaMode === fabric2.schemaMode &&
+          fabric1.schema === fabric2.schema &&
+          fabric1.authentication === fabric2.authentication &&
+          fabric1.clientId === fabric2.clientId &&
+          fabric1.tenantId === fabric2.tenantId &&
+          fabric1.hasClientSecret === fabric2.hasClientSecret &&
+          fabric1.threads === fabric2.threads &&
+          fabric1.environmentId === fabric2.environmentId &&
+          fabric1.reuseSession === fabric2.reuseSession &&
+          fabric1.highConcurrency === fabric2.highConcurrency &&
+          fabric1.workspaceName === fabric2.workspaceName
+        );
+      }
+
       default:
-        return false;
+        return assertNever(conn1, 'connection comparison');
     }
   }
 
@@ -313,6 +551,14 @@ export default class ConnectorsService {
       case 'kinetica':
         baseName = connection.database || 'kinetica';
         break;
+      case 'ducklake':
+        baseName = 'DBT Connection';
+        break;
+      case 'fabricspark':
+        baseName = connection.lakehouse || connection.name;
+        break;
+      default:
+        return assertNever(connection, 'connection name generation');
     }
 
     return `${baseName}_${timestamp}`;
@@ -351,7 +597,10 @@ export default class ConnectorsService {
     return connectionId;
   }
 
-  static async saveNewConnection(connection: ConnectionInput): Promise<string> {
+  static async saveNewConnection(
+    connection: ConnectionInput,
+    writeOnlyCredentials?: Record<string, string | undefined>,
+  ): Promise<string> {
     const connections = await this.loadConnections(true); // Include all connections including ducklake
 
     // Validate connection name
@@ -365,6 +614,15 @@ export default class ConnectorsService {
     }
 
     const connectionId = uuidV4();
+    const fabricClientSecret = this.getWriteOnlyCredential(
+      writeOnlyCredentials,
+      'clientSecret',
+    );
+
+    await this.validateConnection(connection, {
+      fabricClientSecret,
+      connectionId,
+    });
 
     // For ducklake connections, store S3 credentials securely
     if (connection.type === 'ducklake') {
@@ -398,14 +656,37 @@ export default class ConnectorsService {
       }
     }
 
+    const persistedConnection: ConnectionInput =
+      connection.type === 'fabricspark'
+        ? {
+            ...connection,
+            hasClientSecret:
+              connection.authentication === 'SPN' && !!fabricClientSecret,
+          }
+        : connection;
     const newConnection: ConnectionModel = {
       id: connectionId,
-      connection,
+      connection: persistedConnection,
     };
-    await updateDatabase<'connections'>('connections', [
-      ...connections,
-      newConnection,
-    ]);
+    if (connection.type === 'fabricspark' && fabricClientSecret) {
+      await SecureStorageService.setCredential(
+        this.fabricClientSecretAccount(connectionId),
+        fabricClientSecret,
+      );
+    }
+    try {
+      await updateDatabase<'connections'>('connections', [
+        ...connections,
+        newConnection,
+      ]);
+    } catch (error) {
+      if (connection.type === 'fabricspark' && fabricClientSecret) {
+        await SecureStorageService.deleteCredential(
+          this.fabricClientSecretAccount(connectionId),
+        );
+      }
+      throw error;
+    }
     return connectionId;
   }
 
@@ -479,18 +760,30 @@ export default class ConnectorsService {
       }
     }
 
-    const rosettaConnection = await this.mapToRosettaConnection(
+    const rosettaConnection =
+      connection.connection.type === 'fabricspark'
+        ? undefined
+        : await this.mapToRosettaConnection(connection.connection, project);
+    const dbtConnection = this.mapToDbtConnection(
       connection.connection,
-      project,
+      connection.id,
     );
-    const dbtConnection = this.mapToDbtConnection(connection.connection);
 
     const profilesPath = path.join(project.path, 'profiles.yml');
     const profilesContent = await this.generateProfilesYml(
       project.name,
       connection.connection,
+      connection.id,
     );
     await fs.promises.writeFile(profilesPath, profilesContent, 'utf8');
+
+    if (connection.connection.type === 'fabricspark') {
+      await this.writeFabricRosettaNotices(project.path);
+      return {
+        ...project,
+        dbtConnection,
+      };
+    }
 
     // Ensure rosetta directory exists before writing main.conf
     const rosettaDir = path.join(project.path, 'rosetta');
@@ -505,7 +798,7 @@ export default class ConnectorsService {
     return {
       ...project,
       rosettaConnection: {
-        ...rosettaConnection,
+        ...rosettaConnection!,
         name: project.name,
       },
       dbtConnection,
@@ -519,6 +812,7 @@ export default class ConnectorsService {
     projectId,
     connection: conn,
     connectionId: connId,
+    writeOnlyCredentials,
   }: ConfigureConnectionBody): Promise<string> {
     const projects = await ProjectsService.loadProjects();
     const projectIndex = projects.findIndex((p) => p.id === projectId);
@@ -527,16 +821,24 @@ export default class ConnectorsService {
     let connectionId = connId;
     const connection =
       conn ?? connections?.find((c) => c.id === connectionId)?.connection;
+    const fabricClientSecret = this.getWriteOnlyCredential(
+      writeOnlyCredentials,
+      'clientSecret',
+    );
 
     if (!connection) {
       throw new Error('Connection not found!');
     }
 
-    await this.validateConnection(connection);
+    await this.validateConnection(connection, {
+      fabricClientSecret,
+      connectionId,
+    });
 
     if (!connectionId) {
       // Allow reserved name "DBT Connection" for Getting Started template
       const isTemplateConnection =
+        connection.type !== 'fabricspark' &&
         connection.name.toLowerCase().trim() === 'dbt connection';
       if (isTemplateConnection) {
         // Check if a connection with the reserved name already exists
@@ -557,10 +859,13 @@ export default class ConnectorsService {
             // Configs don't match - create new connection with unique name
             // Generate a unique name based on the database details
             const uniqueName = this.generateUniqueConnectionName(connection);
-            connectionId = await this.saveNewConnection({
-              ...connection,
-              name: uniqueName,
-            });
+            connectionId = await this.saveNewConnection(
+              {
+                ...connection,
+                name: uniqueName,
+              },
+              writeOnlyCredentials,
+            );
           }
         } else {
           // Create new connection if none exists
@@ -570,7 +875,10 @@ export default class ConnectorsService {
           );
         }
       } else {
-        connectionId = await this.saveNewConnection(connection);
+        connectionId = await this.saveNewConnection(
+          connection,
+          writeOnlyCredentials,
+        );
       }
     }
 
@@ -596,10 +904,13 @@ export default class ConnectorsService {
    */
   static async updateConnection({
     connection,
+    writeOnlyCredentials,
   }: UpdateConnectionBody): Promise<void> {
-    await this.validateConnection(connection.connection);
-
     const connections = await this.loadConnections(true); // Include all connections including ducklake
+    const fabricClientSecret = this.getWriteOnlyCredential(
+      writeOnlyCredentials,
+      'clientSecret',
+    );
 
     // Validate connection name (exclude current connection from uniqueness check)
     const nameValidation = this.validateConnectionName(
@@ -620,8 +931,57 @@ export default class ConnectorsService {
       throw new Error('Connection not found');
     }
 
-    connections[connectionIndex] = connection;
-    await updateDatabase<'connections'>('connections', connections);
+    await this.validateConnection(connection.connection, {
+      fabricClientSecret,
+      connectionId: connection.id,
+    });
+
+    const existingConnection = connections[connectionIndex];
+    const previousFabricSecret =
+      existingConnection.connection.type === 'fabricspark'
+        ? await SecureStorageService.getCredential(
+            this.fabricClientSecretAccount(connection.id),
+          )
+        : null;
+    const shouldReplaceFabricSecret =
+      connection.connection.type === 'fabricspark' && !!fabricClientSecret;
+    const persistedConnection: ConnectionModel =
+      connection.connection.type === 'fabricspark'
+        ? {
+            ...connection,
+            connection: {
+              ...connection.connection,
+              hasClientSecret:
+                connection.connection.authentication === 'SPN' &&
+                (!!fabricClientSecret || !!previousFabricSecret),
+            },
+          }
+        : connection;
+
+    if (shouldReplaceFabricSecret) {
+      await SecureStorageService.setCredential(
+        this.fabricClientSecretAccount(connection.id),
+        fabricClientSecret!,
+      );
+    }
+    connections[connectionIndex] = persistedConnection;
+    try {
+      await updateDatabase<'connections'>('connections', connections);
+    } catch (error) {
+      if (shouldReplaceFabricSecret) {
+        if (previousFabricSecret) {
+          await SecureStorageService.setCredential(
+            this.fabricClientSecretAccount(connection.id),
+            previousFabricSecret,
+          );
+        } else {
+          await SecureStorageService.deleteCredential(
+            this.fabricClientSecretAccount(connection.id),
+          );
+        }
+      }
+      throw error;
+    }
 
     // Find all projects using this connection and update their config files
     const projects = await ProjectsService.loadProjects();
@@ -637,7 +997,14 @@ export default class ConnectorsService {
         const result = await updateProjectConfigFiles(
           project.path,
           project.name,
-          connection.connection,
+          persistedConnection.connection,
+          connection.id,
+          persistedConnection.connection.type === 'fabricspark'
+            ? {
+                clientSecret:
+                  fabricClientSecret ?? previousFabricSecret ?? undefined,
+              }
+            : undefined,
         );
 
         if (!result.success) {
@@ -654,6 +1021,22 @@ export default class ConnectorsService {
           ],
         });
       }
+    }
+
+    if (
+      persistedConnection.connection.type === 'fabricspark' &&
+      persistedConnection.connection.authentication === 'CLI'
+    ) {
+      await SecureStorageService.deleteCredential(
+        this.fabricClientSecretAccount(connection.id),
+      );
+    }
+
+    if (persistedConnection.connection.type === 'fabricspark') {
+      await FabricRuntime.disposeConnection(
+        connection.id,
+        persistedConnection.connection,
+      );
     }
 
     // If there were any errors updating config files, throw an error with details
@@ -686,6 +1069,13 @@ export default class ConnectorsService {
     }
 
     const connectionToDelete = connections[connectionIndex];
+
+    if (connectionToDelete.connection.type === 'fabricspark') {
+      await FabricRuntime.disposeConnection(
+        connectionToDelete.id,
+        connectionToDelete.connection,
+      );
+    }
 
     // Check if any projects are using this connection
     const projects = await ProjectsService.loadProjects();
@@ -739,9 +1129,14 @@ export default class ConnectorsService {
    * Test a connection configuration
    */
   static async testConnection(
-    connection: ConnectionInput,
+    body: TestConnectionBody,
   ): Promise<boolean | BigQueryTestResponse> {
-    await this.validateConnection(connection);
+    const connection = 'connection' in body ? body.connection : body;
+    const fabricClientSecret =
+      'connection' in body
+        ? this.getWriteOnlyCredential(body.writeOnlyCredentials, 'clientSecret')
+        : undefined;
+    await this.validateConnection(connection, { fabricClientSecret });
     switch (connection.type) {
       case 'postgres':
         return testPostgresConnection(connection);
@@ -774,20 +1169,86 @@ export default class ConnectorsService {
         return testRedshiftConnection(connection);
       case 'kinetica':
         return testKineticaConnection(connection);
-      default:
-        throw new Error(
-          `Unsupported connection type: ${(connection as any).type}`,
+      case 'fabricspark': {
+        const testConnectionId = `fabric-test-${uuidV4()}`;
+        const auth = await this.getFabricRuntimeAuth(
+          testConnectionId,
+          connection,
+          fabricClientSecret,
         );
+        const temporaryRoot = await fs.promises.mkdtemp(
+          path.join(os.tmpdir(), 'dbt-studio-fabric-debug-'),
+        );
+        try {
+          const profileName = 'dbt_studio_fabric_test';
+          const profileOutput = {
+            ...buildFabricProfileOutput(connection, auth.clientSecret),
+            reuse_session: false,
+            high_concurrency: false,
+            session_id_file: 'target/fabricspark-test-session-id',
+          };
+          await fs.promises.mkdir(path.join(temporaryRoot, 'models'), {
+            recursive: true,
+          });
+          await fs.promises.mkdir(path.join(temporaryRoot, 'target'), {
+            recursive: true,
+          });
+          const projectPath = path.join(temporaryRoot, 'dbt_project.yml');
+          const profilesPath = path.join(temporaryRoot, 'profiles.yml');
+          await fs.promises.writeFile(
+            projectPath,
+            yaml.dump({
+              name: profileName,
+              version: '1.0.0',
+              'config-version': 2,
+              profile: profileName,
+              'model-paths': ['models'],
+            }),
+            { encoding: 'utf8', mode: 0o600 },
+          );
+          await fs.promises.writeFile(
+            profilesPath,
+            yaml.dump({
+              [profileName]: {
+                target: 'dev',
+                outputs: { dev: profileOutput },
+              },
+            }),
+            { encoding: 'utf8', mode: 0o600 },
+          );
+          const debug = await DbtCoreVersionService.runManagedDbtDebug({
+            projectDir: temporaryRoot,
+            profilesDir: temporaryRoot,
+            env: process.env,
+          });
+          if (!debug.ok) {
+            throw new Error(debug.error ?? 'Managed dbt debug failed.');
+          }
+          return await FabricRuntime.testConnection(
+            testConnectionId,
+            connection,
+            auth,
+          );
+        } finally {
+          await FabricRuntime.disposeConnection(testConnectionId, connection);
+          await fs.promises.rm(temporaryRoot, {
+            recursive: true,
+            force: true,
+          });
+        }
+      }
+      default:
+        return assertNever(connection, 'connection testing');
     }
   }
 
-  private static runningQueries = new Map<string, () => void>();
+  private static runningQueries = new Map<string, () => Promise<void> | void>();
 
   static async cancelQuery(queryId: string): Promise<void> {
     const cancelFn = this.runningQueries.get(queryId);
     if (cancelFn) {
       // Execute the cancellation function (closes connection/client)
-      cancelFn();
+      await cancelFn();
       this.runningQueries.delete(queryId);
     }
   }
@@ -795,12 +1256,18 @@ export default class ConnectorsService {
   /**
    * Run a select statement and expect the results and fields
    */
-  static async executeSelectStatement({
-    connection,
-    query,
-    projectName,
-    queryId,
-  }: ExecuteStatementType): Promise<QueryResponseType> {
+  static async executeSelectStatement(
+    {
+      connection,
+      connectionId,
+      query,
+      projectName,
+      queryId,
+      rowLimit,
+      rowOffset,
+    }: ExecuteStatementType,
+    onProgress?: (stage: QueryProgressStage, message: string) => void,
+  ): Promise<QueryResponseType> {
     const storeUser = await SecureStorageService.getCredential(
       `db-user-${projectName}`,
     );
@@ -835,7 +1302,7 @@ export default class ConnectorsService {
 
     // Helper to register cancel callback if queryId is present
     const registerCancel = queryId
-      ? (fn: () => void) => {
+      ? (fn: () => Promise<void> | void) => {
           this.runningQueries.set(queryId, fn);
         }
       : undefined;
@@ -894,10 +1361,37 @@ export default class ConnectorsService {
             registerCancel,
           );
           break;
-        default:
-          throw new Error(
-            `Unsupported connection type: ${(connection as any).type}`,
+        case 'fabricspark': {
+          if (this.hasMultipleSqlStatements(query)) {
+            throw new Error(
+              'Microsoft Fabric currently supports one Spark SQL statement per execution.',
+            );
+          }
+          const resolvedId =
+            connectionId ??
+            (await this.findConnectionByName(connection.name))?.id;
+          if (!resolvedId) {
+            throw new Error(
+              'Microsoft Fabric query execution requires a saved connection.',
+            );
+          }
+          const auth = await this.getFabricRuntimeAuth(resolvedId, connection);
+          response = await FabricRuntime.executeSparkSql(
+            resolvedId,
+            connection,
+            auth,
+            query,
+            {
+              rowLimit,
+              offset: rowOffset,
+              registerCancel,
+              onProgress,
+            },
           );
+          break;
+        }
+        default:
+          return assertNever(connection, 'direct query execution');
       }
     } finally {
       // Clean up running query registry
@@ -1007,7 +1501,10 @@ export default class ConnectorsService {
     return yaml.dump(yamlData);
   }
 
-  static async validateConnection(conn: ConnectionInput): Promise<void> {
+  static async validateConnection(
+    conn: ConnectionInput,
+    options?: { fabricClientSecret?: string; connectionId?: string },
+  ): Promise<void> {
     if (!conn.type) {
       throw new Error('Connection type is required');
     }
@@ -1043,8 +1540,75 @@ export default class ConnectorsService {
         if (!conn.host) throw new Error('Host is required');
         if (!conn.port) throw new Error('Port is required');
         break;
+      case 'fabricspark': {
+        const uuidPattern =
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!conn.name?.trim()) throw new Error('Connection name is required');
+        if (conn.endpoint !== FABRIC_API_ENDPOINT) {
+          throw new Error('Unsupported Microsoft Fabric API endpoint');
+        }
+        if (!uuidPattern.test(conn.workspaceId)) {
+          throw new Error('Fabric workspace ID must be a valid UUID');
+        }
+        if (!uuidPattern.test(conn.lakehouseId)) {
+          throw new Error('Fabric Lakehouse ID must be a valid UUID');
+        }
+        if (!conn.lakehouse?.trim()) {
+          throw new Error('Fabric Lakehouse name is required');
+        }
+        if (!conn.schema?.trim()) throw new Error('Schema is required');
+        if (!['schema-enabled', 'non-schema'].includes(conn.schemaMode)) {
+          throw new Error('Unsupported Microsoft Fabric Lakehouse schema mode');
+        }
+        if (!['CLI', 'SPN'].includes(conn.authentication)) {
+          throw new Error('Unsupported Microsoft Fabric authentication method');
+        }
+        if (
+          conn.schemaMode === 'non-schema' &&
+          conn.schema !== conn.lakehouse
+        ) {
+          throw new Error(
+            'For a non-schema Lakehouse, schema must equal the Lakehouse name',
+          );
+        }
+        if (
+          conn.schemaMode === 'schema-enabled' &&
+          conn.schema === conn.lakehouse
+        ) {
+          throw new Error(
+            'For a schema-enabled Lakehouse, schema must differ from the Lakehouse name',
+          );
+        }
+        if (
+          !Number.isInteger(conn.threads) ||
+          conn.threads < 1 ||
+          conn.threads > 32
+        ) {
+          throw new Error('Threads must be an integer between 1 and 32');
+        }
+        if (conn.highConcurrency) {
+          throw new Error(
+            'Microsoft Fabric high-concurrency sessions are not enabled in this release.',
+          );
+        }
+        if (conn.authentication === 'SPN') {
+          if (!conn.clientId || !uuidPattern.test(conn.clientId)) {
+            throw new Error('Service principal client ID must be a valid UUID');
+          }
+          if (!conn.tenantId || !uuidPattern.test(conn.tenantId)) {
+            throw new Error('Service principal tenant ID must be a valid UUID');
+          }
+          const hasStoredSecret = options?.connectionId
+            ? await this.hasFabricClientSecret(options.connectionId)
+            : false;
+          if (!options?.fabricClientSecret && !hasStoredSecret) {
+            throw new Error('Service principal client secret is required');
+          }
+        }
+        break;
+      }
       default:
-        throw new Error('Unsupported connection type!');
+        assertNever(conn, 'connection validation');
     }
   }
 
@@ -1108,8 +1672,10 @@ export default class ConnectorsService {
         }
         return kineticaUrl;
       }
+      case 'fabricspark':
+        return this.fabricFeatureNotImplemented('Rosetta JDBC URL generation');
       default:
-        throw new Error('Unsupported connection type!');
+        return assertNever(conn, 'JDBC URL generation');
     }
   }
 
@@ -1117,6 +1683,9 @@ export default class ConnectorsService {
     connection: ConnectionInput,
     project: Project,
   ): Promise<RosettaConnection> {
+    if (connection.type === 'fabricspark') {
+      return this.fabricFeatureNotImplemented('Rosetta connection mapping');
+    }
     const rosettaJdbcUrl = await this.generateJdbcUrl(connection);
 
     return {
@@ -1144,7 +1713,10 @@ export default class ConnectorsService {
     };
   }
 
-  private static mapToDbtConnection(conn: ConnectionInput): DBTConnection {
+  private static mapToDbtConnection(
+    conn: ConnectionInput,
+    connectionId?: string,
+  ): DBTConnection {
     switch (conn.type) {
       case 'snowflake':
         return {
@@ -1232,23 +1804,50 @@ export default class ConnectorsService {
           useSSL: conn.useSSL,
           bypassSslCertCheck: conn.bypassSslCertCheck,
         };
+      case 'fabricspark': {
+        if (!connectionId) {
+          throw new Error(
+            'Microsoft Fabric profile mapping requires a connection ID',
+          );
+        }
+        return {
+          type: 'fabricspark',
+          method: 'livy',
+          endpoint: FABRIC_API_ENDPOINT,
+          workspaceid: conn.workspaceId,
+          lakehouseid: conn.lakehouseId,
+          lakehouse: conn.lakehouse,
+          schema: conn.schema,
+          authentication: conn.authentication,
+          ...(conn.authentication === 'SPN'
+            ? {
+                client_id: conn.clientId,
+                tenant_id: conn.tenantId,
+              }
+            : {}),
+          threads: conn.threads,
+          environmentId: conn.environmentId,
+          reuse_session: conn.reuseSession,
+          session_id_file: 'target/fabricspark-session-id',
+          high_concurrency: conn.highConcurrency,
+          workspace_name: conn.workspaceName,
+        };
+      }
       default:
-        // Use type assertion to access the type property for error message
-        throw new Error(
-          `Unsupported connection type: ${(conn as ConnectionInput).type}`,
-        );
+        return assertNever(conn, 'dbt connection mapping');
     }
   }
 
   private static async mapToDbtProfiles(
     name: string,
     conn: ConnectionInput,
+    connectionId?: string,
   ): Promise<string> {
     const profileConfig = {
       [name]: {
         target: 'dev',
         outputs: {
-          dev: await this.mapToDbtProfileOutput(conn),
+          dev: await this.mapToDbtProfileOutput(conn, connectionId),
         },
       },
     };
@@ -1259,12 +1858,14 @@ export default class ConnectorsService {
   static async generateProfilesYml(
     name: string,
     connection: ConnectionInput,
+    connectionId?: string,
   ): Promise<string> {
-    return this.mapToDbtProfiles(name, connection);
+    return this.mapToDbtProfiles(name, connection, connectionId);
   }
 
   private static async mapToDbtProfileOutput(
     conn: ConnectionInput,
+    connectionId?: string,
   ): Promise<any> {
     const envVar = (field: string) =>
       `{{ env_var("db-${field}-${conn.name}") }}`;
@@ -1412,8 +2013,18 @@ export default class ConnectorsService {
           ...(conn.timeout && { timeout: conn.timeout }),
           ...(conn.useSSL && { ssl: conn.useSSL }),
         };
+      case 'fabricspark':
+        if (!connectionId) {
+          throw new Error(
+            'Microsoft Fabric profile generation requires a connection ID',
+          );
+        }
+        return buildFabricProfileOutput(
+          conn,
+          (await this.getFabricRuntimeAuth(connectionId, conn)).clientSecret,
+        );
       default:
-        throw new Error('Unsupported connection type!');
+        return assertNever(conn, 'dbt profile generation');
     }
   }
 
@@ -1477,6 +2088,14 @@ export default class ConnectorsService {
       const devOutput = profile?.outputs?.dev;
 
       if (!devOutput || !devOutput.type) return null;
+
+      const resolveProfileValue = (value: unknown): string => {
+        if (typeof value !== 'string') return '';
+        const envMatch = value.match(
+          /\{\{\s*env_var\(["']([^"']+)["']\)\s*(?:\|[^}]*)?\}\}/,
+        );
+        return envMatch ? (process.env[envMatch[1]] ?? '') : value;
+      };
 
       // Map different DBT connection types
       switch (devOutput.type) {
@@ -1554,6 +2173,35 @@ export default class ConnectorsService {
             database: absolutePath,
             schema: devOutput.schema || 'main',
           };
+
+        case 'fabricspark': {
+          const authentication =
+            String(devOutput.authentication).toUpperCase() === 'SPN'
+              ? 'SPN'
+              : 'CLI';
+          return {
+            type: 'fabricspark',
+            method: 'livy',
+            endpoint: devOutput.endpoint || FABRIC_API_ENDPOINT,
+            workspaceid: resolveProfileValue(devOutput.workspaceid),
+            lakehouseid: resolveProfileValue(devOutput.lakehouseid),
+            lakehouse: resolveProfileValue(devOutput.lakehouse),
+            schema: resolveProfileValue(devOutput.schema),
+            authentication,
+            ...(authentication === 'SPN'
+              ? {
+                  client_id: resolveProfileValue(devOutput.client_id),
+                  tenant_id: resolveProfileValue(devOutput.tenant_id),
+                }
+              : {}),
+            threads: Number(devOutput.threads ?? 1),
+            environmentId: devOutput.environmentId,
+            reuse_session: devOutput.reuse_session !== false,
+            session_id_file: devOutput.session_id_file,
+            high_concurrency: devOutput.high_concurrency,
+            workspace_name: devOutput.workspace_name,
+          };
+        }
 
         default:
           return null;
@@ -1660,8 +2308,35 @@ export default class ConnectorsService {
             schema: dbtConnection.schema,
           };
 
-        default:
+        case 'kinetica':
           return null;
+
+        case 'fabricspark':
+          return {
+            type: 'fabricspark',
+            name: connectionName,
+            endpoint: dbtConnection.endpoint || FABRIC_API_ENDPOINT,
+            workspaceId: dbtConnection.workspaceid,
+            lakehouseId: dbtConnection.lakehouseid,
+            lakehouse: dbtConnection.lakehouse,
+            schemaMode:
+              dbtConnection.schema === dbtConnection.lakehouse
+                ? 'non-schema'
+                : 'schema-enabled',
+            schema: dbtConnection.schema,
+            authentication: dbtConnection.authentication,
+            clientId: dbtConnection.client_id,
+            tenantId: dbtConnection.tenant_id,
+            hasClientSecret: false,
+            threads: dbtConnection.threads || 1,
+            environmentId: dbtConnection.environmentId,
+            reuseSession: dbtConnection.reuse_session !== false,
+            highConcurrency: dbtConnection.high_concurrency,
+            workspaceName: dbtConnection.workspace_name,
+          };
+
+        default:
+          return assertNever(dbtConnection, 'dbt connection import mapping');
       }
     } catch (error) {
       return null;
@@ -1865,6 +2540,7 @@ export default class ConnectorsService {
    */
   static async extractSchemaFromConnection(
     connectionId: string,
+    forceRefresh = false,
   ): Promise<{ tables: any[] }> {
     const conn = await this.getConnectionById(connectionId);
 
@@ -2061,10 +2737,13 @@ export default class ConnectorsService {
           await extractor.disconnect();
         }
       }
+      case 'fabricspark': {
+        if (forceRefresh) FabricRuntime.invalidateMetadata(conn.id);
+        const auth = await this.getFabricRuntimeAuth(conn.id, connection);
+        return FabricRuntime.extractSchema(conn.id, connection, auth);
+      }
       default:
-        throw new Error(
-          `Unsupported connection type: "${(connection as any).type}"`,
-        );
+        return assertNever(connection, 'schema extraction');
     }
   }
 
@@ -2093,15 +2772,17 @@ export default class ConnectorsService {
   /**
    * Execute a query directly using a connection (not project-based)
    */
-  static async executeQueryForConnection({
-    connectionId,
-    query,
-    queryId,
-  }: {
-    connectionId: string;
-    query: string;
-    queryId?: string;
-  }): Promise<QueryResponseType> {
+  static async executeQueryForConnection(
+    {
+      connectionId,
+      query,
+      queryId,
+      rowLimit,
+      page,
+      purpose = 'sql-editor',
+    }: ExecuteConnectionQueryRequest,
+    onProgress?: (stage: QueryProgressStage, message: string) => void,
+  ): Promise<QueryResponseType> {
     const conn = await this.getConnectionById(connectionId);
 
     if (!conn) {
@@ -2109,6 +2790,26 @@ export default class ConnectorsService {
     }
 
     const { connection } = conn;
+
+    if (
+      ['analytics-preview', 'analytics-static-build', 'agent'].includes(
+        purpose,
+      ) &&
+      !this.isReadOnlyQuery(query)
+    ) {
+      throw new Error(
+        'Analytics queries are read-only. Use SELECT, WITH, SHOW, DESCRIBE, or EXPLAIN.',
+      );
+    }
+
+    const executionQuery =
+      ['analytics-preview', 'analytics-static-build'].includes(purpose) &&
+      connection.type !== 'fabricspark'
+        ? `SELECT * FROM (\n${query}\n) AS _dbt_studio_limit_wrapper LIMIT ${Math.min(
+            Math.max(Math.floor(page?.limit ?? rowLimit ?? 500), 1),
+            1_000,
+          )}`
+        : query;
 
     // Get credentials from secure storage
     const storeUser = await SecureStorageService.getCredential(
@@ -2140,11 +2841,44 @@ export default class ConnectorsService {
     }
 
     // Use a dummy project name for credential lookup (use connection name)
-    return this.executeSelectStatement({
-      connection,
-      query,
-      projectName: connection.name,
-      queryId,
-    });
+    const result = await this.executeSelectStatement(
+      {
+        connection,
+        connectionId,
+        query: executionQuery,
+        projectName: connection.name,
+        queryId,
+        rowLimit: page?.limit ?? rowLimit,
+        rowOffset: page?.offset,
+      },
+      onProgress,
+    );
+    if (
+      result.success &&
+      connection.type === 'fabricspark' &&
+      page?.includeTotalRows &&
+      this.isReadOnlyQuery(query)
+    ) {
+      const countResult = await this.executeSelectStatement({
+        connection,
+        connectionId,
+        query: `SELECT COUNT(*) AS dbt_studio_total_rows FROM (\n${query}\n) AS dbt_studio_count_source`,
+        projectName: connection.name,
+        rowLimit: 1,
+      });
+      const rawCount = (countResult.data?.[0] as any)?.dbt_studio_total_rows;
+      const totalRows = Number(rawCount);
+      if (countResult.success && Number.isSafeInteger(totalRows)) {
+        result.totalRows = totalRows;
+      }
+    }
+    if (
+      result.success &&
+      connection.type === 'fabricspark' &&
+      /^\s*(CREATE|ALTER|DROP|TRUNCATE|RENAME)\b/i.test(query)
+    ) {
+      FabricRuntime.invalidateMetadata(connectionId);
+    }
+    return result;
   }
 }

@@ -62,14 +62,14 @@ function isAllowedCommand(command: string, allowedCommands: string[]): boolean {
 async function buildDbtProcessEnv(
   projectPath: string,
 ): Promise<Record<string, string | undefined>> {
-  const env = { ...process.env };
   const profilesPath = path.join(projectPath, 'profiles.yml');
 
   if (!fs.existsSync(profilesPath)) {
-    return env;
+    return { ...process.env };
   }
 
   const profilesContent = await fs.promises.readFile(profilesPath, 'utf8');
+  const env = { ...process.env };
   const envVarRegex = /env_var\(\s*["']([^"']+)["']/g;
   const envVarNames = new Set<string>();
 

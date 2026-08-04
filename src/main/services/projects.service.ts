@@ -44,6 +44,12 @@ import SecureStorageService from './secureStorage.service';
 import ConnectorsService from './connectors.service';
 import MainDatabaseService from './mainDatabase.service';
 
+const assertNever = (_value: never, context: string): never => {
+  throw new Error(
+    `UNSUPPORTED_CONNECTION_TYPE: ${context} received an unsupported connection type.`,
+  );
+};
+
 export default class ProjectsService {
   static async loadProjects(): Promise<Project[]> {
     const db = await loadDatabaseFile();
@@ -1188,10 +1194,19 @@ export default class ProjectsService {
         );
       case 'kinetica':
         return this.extractKineticaSchema(connection as KineticaConnection);
-      default:
-        throw new Error(
-          `Unsupported connection type: "${(connection as any).type}"`,
+      case 'fabricspark': {
+        if (!project.connectionId) {
+          throw new Error(
+            'Microsoft Fabric schema extraction requires a saved connection.',
+          );
+        }
+        const result = await ConnectorsService.extractSchemaFromConnection(
+          project.connectionId,
         );
+        return result.tables;
+      }
+      default:
+        return assertNever(connection, 'project schema extraction');
     }
   }
 

@@ -3,6 +3,40 @@ import ConnectorsService from '../../../../src/main/services/connectors.service'
 
 const testPostgresConnection = jest.fn();
 const getCredential = jest.fn();
+const setCredential = jest.fn();
+const deleteCredential = jest.fn();
+const updateDatabase = jest.fn();
+
+jest.mock('electron', () => ({
+  app: {
+    getPath: jest.fn(() => '/tmp/dbt-studio-test'),
+  },
+}));
+
+jest.mock('../../../../src/main/services/notebooks.service', () => ({
+  NotebooksService: {
+    archiveConnectionNotebooks: jest.fn(),
+  },
+}));
+
+jest.mock('../../../../src/main/services/duckLake.service', () => ({
+  __esModule: true,
+  default: {},
+}));
+
+jest.mock(
+  '../../../../src/main/services/duckLake/instanceStore.service',
+  () => ({
+    __esModule: true,
+    default: {},
+  }),
+);
+
+jest.mock('../../../../src/main/services/dbtCoreVersion.service', () => ({
+  DbtCoreVersionService: {
+    runManagedDbtDebug: jest.fn(),
+  },
+}));
 
 jest.mock('openai', () => ({
   OpenAI: jest.fn(),
@@ -12,7 +46,7 @@ jest.mock('../../../../src/main/utils/fileHelper', () => ({
   loadDatabaseFile: jest
     .fn()
     .mockResolvedValue({ connections: [], projects: [] }),
-  updateDatabase: jest.fn(),
+  updateDatabase: (...args: any[]) => updateDatabase(...args),
 }));
 
 jest.mock('../../../../src/main/services/index', () => ({
@@ -25,9 +59,9 @@ jest.mock('../../../../src/main/services/index', () => ({
 jest.mock('../../../../src/main/services/secureStorage.service', () => ({
   __esModule: true,
   default: {
-    setCredential: jest.fn(),
+    setCredential: (...args: any[]) => setCredential(...args),
     getCredential: (...args: any[]) => getCredential(...args),
-    deleteCredential: jest.fn(),
+    deleteCredential: (...args: any[]) => deleteCredential(...args),
   },
 }));
 
@@ -58,6 +92,38 @@ describe('ConnectorsService (main)', () => {
         ConnectorsService.validateConnection({} as any),
       ).rejects.toThrow('Connection type is required');
     });
+
+    it('rejects unknown runtime connection types with a stable error', async () => {
+      await expect(
+        ConnectorsService.validateConnection({ type: 'future-adapter' } as any),
+      ).rejects.toThrow('UNSUPPORTED_CONNECTION_TYPE');
+    });
+
+    it('validates the Microsoft Fabric connection contract', async () => {
+      const connection = {
+        type: 'fabricspark',
+        name: 'Fabric Lakehouse',
+        endpoint: 'https://api.fabric.microsoft.com/v1',
+        workspaceId: '11111111-1111-4111-8111-111111111111',
+        lakehouseId: '22222222-2222-4222-8222-222222222222',
+        lakehouse: 'analytics',
+        schemaMode: 'schema-enabled',
+        schema: 'dbo',
+        authentication: 'CLI',
+        threads: 1,
+        reuseSession: true,
+      } as const;
+
+      await expect(
+        ConnectorsService.validateConnection(connection),
+      ).resolves.toBeUndefined();
+      await expect(
+        ConnectorsService.validateConnection({
+          ...connection,
+          endpoint: 'https://example.com',
+        }),
+      ).rejects.toThrow('Unsupported Microsoft Fabric API endpoint');
+    });
   });
 
   describe('testConnection', () => {
@@ -85,6 +151,52 @@ describe('ConnectorsService (main)', () => {
         'Connection type is required',
       );
       expect(testPostgresConnection).not.toHaveBeenCalled();
+    });
+
+    it('does not fall through to another adapter for invalid Fabric input', async () => {
+      await expect(
+        ConnectorsService.testConnection({ type: 'fabricspark' } as any),
+      ).rejects.toThrow('Connection name is required');
+      expect(testPostgresConnection).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Fabric secure persistence', () => {
+    it('stores the SPN secret by connection ID and persists only its presence', async () => {
+      const connection = {
+        type: 'fabricspark',
+        name: 'Fabric SPN',
+        endpoint: 'https://api.fabric.microsoft.com/v1',
+        workspaceId: '11111111-1111-4111-8111-111111111111',
+        lakehouseId: '22222222-2222-4222-8222-222222222222',
+        lakehouse: 'analytics',
+        schemaMode: 'schema-enabled',
+        schema: 'dbo',
+        authentication: 'SPN',
+        clientId: '33333333-3333-4333-8333-333333333333',
+        tenantId: '44444444-4444-4444-8444-444444444444',
+        threads: 1,
+        reuseSession: true,
+        highConcurrency: false,
+      } as const;
+
+      const connectionId = await ConnectorsService.saveNewConnection(
+        connection,
+        { clientSecret: 'top-secret' },
+      );
+
+      expect(setCredential).toHaveBeenCalledWith(
+        `db-fabricspark-client-secret-${connectionId}`,
+        'top-secret',
+      );
+      const lastCall =
+        updateDatabase.mock.calls[updateDatabase.mock.calls.length - 1];
+      const persisted = lastCall[1];
+      expect(persisted[0].connection).toMatchObject({
+        type: 'fabricspark',
+        hasClientSecret: true,
+      });
+      expect(JSON.stringify(persisted)).not.toContain('top-secret');
     });
   });
 
@@ -257,6 +369,37 @@ describe('ConnectorsService (main)', () => {
         writeFileSpy.mockRestore();
         rmSyncSpy.mockRestore();
       }
+    });
+  });
+
+  describe('Fabric Rosetta boundary', () => {
+    it('refuses to fabricate a JDBC URL for Fabric', async () => {
+      await expect(
+        ConnectorsService.generateJdbcUrl({ type: 'fabricspark' } as any),
+      ).rejects.toThrow(
+        'CONNECTION_FEATURE_NOT_IMPLEMENTED: Microsoft Fabric Lakehouse Rosetta JDBC URL generation is not implemented yet.',
+      );
+    });
+  });
+
+  describe('Fabric Spark SQL statement policy', () => {
+    const hasMultipleStatements = (query: string) =>
+      (ConnectorsService as any).hasMultipleSqlStatements(query);
+
+    it('allows one statement with trailing semicolons and quoted semicolons', () => {
+      expect(hasMultipleStatements("SELECT ';' AS value;")).toBe(false);
+      expect(hasMultipleStatements('SELECT 1;;; -- trailing comment')).toBe(
+        false,
+      );
+    });
+
+    it('rejects multiple executable statements', () => {
+      expect(hasMultipleStatements('SELECT 1; DROP TABLE dbo.orders')).toBe(
+        true,
+      );
+      expect(hasMultipleStatements('SELECT 1; /* separator */ SELECT 2;')).toBe(
+        true,
+      );
     });
   });
 });

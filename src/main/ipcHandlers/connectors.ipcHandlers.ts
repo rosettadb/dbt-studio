@@ -16,11 +16,23 @@ const handlerChannels = [
   'connector:query',
   'connector:cancel-query',
   'connector:list',
+  'connector:get',
+  'connector:update',
+  'connector:delete',
   'connector:save',
+  'connector:setConnectionEnvVariable',
   'connector:extractSchema',
   'connector:updateQuery',
   'connector:getQuery',
   'connector:executeQuery',
+  'source:create',
+  'source:list',
+  'source:get',
+  'source:delete',
+  'source:recentItems',
+  'source:addRecentItem',
+  'source:clearRecentItems',
+  'source:deleteRecentItem',
 ];
 
 const removeConnectorsIpcHandlers = () => {
@@ -148,10 +160,17 @@ const registerConnectorsHandlers = () => {
   // Connection-based schema extraction
   ipcMain.handle(
     'connector:extractSchema',
-    async (_event, connectionId: string) => {
+    async (
+      _event,
+      {
+        connectionId,
+        forceRefresh,
+      }: { connectionId: string; forceRefresh?: boolean },
+    ) => {
       try {
         return await ConnectorsService.extractSchemaFromConnection(
           connectionId,
+          forceRefresh,
         );
       } catch (error: any) {
         return { tables: [], error: error.message };

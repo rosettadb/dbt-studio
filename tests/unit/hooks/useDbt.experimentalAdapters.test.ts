@@ -7,5 +7,8 @@ describe('dbt v2 adapter compatibility', () => {
     );
     expect(getDbtV2CompatibilityError('1.11.12', 'postgres')).toBeNull();
     expect(getDbtV2CompatibilityError('2.0.0a4', 'duckdb')).toBeNull();
+    expect(getDbtV2CompatibilityError('2.0.0a4', 'fabricspark')).toContain(
+      'Microsoft Fabric Lakehouse is not supported safely',
+    );
   });
 });

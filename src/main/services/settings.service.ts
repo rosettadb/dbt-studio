@@ -24,6 +24,7 @@ import { CliAdapter } from '../adapters';
 import { DB_FILE, initializeDataStorage } from '../utils/setupHelpers';
 import DuckDBBootstrap from './duckdb.service';
 import SecureStorageService from './secureStorage.service';
+import FabricRuntime from './fabric/fabricRuntime';
 
 const cliConfig: Record<
   keyof CliUpdateResponseType,
@@ -455,6 +456,7 @@ export default class SettingsService {
 
   static async resetFactorySettings(): Promise<void> {
     try {
+      await FabricRuntime.disposeAll();
       // 1. Load current database to get project paths
       const dataBase = await loadDatabaseFile();
 

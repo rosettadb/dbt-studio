@@ -59,6 +59,11 @@ import {
   usePlanDbtVersionChange,
   useUninstallPackage,
 } from '../../controllers';
+import {
+  DBT_DEFAULT_SELECTED_PACKAGES,
+  DBT_PACKAGE_DESCRIPTIONS,
+  DBT_V1_ADAPTER_PACKAGE_NAMES,
+} from '../../../shared/dbtAdapterDefinitions';
 
 interface DbtSettingsProps {
   settings: SettingsType;
@@ -118,16 +123,9 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     string | null
   >(null);
 
-  const [selectedPackages, setSelectedPackages] = React.useState({
-    'dbt-core': true,
-    'dbt-postgres': true,
-    'dbt-snowflake': true,
-    'dbt-bigquery': true,
-    'dbt-redshift': true,
-    'dbt-databricks': true,
-    'dbt-duckdb': true,
-    sqlglot: true,
-  });
+  const [selectedPackages, setSelectedPackages] = React.useState(
+    DBT_DEFAULT_SELECTED_PACKAGES,
+  );
 
   const [installedPackages, setInstalledPackages] = React.useState<{
     [key: string]: string;
@@ -160,16 +158,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     false,
   );
 
-  const packageDescriptions = {
-    'dbt-core': 'The core dbt™ package (required)',
-    'dbt-postgres': 'Adapter for PostgreSQL databases',
-    'dbt-snowflake': 'Adapter for Snowflake databases',
-    'dbt-bigquery': 'Adapter for Google BigQuery',
-    'dbt-redshift': 'Adapter for Amazon Redshift',
-    'dbt-databricks': 'Adapter for Databricks',
-    'dbt-duckdb': 'Adapter for DuckDB - embedded analytics database',
-    sqlglot: 'SQL Parser and Transpiler (Required for Lineage)',
-  };
+  const packageDescriptions = DBT_PACKAGE_DESCRIPTIONS;
 
   const compareSimpleVersions = (a: string, b: string): number => {
     const parse = (v: string): number[] => {
@@ -225,16 +214,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
   }
 
   const handleInstallDbt = async () => {
-    const allPackages = [
-      'dbt-core',
-      'dbt-postgres',
-      'dbt-snowflake',
-      'dbt-bigquery',
-      'dbt-redshift',
-      'dbt-databricks',
-      'dbt-duckdb',
-      'sqlglot',
-    ];
+    const allPackages = Object.keys(packageDescriptions);
 
     const packages = allPackages.filter(
       (pkg) => selectedPackages[pkg as keyof typeof selectedPackages],
@@ -1031,16 +1011,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
         )}
 
         {!settings.dbtVersion?.startsWith('2.') &&
-          (
-            [
-              'dbt-postgres',
-              'dbt-snowflake',
-              'dbt-bigquery',
-              'dbt-redshift',
-              'dbt-databricks',
-              'dbt-duckdb',
-            ] as const
-          ).map((pkg) => {
+          DBT_V1_ADAPTER_PACKAGE_NAMES.map((pkg) => {
             const installed = installedPackages[pkg];
             const versions = packageVersions[pkg]?.versions ?? [];
             const latestStable = packageVersions[pkg]?.latestStable ?? null;

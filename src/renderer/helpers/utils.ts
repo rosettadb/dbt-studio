@@ -7,6 +7,8 @@ import {
   ConnectionModel,
   DatabricksConnection,
   DuckDBConnection,
+  FabricSparkConnection,
+  KineticaConnection,
   PostgresConnection,
   Project,
   RedshiftConnection,
@@ -19,6 +21,12 @@ import {
   MonacoCompletionItemKind,
 } from '../config/constants';
 import { settingsServices } from '../services';
+
+const assertNever = (_value: never, context: string): never => {
+  throw new Error(
+    `UNSUPPORTED_CONNECTION_TYPE: ${context} received an unsupported connection type.`,
+  );
+};
 
 export const capitalizeFirstLetter = (str: string): string => {
   if (!str) return '';
@@ -264,7 +272,7 @@ export const getConnectionInput = (conn: ConnectionModel) => {
         name: connection.name,
       };
     case 'kinetica':
-      const kinetica = connection as any; // Using any as explicit import for KineticaConnection might be circular or redundant if not already there, but let's use the type structure we know
+      const kinetica = connection as KineticaConnection;
       return {
         type,
         host: kinetica.host,
@@ -274,8 +282,32 @@ export const getConnectionInput = (conn: ConnectionModel) => {
         database: kinetica.database || '',
         schema: kinetica.schema || '',
       };
-    default:
+    case 'ducklake':
       return undefined;
+    case 'fabricspark': {
+      const fabric = connection as FabricSparkConnection;
+      return {
+        type,
+        name: fabric.name,
+        endpoint: fabric.endpoint,
+        workspaceId: fabric.workspaceId,
+        lakehouseId: fabric.lakehouseId,
+        lakehouse: fabric.lakehouse,
+        schemaMode: fabric.schemaMode,
+        schema: fabric.schema,
+        authentication: fabric.authentication,
+        clientId: fabric.clientId,
+        tenantId: fabric.tenantId,
+        hasClientSecret: fabric.hasClientSecret,
+        threads: fabric.threads,
+        environmentId: fabric.environmentId,
+        reuseSession: fabric.reuseSession,
+        highConcurrency: fabric.highConcurrency,
+        workspaceName: fabric.workspaceName,
+      };
+    }
+    default:
+      return assertNever(connection, 'getConnectionInput');
   }
 };
 

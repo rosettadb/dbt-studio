@@ -5,7 +5,6 @@ import path from 'path';
 import os from 'os';
 import yaml from 'js-yaml';
 import SettingsService from './settings.service';
-import ProjectsService from './projects.service';
 import {
   DbtAdapterCapability,
   DbtAdapterCapabilityResponse,
@@ -59,6 +58,7 @@ const ADAPTER_PACKAGES = [
   'dbt-redshift',
   'dbt-databricks',
   'dbt-duckdb',
+  'dbt-fabricspark',
 ] as const;
 
 const V2_ADAPTERS: Record<
@@ -113,6 +113,7 @@ const adapterDisplayName = (adapter: string | null): string => {
     bigquery: 'BigQuery',
     databricks: 'Databricks',
     duckdb: 'DuckDB',
+    fabricspark: 'Microsoft Fabric Lakehouse',
     postgres: 'PostgreSQL',
     redshift: 'Redshift',
     snowflake: 'Snowflake',
@@ -131,6 +132,15 @@ const ALLOWED_PYTHON_PACKAGES = new Set([
   ...ADAPTER_PACKAGES,
   'sqlglot',
 ]);
+
+const buildInstallRequirement = (
+  packageName: string,
+  version?: string,
+): string => {
+  const distribution =
+    packageName === 'dbt-fabricspark' ? 'dbt-fabricspark[cli]' : packageName;
+  return version ? `${distribution}==${version}` : distribution;
+};
 
 const VERSION_PATTERN =
   /^[0-9]+(?:\.[0-9]+)*(?:(?:a|b|rc)[0-9]+)?(?:\.post[0-9]+)?(?:\.dev[0-9]+)?$/i;
@@ -314,6 +324,85 @@ const getPythonExecutable = async (pythonPath?: string): Promise<string> => {
 };
 
 export class DbtCoreVersionService {
+  private static async installedPackageVersion(
+    python: string,
+    packageName: string,
+  ): Promise<string | null> {
+    const shown = await runProcess(python, ['-m', 'pip', 'show', packageName]);
+    return shown.exitCode === 0 ? parsePipShowVersion(shown.stdout) : null;
+  }
+
+  private static async previewPackageInstall(
+    python: string,
+    requirement: string,
+  ): Promise<{ ok: boolean; error?: string }> {
+    const root = await fs.mkdtemp(
+      path.join(os.tmpdir(), 'dbt-studio-pip-preview-'),
+    );
+    try {
+      const result = await runProcess(python, [
+        '-m',
+        'pip',
+        'install',
+        '--dry-run',
+        '--report',
+        path.join(root, 'report.json'),
+        requirement,
+      ]);
+      return result.exitCode === 0
+        ? { ok: true }
+        : {
+            ok: false,
+            error:
+              'Package dependency resolution failed before installation. Choose a version compatible with the managed dbt Core runtime.',
+          };
+    } finally {
+      await fs.remove(root);
+    }
+  }
+
+  private static async rollbackPackageInstall(
+    python: string,
+    packageName: string,
+    previousPackageVersion: string | null,
+    previousDbtVersion: string | null,
+  ): Promise<void> {
+    if (previousPackageVersion) {
+      await runProcess(python, [
+        '-m',
+        'pip',
+        'install',
+        '--force-reinstall',
+        '--no-cache-dir',
+        buildInstallRequirement(packageName, previousPackageVersion),
+      ]);
+    } else {
+      await runProcess(python, [
+        '-m',
+        'pip',
+        'uninstall',
+        '--yes',
+        packageName,
+      ]);
+    }
+    const currentDbtVersion = await this.installedPackageVersion(
+      python,
+      'dbt-core',
+    );
+    if (previousDbtVersion && currentDbtVersion !== previousDbtVersion) {
+      await runProcess(python, [
+        '-m',
+        'pip',
+        'install',
+        '--force-reinstall',
+        '--no-cache-dir',
+        `dbt-core==${previousDbtVersion}`,
+      ]);
+    } else if (!previousDbtVersion && currentDbtVersion) {
+      await runProcess(python, ['-m', 'pip', 'uninstall', '--yes', 'dbt-core']);
+    }
+  }
+
   static async listDbtCoreVersions(
     options?: DbtVersionListOptions,
   ): Promise<DbtVersionListResponse> {
@@ -443,6 +532,80 @@ export class DbtCoreVersionService {
     return { packages };
   }
 
+  static async runManagedDbtDebug(options: {
+    projectDir: string;
+    profilesDir: string;
+    env: Record<string, string | undefined>;
+  }): Promise<{ ok: boolean; error?: string }> {
+    const installed = await this.getInstalledDbtCore();
+    if (
+      !installed.isExecutableVerified ||
+      !installed.dbtPath ||
+      !installed.version
+    ) {
+      return {
+        ok: false,
+        error:
+          installed.error ?? 'The managed dbt Core runtime is unavailable.',
+      };
+    }
+    const parsedVersion = parseVersionTriple(installed.version);
+    if (!parsedVersion || parsedVersion.major !== 1) {
+      return {
+        ok: false,
+        error:
+          'Microsoft Fabric Lakehouse requires the managed dbt Core v1 runtime.',
+      };
+    }
+    const packages = await this.getInstalledPackages();
+    if (!packages.packages['dbt-fabricspark']) {
+      return {
+        ok: false,
+        error:
+          'dbt-fabricspark is not installed. Install it from Settings and retry.',
+      };
+    }
+    const result = await runProcess(
+      installed.dbtPath,
+      [
+        'debug',
+        '--project-dir',
+        options.projectDir,
+        '--profiles-dir',
+        options.profilesDir,
+        '--no-use-colors',
+      ],
+      {
+        cwd: options.projectDir,
+        env: { ...process.env, ...options.env },
+      },
+    );
+    if (result.exitCode === 0) return { ok: true };
+    const combined = `${result.stderr}\n${result.stdout}`.toLowerCase();
+    let error = 'Managed dbt debug could not connect to Microsoft Fabric.';
+    if (/az login|azure cli|credential|authentication/.test(combined)) {
+      error =
+        'Microsoft Fabric authentication failed. Check Azure CLI login or the service-principal credentials.';
+    } else if (
+      /permission|forbidden|not authorized|access denied/.test(combined)
+    ) {
+      error =
+        'The Microsoft Fabric principal does not have the required workspace or Lakehouse permissions.';
+    } else if (
+      /no module named|could not find profile|adapter/.test(combined)
+    ) {
+      error =
+        'The managed dbt-fabricspark adapter is missing or incompatible with dbt Core v1.';
+    } else if (/timeout|timed out|capacity/.test(combined)) {
+      error =
+        'Microsoft Fabric did not start the Spark session before the connection-test timeout.';
+    }
+    return {
+      ok: false,
+      error,
+    };
+  }
+
   static async installLatestPackage(
     req: PythonPackageActionRequest,
   ): Promise<PythonPackageInstallVersionResponse> {
@@ -456,18 +619,38 @@ export class DbtCoreVersionService {
 
     try {
       const python = await getPythonExecutable(req.pythonPath);
+      const previousPackageVersion = await this.installedPackageVersion(
+        python,
+        packageName,
+      );
+      const previousDbtVersion = await this.installedPackageVersion(
+        python,
+        'dbt-core',
+      );
+      const preview = await this.previewPackageInstall(
+        python,
+        buildInstallRequirement(packageName),
+      );
+      if (!preview.ok) return preview;
       const install = await runProcess(python, [
         '-m',
         'pip',
         'install',
         '--upgrade',
         '--no-cache-dir',
-        packageName,
+        buildInstallRequirement(packageName),
       ]);
       if (install.exitCode !== 0) {
+        await this.rollbackPackageInstall(
+          python,
+          packageName,
+          previousPackageVersion,
+          previousDbtVersion,
+        );
         return {
           ok: false,
-          error: install.stderr || install.stdout || 'Package install failed.',
+          error:
+            'Package installation failed. The managed Python environment was restored.',
         };
       }
 
@@ -478,9 +661,39 @@ export class DbtCoreVersionService {
         packageName,
       ]);
       const installedVersion = parsePipShowVersion(shown.stdout);
-      return installedVersion
-        ? { ok: true, installedVersion }
-        : { ok: false, error: `Unable to verify ${packageName}.` };
+      const installedDbtVersion = await this.installedPackageVersion(
+        python,
+        'dbt-core',
+      );
+      if (
+        packageName === 'dbt-fabricspark' &&
+        parseVersionTriple(installedDbtVersion ?? '')?.major !== 1
+      ) {
+        await this.rollbackPackageInstall(
+          python,
+          packageName,
+          previousPackageVersion,
+          previousDbtVersion,
+        );
+        return {
+          ok: false,
+          error:
+            'dbt-fabricspark requires a compatible dbt Core v1 runtime. The managed environment was restored.',
+        };
+      }
+      if (!installedVersion) {
+        await this.rollbackPackageInstall(
+          python,
+          packageName,
+          previousPackageVersion,
+          previousDbtVersion,
+        );
+        return {
+          ok: false,
+          error: `Unable to verify ${packageName}. The managed environment was restored.`,
+        };
+      }
+      return { ok: true, installedVersion };
     } catch (error) {
       return {
         ok: false,
@@ -773,7 +986,8 @@ export class DbtCoreVersionService {
   }
 
   static async checkCurrentProjectCompatibility(): Promise<DbtProjectCompatibilityResult> {
-    const project = await ProjectsService.getSelectedProject();
+    const { default: ProjectService } = await import('./projects.service');
+    const project = await ProjectService.getSelectedProject();
     if (!project) {
       return {
         ok: false,
@@ -800,6 +1014,7 @@ export class DbtCoreVersionService {
     const adapterCheck = await this.checkProjectAdapterCompatibility(
       project.path,
       installed.version,
+      project.connection?.type,
     );
     if (!adapterCheck.adapter.canExecute) {
       return {
@@ -907,6 +1122,19 @@ export class DbtCoreVersionService {
 
     try {
       const python = await getPythonExecutable(req.pythonPath);
+      const previousPackageVersion = await this.installedPackageVersion(
+        python,
+        safeName,
+      );
+      const previousDbtVersion = await this.installedPackageVersion(
+        python,
+        'dbt-core',
+      );
+      const preview = await this.previewPackageInstall(
+        python,
+        buildInstallRequirement(safeName, safeVersion),
+      );
+      if (!preview.ok) return preview;
       const result = await runProcess(python, [
         '-m',
         'pip',
@@ -914,16 +1142,20 @@ export class DbtCoreVersionService {
         '--upgrade',
         '--force-reinstall',
         '--no-cache-dir',
-        `${safeName}==${safeVersion}`,
+        buildInstallRequirement(safeName, safeVersion),
       ]);
 
       if (result.exitCode !== 0) {
+        await this.rollbackPackageInstall(
+          python,
+          safeName,
+          previousPackageVersion,
+          previousDbtVersion,
+        );
         return {
           ok: false,
           error:
-            result.stderr ||
-            result.stdout ||
-            `pip install failed with exit code ${result.exitCode}`,
+            'Package installation failed. The managed Python environment was restored.',
         };
       }
 
@@ -931,9 +1163,36 @@ export class DbtCoreVersionService {
       const installedVersion =
         shown.exitCode === 0 ? parsePipShowVersion(shown.stdout) : null;
       if (installedVersion !== safeVersion) {
+        await this.rollbackPackageInstall(
+          python,
+          safeName,
+          previousPackageVersion,
+          previousDbtVersion,
+        );
         return {
           ok: false,
           error: `Installed package verification failed. Expected ${safeVersion}, found ${installedVersion || 'unknown'}.`,
+        };
+      }
+
+      const installedDbtVersion = await this.installedPackageVersion(
+        python,
+        'dbt-core',
+      );
+      if (
+        safeName === 'dbt-fabricspark' &&
+        parseVersionTriple(installedDbtVersion ?? '')?.major !== 1
+      ) {
+        await this.rollbackPackageInstall(
+          python,
+          safeName,
+          previousPackageVersion,
+          previousDbtVersion,
+        );
+        return {
+          ok: false,
+          error:
+            'dbt-fabricspark requires a compatible dbt Core v1 runtime. The managed environment was restored.',
         };
       }
 
@@ -946,12 +1205,24 @@ export class DbtCoreVersionService {
     }
   }
 
-  private static async resolveProjectAdapter(projectPath?: string): Promise<{
+  private static async resolveProjectAdapter(
+    projectPath?: string,
+    adapterHint?: string,
+  ): Promise<{
     adapter: string | null;
     source: DbtAdapterCapability['source'];
     projectPath?: string;
   }> {
-    const selected = await ProjectsService.getSelectedProject();
+    if (adapterHint) {
+      return {
+        adapter: normalizeAdapter(adapterHint),
+        source: 'connection',
+        projectPath,
+      };
+    }
+    const selected = projectPath
+      ? undefined
+      : await (await import('./projects.service')).default.getSelectedProject();
     const resolvedPath = projectPath || selected?.path;
     if (selected && selected.path === resolvedPath && selected.connection?.type)
       return {
@@ -1035,6 +1306,7 @@ export class DbtCoreVersionService {
   static async getActiveAdapterCapabilities(
     projectPath?: string,
     detectedDbtCoreVersion?: string | null,
+    adapterHint?: string,
   ): Promise<DbtAdapterCapabilityResponse> {
     const dbtCoreVersion =
       detectedDbtCoreVersion === undefined
@@ -1043,7 +1315,7 @@ export class DbtCoreVersionService {
     let runtime: DbtAdapterCapabilityResponse['runtime'] = 'unknown';
     if (dbtCoreVersion?.startsWith('2.')) runtime = 'v2';
     if (dbtCoreVersion?.startsWith('1.')) runtime = 'v1';
-    const resolved = await this.resolveProjectAdapter(projectPath);
+    const resolved = await this.resolveProjectAdapter(projectPath, adapterHint);
     const adapter = this.capabilityFor(
       resolved.adapter,
       resolved.source,
@@ -1062,10 +1334,12 @@ export class DbtCoreVersionService {
   static async checkProjectAdapterCompatibility(
     projectPath?: string,
     detectedDbtCoreVersion?: string | null,
+    adapterHint?: string,
   ): Promise<DbtProjectAdapterCheck> {
     const result = await this.getActiveAdapterCapabilities(
       projectPath,
       detectedDbtCoreVersion,
+      adapterHint,
     );
     return { ...result, adapter: result.adapters[0] };
   }

@@ -1,20 +1,25 @@
 import { QueryResult } from 'pg';
 import { CloudConnection, RecentItem } from './frontend';
 
+export const SUPPORTED_CONNECTION_TYPES = [
+  'postgres',
+  'snowflake',
+  'bigquery',
+  'redshift',
+  'databricks',
+  'mysql',
+  'oracle',
+  'db2',
+  'mssql',
+  'kinetica',
+  'googlecloud',
+  'duckdb',
+  'ducklake',
+  'fabricspark',
+] as const;
+
 export type SupportedConnectionTypes =
-  | 'postgres'
-  | 'snowflake'
-  | 'bigquery'
-  | 'redshift'
-  | 'databricks'
-  | 'mysql'
-  | 'oracle'
-  | 'db2'
-  | 'mssql'
-  | 'kinetica'
-  | 'googlecloud'
-  | 'duckdb'
-  | 'ducklake';
+  (typeof SUPPORTED_CONNECTION_TYPES)[number];
 
 export type ConnectionBase = {
   type: SupportedConnectionTypes;
@@ -108,6 +113,30 @@ export type DuckLakeConnectionConfig = Omit<
   status?: 'active' | 'inactive' | 'error' | 'connecting';
 };
 
+export type FabricSparkAuthentication = 'CLI' | 'SPN';
+
+export type FabricSparkSchemaMode = 'non-schema' | 'schema-enabled';
+
+export type FabricSparkConnection = {
+  type: 'fabricspark';
+  name: string;
+  endpoint: string;
+  workspaceId: string;
+  lakehouseId: string;
+  lakehouse: string;
+  schemaMode: FabricSparkSchemaMode;
+  schema: string;
+  authentication: FabricSparkAuthentication;
+  clientId?: string;
+  tenantId?: string;
+  hasClientSecret?: boolean;
+  threads: number;
+  environmentId?: string;
+  reuseSession: boolean;
+  highConcurrency?: boolean;
+  workspaceName?: string;
+};
+
 export type ConnectionInput =
   | PostgresConnection
   | SnowflakeConnection
@@ -116,7 +145,8 @@ export type ConnectionInput =
   | DatabricksConnection
   | DuckDBConnection
   | KineticaConnection
-  | DuckLakeConnectionConfig;
+  | DuckLakeConnectionConfig
+  | FabricSparkConnection;
 
 export type ConnectionModel = {
   id: string;
@@ -198,6 +228,26 @@ export type KineticaDBTConnection = DBTConnectionBase & {
   bypassSslCertCheck?: boolean;
 };
 
+export type FabricSparkDBTConnection = {
+  type: 'fabricspark';
+  method: 'livy';
+  endpoint: string;
+  workspaceid: string;
+  lakehouseid: string;
+  lakehouse: string;
+  schema: string;
+  authentication: FabricSparkAuthentication;
+  client_id?: string;
+  tenant_id?: string;
+  client_secret?: string;
+  threads: number;
+  environmentId?: string;
+  reuse_session?: boolean;
+  session_id_file?: string;
+  high_concurrency?: boolean;
+  workspace_name?: string;
+};
+
 export type DBTConnection =
   | PostgresDBTConnection
   | SnowflakeDBTConnection
@@ -205,7 +255,8 @@ export type DBTConnection =
   | RedshiftDBTConnection
   | DatabricksDBTConnection
   | DuckDBDBTConnection
-  | KineticaDBTConnection;
+  | KineticaDBTConnection
+  | FabricSparkDBTConnection;
 
 export type RosettaConnection = {
   name: string;
@@ -602,13 +653,34 @@ export type Table = {
 export type QueryResponseType = {
   success: boolean;
   data?: QueryResult[];
-  fields?: { name: string; type: number }[];
+  fields?: {
+    name: string;
+    type: number;
+    typeName?: string;
+    nullable?: boolean;
+  }[];
   rowCount?: number; // Add rowCount for affected rows in INSERT/UPDATE/DELETE operations
   error?: string;
   duration?: number;
   isCommand?: boolean;
   commandType?: string;
+  totalRows?: number;
+  truncated?: boolean;
+  errorCode?: string;
+  statementId?: number;
 };
+
+export type QueryProgressStage =
+  | 'authenticating'
+  | 'starting-session'
+  | 'session-ready'
+  | 'queued'
+  | 'executing'
+  | 'reading-results'
+  | 'cancelling'
+  | 'completed'
+  | 'cancelled'
+  | 'failed';
 
 export type CliUpdateItem = {
   currentVersion: string;
@@ -716,9 +788,32 @@ export type AnalyticsEvent = {
 
 export type ExecuteStatementType = {
   connection: ConnectionInput;
+  connectionId?: string;
   query: string;
   projectName: string;
   queryId?: string;
+  rowLimit?: number;
+  rowOffset?: number;
+};
+
+export type QueryExecutionPurpose =
+  | 'sql-editor'
+  | 'notebook'
+  | 'analytics-preview'
+  | 'analytics-static-build'
+  | 'agent';
+
+export type ExecuteConnectionQueryRequest = {
+  connectionId: string;
+  query: string;
+  queryId?: string;
+  rowLimit?: number;
+  page?: {
+    limit: number;
+    offset: number;
+    includeTotalRows?: boolean;
+  };
+  purpose?: QueryExecutionPurpose;
 };
 
 // AI Provider Types

@@ -9,7 +9,10 @@ jest.mock('child_process', () => ({
 }));
 jest.mock('../../../../../src/main/services/settings.service', () => ({
   __esModule: true,
-  default: { getDbtExePath: jest.fn() },
+  default: {
+    getDbtExePath: jest.fn(),
+    loadSettings: jest.fn().mockResolvedValue({ dbtVersion: '1.11.12' }),
+  },
 }));
 jest.mock('../../../../../src/main/services/agent.service', () => ({
   __esModule: true,

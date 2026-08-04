@@ -13,7 +13,7 @@ import { settingsServices } from '../../services';
 import { SettingsType } from '../../../types/backend';
 
 type AdapterSelectionProps = {
-  adapters: Array<{ name: string; description: string }>;
+  adapters: ReadonlyArray<{ name: string; description: string }>;
   selectedAdapters: string[];
   setSelectedAdapters: React.Dispatch<React.SetStateAction<string[]>>;
   installButton: React.ReactNode;
@@ -80,7 +80,7 @@ const AdapterSelection: React.FC<AdapterSelectionProps> = ({
 
 type Props = {
   settings: SettingsType;
-  adapters: Array<{ name: string; description: string }>;
+  adapters: ReadonlyArray<{ name: string; description: string }>;
   selectedAdapters: string[];
   setSelectedAdapters: React.Dispatch<React.SetStateAction<string[]>>;
   onInstallComplete: (dbtPath: string) => void;

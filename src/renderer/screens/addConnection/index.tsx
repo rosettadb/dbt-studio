@@ -9,6 +9,7 @@ import { Connections } from '../../components';
 import { SupportedConnectionTypes } from '../../../types/backend';
 import { AppLayout } from '../../layouts';
 import { ConnectionsSidebar } from '../../components/sidebarConnections';
+import { getConnectionDisplayName } from '../../../shared/connections/connectionCapabilities';
 
 const ConnectionContainer = styled(Box)`
   padding: 1rem 2rem 2rem;
@@ -81,6 +82,12 @@ const baseItems: ItemType[] = [
     id: 'kinetica',
     name: 'Kinetica',
     img: 'kinetica',
+    disabled: false,
+  },
+  {
+    id: 'fabricspark',
+    name: getConnectionDisplayName('fabricspark'),
+    img: 'fabricspark',
     disabled: false,
   },
 ];
@@ -179,14 +186,39 @@ const AddConnection: React.FC = () => {
           />
         );
       }
-      default: {
+      case 'fabricspark': {
         return (
-          <Connections.Postgres
+          <Connections.FabricSpark
             onCancel={() => setSelectedItem(undefined)}
             projectId={projectId}
             duplicateFrom={duplicateData}
             suggestedName={suggestedName}
           />
+        );
+      }
+      case 'mysql':
+      case 'oracle':
+      case 'db2':
+      case 'mssql':
+      case 'googlecloud':
+      case 'ducklake': {
+        return (
+          <Box sx={{ py: 4 }}>
+            <Typography variant="h6">
+              {getConnectionDisplayName(selectedItem.id)} is not available in
+              this connection form yet.
+            </Typography>
+          </Box>
+        );
+      }
+      default: {
+        return (
+          <Box sx={{ py: 4 }}>
+            <Typography variant="h6">
+              Unsupported connection type. Return to the connection list and
+              select a supported connection.
+            </Typography>
+          </Box>
         );
       }
     }

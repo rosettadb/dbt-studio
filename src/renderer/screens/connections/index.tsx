@@ -46,6 +46,10 @@ import connectionIcons, {
 import { SupportedConnectionTypes } from '../../../types/backend';
 import { CloudProvider, CloudConnection } from '../../../types/frontend';
 import { generateCloneConnectionName } from '../../utils/connectionNaming';
+import {
+  getConnectionDisplayName,
+  getConnectionTypeColor,
+} from '../../utils/connectionPresentation';
 
 const Connections: React.FC = () => {
   const {
@@ -180,26 +184,6 @@ const Connections: React.FC = () => {
     return <CloudIcon sx={{ fontSize: 48 }} />;
   };
 
-  // Helper function to get connection type name
-  const getConnectionTypeName = (connectionType: string) => {
-    switch (connectionType) {
-      case 'postgres':
-        return 'PostgreSQL';
-      case 'snowflake':
-        return 'Snowflake';
-      case 'bigquery':
-        return 'BigQuery';
-      case 'redshift':
-        return 'Redshift';
-      case 'databricks':
-        return 'Databricks';
-      case 'duckdb':
-        return 'DuckDB';
-      default:
-        return connectionType.toUpperCase();
-    }
-  };
-
   // Helper function to get cloud provider name
   const getCloudProviderName = (provider: string) => {
     switch (provider) {
@@ -211,26 +195,6 @@ const Connections: React.FC = () => {
         return 'Google Cloud Storage';
       default:
         return provider.toUpperCase();
-    }
-  };
-
-  // Helper function to get connection type color
-  const getConnectionTypeColor = (connectionType: string) => {
-    switch (connectionType) {
-      case 'postgres':
-        return '#336791';
-      case 'snowflake':
-        return '#29b5e8';
-      case 'bigquery':
-        return '#4285f4';
-      case 'redshift':
-        return '#8c4fff';
-      case 'databricks':
-        return '#ff3621';
-      case 'duckdb':
-        return '#fff000';
-      default:
-        return '#666';
     }
   };
 
@@ -312,6 +276,12 @@ const Connections: React.FC = () => {
         return (
           <Typography variant="body2" color="text.secondary">
             Path: {connection.short_database_path || connection.database_path}
+          </Typography>
+        );
+      case 'fabricspark':
+        return (
+          <Typography variant="body2" color="text.secondary">
+            Lakehouse: {connection.lakehouse}
           </Typography>
         );
       default:
@@ -472,7 +442,9 @@ const Connections: React.FC = () => {
                                 }}
                               >
                                 <Chip
-                                  label={getConnectionTypeName(connection.type)}
+                                  label={getConnectionDisplayName(
+                                    connection.type,
+                                  )}
                                   size="small"
                                   sx={{
                                     bgcolor: getConnectionTypeColor(

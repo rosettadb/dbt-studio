@@ -4,19 +4,7 @@ import { toast } from 'react-toastify';
 import { useGetSettings, useUpdateSettings } from '../../controllers';
 import { Loader, FinishSetup, DbtSetup } from '../../components';
 import { client } from '../../config/client';
-
-const ADAPTERS = [
-  { name: 'dbt-core', description: 'The core dbt™ package' },
-  { name: 'dbt-postgres', description: 'Adapter for PostgreSQL databases' },
-  { name: 'dbt-snowflake', description: 'Adapter for Snowflake databases' },
-  { name: 'dbt-bigquery', description: 'Adapter for Google BigQuery' },
-  { name: 'dbt-redshift', description: 'Adapter for Amazon Redshift' },
-  { name: 'dbt-databricks', description: 'Adapter for Databricks' },
-  {
-    name: 'dbt-duckdb',
-    description: 'Adapter for DuckDB - embedded analytics database',
-  },
-];
+import { DBT_ADAPTER_PACKAGE_DEFINITIONS } from '../../../shared/dbtAdapterDefinitions';
 
 const Setup: React.FC = () => {
   const { data: settings, isLoading } = useGetSettings();
@@ -24,7 +12,7 @@ const Setup: React.FC = () => {
   const [isInitialized, setIsInitialized] = React.useState(false);
   const [currentStep, setCurrentStep] = React.useState<number>(0);
   const [selectedAdapters, setSelectedAdapters] = React.useState<string[]>(
-    ADAPTERS.map((a) => a.name),
+    DBT_ADAPTER_PACKAGE_DEFINITIONS.map((a) => a.name),
   );
 
   const saveSetting = (name: string, value: string) => {
@@ -75,7 +63,7 @@ const Setup: React.FC = () => {
         <div data-testid="setup-step-cli" style={{ width: '100%' }}>
           <DbtSetup
             settings={settings}
-            adapters={ADAPTERS}
+            adapters={DBT_ADAPTER_PACKAGE_DEFINITIONS}
             selectedAdapters={selectedAdapters}
             setSelectedAdapters={setSelectedAdapters}
             onInstallComplete={(path) => {

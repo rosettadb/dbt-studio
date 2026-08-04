@@ -5,6 +5,7 @@ import { Redshift } from './redshift';
 import { Databricks } from './databricks';
 import { DuckDB } from './duckdb';
 import { Kinetica } from './kinetica';
+import { FabricSpark } from './fabricspark';
 
 export const Connections = {
   Postgres,
@@ -14,4 +15,5 @@ export const Connections = {
   Databricks,
   DuckDB,
   Kinetica,
+  FabricSpark,
 };

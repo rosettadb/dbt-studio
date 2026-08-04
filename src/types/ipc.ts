@@ -511,11 +511,20 @@ export type ConfigureConnectionBody = {
   projectId?: string;
   connection?: ConnectionInput;
   connectionId?: string;
+  writeOnlyCredentials?: Record<string, string | undefined>;
 };
 
 export type UpdateConnectionBody = {
   connection: ConnectionModel;
+  writeOnlyCredentials?: Record<string, string | undefined>;
 };
+
+export type TestConnectionBody =
+  | ConnectionInput
+  | {
+      connection: ConnectionInput;
+      writeOnlyCredentials?: Record<string, string | undefined>;
+    };
 
 export interface UploadFileRequest {
   provider: CloudProvider;

@@ -4,10 +4,17 @@ import {
   ConnectionModel,
   DatabricksConnection,
   DuckDBConnection,
+  FabricSparkConnection,
   PostgresConnection,
   RedshiftConnection,
   SnowflakeConnection,
 } from '../../types/backend';
+
+const assertNever = (_value: never, context: string): never => {
+  throw new Error(
+    `UNSUPPORTED_CONNECTION_TYPE: ${context} received an unsupported connection type.`,
+  );
+};
 
 const getConnectionInput = (conn: ConnectionModel) => {
   if (!conn) {
@@ -82,8 +89,33 @@ const getConnectionInput = (conn: ConnectionModel) => {
         schema: duck.schema || 'main',
         name: connection.name,
       };
-    default:
+    case 'kinetica':
+    case 'ducklake':
       return undefined;
+    case 'fabricspark': {
+      const fabric = connection as FabricSparkConnection;
+      return {
+        type,
+        name: fabric.name,
+        endpoint: fabric.endpoint,
+        workspaceId: fabric.workspaceId,
+        lakehouseId: fabric.lakehouseId,
+        lakehouse: fabric.lakehouse,
+        schemaMode: fabric.schemaMode,
+        schema: fabric.schema,
+        authentication: fabric.authentication,
+        clientId: fabric.clientId,
+        tenantId: fabric.tenantId,
+        hasClientSecret: fabric.hasClientSecret,
+        threads: fabric.threads,
+        environmentId: fabric.environmentId,
+        reuseSession: fabric.reuseSession,
+        highConcurrency: fabric.highConcurrency,
+        workspaceName: fabric.workspaceName,
+      };
+    }
+    default:
+      return assertNever(connection, 'useConnectionInput');
   }
 };
 

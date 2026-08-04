@@ -5,8 +5,13 @@ import {
   QueryResponseType,
   BigQueryTestResponse,
   ConnectionModel,
+  ExecuteConnectionQueryRequest,
 } from '../../types/backend';
-import { ConfigureConnectionBody, UpdateConnectionBody } from '../../types/ipc';
+import {
+  ConfigureConnectionBody,
+  TestConnectionBody,
+  UpdateConnectionBody,
+} from '../../types/ipc';
 
 export const configureConnection = async (
   body: ConfigureConnectionBody,
@@ -39,10 +44,10 @@ export const saveConnection = async (
 };
 
 export const testConnection = async (
-  body: ConnectionInput,
+  body: TestConnectionBody,
 ): Promise<boolean | BigQueryTestResponse> => {
   const { data } = await client.post<
-    ConnectionInput,
+    TestConnectionBody,
     boolean | BigQueryTestResponse
   >('connector:test', body);
   return data;
@@ -117,11 +122,12 @@ export const getConnectionById = async (
  */
 export const extractSchemaFromConnection = async (
   connectionId: string,
+  forceRefresh = false,
 ): Promise<{ tables: any[]; error?: string }> => {
-  const { data } = await client.post<string, { tables: any[]; error?: string }>(
-    'connector:extractSchema',
-    connectionId,
-  );
+  const { data } = await client.post<
+    { connectionId: string; forceRefresh?: boolean },
+    { tables: any[]; error?: string }
+  >('connector:extractSchema', { connectionId, forceRefresh });
   return data;
 };
 
@@ -154,13 +160,11 @@ export const getConnectionQuery = async (
 /**
  * Execute a query directly using a connection (not project-based)
  */
-export const executeQueryForConnection = async (body: {
-  connectionId: string;
-  query: string;
-  queryId?: string;
-}): Promise<QueryResponseType> => {
+export const executeQueryForConnection = async (
+  body: ExecuteConnectionQueryRequest,
+): Promise<QueryResponseType> => {
   const { data } = await client.post<
-    { connectionId: string; query: string; queryId?: string },
+    ExecuteConnectionQueryRequest,
     QueryResponseType
   >('connector:executeQuery', body);
   return data;

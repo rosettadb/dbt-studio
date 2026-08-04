@@ -258,6 +258,7 @@ describe('DbtCoreVersionService', () => {
       { exitCode: 1 },
       { exitCode: 1 },
       { exitCode: 1 },
+      { exitCode: 1 },
     ]);
 
     const plan = await DbtCoreVersionService.planVersionChange({
@@ -289,6 +290,54 @@ describe('DbtCoreVersionService', () => {
 
     expect(installed.isDbtCorePackage).toBe(false);
     expect(installed.isExecutableVerified).toBe(false);
+  });
+
+  it('previews and installs the Fabric CLI extra while preserving dbt Core v1', async () => {
+    mkdtempMock.mockImplementation(
+      async () => '/tmp/dbt-studio-pip-preview-test',
+    );
+    mockCommands([
+      { exitCode: 1 },
+      { exitCode: 0, stdout: 'Name: dbt-core\nVersion: 1.10.0\n' },
+      { exitCode: 0 },
+      { exitCode: 0 },
+      { exitCode: 0, stdout: 'Name: dbt-fabricspark\nVersion: 1.9.2\n' },
+      { exitCode: 0, stdout: 'Name: dbt-core\nVersion: 1.10.0\n' },
+    ]);
+
+    const result = await DbtCoreVersionService.installPackageVersion({
+      pythonPath,
+      packageName: 'dbt-fabricspark',
+      version: '1.9.2',
+    });
+
+    expect(result).toEqual({ ok: true, installedVersion: '1.9.2' });
+    expect(spawnMock).toHaveBeenCalledWith(
+      pythonPath,
+      [
+        '-m',
+        'pip',
+        'install',
+        '--dry-run',
+        '--report',
+        '/tmp/dbt-studio-pip-preview-test/report.json',
+        'dbt-fabricspark[cli]==1.9.2',
+      ],
+      { shell: false },
+    );
+    expect(spawnMock).toHaveBeenCalledWith(
+      pythonPath,
+      [
+        '-m',
+        'pip',
+        'install',
+        '--upgrade',
+        '--force-reinstall',
+        '--no-cache-dir',
+        'dbt-fabricspark[cli]==1.9.2',
+      ],
+      { shell: false },
+    );
   });
 
   it('blocks a proprietary dbt package and preserves settings', async () => {

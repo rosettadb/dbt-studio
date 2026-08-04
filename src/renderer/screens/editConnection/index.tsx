@@ -10,6 +10,7 @@ import {
 import { AppLayout } from '../../layouts';
 import { ConnectionsSidebar } from '../../components/sidebarConnections';
 import { Container } from './styles';
+import { getConnectionDisplayName } from '../../../shared/connections/connectionCapabilities';
 
 const EditConnection: React.FC = () => {
   const navigate = useNavigate();
@@ -89,13 +90,34 @@ const EditConnection: React.FC = () => {
           />
         );
       }
-      default: {
+      case 'fabricspark': {
         return (
-          <Connections.Postgres
+          <Connections.FabricSpark
             key={connId}
             onCancel={handleCancel}
             connection={conn}
           />
+        );
+      }
+      case 'mysql':
+      case 'oracle':
+      case 'db2':
+      case 'mssql':
+      case 'googlecloud':
+      case 'ducklake': {
+        return (
+          <Typography variant="h6">
+            {getConnectionDisplayName(connectionType)} editing is not available
+            yet.
+          </Typography>
+        );
+      }
+      default: {
+        return (
+          <Typography variant="h6">
+            Unsupported connection type. Return to the connection list and
+            select a supported connection.
+          </Typography>
         );
       }
     }
