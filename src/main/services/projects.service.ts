@@ -1337,7 +1337,29 @@ export default class ProjectsService {
   }
 
   /**
-   * List pipeline YAML files under rosetta/pipelines/ directory
+   * List pipeline YAML files in a directory, ignoring non-pipeline yaml
+   * files such as main.conf.
+   */
+  private static async listPipelineFilesInDir(
+    dir: string,
+  ): Promise<{ name: string; path: string }[]> {
+    if (!fs.existsSync(dir)) return [];
+
+    const entries = await fs.promises.readdir(dir);
+    return entries
+      .filter(
+        (f) => (f.endsWith('.yml') || f.endsWith('.yaml')) && f !== 'main.conf',
+      )
+      .map((f) => ({
+        name: f.replace(/\.(yml|yaml)$/, ''),
+        path: path.join(dir, f),
+      }));
+  }
+
+  /**
+   * List pipeline YAML files under rosetta/pipelines/ (current location) and
+   * .rosetta/ (deprecated location, kept during the transition to
+   * rosetta/pipelines/ — remove once existing projects have migrated).
    */
   static async listPipelines(
     projectId: string,
@@ -1346,16 +1368,14 @@ export default class ProjectsService {
     if (!project) throw new Error('Project not found');
 
     const pipelinesDir = path.join(project.path, 'rosetta', 'pipelines');
-    if (!fs.existsSync(pipelinesDir)) return [];
+    const legacyPipelinesDir = path.join(project.path, '.rosetta');
 
-    const entries = await fs.promises.readdir(pipelinesDir);
-    return entries
-      .filter(
-        (f) => (f.endsWith('.yml') || f.endsWith('.yaml')) && f !== 'main.conf',
-      )
-      .map((f) => ({
-        name: f.replace(/\.(yml|yaml)$/, ''),
-        path: path.join(pipelinesDir, f),
-      }));
+    const [current, legacy] = await Promise.all([
+      this.listPipelineFilesInDir(pipelinesDir),
+      this.listPipelineFilesInDir(legacyPipelinesDir),
+    ]);
+
+    const currentNames = new Set(current.map((p) => p.name));
+    return [...current, ...legacy.filter((p) => !currentNames.has(p.name))];
   }
 }

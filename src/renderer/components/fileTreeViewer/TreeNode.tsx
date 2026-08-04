@@ -116,12 +116,15 @@ const isPipelineYaml = (filePath: string): boolean => {
   const fileName = parts[parts.length - 1] || '';
   const parentDir = parts[parts.length - 2] || '';
   const grandparentDir = parts[parts.length - 3] || '';
-  return (
-    parentDir === 'pipelines' &&
-    grandparentDir === 'rosetta' &&
+  const isYaml =
     (fileName.endsWith('.yml') || fileName.endsWith('.yaml')) &&
-    fileName !== 'main.conf'
-  );
+    fileName !== 'main.conf';
+  // Deprecated location, kept for backward compatibility during the
+  // transition to rosetta/pipelines/. Remove once projects have migrated.
+  const isLegacyLocation = parentDir === '.rosetta';
+  const isCurrentLocation =
+    parentDir === 'pipelines' && grandparentDir === 'rosetta';
+  return isYaml && (isLegacyLocation || isCurrentLocation);
 };
 
 export const TreeNode: React.FC<TreeNodeProps> = ({

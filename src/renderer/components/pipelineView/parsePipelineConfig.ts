@@ -42,12 +42,18 @@ export function parsePipelineConfig(content: string): PipelineConfig | null {
 export const PIPELINE_CONFIG_FILENAME = 'pipeline.yml';
 export const PIPELINE_CONFIG_PARENT_DIR = 'rosetta';
 export const PIPELINE_CONFIG_DIR = 'pipelines';
+// Deprecated location, kept for backward compatibility during the transition
+// to rosetta/pipelines/. Remove once existing projects have migrated.
+export const LEGACY_PIPELINE_CONFIG_DIR = '.rosetta';
 
 export function isPipelineFile(filePath: string): boolean {
   const parts = filePath.replace(/\\/g, '/').split('/');
   const fileName = parts[parts.length - 1];
   const dirName = parts[parts.length - 2];
   const parentDirName = parts[parts.length - 3];
+  if (dirName === LEGACY_PIPELINE_CONFIG_DIR) {
+    return fileName.endsWith('.yml') && fileName !== 'main.conf';
+  }
   return (
     dirName === PIPELINE_CONFIG_DIR &&
     parentDirName === PIPELINE_CONFIG_PARENT_DIR &&
