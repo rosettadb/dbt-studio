@@ -170,10 +170,10 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
   const writePipelineFile = async (fileName: string, content: string) => {
     await projectsServices.createFolder({
       filePath: project.path,
-      name: '.rosetta',
+      name: 'rosetta/pipelines',
     });
 
-    const pipelinePath = `${project.path}/.rosetta/${fileName}`;
+    const pipelinePath = `${project.path}/rosetta/pipelines/${fileName}`;
     await projectsServices.saveFileContent({
       path: pipelinePath,
       content,
@@ -407,7 +407,7 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
                     bgcolor: alpha(theme.palette.common.white, 0.15),
                   }}
                 >
-                  .rosetta/
+                  rosetta/pipelines/
                 </Box>
               </>
             )}
@@ -616,7 +616,7 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
                             opacity: 0.8,
                           }}
                         >
-                          .rosetta/{template.fileName}
+                          rosetta/pipelines/{template.fileName}
                         </Typography>
                       </Box>
 
@@ -931,7 +931,7 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
                               opacity: 0.8,
                             }}
                           >
-                            .rosetta/{template.fileName}
+                            rosetta/pipelines/{template.fileName}
                           </Typography>
                         </Box>
                       );

@@ -40,13 +40,19 @@ export function parsePipelineConfig(content: string): PipelineConfig | null {
 
 // Filename detection
 export const PIPELINE_CONFIG_FILENAME = 'pipeline.yml';
-export const PIPELINE_CONFIG_DIR = '.rosetta';
+export const PIPELINE_CONFIG_PARENT_DIR = 'rosetta';
+export const PIPELINE_CONFIG_DIR = 'pipelines';
 
 export function isPipelineFile(filePath: string): boolean {
   const parts = filePath.replace(/\\/g, '/').split('/');
   const fileName = parts[parts.length - 1];
   const dirName = parts[parts.length - 2];
-  return dirName === PIPELINE_CONFIG_DIR && fileName.endsWith('.yml');
+  const parentDirName = parts[parts.length - 3];
+  return (
+    dirName === PIPELINE_CONFIG_DIR &&
+    parentDirName === PIPELINE_CONFIG_PARENT_DIR &&
+    fileName.endsWith('.yml')
+  );
 }
 
 export const PIPELINE_CONFIG_TEMPLATE = `name: "CI"

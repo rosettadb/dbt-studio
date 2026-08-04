@@ -115,8 +115,10 @@ const isPipelineYaml = (filePath: string): boolean => {
   const parts = filePath.replace(/\\/g, '/').split('/');
   const fileName = parts[parts.length - 1] || '';
   const parentDir = parts[parts.length - 2] || '';
+  const grandparentDir = parts[parts.length - 3] || '';
   return (
-    parentDir === '.rosetta' &&
+    parentDir === 'pipelines' &&
+    grandparentDir === 'rosetta' &&
     (fileName.endsWith('.yml') || fileName.endsWith('.yaml')) &&
     fileName !== 'main.conf'
   );

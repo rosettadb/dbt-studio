@@ -1337,7 +1337,7 @@ export default class ProjectsService {
   }
 
   /**
-   * List pipeline YAML files under .rosetta/ directory
+   * List pipeline YAML files under rosetta/pipelines/ directory
    */
   static async listPipelines(
     projectId: string,
@@ -1345,17 +1345,17 @@ export default class ProjectsService {
     const project = await this.getProject(projectId);
     if (!project) throw new Error('Project not found');
 
-    const rosettaDir = path.join(project.path, '.rosetta');
-    if (!fs.existsSync(rosettaDir)) return [];
+    const pipelinesDir = path.join(project.path, 'rosetta', 'pipelines');
+    if (!fs.existsSync(pipelinesDir)) return [];
 
-    const entries = await fs.promises.readdir(rosettaDir);
+    const entries = await fs.promises.readdir(pipelinesDir);
     return entries
       .filter(
         (f) => (f.endsWith('.yml') || f.endsWith('.yaml')) && f !== 'main.conf',
       )
       .map((f) => ({
         name: f.replace(/\.(yml|yaml)$/, ''),
-        path: path.join(rosettaDir, f),
+        path: path.join(pipelinesDir, f),
       }));
   }
 }
