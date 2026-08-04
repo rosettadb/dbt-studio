@@ -183,13 +183,9 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
   };
 
   const pipelineExists = async (fileName: string): Promise<boolean> => {
-    try {
-      const pipelines = await projectsServices.listPipelines(project.id);
-      const pipelinePath = `${project.path}/.rosetta/${fileName}`;
-      return pipelines.some((p) => p.path === pipelinePath);
-    } catch {
-      return false;
-    }
+    const pipelines = await projectsServices.listPipelines(project.id);
+    const baseName = fileName.replace(/\.(yml|yaml)$/, '');
+    return pipelines.some((p) => p.name === baseName);
   };
 
   const createPipeline = async (fileName: string, content: string) => {
