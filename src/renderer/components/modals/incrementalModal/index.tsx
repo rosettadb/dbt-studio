@@ -22,7 +22,7 @@ import { SelectableFileTree } from '../../selectableFileTree';
 type Props = {
   isOpen: boolean;
   onClose: () => void;
-  processCallback: (path: string, selectedFiles: string[]) => void;
+  processCallback: (path: string, selectedFiles: string[]) => Promise<void>;
   path: string;
   project: Project;
 };
@@ -411,11 +411,15 @@ export const IncrementalModal: React.FC<Props> = ({
           variant="contained"
           onClick={async () => {
             setLoading(true);
-            await updateProject.mutateAsync({
-              ...project,
-              incrementalDir: updatedPath,
-            });
-            processCallback(updatedPath, allSelectedFiles);
+            try {
+              await updateProject.mutateAsync({
+                ...project,
+                incrementalDir: updatedPath,
+              });
+              await processCallback(updatedPath, allSelectedFiles);
+            } finally {
+              setLoading(false);
+            }
           }}
           disabled={totalSelectedItems === 0 || loading}
           sx={{

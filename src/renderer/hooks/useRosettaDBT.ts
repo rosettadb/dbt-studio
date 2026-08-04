@@ -171,6 +171,10 @@ const useRosettaDBT = (successCallback: () => Promise<void>) => {
         });
       }
 
+      // 2-minute safety net — enough for large schema extracts;
+      // the try/catch recovers cleanly if this fires
+      const ROSETTA_TIMEOUT_MS = 2 * 60 * 1000;
+
       if (!project.isExtracted) {
         try {
           const compiledCommand = await compileCommand(project, settings, {
@@ -181,7 +185,7 @@ const useRosettaDBT = (successCallback: () => Promise<void>) => {
               `${project.rosettaConnection?.name}`,
             ),
           } as Command);
-          await runCommand(compiledCommand);
+          await runCommand(compiledCommand, undefined, ROSETTA_TIMEOUT_MS);
           await projectsServices.updateProject({
             ...project,
             isExtracted: true,
@@ -193,9 +197,21 @@ const useRosettaDBT = (successCallback: () => Promise<void>) => {
           return;
         }
       }
-      const compiledCommand = await compileCommand(project, settings, command);
-      await runCommand(compiledCommand);
-      setIsSuccess(true);
+
+      try {
+        const compiledCommand = await compileCommand(
+          project,
+          settings,
+          command,
+        );
+        await runCommand(compiledCommand, undefined, ROSETTA_TIMEOUT_MS);
+        setIsSuccess(true);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(err);
+        toast.error('Rosetta dbt command failed');
+        setIsRunning(false);
+      }
     },
     isRunning,
   };

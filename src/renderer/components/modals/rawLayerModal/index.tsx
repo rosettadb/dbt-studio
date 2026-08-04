@@ -19,7 +19,7 @@ import { Project } from '../../../../types/backend';
 type Props = {
   isOpen: boolean;
   onClose: () => void;
-  processCallback: (path: string) => void;
+  processCallback: (path: string) => Promise<void>;
   path: string;
   project: Project;
 };
@@ -138,11 +138,15 @@ export const RawLayerModal: React.FC<Props> = ({
           variant="contained"
           onClick={async () => {
             setLoading(true);
-            await updateProject.mutateAsync({
-              ...project,
-              rawLayerDir: updatedPath,
-            });
-            processCallback(updatedPath);
+            try {
+              await updateProject.mutateAsync({
+                ...project,
+                rawLayerDir: updatedPath,
+              });
+              await processCallback(updatedPath);
+            } finally {
+              setLoading(false);
+            }
           }}
           disabled={loading}
           sx={{
