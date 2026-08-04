@@ -1173,11 +1173,19 @@ const ProjectDetails: React.FC = () => {
               }}
               onFileSelect={async (fileNode) => {
                 if (isPipelineFile(fileNode.path)) {
-                  openTab(toPipelineTabPath(fileNode.path), {
+                  const pipelineTabPath = toPipelineTabPath(fileNode.path);
+                  const alreadyOpen = !!getTabByPath(pipelineTabPath);
+                  openTab(pipelineTabPath, {
                     title: fileNode.name,
                     content: '',
                     isReadOnly: true,
                   });
+                  // If the tab was already open (e.g. after a pipeline override),
+                  // React Query won't re-fetch automatically — force a refresh so
+                  // the view shows the updated file content.
+                  if (alreadyOpen) {
+                    await refetchPipelineContent();
+                  }
                   return;
                 }
                 if (!utils.isEditableFile(fileNode.path)) {
