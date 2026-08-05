@@ -46,6 +46,7 @@ const analyticsRow: SecondBrainAnalyticsEvidenceRow = {
 const durableOperation: SecondBrainRefreshOperation = {
   type: 'create',
   pageId: 'topics/revenue-validation.md',
+  expectedHash: null,
   content: `---
 type: Project Knowledge
 id: revenue-validation
@@ -562,6 +563,7 @@ Existing guidance.
           id: '42',
           name: 'Revenue',
           path: projectRoot,
+          expectedHash: null,
           createdAt: fixedDate.toISOString(),
           connectionId: 'warehouse',
         },

@@ -133,7 +133,7 @@ export type SecondBrainSourceBatch = {
 export type SecondBrainRefreshOperation = {
   type: 'create' | 'replace';
   pageId: string;
-  expectedHash?: string;
+  expectedHash: string | null;
   content: string;
   rationale: string;
   confidence: number;
@@ -196,7 +196,7 @@ const operationZodSchema: z.ZodType<SecondBrainRefreshProposal> = z.object({
       z.object({
         type: z.enum(['create', 'replace']),
         pageId: z.string().max(240),
-        expectedHash: z.string().length(64).optional(),
+        expectedHash: z.string().length(64).nullable(),
         content: z.string().max(64 * 1024),
         rationale: z.string().max(500),
         confidence: z.number().min(0).max(1),
@@ -759,7 +759,7 @@ export default class SecondBrainRefreshService {
         await this.secondBrain.writePage({
           pageId: operation.pageId,
           content: operation.content,
-          expectedHash: operation.expectedHash,
+          expectedHash: operation.expectedHash ?? undefined,
           actor: 'refresh',
         });
         changedPageIds.push(operation.pageId);
