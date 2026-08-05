@@ -136,8 +136,8 @@ export const PipelineSelectorModal: React.FC<PipelineSelectorModalProps> = ({
   const handleCreatePipeline = async () => {
     setIsCreating(true);
     try {
-      // Ensure rosetta/pipelines directory exists
-      await projectsServices.createFolder({
+      // Ensure rosetta/pipelines directory exists before writing into it
+      await projectsServices.createFolderAsync({
         filePath: project.path,
         name: 'rosetta/pipelines',
       });

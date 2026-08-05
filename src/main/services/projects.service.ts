@@ -20,6 +20,7 @@ import {
 import {
   createNewFile,
   createNewFolder,
+  asyncCreateNewFolder,
   copyPath,
   createZipArchive,
   deleteDirectory,
@@ -952,6 +953,19 @@ export default class ProjectsService {
 
   static createFolder({ filePath, name }: { filePath: string; name: string }) {
     createNewFolder(filePath, name);
+  }
+
+  // Awaitable counterpart to createFolder — use when the folder must exist
+  // on disk before a subsequent write into it (e.g. writing a file right
+  // after creating its parent directory).
+  static async createFolderAsync({
+    filePath,
+    name,
+  }: {
+    filePath: string;
+    name: string;
+  }) {
+    await asyncCreateNewFolder(filePath, name);
   }
 
   static copyPath({ source, target }: { source: string; target: string }) {

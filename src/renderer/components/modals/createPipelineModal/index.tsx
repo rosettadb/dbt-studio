@@ -168,7 +168,7 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
   };
 
   const writePipelineFile = async (fileName: string, content: string) => {
-    await projectsServices.createFolder({
+    await projectsServices.createFolderAsync({
       filePath: project.path,
       name: 'rosetta/pipelines',
     });
