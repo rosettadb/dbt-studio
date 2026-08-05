@@ -402,13 +402,16 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           path={rawPath}
           project={project}
           processCallback={async (updatedPath) => {
-            onBeforeExecute?.();
-            await rosettaDbt(project, {
-              command: 'extract',
-              commandType: CommandType.DBTNext,
-              arguments: new Map([['-o', updatedPath]]),
-            } as Command);
-            setOpenRawLayerModal(false);
+            try {
+              onBeforeExecute?.();
+              await rosettaDbt(project, {
+                command: 'extract',
+                commandType: CommandType.DBTNext,
+                arguments: new Map([['-o', updatedPath]]),
+              } as Command);
+            } finally {
+              setOpenRawLayerModal(false);
+            }
           }}
         />
       )}
@@ -427,13 +430,16 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
               });
               args.set(' ', command);
             }
-            onBeforeExecute?.();
-            await rosettaDbt(project, {
-              command: 'staging',
-              commandType: CommandType.DBTNext,
-              arguments: args,
-            } as Command);
-            setStagingModal(false);
+            try {
+              onBeforeExecute?.();
+              await rosettaDbt(project, {
+                command: 'staging',
+                commandType: CommandType.DBTNext,
+                arguments: args,
+              } as Command);
+            } finally {
+              setStagingModal(false);
+            }
           }}
         />
       )}
@@ -452,13 +458,16 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
               });
               args.set(' ', command);
             }
-            onBeforeExecute?.();
-            await rosettaDbt(project, {
-              commandType: CommandType.DBTNext,
-              command: 'incremental',
-              arguments: args,
-            } as Command);
-            setIncrementalModal(false);
+            try {
+              onBeforeExecute?.();
+              await rosettaDbt(project, {
+                commandType: CommandType.DBTNext,
+                command: 'incremental',
+                arguments: args,
+              } as Command);
+            } finally {
+              setIncrementalModal(false);
+            }
           }}
         />
       )}
