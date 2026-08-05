@@ -80,7 +80,7 @@ export const MemoryConsentDialog: React.FC = () => {
       setOpen(false);
       toast.success(
         enabled
-          ? 'Wiki Memory is enabled and ready.'
+          ? 'AI Agent Memory is enabled and ready.'
           : 'Memory will remain disabled.',
       );
     } catch (error) {
@@ -142,7 +142,7 @@ export const MemoryConsentDialog: React.FC = () => {
           </Box>
           <Box sx={{ minWidth: 0, pt: 0.25 }}>
             <Typography variant="h6" component="div" sx={{ lineHeight: 1.3 }}>
-              Enable Wiki Memory?
+              AI Agent Memory
             </Typography>
             <Typography
               variant="body2"
@@ -173,13 +173,17 @@ export const MemoryConsentDialog: React.FC = () => {
             'Let the AI maintain useful connections as you work.',
             'Review, edit, or disable memory at any time in AI Settings.',
           ].map((item) => (
-            <Stack key={item} direction="row" spacing={1.25} alignItems="start">
+            <Stack
+              key={item}
+              direction="row"
+              spacing={1.25}
+              alignItems="center"
+            >
               <Box
                 aria-hidden="true"
                 sx={{
                   width: 6,
                   height: 6,
-                  mt: '7px',
                   flex: '0 0 auto',
                   borderRadius: '50%',
                   bgcolor: 'primary.main',
@@ -232,7 +236,7 @@ export const MemoryConsentDialog: React.FC = () => {
             ) : undefined
           }
         >
-          Enable memory
+          Enable AI Memory
         </Button>
       </DialogActions>
     </Dialog>

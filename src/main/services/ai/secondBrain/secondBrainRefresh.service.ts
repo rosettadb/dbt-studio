@@ -4,7 +4,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import ignore from 'ignore';
 import simpleGit from 'simple-git';
-import { generateObject, Schema, zodSchema } from 'ai';
+import { generateObject, LanguageModel, Schema, zodSchema } from 'ai';
 import { z } from 'zod';
 import yaml from 'js-yaml';
 import MainDatabaseService, {
@@ -1401,7 +1401,7 @@ export default class SecondBrainRefreshService {
         abortSignal,
       });
     }
-    const model = existingModel ?? (await this.getModel());
+    const model: LanguageModel = existingModel ?? (await this.getModel());
     const prompt = buildSecondBrainGenerationPrompt(currentPages, evidence);
     const result = await generateObject<
       Schema<SecondBrainRefreshProposal>,

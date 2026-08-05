@@ -305,11 +305,12 @@ export async function getVercelModel(requestedModel?: string) {
 
   switch (activeProvider.type) {
     case 'openai':
-      // Use 'compatible' mode to force Chat Completions API for all models.
-      // The default 'strict' mode uses the new Responses API for newer models
-      // (e.g. gpt-5.x) which can hang indefinitely on the initial connection.
+      // Use .chat() to force the Chat Completions API (/v1/chat/completions).
+      // In @ai-sdk/openai v3+, calling the provider directly routes to the
+      // Responses API (/v1/responses) which enforces strict JSON schema rules
+      // that are incompatible with optional fields in structured output schemas.
       return maybeWrapWithDevtools(
-        createOpenAI({ apiKey, compatibility: 'compatible' } as any)(model),
+        createOpenAI({ apiKey: apiKey ?? undefined }).chat(model),
       );
     case 'anthropic':
       return maybeWrapWithDevtools(
