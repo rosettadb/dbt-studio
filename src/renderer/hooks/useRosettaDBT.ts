@@ -126,11 +126,15 @@ const useRosettaDBT = (successCallback: () => Promise<void>) => {
 
         const openaiKey = await getOpenAIKey();
         if (openaiKey) {
-          setEnvVariables.mutate({
-            key: 'openai-api-key',
-            value: openaiKey,
-          });
+          envPromises.push(
+            setEnvVariables.mutateAsync({
+              key: 'openai-api-key',
+              value: openaiKey,
+            }),
+          );
         }
+
+        await Promise.all(envPromises);
 
         // 2-minute safety net — enough for large schema extracts;
         // the try/catch recovers cleanly if this fires
