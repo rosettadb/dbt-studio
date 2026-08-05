@@ -16,6 +16,7 @@ describe('settings.ipcHandlers', () => {
 
   it('registers key settings channels and removes previous handlers', async () => {
     const { ipcMain } = await import('electron');
+    const resetFactorySettings = jest.fn().mockResolvedValue(undefined);
 
     jest.doMock('../../../../src/main/utils/setupHelpers', () => ({
       initializeDataStorage: jest.fn(),
@@ -33,7 +34,7 @@ describe('settings.ipcHandlers', () => {
         checkRosettaVersions: jest.fn(),
         installRosettaVersion: jest.fn(),
         uninstallRosetta: jest.fn(),
-        resetFactorySettings: jest.fn(),
+        resetFactorySettings,
         getFileName: jest.fn(),
         getDuckDbMetadata: jest.fn(),
         refreshDuckDbMetadata: jest.fn(),
@@ -61,6 +62,12 @@ describe('settings.ipcHandlers', () => {
       expect.any(Function),
     );
     expect(ipcMain.handle).toHaveBeenCalledWith('settings:restart', expect.any(Function));
+
+    const session = { clearStorageData: jest.fn() };
+    const resetHandler = getHandleHandler(ipcMain, 'settings:reset-factory');
+    await resetHandler({ sender: { session } });
+
+    expect(resetFactorySettings).toHaveBeenCalledWith(session);
   });
 
   it('delegates settings:load to SettingsService.loadSettings', async () => {

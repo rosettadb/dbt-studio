@@ -6,7 +6,6 @@ import { icons } from '../../../../assets';
 import { utils } from '../../helpers';
 import { ResetFactoryModal } from '../modals';
 import { useResetFactorySettings } from '../../controllers';
-import { restartApp } from '../../services/settings.services';
 
 export const AboutSettings: React.FC = () => {
   const [isResetModalOpen, setIsResetModalOpen] = React.useState(false);
@@ -14,15 +13,8 @@ export const AboutSettings: React.FC = () => {
   const { mutate: resetFactorySettings, isLoading: isResetting } =
     useResetFactorySettings({
       onSuccess: () => {
-        toast.success(
-          'Factory settings reset successfully. The app will restart automatically.',
-        );
+        toast.success('Factory reset completed. The app is restarting.');
         setIsResetModalOpen(false);
-
-        // Restart the app after a short delay
-        setTimeout(() => {
-          restartApp();
-        }, 2000); // 2 second delay
       },
       onError: (error) => {
         toast.error(`Failed to reset factory settings: ${error.message}`);

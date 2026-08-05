@@ -1457,6 +1457,27 @@ COMBINED SUMMARY:`,
     return { success: false, message: 'No active agent execution found' };
   }
 
+  static cancelAllForFactoryReset(): void {
+    TerminalConfirmGate.abortAll();
+    activeAgents.forEach((controller) => controller.abort());
+    activeAgents.clear();
+    agentContexts.clear();
+    activeCompactions.clear();
+
+    const resetError = new Error('Factory reset is in progress');
+    [
+      pendingEditorBridgeRequests,
+      pendingNotebookBridgeRequests,
+      pendingAnalyticsBridgeRequests,
+    ].forEach((requests) => {
+      requests.forEach(({ reject, timeout }) => {
+        clearTimeout(timeout);
+        reject(resetError);
+      });
+      requests.clear();
+    });
+  }
+
   /**
    * List available agent tools
    */
