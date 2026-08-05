@@ -14,6 +14,7 @@ import {
   Typography,
 } from '@mui/material';
 import React from 'react';
+import { toast } from 'react-toastify';
 import { projectsServices } from '../../../services';
 import { useUpdateProject } from '../../../controllers';
 import { FileNode, Project } from '../../../../types/backend';
@@ -417,6 +418,11 @@ export const IncrementalModal: React.FC<Props> = ({
                 incrementalDir: updatedPath,
               });
               await processCallback(updatedPath, allSelectedFiles);
+            } catch (err) {
+              // eslint-disable-next-line no-console
+              console.error(err);
+              toast.error('Failed to generate incremental layer');
+              throw err;
             } finally {
               setLoading(false);
             }

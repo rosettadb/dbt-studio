@@ -12,6 +12,7 @@ import {
   InputAdornment,
 } from '@mui/material';
 import React from 'react';
+import { toast } from 'react-toastify';
 import { projectsServices } from '../../../services';
 import { useUpdateProject } from '../../../controllers';
 import { Project } from '../../../../types/backend';
@@ -144,6 +145,11 @@ export const RawLayerModal: React.FC<Props> = ({
                 rawLayerDir: updatedPath,
               });
               await processCallback(updatedPath);
+            } catch (err) {
+              // eslint-disable-next-line no-console
+              console.error(err);
+              toast.error('Failed to generate raw layer');
+              throw err;
             } finally {
               setLoading(false);
             }
