@@ -41,6 +41,11 @@ export interface CloudPipelineStep {
 }
 
 export interface CloudPipelineData {
+  // Overall CI/CD container status — authoritative for whether the run is
+  // done. Steps are updated conditionally and may not all reach a terminal
+  // state even after the run finishes, so this must take priority over any
+  // status derived from `steps`.
+  status?: CloudActionStatus;
   steps: CloudPipelineStep[];
   metadata?: {
     job_name?: string;

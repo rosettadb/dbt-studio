@@ -98,10 +98,14 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
     return applyStatuses(config.jobs, actionStatus);
   }, [config, actionStatus]);
 
-  // Derive a coarse run state from the matched steps so the header chip can
-  // show something meaningful without a separate /actions/[id] round-trip.
+  // Prefer the overall container status when the API provides one — steps
+  // are updated conditionally and may never all reach a terminal state even
+  // after the run finishes, so deriving from steps alone can get stuck.
+  // Fall back to deriving from steps only for responses that omit it.
   const derivedRunState: CloudActionStatus | null = React.useMemo(() => {
-    if (!actionId || !actionStatus?.steps?.length) return null;
+    if (!actionId || !actionStatus) return null;
+    if (actionStatus.status) return actionStatus.status;
+    if (!actionStatus.steps?.length) return null;
     const statuses = actionStatus.steps.map((s) => s.status);
     if (statuses.includes('failed')) return 'FAILED';
     if (statuses.includes('running')) return 'RUNNING';
