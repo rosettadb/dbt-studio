@@ -2,7 +2,10 @@ import { ipcMain } from 'electron';
 import AgentService from '../services/agent.service';
 import { TerminalConfirmGate } from '../services/ai/tools/terminalConfirmGate';
 import { AgentEditorBridgeService } from '../services/ai/agentEditorBridge.service';
-import type { AgentRunRequest } from '../services/agent.service';
+import type {
+  AgentContextOverheadRequest,
+  AgentRunRequest,
+} from '../services/agent.service';
 import type { GetQueryResultsRequest } from '../../types/backend';
 
 export const registerAgentHandlers = () => {
@@ -15,6 +18,12 @@ export const registerAgentHandlers = () => {
   );
 
   ipcMain.handle('agent:tools:list', async () => AgentService.listTools());
+
+  ipcMain.handle(
+    'agent:context-overhead:get',
+    async (_event, request: AgentContextOverheadRequest) =>
+      AgentService.getContextOverhead(request),
+  );
 
   ipcMain.handle('agent:terminal-resolve', async (_event, req) => {
     TerminalConfirmGate.resolve(req.requestId, req.allow);

@@ -384,6 +384,7 @@ export type NotebookChannels =
 export type AgentChannels =
   | 'agent:run'
   | 'agent:cancel'
+  | 'agent:context-overhead:get'
   | 'agent:tool-call'
   | 'agent:step-start'
   | 'agent:terminal-confirm'
@@ -479,6 +480,26 @@ export type PipelineTemplatesChannels =
   | 'pipeline-templates:list'
   | 'pipeline-templates:fetch-content';
 
+export type SecondBrainChannels =
+  | 'second-brain:status'
+  | 'second-brain:tree'
+  | 'second-brain:read'
+  | 'second-brain:write'
+  | 'second-brain:search'
+  | 'second-brain:archive'
+  | 'second-brain:init'
+  | 'second-brain:update-preview'
+  | 'second-brain:update-apply'
+  | 'second-brain:pause'
+  | 'second-brain:clear-and-disable'
+  | 'second-brain:cancel'
+  | 'second-brain:revisions'
+  | 'second-brain:revision-read'
+  | 'second-brain:restore'
+  | 'second-brain:open-wiki-folder'
+  | 'second-brain:open-wiki-terminal'
+  | 'second-brain:progress';
+
 export type Channels =
   | TestChannels
   | CliChannels
@@ -505,7 +526,8 @@ export type Channels =
   | AnalyticsPagesChannels
   | StaticSiteChannels
   | FlowfileChannels
-  | PipelineTemplatesChannels;
+  | PipelineTemplatesChannels
+  | SecondBrainChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;

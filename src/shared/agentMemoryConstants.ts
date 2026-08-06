@@ -1,0 +1,2 @@
+export const AGENT_MEMORY_ENTRY_FILE = 'MEMORY.md';
+export const PROJECT_AGENT_CONTEXT_FILE = 'AGENTS.md';

@@ -13,6 +13,9 @@ export interface BaseAgentConfig {
   mcpTools: Record<string, any>;
   skillsPrompt: string;
   loadSkillTool: any;
+  secondBrainContext: string;
+  secondBrainTools: Record<string, any>;
+  secondBrainTokens: number;
   maxSteps: number;
   mainWindow?: BrowserWindow;
   onStepFinish: (args: {
@@ -38,8 +41,18 @@ export async function buildBaseAgentConfig(options: {
   aiSettings: AISettingsConfig;
   event: IpcMainInvokeEvent;
   mainWindow?: BrowserWindow;
+  secondBrainContext?: string;
+  secondBrainTools?: Record<string, any>;
+  secondBrainTokens?: number;
 }): Promise<BaseAgentConfig> {
-  const { requestedModel, aiSettings, mainWindow } = options;
+  const {
+    requestedModel,
+    aiSettings,
+    mainWindow,
+    secondBrainContext = '',
+    secondBrainTools = {},
+    secondBrainTokens = 0,
+  } = options;
 
   const model = await getVercelModel(requestedModel);
   const mcpTools = await buildMCPToolset();
@@ -86,6 +99,9 @@ export async function buildBaseAgentConfig(options: {
     mcpTools,
     skillsPrompt,
     loadSkillTool,
+    secondBrainContext,
+    secondBrainTools,
+    secondBrainTokens,
     maxSteps,
     mainWindow,
     onStepFinish,

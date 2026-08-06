@@ -13,3 +13,4 @@ export * from './DuckDBSettings';
 export * from './FlowfileSettings';
 export * from './KeystoreSettings';
 export * from './TaskManagerSettings';
+export * from './SecondBrainTab';

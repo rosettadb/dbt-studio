@@ -179,8 +179,21 @@ export const useAgentStream = (sessionId: number | undefined) => {
       if (data.conversationId !== sessionId) return;
 
       if (data.done) {
-        // Stream finished — stop the streaming indicator
-        setStreamState((prev) => ({ ...prev, isStreaming: false }));
+        // A terminal stream must never leave a tool call spinning forever.
+        setStreamState((prev) =>
+          withParts({ ...prev, isStreaming: false }, (parts) =>
+            parts.map((part) =>
+              part.type === 'tool-call' && part.status === 'running'
+                ? {
+                    ...part,
+                    status: 'error' as const,
+                    error:
+                      'Tool call ended without a result. Check the tool arguments and try again.',
+                  }
+                : part,
+            ),
+          ),
+        );
         return;
       }
 
@@ -334,6 +347,7 @@ export const useAgentStream = (sessionId: number | undefined) => {
       connectionId?: string,
       notebookId?: string,
       pageId?: string,
+      includeProjectAiContext?: boolean,
     ) => {
       if (!sessionId) return;
 
@@ -382,6 +396,7 @@ export const useAgentStream = (sessionId: number | undefined) => {
           connectionId,
           notebookId,
           pageId,
+          includeProjectAiContext,
         });
 
         // Agent completed — replace optimistic message with persisted data

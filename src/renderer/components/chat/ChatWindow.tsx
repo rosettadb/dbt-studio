@@ -7,12 +7,21 @@ import {
   Typography,
   Button,
   CircularProgress,
+  Divider,
+  ListItemIcon,
+  ListItemText,
   Menu,
   MenuItem,
 } from '@mui/material';
 import { Close, MoreHoriz, Add as AddIcon, Tag } from '@mui/icons-material';
+import { useQueryClient } from 'react-query';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import { ReactComponent as ProvidersIcon } from '../../assets/icons/lucide/bot.svg';
+import { ReactComponent as SettingsIcon } from '../../assets/icons/lucide/settings-2.svg';
+import { ReactComponent as MCPServersIcon } from '../../assets/icons/lucide/network.svg';
+import { ReactComponent as SkillsIcon } from '../../assets/icons/lucide/blocks.svg';
+import { ReactComponent as MemoriesIcon } from '../../assets/icons/lucide/brain-circuit.svg';
 import { useAppContext } from '../../hooks';
 import { useGetSelectedProject } from '../../controllers';
 import {
@@ -33,16 +42,20 @@ import { ChatMessageList } from './ChatMessageList';
 import { ChatInputBox } from './ChatInputBox';
 import { FilesChangedBlock } from './FilesChangedBlock';
 import { GradientBorder } from './GradientBorder';
+import { MemoryConsentDialog } from './MemoryConsentDialog';
 import type { ContextUsageBreakdown } from './ContextUsageRing';
 
 import { useContextManager } from '../../hooks/useContextManager';
 import { useAgentStream } from '../../hooks/useAgentStream';
 import { useToolMode } from '../../hooks/useToolMode';
 import {
+  useGetAgentContextOverhead,
   useOnStreamChunk,
   useOnContextUsage,
 } from '../../controllers/agent.controller';
+import { useGetFileContent } from '../../controllers/projects.controller';
 import { projectsServices } from '../../services';
+import { PROJECT_AGENT_CONTEXT_FILE } from '../../../shared/agentMemoryConstants';
 
 export interface ChatWindowProps {
   screenKey?: 'project' | 'sql' | 'notebooks' | 'analytics';
@@ -99,6 +112,9 @@ const estimateMessagesTokens = (
     return sum + tokens + 4;
   }, 0);
 
+const projectMemoryEnabledKey = (projectId: number | string) =>
+  `project-memory-enabled:${projectId}`;
+
 export const ChatWindow: React.FC<ChatWindowProps> = ({
   screenKey = 'project',
   connectionId,
@@ -148,6 +164,89 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   // Tool mode — drives which tools are available in the backend
   const { currentMode } = useToolMode(selectedSessionId);
 
+  // Load canonical project-specific AI context on the project screen only.
+  const projectAgentContextPath =
+    screenKey === 'project' && project?.path
+      ? `${project.path}/${PROJECT_AGENT_CONTEXT_FILE}`
+      : undefined;
+  const projectMemoryEnabled =
+    screenKey === 'project' && projectId !== undefined && projectId !== null
+      ? localStorage.getItem(projectMemoryEnabledKey(projectId)) !== 'false'
+      : false;
+  const projectContextDismissKey =
+    projectId !== undefined && projectId !== null
+      ? `agents-md-dismissed:${projectId}`
+      : null;
+  const [, setProjectContextDismissalRevision] = React.useState(0);
+  const isDismissed = projectContextDismissKey
+    ? localStorage.getItem(projectContextDismissKey) === 'true'
+    : false;
+
+  const {
+    isError: projectAgentContextMissing,
+    isFetched: projectAgentContextFetched,
+  } = useGetFileContent(projectAgentContextPath, {
+    // Re-fetch after a stream finishes in case the agent just created the file
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+
+  const projectAgentContextExists = projectAgentContextFetched
+    ? !projectAgentContextMissing
+    : null;
+  const projectContextGenerationInFlightRef = React.useRef(false);
+
+  const handleGenerateProjectContext = async () => {
+    if (streamState.isStreaming || projectContextGenerationInFlightRef.current)
+      return;
+    projectContextGenerationInFlightRef.current = true;
+    const prompt =
+      `Please create an \`${PROJECT_AGENT_CONTEXT_FILE}\` file at the root of this dbt project. ` +
+      `The file should include sections for: Project Overview, Naming Conventions, ` +
+      `Model Layers, and Rules for the AI. Use the project name from \`dbt_project.yml\` ` +
+      `and populate what you can from the project structure. Leave placeholder comments ` +
+      `for sections the user should fill in themselves.`;
+    try {
+      await startStream(
+        prompt,
+        [],
+        undefined,
+        currentMode,
+        screenKey,
+        connectionId,
+        notebookId,
+        pageId,
+        undefined,
+      );
+    } finally {
+      projectContextGenerationInFlightRef.current = false;
+    }
+  };
+
+  const handleDismissProjectContext = () => {
+    if (projectContextDismissKey) {
+      localStorage.setItem(projectContextDismissKey, 'true');
+      setProjectContextDismissalRevision((revision) => revision + 1);
+    }
+  };
+
+  // Re-check project context after the agent may have created the file.
+  const queryClient = useQueryClient();
+  const prevIsStreamingRef = React.useRef(false);
+  React.useEffect(() => {
+    if (
+      prevIsStreamingRef.current &&
+      !streamState.isStreaming &&
+      projectAgentContextPath
+    ) {
+      queryClient.invalidateQueries([
+        'GET_FILE_CONTENT',
+        projectAgentContextPath,
+      ]);
+    }
+    prevIsStreamingRef.current = streamState.isStreaming;
+  }, [streamState.isStreaming, projectAgentContextPath, queryClient]);
+
   // Load messages for the selected session (used to estimate context usage on session switch)
   const { data: sessionMessages = [] } =
     useGetChatMessagesWithContext(selectedSessionId);
@@ -156,6 +255,45 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     isLoading: isLoadingCompactionSummary,
   } = useGetLatestChatCompactionSummary(selectedSessionId);
   const { data: activeProvider } = useGetActiveAIProvider();
+  const activeProviderModel = React.useMemo(() => {
+    try {
+      const config =
+        typeof (activeProvider as any)?.config === 'string'
+          ? JSON.parse((activeProvider as any).config)
+          : (activeProvider as any)?.config;
+      return typeof config?.model === 'string' ? config.model : undefined;
+    } catch {
+      return undefined;
+    }
+  }, [activeProvider]);
+  const contextOverheadRequest = React.useMemo(
+    () =>
+      selectedSessionId
+        ? {
+            conversationId: selectedSessionId,
+            requestedModel: activeProviderModel,
+            projectPath: project?.path,
+            toolMode: currentMode,
+            screenKey,
+            connectionId,
+            notebookId,
+            pageId,
+          }
+        : undefined,
+    [
+      selectedSessionId,
+      activeProviderModel,
+      project?.path,
+      currentMode,
+      screenKey,
+      connectionId,
+      notebookId,
+      pageId,
+    ],
+  );
+  const { data: contextOverhead } = useGetAgentContextOverhead(
+    contextOverheadRequest,
+  );
 
   // Reset usage + context breakdown when session or scope changes
   React.useEffect(() => {
@@ -168,7 +306,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   // This keeps the ring meaningful even before the first agent run.
   React.useEffect(() => {
     if (hasAuthoritativeContextBreakdownRef.current) return;
-    if (!selectedSessionId || sessionMessages.length === 0) return;
+    if (!selectedSessionId || !contextOverhead) return;
     if (isLoadingCompactionSummary) return;
 
     const activeMessages =
@@ -202,38 +340,30 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       }>,
     );
 
-    // Derive context window from active provider model (fallback 32k)
-    const cfg =
-      typeof (activeProvider as any)?.config === 'string'
-        ? JSON.parse((activeProvider as any).config)
-        : (activeProvider as any)?.config;
-    const modelId = cfg?.model ?? '';
-    const contextWindow = (() => {
-      const m = modelId.toLowerCase();
-      if (m.includes('gemini-2.5') || m.includes('gemini-3')) return 1_000_000;
-      if (m.includes('claude') || m.includes('gpt-4')) return 200_000;
-      if (m.includes('gpt-4o') || m.includes('gpt-4.1')) return 128_000;
-      return 32_000;
-    })();
-
+    const total =
+      historyTokens +
+      contextOverhead.skills +
+      contextOverhead.mcpTools +
+      contextOverhead.secondBrain;
     const percentUsed = Math.min(
       100,
-      Math.round((historyTokens / contextWindow) * 100),
+      (total / contextOverhead.contextWindow) * 100,
     );
 
     setContextBreakdown({
       conversation: historyTokens,
       userFiles: 0,
-      skills: 0,
-      mcpTools: 0,
-      total: historyTokens,
-      contextWindow,
+      skills: contextOverhead.skills,
+      mcpTools: contextOverhead.mcpTools,
+      secondBrain: contextOverhead.secondBrain,
+      total,
+      contextWindow: contextOverhead.contextWindow,
       percentUsed,
     });
   }, [
     selectedSessionId,
     sessionMessages,
-    activeProvider,
+    contextOverhead,
     latestCompactionSummary,
     isLoadingCompactionSummary,
   ]);
@@ -677,6 +807,19 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
           onConfirmTerminal={confirmTerminal}
           onClearError={clearError}
           onOpenFile={handleOpenFile}
+          projectMemoryPrompt={
+            screenKey === 'project' &&
+            projectMemoryEnabled &&
+            projectAgentContextExists === false &&
+            !isDismissed
+              ? {
+                  fileName: PROJECT_AGENT_CONTEXT_FILE,
+                  disabled: streamState.isStreaming,
+                  onAccept: handleGenerateProjectContext,
+                  onDecline: handleDismissProjectContext,
+                }
+              : undefined
+          }
         />
 
         {changedFiles.length > 0 && (
@@ -895,32 +1038,88 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
             transformOrigin={{ vertical: 'top', horizontal: 'right' }}
             slotProps={{
               paper: {
-                sx: { minWidth: 120, py: 0.25 },
+                sx: {
+                  minWidth: 190,
+                  py: 0.5,
+                  borderRadius: 1.5,
+                  border: 1,
+                  borderColor: 'divider',
+                  boxShadow: 6,
+                },
               },
             }}
           >
             {(
               [
-                { label: 'Providers', tab: 'Providers' },
-                { label: 'Settings', tab: 'Settings' },
-                { label: 'MCP Servers', tab: 'MCP Servers' },
-                { label: 'Skills', tab: 'Skills' },
+                {
+                  label: 'AI Providers',
+                  tab: 'Providers',
+                  icon: <ProvidersIcon />,
+                },
+                {
+                  label: 'AI Settings',
+                  tab: 'Settings',
+                  icon: <SettingsIcon />,
+                },
+                {
+                  label: 'MCP Servers',
+                  tab: 'MCP Servers',
+                  icon: <MCPServersIcon />,
+                },
+                { label: 'Skills', tab: 'Skills', icon: <SkillsIcon /> },
               ] as const
-            ).map(({ label, tab }) => (
+            ).map(({ label, tab, icon }) => (
               <MenuItem
                 key={tab}
                 onClick={() => navigateToAISettings(tab)}
                 dense
                 sx={{
-                  py: 0.5,
-                  px: 1.5,
-                  minHeight: 'unset',
-                  fontSize: '0.8rem',
+                  minHeight: 34,
+                  px: 1.25,
+                  borderRadius: 0.75,
+                  mx: 0.5,
                 }}
               >
-                {label}
+                <ListItemIcon
+                  sx={{
+                    minWidth: 30,
+                    color: 'text.secondary',
+                    '& svg': { width: 17, height: 17 },
+                  }}
+                >
+                  {icon}
+                </ListItemIcon>
+                <ListItemText
+                  primary={label}
+                  primaryTypographyProps={{ fontSize: '0.8rem' }}
+                />
               </MenuItem>
             ))}
+            <Divider sx={{ my: 0.5 }} />
+            <MenuItem
+              onClick={() => navigateToAISettings('Agent Memory')}
+              dense
+              sx={{
+                minHeight: 34,
+                px: 1.25,
+                borderRadius: 0.75,
+                mx: 0.5,
+              }}
+            >
+              <ListItemIcon
+                sx={{
+                  minWidth: 30,
+                  color: 'text.secondary',
+                  '& svg': { width: 17, height: 17 },
+                }}
+              >
+                <MemoriesIcon />
+              </ListItemIcon>
+              <ListItemText
+                primary="Edit Memories"
+                primaryTypographyProps={{ fontSize: '0.8rem' }}
+              />
+            </MenuItem>
           </Menu>
 
           <Tooltip title="Close">
@@ -943,7 +1142,9 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       </Box>
 
       {/* Messages Area */}
-      <Box sx={{ flex: 1, minHeight: 0, display: 'flex' }}>
+      <Box
+        sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
+      >
         {renderMessages()}
       </Box>
 
@@ -967,6 +1168,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
                 connectionId,
                 notebookId,
                 pageId,
+                projectMemoryEnabled,
               )
             }
             onCancelStream={cancelStream}
@@ -974,6 +1176,8 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
           />
         </GradientBorder>
       </Box>
+
+      <MemoryConsentDialog />
     </Paper>
   );
 };

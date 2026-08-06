@@ -97,6 +97,7 @@ export interface AgentContextUsagePayload {
     userFiles: number;
     skills: number;
     mcpTools: number;
+    secondBrain: number;
     total: number;
     contextWindow: number;
     percentUsed: number;

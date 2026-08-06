@@ -23,6 +23,7 @@ import { registerStaticSiteHandlers } from './staticSite.ipcHandlers';
 import registerFlowfileHandlers from './flowfile.ipcHandlers';
 import { registerPipelineTemplatesHandlers } from './pipelineTemplates.ipcHandlers';
 import registerTaskManagerHandlers from './taskManager.ipcHandlers';
+import { registerSecondBrainHandlers } from './secondBrain.ipcHandlers';
 
 export {
   registerCliHandlers,
@@ -50,4 +51,5 @@ export {
   registerFlowfileHandlers,
   registerPipelineTemplatesHandlers,
   registerTaskManagerHandlers,
+  registerSecondBrainHandlers,
 };
