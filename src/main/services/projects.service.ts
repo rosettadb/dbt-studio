@@ -1351,23 +1351,39 @@ export default class ProjectsService {
   }
 
   /**
-   * List pipeline YAML files in a directory, ignoring non-pipeline yaml
-   * files such as main.conf.
+   * Recursively lists pipeline YAML files under a directory, ignoring
+   * non-pipeline yaml files such as main.conf. `name` is the path relative to
+   * `baseDir` (POSIX-style, extension stripped) so pipelines nested in
+   * subdirectories keep their directory prefix, e.g. `test/test` for
+   * `<baseDir>/test/test.yml`.
    */
   private static async listPipelineFilesInDir(
     dir: string,
+    baseDir: string = dir,
   ): Promise<{ name: string; path: string }[]> {
     if (!fs.existsSync(dir)) return [];
 
-    const entries = await fs.promises.readdir(dir);
-    return entries
-      .filter(
-        (f) => (f.endsWith('.yml') || f.endsWith('.yaml')) && f !== 'main.conf',
-      )
-      .map((f) => ({
-        name: f.replace(/\.(yml|yaml)$/, ''),
-        path: path.join(dir, f),
-      }));
+    const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    const results: { name: string; path: string }[] = [];
+
+    for (const entry of entries) {
+      const entryPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        const nested = await this.listPipelineFilesInDir(entryPath, baseDir);
+        results.push(...nested);
+      } else if (
+        (entry.name.endsWith('.yml') || entry.name.endsWith('.yaml')) &&
+        entry.name !== 'main.conf'
+      ) {
+        const relative = path
+          .relative(baseDir, entryPath)
+          .replace(/\\/g, '/')
+          .replace(/\.(yml|yaml)$/, '');
+        results.push({ name: relative, path: entryPath });
+      }
+    }
+
+    return results;
   }
 
   /**
