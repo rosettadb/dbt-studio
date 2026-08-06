@@ -114,16 +114,18 @@ interface TreeNodeProps extends NodeRendererProps<FileNode> {
 const isPipelineYaml = (filePath: string): boolean => {
   const parts = filePath.replace(/\\/g, '/').split('/');
   const fileName = parts[parts.length - 1] || '';
-  const parentDir = parts[parts.length - 2] || '';
-  const grandparentDir = parts[parts.length - 3] || '';
+  const dirParts = parts.slice(0, -1);
   const isYaml =
     (fileName.endsWith('.yml') || fileName.endsWith('.yaml')) &&
     fileName !== 'main.conf';
   // Deprecated location, kept for backward compatibility during the
   // transition to rosetta/pipelines/. Remove once projects have migrated.
-  const isLegacyLocation = parentDir === '.rosetta';
-  const isCurrentLocation =
-    parentDir === 'pipelines' && grandparentDir === 'rosetta';
+  // Matches any depth under rosetta/pipelines/ or .rosetta/ so pipelines
+  // nested in subdirectories are still recognized.
+  const isLegacyLocation = dirParts.includes('.rosetta');
+  const isCurrentLocation = dirParts.some(
+    (dir, i) => dir === 'rosetta' && dirParts[i + 1] === 'pipelines',
+  );
   return isYaml && (isLegacyLocation || isCurrentLocation);
 };
 

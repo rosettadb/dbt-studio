@@ -49,16 +49,23 @@ export const LEGACY_PIPELINE_CONFIG_DIR = '.rosetta';
 export function isPipelineFile(filePath: string): boolean {
   const parts = filePath.replace(/\\/g, '/').split('/');
   const fileName = parts[parts.length - 1];
-  const dirName = parts[parts.length - 2];
-  const parentDirName = parts[parts.length - 3];
-  if (dirName === LEGACY_PIPELINE_CONFIG_DIR) {
-    return fileName.endsWith('.yml') && fileName !== 'main.conf';
-  }
-  return (
-    dirName === PIPELINE_CONFIG_DIR &&
-    parentDirName === PIPELINE_CONFIG_PARENT_DIR &&
-    fileName.endsWith('.yml')
+  const dirParts = parts.slice(0, -1);
+
+  const isYaml =
+    (fileName.endsWith('.yml') || fileName.endsWith('.yaml')) &&
+    fileName !== 'main.conf';
+  if (!isYaml) return false;
+
+  // Matches any depth under rosetta/pipelines/ or .rosetta/, not just files
+  // directly inside them, so pipelines nested in subdirectories are still
+  // recognized.
+  const isLegacyLocation = dirParts.includes(LEGACY_PIPELINE_CONFIG_DIR);
+  const isCurrentLocation = dirParts.some(
+    (dir, i) =>
+      dir === PIPELINE_CONFIG_PARENT_DIR &&
+      dirParts[i + 1] === PIPELINE_CONFIG_DIR,
   );
+  return isLegacyLocation || isCurrentLocation;
 }
 
 export const PIPELINE_CONFIG_TEMPLATE = `name: "CI"
