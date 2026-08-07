@@ -15,6 +15,7 @@ import {
   Project,
 } from '../../../types/backend';
 import { useDbt, useProcess } from '../../hooks';
+import { useGetSettings } from '../../controllers';
 import {
   StagingModal,
   IncrementalModal,
@@ -68,6 +69,8 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
     setRunInCloudModal(command);
   });
   const { start, stop, isRunning } = useProcess();
+  const { data: settings } = useGetSettings();
+  const isDbtV2 = !!settings?.dbtVersion?.startsWith('2.');
   const [stagingPath, setStagingPath] = React.useState('');
   const [rawPath, setRawPath] = React.useState('');
   const [incrementalPath, setIncrementalPath] = React.useState('');
@@ -110,6 +113,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
     localOnly: boolean;
     cloudOnly?: boolean;
     dividerBefore?: boolean;
+    hidden?: boolean;
   }[] = [
     // Rosetta Layer Generation Commands (Local Only)
     {
@@ -268,6 +272,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
       leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
       subTitle: 'Generate documentation for the project',
       localOnly: true, // Docs generation is typically local
+      hidden: isDbtV2, // dbt Core v2 does not support docs generation
     },
     {
       name: (
@@ -296,6 +301,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
       leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
       subTitle: 'Serve the documentation website',
       localOnly: true, // Serve docs is local development only
+      hidden: isDbtV2, // dbt Core v2 does not support docs generation/serving
     },
     {
       name: 'Clean',
@@ -356,6 +362,9 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
   // In cloud mode: hide Rosetta layer generation and local development tools
   // In local mode: show all items
   const filteredMenuItems = allMenuItems.filter((item) => {
+    if (item.hidden) {
+      return false;
+    }
     if (environment === 'cloud') {
       return !item.localOnly;
     }
@@ -374,8 +383,14 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
         leftIcon={<PlayCircleOutline />}
         height={24}
         menuItems={filteredMenuItems.map((item) => {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { localOnly: _l, cloudOnly: _c, ...menuItem } = item;
+          /* eslint-disable @typescript-eslint/no-unused-vars */
+          const {
+            localOnly: _l,
+            cloudOnly: _c,
+            hidden: _h,
+            ...menuItem
+          } = item;
+          /* eslint-enable @typescript-eslint/no-unused-vars */
           // dividerBefore is kept — SplitButton supports it
           return menuItem;
         })}
@@ -387,13 +402,16 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           path={rawPath}
           project={project}
           processCallback={async (updatedPath) => {
-            onBeforeExecute?.();
-            await rosettaDbt(project, {
-              command: 'extract',
-              commandType: CommandType.DBTNext,
-              arguments: new Map([['-o', updatedPath]]),
-            } as Command);
-            setOpenRawLayerModal(false);
+            try {
+              onBeforeExecute?.();
+              await rosettaDbt(project, {
+                command: 'extract',
+                commandType: CommandType.DBTNext,
+                arguments: new Map([['-o', updatedPath]]),
+              } as Command);
+            } finally {
+              setOpenRawLayerModal(false);
+            }
           }}
         />
       )}
@@ -412,13 +430,16 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
               });
               args.set(' ', command);
             }
-            onBeforeExecute?.();
-            await rosettaDbt(project, {
-              command: 'staging',
-              commandType: CommandType.DBTNext,
-              arguments: args,
-            } as Command);
-            setStagingModal(false);
+            try {
+              onBeforeExecute?.();
+              await rosettaDbt(project, {
+                command: 'staging',
+                commandType: CommandType.DBTNext,
+                arguments: args,
+              } as Command);
+            } finally {
+              setStagingModal(false);
+            }
           }}
         />
       )}
@@ -437,13 +458,16 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
               });
               args.set(' ', command);
             }
-            onBeforeExecute?.();
-            await rosettaDbt(project, {
-              commandType: CommandType.DBTNext,
-              command: 'incremental',
-              arguments: args,
-            } as Command);
-            setIncrementalModal(false);
+            try {
+              onBeforeExecute?.();
+              await rosettaDbt(project, {
+                commandType: CommandType.DBTNext,
+                command: 'incremental',
+                arguments: args,
+              } as Command);
+            } finally {
+              setIncrementalModal(false);
+            }
           }}
         />
       )}

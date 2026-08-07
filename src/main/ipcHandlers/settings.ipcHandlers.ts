@@ -103,8 +103,8 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
     return SettingsService.uninstallRosetta();
   });
 
-  ipcMain.handle('settings:reset-factory', async () => {
-    return SettingsService.resetFactorySettings();
+  ipcMain.handle('settings:reset-factory', async (event) => {
+    return SettingsService.resetFactorySettings(event.sender.session);
   });
 
   ipcMain.handle('settings:restart', async () => {

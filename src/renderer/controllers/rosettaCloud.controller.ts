@@ -19,7 +19,11 @@ import {
   UseAuthLoginResult,
   UseAuthLogoutResult,
 } from '../../types/apiKey';
-import { CloudLogEntry, CloudPipelineData } from '../../types/cloudAction';
+import {
+  CloudLogEntry,
+  CloudPipelineData,
+  isTerminalActionStatus,
+} from '../../types/cloudAction';
 import { rosettaCloudServices } from '../services';
 import { QUERY_KEYS } from '../config/constants';
 
@@ -204,9 +208,12 @@ export const useCloudActionStatus = (
         ? rosettaCloudServices.getActionStatus(actionId)
         : Promise.resolve(null),
     enabled: !!actionId,
-    // Keep polling while at least one step is still pending/running. Stop once
-    // every step has settled into a terminal state.
+    // Stop polling once the overall container status is terminal. Steps are
+    // updated conditionally and may never all settle even after the run
+    // finishes, so step statuses alone aren't a reliable stop condition.
     refetchInterval: (data) => {
+      if (data?.status)
+        return isTerminalActionStatus(data.status) ? false : 3000;
       if (!data?.steps?.length) return 3000;
       const stillActive = data.steps.some(
         (s) =>
@@ -223,6 +230,7 @@ export const useCloudActionStatus = (
 const isActionFinishedFromStatus = (
   status: CloudPipelineData | null | undefined,
 ): boolean => {
+  if (status?.status) return isTerminalActionStatus(status.status);
   if (!status?.steps?.length) return false;
   return status.steps.every(
     (s) =>

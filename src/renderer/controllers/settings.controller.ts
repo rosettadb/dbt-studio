@@ -148,14 +148,13 @@ export const useResetFactorySettings = (
 ): UseMutationResult<void, CustomError, void> => {
   const { onSuccess: onCustomSuccess, onError: onCustomError } =
     customOptions || {};
-  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async () => {
       return settingsServices.resetFactorySettings();
     },
-    onSuccess: async (...args) => {
-      // Invalidate all queries since we're resetting everything
-      await queryClient.invalidateQueries();
+    onSuccess: (...args) => {
+      // Do not refetch after deletion: an active query could recreate a reset
+      // store before the main process relaunches the application.
       onCustomSuccess?.(...args);
     },
     onError: (...args) => {

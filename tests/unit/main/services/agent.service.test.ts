@@ -1,10 +1,15 @@
 import AgentService, {
+  AI_SETTINGS_DEFAULTS,
+  getToolFailureMessage,
   getToolsForMode,
+  normalizeAISettings,
+  sanitizeWikiToolCallForPersistence,
 } from '../../../../src/main/services/agent.service';
 import type { AISettingsConfig } from '../../../../src/types/backend';
 import type { ChatMessage } from '../../../../src/main/schemas/mainDatabase.schema';
 import { estimateMessagesTokens } from '../../../../src/main/services/ai/tokenEstimator';
 import MainDatabaseService from '../../../../src/main/services/mainDatabase.service';
+import { getVercelModel } from '../../../../src/main/services/ai/agentAdapter';
 
 // Mock everything agent.service imports
 jest.mock('fs-extra', () => ({
@@ -14,7 +19,11 @@ jest.mock('fs-extra', () => ({
 }));
 
 jest.mock('electron', () => ({
-  app: { getPath: jest.fn().mockReturnValue('/mock/path') },
+  app: {
+    getPath: jest.fn().mockReturnValue('/mock/path'),
+    getName: jest.fn().mockReturnValue('dbt-studio-test'),
+    getVersion: jest.fn().mockReturnValue('0.0.0-test'),
+  },
   BrowserWindow: { fromWebContents: jest.fn() },
 }));
 
@@ -40,6 +49,10 @@ jest.mock('../../../../src/main/services/ai/agents/sqlAgent', () => ({
 
 jest.mock('../../../../src/main/services/ai/agents/notebooksAgent', () => ({
   createNotebooksAgent: jest.fn(),
+}));
+
+jest.mock('../../../../src/main/services/ai/agents/analyticsAgent', () => ({
+  createAnalyticsAgent: jest.fn(),
 }));
 
 jest.mock('../../../../src/main/services/ai/mcp/mcpToolAdapter', () => ({
@@ -94,6 +107,9 @@ jest.mock('../../../../src/main/services/mainDatabase.service', () => ({
   __esModule: true,
   default: {
     getMessages: jest.fn(),
+    getMessagesWithContext: jest.fn(),
+    getLatestCompactionSummary: jest.fn().mockResolvedValue(null),
+    saveCompactionSummary: jest.fn(),
     addMessageWithContext: jest.fn(),
     compactConversationMessages: jest.fn(),
   },
@@ -117,6 +133,118 @@ jest.mock(
 );
 
 describe('AgentService (Phase 1)', () => {
+  describe('AI settings migration', () => {
+    it('adds disabled Second Brain defaults to legacy settings', () => {
+      const normalized = normalizeAISettings({
+        configuration: { autoGenerateMemories: true },
+      });
+
+      expect(normalized.secondBrain).toEqual(AI_SETTINGS_DEFAULTS.secondBrain);
+      expect(normalized.secondBrain.enabled).toBe(false);
+      expect(normalized.configuration.autoGenerateMemories).toBe(true);
+    });
+
+    it('clamps Second Brain byte and prompt budgets', () => {
+      const normalized = normalizeAISettings({
+        secondBrain: {
+          enabled: true,
+          maxPromptChars: Number.POSITIVE_INFINITY,
+          maxPageBytes: 100,
+          maxTotalBytes: 500,
+        },
+      });
+
+      expect(normalized.secondBrain.enabled).toBe(true);
+      expect(normalized.secondBrain.maxPromptChars).toBe(6000);
+      expect(normalized.secondBrain.maxPageBytes).toBe(1024);
+      expect(normalized.secondBrain.maxTotalBytes).toBe(1024);
+    });
+  });
+
+  describe('Second Brain persistence redaction', () => {
+    it('omits wiki page bodies and update content from persisted tool metadata', () => {
+      const read = sanitizeWikiToolCallForPersistence(
+        'wiki_read',
+        { pageId: 'MEMORY.md' },
+        {
+          ok: true,
+          pageId: 'MEMORY.md',
+          title: 'Second Brain',
+          body: 'private durable page body',
+          hash: 'a'.repeat(64),
+        },
+      );
+      const update = sanitizeWikiToolCallForPersistence(
+        'wiki_update',
+        {
+          pageId: 'MEMORY.md',
+          rationale: 'private rationale',
+          sourceRefs: ['private source reference'],
+          operation: {
+            type: 'create',
+            heading: 'private heading',
+            searchQuery: 'private search query',
+            content: 'new private fact',
+          },
+        },
+        { ok: true },
+      );
+      const archive = sanitizeWikiToolCallForPersistence(
+        'wiki_archive',
+        {
+          pageId: 'topics/private.md',
+          expectedHash: 'a'.repeat(64),
+          rationale: 'private archive rationale',
+        },
+        { ok: true },
+      );
+
+      expect(read.output).toMatchObject({
+        bodyOmitted: true,
+        bodyChars: 25,
+      });
+      expect(JSON.stringify(read.output)).not.toContain('private durable');
+      expect(update.input).toMatchObject({
+        operation: {
+          contentOmitted: true,
+          contentChars: 16,
+          headingOmitted: true,
+          searchQueryOmitted: true,
+        },
+        sourceRefsCount: 1,
+        sourceRefsOmitted: true,
+        rationaleOmitted: true,
+      });
+      expect(JSON.stringify(update.input)).not.toContain('new private fact');
+      expect(JSON.stringify(update.input)).not.toContain('private heading');
+      expect(JSON.stringify(update.input)).not.toContain(
+        'private search query',
+      );
+      expect(JSON.stringify(update.input)).not.toContain('private source');
+      expect(JSON.stringify(update.input)).not.toContain('private rationale');
+      expect(archive.input).toMatchObject({
+        pageId: 'topics/private.md',
+        rationaleChars: 25,
+        rationaleOmitted: true,
+      });
+      expect(JSON.stringify(archive.input)).not.toContain(
+        'private archive rationale',
+      );
+    });
+  });
+
+  describe('Tool terminal states', () => {
+    it('recognizes structured tool failures as errors', () => {
+      expect(
+        getToolFailureMessage({
+          ok: false,
+          error: { code: 'OUT_OF_SCOPE', message: 'Page is out of scope.' },
+        }),
+      ).toBe('Page is out of scope.');
+      expect(getToolFailureMessage({ ok: true })).toBeUndefined();
+    });
+  });
+
   describe('getToolsForMode', () => {
     const aiSettingsMock: AISettingsConfig = {
       chat: {
@@ -143,6 +271,15 @@ describe('AgentService (Phase 1)', () => {
         autoGenerateMemories: true,
       },
       advanced: { maxWorkspaceFileCount: 5000 },
+      secondBrain: {
+        enabled: false,
+        initialized: false,
+        maxPromptChars: 6000,
+        maxPageBytes: 64 * 1024,
+        maxTotalBytes: 10 * 1024 * 1024,
+        includeGlobalPages: true,
+        inlineSelfLearning: true,
+      },
     };
 
     it('returns only analysis tools in chat mode', () => {
@@ -207,6 +344,7 @@ describe('AgentService (Phase 1)', () => {
       const compacted = await (AgentService as any).autoCompact(
         1,
         messages,
+        null,
         event,
         100,
       );
@@ -223,9 +361,9 @@ describe('AgentService (Phase 1)', () => {
 
     it('buildTurnMessages triggers compaction at >=70% total prompt usage', async () => {
       const messages = Array.from({ length: 6 }, (_, i) => makeMessage(i + 1));
-      (MainDatabaseService.getMessages as jest.Mock).mockResolvedValue(
-        messages,
-      );
+      (
+        MainDatabaseService.getMessagesWithContext as jest.Mock
+      ).mockResolvedValue(messages);
       (estimateMessagesTokens as jest.Mock).mockReturnValue(70000);
       const autoCompactSpy = jest
         .spyOn(AgentService as any, 'autoCompact')
@@ -247,9 +385,9 @@ describe('AgentService (Phase 1)', () => {
 
     it('buildTurnMessages skips compaction below 70% total prompt usage', async () => {
       const messages = Array.from({ length: 4 }, (_, i) => makeMessage(i + 1));
-      (MainDatabaseService.getMessages as jest.Mock).mockResolvedValue(
-        messages,
-      );
+      (
+        MainDatabaseService.getMessagesWithContext as jest.Mock
+      ).mockResolvedValue(messages);
       (estimateMessagesTokens as jest.Mock).mockReturnValue(10000);
       const autoCompactSpy = jest.spyOn(AgentService as any, 'autoCompact');
 
@@ -259,12 +397,49 @@ describe('AgentService (Phase 1)', () => {
         [],
         'test-model',
         { sender: { send: jest.fn() } } as any,
-        { skills: 0, mcpTools: 0 },
+        { skills: 0, mcpTools: 0, secondBrain: 200 },
       );
 
       expect(autoCompactSpy).not.toHaveBeenCalled();
       expect(result.messages[0].role).toBe(messages[0].role);
+      expect(result.breakdown.secondBrain).toBe(200);
+      expect(result.breakdown.total).toBe(10_220);
       autoCompactSpy.mockRestore();
+    });
+  });
+
+  describe('Resumed session context overhead', () => {
+    it('returns fixed prompt categories without running an agent turn', async () => {
+      (getVercelModel as jest.Mock).mockResolvedValue({
+        modelId: 'gemini-3.1-flash-lite',
+      });
+      const overheadSpy = jest
+        .spyOn(AgentService as any, 'buildFixedPromptContext')
+        .mockResolvedValue({
+          secondBrainContext: 'memory context',
+          secondBrainTools: {},
+          fixedOverheadTokens: {
+            skills: 595,
+            mcpTools: 0,
+            secondBrain: 401,
+          },
+        });
+
+      await expect(
+        AgentService.getContextOverhead({
+          conversationId: 7,
+          projectPath: '/project',
+          screenKey: 'project',
+          toolMode: 'agent',
+        }),
+      ).resolves.toEqual({
+        skills: 595,
+        mcpTools: 0,
+        secondBrain: 401,
+        contextWindow: 100_000,
+      });
+
+      overheadSpy.mockRestore();
     });
   });
 
@@ -286,7 +461,7 @@ describe('AgentService (Phase 1)', () => {
       ).toThrow(/Message is too large/);
     });
 
-    it('caps the per-message token limit at 8k for large context models', () => {
+    it('applies the 20k character cap before token limits', () => {
       const largeMessage = 'x'.repeat(24_003);
 
       expect(() =>
@@ -294,7 +469,7 @@ describe('AgentService (Phase 1)', () => {
           largeMessage,
           1_000_000,
         ),
-      ).toThrow(/8,000 tokens/);
+      ).toThrow(/20,000 characters/);
     });
   });
 });

@@ -256,8 +256,13 @@ function buildGetQueryResultsTool(conversationId: number) {
   });
 }
 
-export function createStudioSqlTools(conversationId: number) {
-  const schemaExtractEnabled = isToolEnabled(STUDIO_SQL_SCHEMA_EXTRACT_FLAG);
+export function createStudioSqlTools(
+  conversationId: number,
+  options?: { forceSchemaExtract?: boolean },
+) {
+  const schemaExtractEnabled =
+    options?.forceSchemaExtract ||
+    isToolEnabled(STUDIO_SQL_SCHEMA_EXTRACT_FLAG);
   const queryEnabled = isToolEnabled(STUDIO_SQL_QUERY_FLAG);
   const getResultsEnabled = isToolEnabled(STUDIO_SQL_GET_RESULTS_FLAG);
 

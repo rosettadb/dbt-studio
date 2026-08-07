@@ -107,6 +107,36 @@ class TaskManagerServiceImpl {
     return true;
   }
 
+  cancelAll(): number {
+    let uncancelledTaskCount = 0;
+
+    Array.from(this.tasks.keys()).forEach((id) => {
+      const task = this.tasks.get(id);
+      if (!task || task.status !== 'running') return;
+
+      const canceller = this.cancellers.get(id);
+      if (!canceller) {
+        uncancelledTaskCount += 1;
+        return;
+      }
+
+      try {
+        canceller();
+      } catch {
+        uncancelledTaskCount += 1;
+        return;
+      }
+
+      task.status = 'cancelled';
+      task.finishedAt = Date.now();
+      this.cancellers.delete(id);
+      this.lastProgressEmit.delete(id);
+      this.broadcast({ type: 'updated', task });
+    });
+
+    return uncancelledTaskCount;
+  }
+
   remove(id: string) {
     const task = this.tasks.get(id);
     if (!task) return;

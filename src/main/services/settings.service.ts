@@ -3,6 +3,7 @@ import axios from 'axios';
 import fs from 'fs-extra';
 import path from 'path';
 import { app } from 'electron';
+import type { Session } from 'electron';
 import os from 'os';
 import AdmZip from 'adm-zip';
 import * as tar from 'tar';
@@ -10,7 +11,6 @@ import {
   loadDatabaseFile,
   loadDefaultSettings,
   updateDatabase,
-  deleteDirectory,
 } from '../utils/fileHelper';
 import {
   CliUpdateResponseType,
@@ -21,9 +21,11 @@ import {
   DuckDBDiagnostics,
 } from '../../types/backend';
 import { CliAdapter } from '../adapters';
-import { DB_FILE, initializeDataStorage } from '../utils/setupHelpers';
+import { DB_FILE } from '../utils/setupHelpers';
 import DuckDBBootstrap from './duckdb.service';
 import SecureStorageService from './secureStorage.service';
+
+const FACTORY_RESET_SHUTDOWN_TIMEOUT_MS = 10_000;
 
 const cliConfig: Record<
   keyof CliUpdateResponseType,
@@ -49,6 +51,8 @@ const cliConfig: Record<
 };
 
 export default class SettingsService {
+  private static factoryResetPromise: Promise<void> | null = null;
+
   static async loadSettings(): Promise<SettingsType> {
     const dataBase = await loadDatabaseFile();
     const defaultSettings = loadDefaultSettings();
@@ -453,60 +457,361 @@ export default class SettingsService {
     };
   }
 
-  static async resetFactorySettings(): Promise<void> {
+  static async resetFactorySettings(session: Session): Promise<void> {
+    if (this.factoryResetPromise) return this.factoryResetPromise;
+
+    this.factoryResetPromise = this.performFactoryReset(session).catch(
+      (error) => {
+        this.factoryResetPromise = null;
+        throw error;
+      },
+    );
+    return this.factoryResetPromise;
+  }
+
+  private static async performFactoryReset(session: Session): Promise<void> {
+    let stage = 'preparing cleanup';
+    let teardownStarted = false;
+
     try {
-      // 1. Load current database to get project paths
       const dataBase = await loadDatabaseFile();
+      const projectPaths = await this.resolveProjectPaths(
+        (dataBase.projects ?? []).map((project) => project.path),
+      );
+      const managedRosettaPath = await this.resolveManagedRosettaPath(
+        dataBase.settings?.rosettaPath,
+      );
 
-      // 2. Delete all project directories
-      for (const project of dataBase.projects) {
-        if (project.path && fs.existsSync(project.path)) {
-          try {
-            deleteDirectory(project.path);
-          } catch (error) {
-            // eslint-disable-next-line no-console
-            console.error(
-              `Failed to delete project directory ${project.path}:`,
-              error,
-            );
-          }
-        }
+      stage = 'stopping active resources';
+      teardownStarted = true;
+      await this.stopFactoryResetResources();
+
+      stage = 'clearing browser data';
+      await session.clearStorageData();
+      await session.clearCache();
+      await session.closeAllConnections();
+
+      stage = 'clearing secure credentials';
+      await SecureStorageService.clearAllCredentials();
+
+      stage = 'deleting application data';
+      const userDataPath = path.resolve(app.getPath('userData'));
+      const ownedTargets = [
+        { category: 'legacy settings', target: DB_FILE },
+        {
+          category: 'main application database',
+          target: path.join(userDataPath, 'main-database.db'),
+        },
+        {
+          category: 'main application database',
+          target: path.join(userDataPath, 'main-database.db-wal'),
+        },
+        {
+          category: 'main application database',
+          target: path.join(userDataPath, 'main-database.db-shm'),
+        },
+        {
+          category: 'persistent DuckDB',
+          target: path.join(userDataPath, 'main.duckdb'),
+        },
+        {
+          category: 'persistent DuckDB',
+          target: path.join(userDataPath, 'main.duckdb.wal'),
+        },
+        {
+          category: 'DuckLake state',
+          target: path.join(userDataPath, 'datalake'),
+        },
+        {
+          category: 'notebooks',
+          target: path.join(userDataPath, 'notebooks'),
+        },
+        {
+          category: 'AI settings',
+          target: path.join(userDataPath, 'ai-settings.json'),
+        },
+        {
+          category: 'MCP configuration',
+          target: path.join(userDataPath, 'mcp.config.json'),
+        },
+        {
+          category: 'Agent Skills',
+          target: path.join(userDataPath, 'skills'),
+        },
+        {
+          category: 'managed Python',
+          target: path.join(userDataPath, 'python'),
+        },
+        {
+          category: 'managed Python',
+          target: path.join(userDataPath, 'venv'),
+        },
+        {
+          category: 'managed DuckDB extensions',
+          target: path.join(userDataPath, 'duckdb'),
+        },
+        {
+          category: 'setup assets',
+          target: path.join(userDataPath, 'dbt_sample'),
+        },
+        {
+          category: 'setup assets',
+          target: path.join(userDataPath, 'main.conf'),
+        },
+        ...projectPaths.map((target) => ({
+          category: 'registered projects',
+          target,
+        })),
+        ...(managedRosettaPath
+          ? [{ category: 'managed Rosetta', target: managedRosettaPath }]
+          : []),
+      ];
+
+      const removalResults = await Promise.allSettled(
+        ownedTargets.map(({ target }) => fs.remove(target)),
+      );
+      const failedCategories = Array.from(
+        new Set(
+          removalResults.flatMap((result, index) =>
+            result.status === 'rejected' ? [ownedTargets[index].category] : [],
+          ),
+        ),
+      );
+      if (failedCategories.length > 0) {
+        throw new Error(
+          `Could not remove: ${failedCategories.sort().join(', ')}`,
+        );
       }
 
-      // 3. Clear all secure storage credentials
-      await this.clearAllSecureCredentials();
-
-      // 4. Delete database.json
-      if (fs.existsSync(DB_FILE)) {
-        await fs.remove(DB_FILE);
+      stage = 'verifying cleanup';
+      const remainingCategories = Array.from(
+        new Set(
+          (
+            await Promise.all(
+              ownedTargets.map(async ({ category, target }) => ({
+                category,
+                exists: await fs.pathExists(target),
+              })),
+            )
+          ).flatMap(({ category, exists }) => (exists ? [category] : [])),
+        ),
+      );
+      if (remainingCategories.length > 0) {
+        throw new Error(
+          `Data remains for: ${remainingCategories.sort().join(', ')}`,
+        );
       }
 
-      // 5. Reinitialize with default settings
-      initializeDataStorage();
+      stage = 'scheduling restart';
+      setTimeout(() => {
+        app.relaunch();
+        app.exit(0);
+      }, 50);
     } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      throw new Error(`Failed to reset factory settings: ${errorMessage}`);
+      await this.resumeAfterFailedFactoryReset();
+      const detail = this.getSanitizedResetDetail(error);
+      const restartInstruction = teardownStarted
+        ? ' Restart Rosetta DBT Studio before continuing.'
+        : '';
+      throw new Error(
+        `Factory reset failed while ${stage}.${detail}${restartInstruction}`,
+      );
     }
   }
 
-  private static async clearAllSecureCredentials(): Promise<void> {
+  private static async resumeAfterFailedFactoryReset(): Promise<void> {
     try {
-      // Get all stored credentials from keytar
-      const accounts = await SecureStorageService.findCredentials();
-
-      // Delete all found credentials
-      await Promise.all(
-        accounts.map(async (account) => {
-          try {
-            await SecureStorageService.deleteCredential(account);
-          } catch (error) {
-            // eslint-disable-next-line no-console
-          }
-        }),
+      const { default: MainDatabaseService } = await import(
+        './mainDatabase.service'
       );
-    } catch (error) {
-      // eslint-disable-next-line no-console
+      DuckDBBootstrap.cancelFactoryReset();
+      MainDatabaseService.cancelFactoryReset();
+    } catch {
+      // Preserve the original reset failure.
+    }
+  }
+
+  private static getSanitizedResetDetail(error: unknown): string {
+    if (!(error instanceof Error)) return '';
+    const safePrefixes = [
+      'A registered project ',
+      'The managed Rosetta ',
+      'Could not remove:',
+      'Data remains for:',
+      'Could not stop ',
+      'Failed to delete ',
+      'Failed to verify removal ',
+      'Failed to verify secure credential account removal',
+      'Timed out while ',
+    ];
+    return safePrefixes.some((prefix) => error.message.startsWith(prefix))
+      ? ` ${error.message}`
+      : '';
+  }
+
+  private static async resolveProjectPaths(
+    paths: Array<string | undefined>,
+  ): Promise<string[]> {
+    const userDataPath = path.resolve(app.getPath('userData'));
+    const homePath = path.resolve(app.getPath('home'));
+    const unsafePaths = new Set([
+      path.parse(userDataPath).root,
+      path.parse(homePath).root,
+      userDataPath,
+      homePath,
+      path.dirname(userDataPath),
+      path.dirname(homePath),
+    ]);
+    const resolved = await Promise.all(
+      paths
+        .filter((projectPath): projectPath is string =>
+          Boolean(projectPath?.trim()),
+        )
+        .map(async (projectPath) => {
+          const target = path.resolve(projectPath);
+          const targetRoot = path.parse(target).root;
+          const isBroadTopLevelPath = path.dirname(target) === targetRoot;
+          const containsProtectedRoot = [userDataPath, homePath].some(
+            (protectedPath) => {
+              const relative = path.relative(target, protectedPath);
+              return (
+                relative !== '' &&
+                !relative.startsWith('..') &&
+                !path.isAbsolute(relative)
+              );
+            },
+          );
+          if (
+            unsafePaths.has(target) ||
+            isBroadTopLevelPath ||
+            containsProtectedRoot
+          ) {
+            throw new Error('A registered project has an unsafe location');
+          }
+          if (await fs.pathExists(target)) {
+            const stats = await fs.lstat(target);
+            if (stats.isSymbolicLink()) {
+              throw new Error('A registered project uses an unsafe symlink');
+            }
+          }
+          return target;
+        }),
+    );
+    return Array.from(new Set(resolved));
+  }
+
+  private static async resolveManagedRosettaPath(
+    rosettaPath?: string,
+  ): Promise<string | null> {
+    if (!rosettaPath?.trim()) return null;
+
+    const managedRoot =
+      process.platform === 'win32'
+        ? path.resolve('C:/rosetta')
+        : path.resolve(app.getPath('home'), '.rosetta');
+    // The Rosetta installer stores a binary file path. Its packaged layout is
+    // <managed-root>/<version>/<version>/bin/rosetta, so climb from the
+    // binary through bin and the nested archive directory to the owned
+    // version directory.
+    const installPath = path.resolve(rosettaPath, '../../..');
+    const relative = path.relative(managedRoot, installPath);
+    const isManagedChild =
+      relative !== '' &&
+      !relative.startsWith('..') &&
+      !path.isAbsolute(relative) &&
+      path.basename(installPath).startsWith('rosetta-');
+
+    if (!isManagedChild) return null;
+    if (
+      (await fs.pathExists(installPath)) &&
+      (await fs.lstat(installPath)).isSymbolicLink()
+    ) {
+      throw new Error(
+        'The managed Rosetta installation uses an unsafe symlink',
+      );
+    }
+    return installPath;
+  }
+
+  private static async stopFactoryResetResources(): Promise<void> {
+    const [
+      { default: AgentService },
+      { AgentEditorBridgeService },
+      { TaskManagerService },
+      { FlowfileService },
+      { MCPClientManager },
+      { default: ConnectorsService },
+      { default: DuckLakeConnectionManager },
+      { CatalogAdapterFactory },
+      { default: MainDatabaseService },
+    ] = await Promise.all([
+      import('./agent.service'),
+      import('./ai/agentEditorBridge.service'),
+      import('./taskManager.service'),
+      import('./flowfile.service'),
+      import('./ai/mcp/mcpClientManager'),
+      import('./connectors.service'),
+      import('./duckLake/connectionManager.service'),
+      import('./duckLake/adapters'),
+      import('./mainDatabase.service'),
+    ]);
+
+    AgentService.cancelAllForFactoryReset();
+    AgentEditorBridgeService.resetForFactoryReset();
+    const uncancelledTaskCount = TaskManagerService.cancelAll();
+    if (uncancelledTaskCount > 0) {
+      throw new Error(
+        `Could not stop ${uncancelledTaskCount} background task(s)`,
+      );
+    }
+
+    const flowfileResult = await this.withFactoryResetTimeout(
+      'stopping Flowfile',
+      FlowfileService.stop(),
+    );
+    if (!flowfileResult.ok) {
+      throw new Error('Could not stop Flowfile');
+    }
+
+    await this.withFactoryResetTimeout(
+      'disconnecting MCP clients',
+      MCPClientManager.disconnectAll(),
+    );
+    ConnectorsService.cleanupBigQueryKeyFiles();
+    await this.withFactoryResetTimeout(
+      'disconnecting DuckLake connections',
+      DuckLakeConnectionManager.disconnectAll(),
+    );
+    await this.withFactoryResetTimeout(
+      'disconnecting catalog adapters',
+      CatalogAdapterFactory.disconnectAll(),
+    );
+    await this.withFactoryResetTimeout(
+      'stopping DuckDB',
+      DuckDBBootstrap.beginFactoryReset(),
+    );
+    await this.withFactoryResetTimeout(
+      'stopping the main database',
+      MainDatabaseService.beginFactoryReset(),
+    );
+  }
+
+  private static async withFactoryResetTimeout<T>(
+    description: string,
+    operation: Promise<T>,
+  ): Promise<T> {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        operation,
+        new Promise<T>((_resolve, reject) => {
+          timeout = setTimeout(() => {
+            reject(new Error(`Timed out while ${description}`));
+          }, FACTORY_RESET_SHUTDOWN_TIMEOUT_MS);
+        }),
+      ]);
+    } finally {
+      if (timeout) clearTimeout(timeout);
     }
   }
 

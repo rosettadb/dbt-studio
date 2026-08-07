@@ -102,7 +102,7 @@ const VerticalSash = (_: number, active: boolean) => (
 const Notebooks = () => {
   const theme = useTheme();
   const navigate = useNavigate();
-  const { selectedProject } = useContext(AppContext);
+  const { selectedProject, projects } = useContext(AppContext);
   const { isSidebarOpen } = useContext(AppContext);
   const { data: connections = [] } = useGetConnections();
   const { data: duckLakeInstances = [] } = useDuckLakeInstances();
@@ -739,8 +739,9 @@ const Notebooks = () => {
                     const icon =
                       connectionIcons.images[conn.connection.type] ||
                       defaultIcon;
-                    const isProjectConnection =
-                      conn.id === selectedProject?.connectionId;
+                    const linkedProject = projects?.find(
+                      (p) => p.connectionId === conn.id,
+                    );
                     return (
                       <Box
                         sx={{
@@ -769,13 +770,16 @@ const Notebooks = () => {
                         >
                           {conn.connection.name}
                         </span>
-                        {isProjectConnection && (
-                          <Tooltip title="Project Connection">
+                        {linkedProject && (
+                          <Tooltip title={`Project: ${linkedProject.name}`}>
                             <LinkIcon
                               sx={{
                                 ml: 'auto',
                                 fontSize: 16,
-                                color: 'primary.main',
+                                color:
+                                  linkedProject.id === selectedProject?.id
+                                    ? 'success.main'
+                                    : 'text.disabled',
                                 mr: 2,
                                 transform: 'rotate(-45deg)',
                               }}
@@ -846,8 +850,9 @@ const Notebooks = () => {
                   Select Connection
                 </MenuItem>
                 {connections.map((conn) => {
-                  const isProjectConnection =
-                    conn.id === selectedProject?.connectionId;
+                  const linkedProject = projects?.find(
+                    (p) => p.connectionId === conn.id,
+                  );
                   return (
                     <MenuItem
                       key={conn.id}
@@ -877,12 +882,15 @@ const Notebooks = () => {
                         />
                         {conn.connection.name}
                       </Box>
-                      {isProjectConnection && (
-                        <Tooltip title="Project Connection">
+                      {linkedProject && (
+                        <Tooltip title={`Project: ${linkedProject.name}`}>
                           <LinkIcon
                             sx={{
                               fontSize: 16,
-                              color: 'primary.main',
+                              color:
+                                linkedProject.id === selectedProject?.id
+                                  ? 'success.main'
+                                  : 'text.disabled',
                               transform: 'rotate(-45deg)',
                             }}
                           />

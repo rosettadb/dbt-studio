@@ -12,6 +12,7 @@ import {
   InputAdornment,
 } from '@mui/material';
 import React from 'react';
+import { toast } from 'react-toastify';
 import { projectsServices } from '../../../services';
 import { useUpdateProject } from '../../../controllers';
 import { Project } from '../../../../types/backend';
@@ -19,7 +20,7 @@ import { Project } from '../../../../types/backend';
 type Props = {
   isOpen: boolean;
   onClose: () => void;
-  processCallback: (path: string) => void;
+  processCallback: (path: string) => Promise<void>;
   path: string;
   project: Project;
 };
@@ -138,11 +139,20 @@ export const RawLayerModal: React.FC<Props> = ({
           variant="contained"
           onClick={async () => {
             setLoading(true);
-            await updateProject.mutateAsync({
-              ...project,
-              rawLayerDir: updatedPath,
-            });
-            processCallback(updatedPath);
+            try {
+              await updateProject.mutateAsync({
+                ...project,
+                rawLayerDir: updatedPath,
+              });
+              await processCallback(updatedPath);
+            } catch (err) {
+              // eslint-disable-next-line no-console
+              console.error(err);
+              toast.error('Failed to generate raw layer');
+              throw err;
+            } finally {
+              setLoading(false);
+            }
           }}
           disabled={loading}
           sx={{

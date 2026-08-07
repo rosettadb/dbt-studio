@@ -14,6 +14,7 @@ export interface ContextUsageBreakdown {
   userFiles: number;
   skills: number;
   mcpTools: number;
+  secondBrain?: number;
   total: number;
   contextWindow: number;
   percentUsed: number;
@@ -41,6 +42,14 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
+export function formatContextPercentage(percent: number): string {
+  if (!Number.isFinite(percent) || percent <= 0) return '0%';
+  if (percent < 0.1) return '<0.1%';
+  const rounded =
+    percent < 10 ? Math.round(percent * 10) / 10 : Math.round(percent);
+  return `${rounded}%`;
+}
+
 interface RowProps {
   label: string;
   tokens: number;
@@ -49,7 +58,7 @@ interface RowProps {
 }
 
 const UsageRow: React.FC<RowProps> = ({ label, tokens, total, color }) => {
-  const pct = total > 0 ? Math.round((tokens / total) * 100) : 0;
+  const pct = total > 0 ? Math.min(100, (tokens / total) * 100) : 0;
   return (
     <Box sx={{ mb: 1.25 }}>
       <Box
@@ -70,7 +79,7 @@ const UsageRow: React.FC<RowProps> = ({ label, tokens, total, color }) => {
           variant="caption"
           sx={{ color: 'text.disabled', fontSize: '0.7rem', ml: 1 }}
         >
-          {formatTokens(tokens)} ({pct}%)
+          {formatTokens(tokens)} ({formatContextPercentage(pct)})
         </Typography>
       </Box>
       <LinearProgress
@@ -130,7 +139,7 @@ export const ContextUsageRing: React.FC<ContextUsageRingProps> = ({
     );
   }
 
-  const pct = Math.min(100, breakdown.percentUsed);
+  const pct = Math.max(0, Math.min(100, breakdown.percentUsed));
   const ringColor = getColor(pct);
 
   const r = (size - STROKE_WIDTH) / 2;
@@ -138,7 +147,7 @@ export const ContextUsageRing: React.FC<ContextUsageRingProps> = ({
   const dash = (pct / 100) * circ;
   const gap = circ - dash;
 
-  const totalLabel = `${pct}% context used`;
+  const totalLabel = `${formatContextPercentage(pct)} context used`;
 
   return (
     <>
@@ -238,6 +247,12 @@ export const ContextUsageRing: React.FC<ContextUsageRingProps> = ({
           total={breakdown.contextWindow}
           color="#4caf50"
         />
+        <UsageRow
+          label="Wiki Memory"
+          tokens={breakdown.secondBrain ?? 0}
+          total={breakdown.contextWindow}
+          color="#00acc1"
+        />
 
         <Divider sx={{ my: 1.25 }} />
 
@@ -264,10 +279,9 @@ export const ContextUsageRing: React.FC<ContextUsageRingProps> = ({
           >
             {pct >= AUTO_COMPACTION_THRESHOLD
               ? 'Auto-compaction threshold reached'
-              : `${Math.max(
-                  0,
-                  AUTO_COMPACTION_THRESHOLD - pct,
-                )}% until auto-compaction`}
+              : `${formatContextPercentage(
+                  Math.max(0, AUTO_COMPACTION_THRESHOLD - pct),
+                )} until auto-compaction`}
           </Typography>
         </Box>
       </Popover>

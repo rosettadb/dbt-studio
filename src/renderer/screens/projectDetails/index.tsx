@@ -127,6 +127,34 @@ const VerticalSash = (_: number, active: boolean) => (
   </div>
 );
 
+/**
+ * Resolves a pipeline file's identifier relative to whichever pipelines base
+ * directory it lives under (`rosetta/pipelines/` current, `.rosetta/`
+ * legacy), extension stripped — matching the `name` the main process reports
+ * from `ProjectsService.listPipelines`. Falls back to the bare filename if
+ * the file isn't under a known base dir. This is what must be sent as
+ * `PIPELINE_FILE` and used as the `pipelineRuns` lookup key so nested
+ * pipelines don't collide with same-named pipelines in other folders.
+ */
+const getPipelineRelativeName = (
+  filePath: string,
+  projectPath: string,
+): string => {
+  const normalizedFile = filePath.replace(/\\/g, '/');
+  const normalizedProject = projectPath.replace(/\\/g, '/').replace(/\/$/, '');
+  const baseDirs = [
+    `${normalizedProject}/rosetta/pipelines/`,
+    `${normalizedProject}/.rosetta/`,
+  ];
+
+  const base = baseDirs.find((dir) => normalizedFile.startsWith(dir));
+  const relative = base
+    ? normalizedFile.slice(base.length)
+    : (normalizedFile.split('/').pop() ?? normalizedFile);
+
+  return relative.replace(/\.(yml|yaml)$/, '');
+};
+
 const ProjectDetails: React.FC = () => {
   const navigate = useNavigate();
   const [verticalSizes, setVerticalSizes] = React.useState<(number | string)[]>(
@@ -216,17 +244,16 @@ const ProjectDetails: React.FC = () => {
   const [pipelineCloudModal, setPipelineCloudModal] = React.useState(false);
   const theme = useTheme();
 
-  const handleRunPipelineFile = React.useCallback((filePath: string) => {
-    // Extract pipeline name from path (filename without extension)
-    const name =
-      filePath
-        .replace(/\\/g, '/')
-        .split('/')
-        .pop()
-        ?.replace(/\.(yml|yaml)$/, '') || '';
-    setPipelineRunArgs(`--pipeline_name ${name}`);
-    setPipelineCloudModal(true);
-  }, []);
+  const handleRunPipelineFile = React.useCallback(
+    (filePath: string) => {
+      const name = project?.path
+        ? getPipelineRelativeName(filePath, project.path)
+        : '';
+      setPipelineRunArgs(`--pipeline_name ${name}`);
+      setPipelineCloudModal(true);
+    },
+    [project?.path],
+  );
 
   // Pipeline tab support — derive state from the currently active tab
   const activePipelineFilePath = React.useMemo(() => {
@@ -245,13 +272,26 @@ const ProjectDetails: React.FC = () => {
     return parts[parts.length - 1] || null;
   }, [activePipelineFilePath]);
 
-  const recordedPipelineActionId = activePipelineBasename
-    ? (project?.pipelineRuns?.[activePipelineBasename] ?? null)
+  // Identifier matching the PIPELINE_FILE sent to the cloud and the key used
+  // in project.pipelineRuns (relative to the pipelines base dir, e.g.
+  // `test/test.yml`) — must NOT be reduced to just the basename, or nested
+  // pipelines collide with same-named pipelines in other folders.
+  const activePipelineFile = React.useMemo(() => {
+    if (!activePipelineFilePath || !project?.path) return null;
+    const relativeName = getPipelineRelativeName(
+      activePipelineFilePath,
+      project.path,
+    );
+    return relativeName ? `${relativeName}.yml` : null;
+  }, [activePipelineFilePath, project?.path]);
+
+  const recordedPipelineActionId = activePipelineFile
+    ? (project?.pipelineRuns?.[activePipelineFile] ?? null)
     : null;
 
   const activePipelineActionId = usePipelineActionId(
     project?.externalId ? project?.id : null,
-    activePipelineBasename,
+    activePipelineFile,
     recordedPipelineActionId,
   );
 
@@ -1173,11 +1213,19 @@ const ProjectDetails: React.FC = () => {
               }}
               onFileSelect={async (fileNode) => {
                 if (isPipelineFile(fileNode.path)) {
-                  openTab(toPipelineTabPath(fileNode.path), {
+                  const pipelineTabPath = toPipelineTabPath(fileNode.path);
+                  const alreadyOpen = !!getTabByPath(pipelineTabPath);
+                  openTab(pipelineTabPath, {
                     title: fileNode.name,
                     content: '',
                     isReadOnly: true,
                   });
+                  // If the tab was already open (e.g. after a pipeline override),
+                  // React Query won't re-fetch automatically — force a refresh so
+                  // the view shows the updated file content.
+                  if (alreadyOpen) {
+                    await refetchPipelineContent();
+                  }
                   return;
                 }
                 if (!utils.isEditableFile(fileNode.path)) {

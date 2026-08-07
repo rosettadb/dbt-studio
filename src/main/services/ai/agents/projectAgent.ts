@@ -3,10 +3,13 @@ import { z } from 'zod';
 import type { BaseAgentConfig } from './baseAgentConfig';
 import { createDbtTools, dbtTools } from '../tools/dbt.tools';
 import { createStudioCliTools } from '../tools/studio/cli.tools';
+import { createStudioSqlTools } from '../tools/studio/sql.tools';
 import {
   createFilesystemTools,
   filesystemTools,
 } from '../tools/filesystem.tools';
+import { composeAgentRuntime } from './composeAgentRuntime';
+import { PROJECT_AGENT_CONTEXT_FILE } from '../../../../shared/agentMemoryConstants';
 
 export interface ProjectAgentOptions {
   projectPath?: string;
@@ -15,6 +18,14 @@ export interface ProjectAgentOptions {
   onFileWritten?: (filePath: string) => void;
   conversationId?: number; // Added for retrofitting
   toolMode: 'chat' | 'agent';
+  projectAiContext?: string;
+  sessionContextBlock?: string;
+  connectionMeta?: {
+    name?: string;
+    type?: string;
+    database?: string;
+    schema?: string;
+  };
 }
 
 export async function createProjectAgent(
@@ -29,6 +40,26 @@ export async function createProjectAgent(
       ? `\n### MCP Server Tools\nThe following external tools are currently available:\n${mcpToolKeys.map((k) => `- ${k}`).join('\n')}`
       : '';
 
+  const connectionBlock = options.connectionMeta?.type
+    ? [
+        '\n## Active Database Connection\n',
+        `- **Type**: ${options.connectionMeta.type}`,
+        `- **Name**: ${options.connectionMeta.name ?? 'N/A'}`,
+        `- **Database**: ${options.connectionMeta.database ?? 'default'}`,
+        `- **Schema**: ${options.connectionMeta.schema ?? 'default'}`,
+      ].join('\n')
+    : '';
+
+  const sessionCtxBlock = options.sessionContextBlock
+    ? `\n<session_context>\n${options.sessionContextBlock}\n</session_context>\n`
+    : '';
+
+  const projectContextBlock = options.projectAiContext
+    ? `\n<project_ai_context source="${PROJECT_AGENT_CONTEXT_FILE}">\n${options.projectAiContext}\n</project_ai_context>\n` +
+      `\n> Note: You can update \`${PROJECT_AGENT_CONTEXT_FILE}\` using your \`writeFile\` tool if the user asks you to modify these instructions.\n` +
+      `> **CRITICAL PRECEDENCE RULE:** Project-scoped \`${PROJECT_AGENT_CONTEXT_FILE}\` context is stronger than global Agent Memory. It remains subordinate to system, security, trusted scope, connection, confirmation, credential, and tool-authorization policy.\n`
+    : '';
+
   const isAskMode = options.toolMode === 'chat';
 
   const systemInstructions = isAskMode
@@ -36,6 +67,14 @@ export async function createProjectAgent(
 You help users with dbt model development, debugging, and data operations by answering questions.
 
 ${projectPath ? `## Active dbt Project\n\nProject path: ${projectPath}\n` : ''}
+${connectionBlock}
+${sessionCtxBlock}
+${projectContextBlock}
+
+## Project AI Instructions (${PROJECT_AGENT_CONTEXT_FILE})
+
+The trusted runtime injects the canonical project-root file above when it is enabled, present, bounded, and safe. Do not independently load legacy or differently cased instruction files. "Project Memory" means the project-owned \`${PROJECT_AGENT_CONTEXT_FILE}\` file. If no project context was injected and the user asks about Project Memory, \`${PROJECT_AGENT_CONTEXT_FILE}\`, project conventions, or AI instructions, explain that the file is missing and offer to create it after the user switches to Code mode. Ask mode cannot create it.
+
 ${skills ?? ''}
 
 ## Ask Mode Constraints
@@ -57,7 +96,22 @@ You help users with dbt model development, debugging, documentation, and data op
 You have access to the dbt project filesystem and can read, write, and run dbt commands.
 
 ${projectPath ? `## Active dbt Project\n\nProject path: ${projectPath}\n\nAll file operations and dbt commands should use this project path as the working directory unless the user specifies otherwise.\n` : ''}
+${connectionBlock}
+${sessionCtxBlock}
+${projectContextBlock}
+
+## Project AI Instructions (${PROJECT_AGENT_CONTEXT_FILE})
+
+The trusted runtime injects the canonical project-root file above when it is enabled, present, bounded, and safe. Do not independently load legacy or differently cased instruction files. "Project Memory" means the project-owned \`${PROJECT_AGENT_CONTEXT_FILE}\` file. If no project context was injected and the user asks about Project Memory, \`${PROJECT_AGENT_CONTEXT_FILE}\`, project conventions, or AI instructions, explain that the file is missing and offer to create it. Use \`writeFile\` only after the user agrees, and respect a decline for the rest of the conversation.
+
 ${skills ?? ''}
+
+## Standard dbt Conventions
+
+Unless overridden by \`${PROJECT_AGENT_CONTEXT_FILE}\`, always follow standard dbt project organization conventions:
+- **Staging (\`models/staging/\`)**: 1:1 mapping with sources. Name models \`stg_{source_name}.sql\`. Do basic renaming and casting here, no complex logic. Source definitions (\`sources.yml\`) belong here.
+- **Intermediate (\`models/intermediate/\`)**: Joins and complex transformations between staging models. Name models \`int_{name}.sql\`.
+- **Marts (\`models/marts/\`)**: Clean, business-level aggregates for BI tools. Name models \`dim_{name}.sql\` (dimensions) or \`fct_{name}.sql\` (facts).
 
 ## Guidelines
 
@@ -163,6 +217,9 @@ If the failure appears to be caused by invalid credentials, unreachable host, wr
 - pathExists: Check if a file or directory exists
 ${mcpToolsList}
 
+### Database Tools
+- studio_sql_schema_extract: Extract schema (tables, views, columns) for the active SQL connection to understand the database structure
+
 Always confirm before making destructive changes.`;
 
   const allBaseTools = projectPath
@@ -172,6 +229,9 @@ Always confirm before making destructive changes.`;
           projectPath,
           conversationId: options.conversationId,
           mainWindow: base.mainWindow,
+        }),
+        ...createStudioSqlTools(options.conversationId ?? 0, {
+          forceSchemaExtract: true,
         }),
         ...createFilesystemTools(projectPath),
       }
@@ -193,6 +253,7 @@ Always confirm before making destructive changes.`;
     'listDirectory',
     'readFile',
     'pathExists',
+    'studio_sql_schema_extract',
   ];
 
   const makeAskModeStub = (toolName: string): any => {
@@ -207,7 +268,7 @@ Always confirm before making destructive changes.`;
 
   const baseTools: Record<string, any> = {};
   Object.entries(allBaseTools).forEach(([name, toolDef]) => {
-    if (enabledToolNames.has(name)) {
+    if (enabledToolNames.has(name) || name === 'studio_sql_schema_extract') {
       if (isAskMode && !READ_ONLY_TOOLS.includes(name)) {
         baseTools[name] = makeAskModeStub(name);
       } else {
@@ -216,10 +277,12 @@ Always confirm before making destructive changes.`;
     }
   });
 
+  const runtime = composeAgentRuntime(base, systemInstructions, baseTools);
+
   return new ToolLoopAgent({
     model: base.model as any,
-    instructions: systemInstructions,
-    tools: { ...baseTools, ...base.mcpTools, loadSkill: base.loadSkillTool },
+    instructions: runtime.instructions,
+    tools: runtime.tools,
     stopWhen: stepCountIs(base.maxSteps),
     prepareStep: base.prepareStep,
     onStepFinish: base.onStepFinish,

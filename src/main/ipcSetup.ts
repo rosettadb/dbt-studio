@@ -25,6 +25,7 @@ import {
   registerFlowfileHandlers,
   registerPipelineTemplatesHandlers,
   registerTaskManagerHandlers,
+  registerSecondBrainHandlers,
 } from './ipcHandlers';
 import { installIpcErrorHandling } from './utils/ipcErrorHandler';
 
@@ -55,6 +56,7 @@ const registerHandlers = (mainWindow: BrowserWindow) => {
   registerFlowfileHandlers();
   registerPipelineTemplatesHandlers();
   registerTaskManagerHandlers(mainWindow);
+  registerSecondBrainHandlers();
 };
 
 export default registerHandlers;

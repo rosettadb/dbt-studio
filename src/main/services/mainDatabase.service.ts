@@ -19,6 +19,9 @@ import {
   or,
   notInArray,
   ne,
+  asc,
+  gt,
+  sql as drizzleSql,
 } from 'drizzle-orm';
 import * as schema from '../schemas/mainDatabase.schema';
 import { MainDatabaseInfo, UsageStats } from '../../types/backend';
@@ -55,10 +58,44 @@ export interface GetConversationsFilter {
   pageId?: string | null;
 }
 
+export type SecondBrainEvidenceCursor = {
+  updatedAt: string;
+  stableId: string;
+};
+
+export type SecondBrainSessionEvidenceRow = {
+  stableId: string;
+  conversationId: number;
+  conversationTitle: string;
+  projectId: number | null;
+  screenKey: string;
+  connectionId: string | null;
+  notebookId: string | null;
+  pageId: string | null;
+  role: string;
+  content: string;
+  toolCalls: unknown;
+  contextItems: unknown;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SecondBrainAnalyticsEvidenceRow = {
+  stableId: string;
+  connectionId: string;
+  title: string;
+  routePath: string;
+  markdownContent: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export default class MainDatabaseService {
   private static sqlite: Database.Database | null = null;
 
   private static db: BetterSQLite3Database<typeof schema> | null = null;
+
+  private static factoryResetInProgress = false;
 
   private static readonly DB_PATH = path.join(
     app.getPath('userData'),
@@ -67,6 +104,9 @@ export default class MainDatabaseService {
 
   // Initialize database following SettingsService patterns
   static async initializeDatabase(): Promise<void> {
+    if (this.factoryResetInProgress) {
+      throw new Error('Main database is unavailable during factory reset');
+    }
     try {
       if (!this.sqlite) {
         // Create SQLite connection with optimizations
@@ -800,6 +840,139 @@ export default class MainDatabaseService {
     }
   }
 
+  static async getConversationScope(id: number): Promise<{
+    id: number;
+    projectId: number | null;
+    screenKey: string;
+    connectionId: string | null;
+    notebookId: string | null;
+    pageId: string | null;
+  } | null> {
+    const db = await this.getDatabase();
+    const [conversation] = await db
+      .select({
+        id: schema.chatConversations.id,
+        projectId: schema.chatConversations.projectId,
+        screenKey: schema.chatConversations.screenKey,
+        connectionId: schema.chatConversations.connectionId,
+        notebookId: schema.chatConversations.notebookId,
+        pageId: schema.chatConversations.pageId,
+      })
+      .from(schema.chatConversations)
+      .where(eq(schema.chatConversations.id, id))
+      .limit(1);
+
+    return conversation ?? null;
+  }
+
+  static async getSecondBrainSessionEvidence(options: {
+    after?: SecondBrainEvidenceCursor;
+    limit: number;
+  }): Promise<SecondBrainSessionEvidenceRow[]> {
+    const db = await this.getDatabase();
+    const limit = Math.max(1, Math.min(options.limit, 200));
+    const effectiveUpdatedAt = drizzleSql<string>`coalesce(${schema.chatMessages.updatedAt}, ${schema.chatMessages.createdAt}, '')`;
+    const conditions = [
+      inArray(schema.chatMessages.role, ['user', 'assistant']),
+      or(
+        eq(schema.chatMessages.isStreaming, false),
+        isNull(schema.chatMessages.isStreaming),
+      )!,
+    ];
+    if (options.after) {
+      if (!/^\d+$/u.test(options.after.stableId)) {
+        throw new Error('Invalid Second Brain session evidence cursor.');
+      }
+      conditions.push(
+        or(
+          gt(effectiveUpdatedAt, options.after.updatedAt),
+          and(
+            eq(effectiveUpdatedAt, options.after.updatedAt),
+            gt(schema.chatMessages.id, Number(options.after.stableId)),
+          ),
+        )!,
+      );
+    }
+
+    const rows = await db
+      .select({
+        stableId: schema.chatMessages.id,
+        conversationId: schema.chatConversations.id,
+        conversationTitle: schema.chatConversations.title,
+        projectId: schema.chatConversations.projectId,
+        screenKey: schema.chatConversations.screenKey,
+        connectionId: schema.chatConversations.connectionId,
+        notebookId: schema.chatConversations.notebookId,
+        pageId: schema.chatConversations.pageId,
+        role: schema.chatMessages.role,
+        content: schema.chatMessages.content,
+        toolCalls: schema.chatMessages.toolCalls,
+        contextItems: schema.chatMessages.contextItems,
+        createdAt: schema.chatMessages.createdAt,
+        updatedAt: effectiveUpdatedAt,
+      })
+      .from(schema.chatMessages)
+      .innerJoin(
+        schema.chatConversations,
+        eq(schema.chatMessages.conversationId, schema.chatConversations.id),
+      )
+      .where(and(...conditions))
+      .orderBy(asc(effectiveUpdatedAt), asc(schema.chatMessages.id))
+      .limit(limit);
+
+    return rows.map((row) => ({
+      ...row,
+      stableId: String(row.stableId),
+      createdAt: row.createdAt ?? '',
+      updatedAt: row.updatedAt,
+    }));
+  }
+
+  static async getSecondBrainAnalyticsEvidence(options: {
+    after?: SecondBrainEvidenceCursor;
+    limit: number;
+  }): Promise<SecondBrainAnalyticsEvidenceRow[]> {
+    const db = await this.getDatabase();
+    const limit = Math.max(1, Math.min(options.limit, 100));
+    const effectiveUpdatedAt = drizzleSql<string>`coalesce(${schema.analyticsPages.updatedAt}, ${schema.analyticsPages.createdAt}, '')`;
+    const conditions = [];
+    if (options.after) {
+      conditions.push(
+        or(
+          gt(effectiveUpdatedAt, options.after.updatedAt),
+          and(
+            eq(effectiveUpdatedAt, options.after.updatedAt),
+            gt(schema.analyticsPages.id, options.after.stableId),
+          ),
+        )!,
+      );
+    }
+
+    const query = db
+      .select({
+        stableId: schema.analyticsPages.id,
+        connectionId: schema.analyticsPages.connectionId,
+        title: schema.analyticsPages.title,
+        routePath: schema.analyticsPages.routePath,
+        markdownContent: schema.analyticsPages.markdownContent,
+        createdAt: schema.analyticsPages.createdAt,
+        updatedAt: effectiveUpdatedAt,
+      })
+      .from(schema.analyticsPages)
+      .orderBy(asc(effectiveUpdatedAt), asc(schema.analyticsPages.id))
+      .limit(limit);
+    const rows =
+      conditions.length > 0
+        ? await query.where(and(...conditions))
+        : await query;
+
+    return rows.map((row) => ({
+      ...row,
+      createdAt: row.createdAt ?? '',
+      updatedAt: row.updatedAt,
+    }));
+  }
+
   static async updateConversation(
     id: number,
     updates: Partial<NewChatConversation>,
@@ -1401,10 +1574,20 @@ export default class MainDatabaseService {
       }
 
       // Reinitialize
+      this.factoryResetInProgress = false;
       await this.initializeDatabase();
     } catch (error) {
       throw error;
     }
+  }
+
+  static async beginFactoryReset(): Promise<void> {
+    this.factoryResetInProgress = true;
+    await this.closeDatabase();
+  }
+
+  static cancelFactoryReset(): void {
+    this.factoryResetInProgress = false;
   }
 
   // Database Information Methods

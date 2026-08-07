@@ -1,5 +1,25 @@
 import keytar from 'keytar';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import MainDatabaseService from './mainDatabase.service';
+
+const execFileAsync = promisify(execFile);
+const MAC_KEYCHAIN_DELETE_LIMIT = 10_000;
+
+const isMacKeychainItemNotFound = (error: unknown): boolean => {
+  if (!(error instanceof Error)) return false;
+  const commandError = error as Error & {
+    code?: number | string;
+    stderr?: string;
+  };
+  return (
+    commandError.code === 44 ||
+    commandError.code === '44' ||
+    commandError.stderr?.includes(
+      'The specified item could not be found in the keychain',
+    ) === true
+  );
+};
 
 // AI Provider types for secure storage
 export type AIProviderType =
@@ -40,6 +60,66 @@ class SecureStorageService {
     return credentials
       .map((cred) => cred.account)
       .filter((account) => account !== this.ENVIRONMENTS_KEY);
+  }
+
+  async clearAllCredentials(): Promise<void> {
+    if (process.platform === 'darwin') {
+      await this.clearMacKeychainCredentials();
+      return;
+    }
+
+    const credentials = await keytar.findCredentials(this.serviceName);
+    let failureCount = 0;
+
+    // Native credential-manager operations must be serialized. Starting many
+    // OS-level deletions at once can queue overlapping authorization requests.
+    for (let index = 0; index < credentials.length; index += 1) {
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const deleted = await keytar.deletePassword(
+          this.serviceName,
+          credentials[index].account,
+        );
+        if (!deleted) failureCount += 1;
+      } catch {
+        failureCount += 1;
+      }
+    }
+
+    if (failureCount > 0) {
+      throw new Error(
+        `Failed to delete ${failureCount} secure credential account(s)`,
+      );
+    }
+
+    const remaining = await keytar.findCredentials(this.serviceName);
+    if (remaining.length > 0) {
+      throw new Error(
+        `Failed to verify removal of ${remaining.length} secure credential account(s)`,
+      );
+    }
+  }
+
+  private async clearMacKeychainCredentials(): Promise<void> {
+    for (let index = 0; index < MAC_KEYCHAIN_DELETE_LIMIT; index += 1) {
+      try {
+        // Do not use findCredentials() on macOS: it requests every secret value
+        // and can trigger one authorization dialog per Keychain item. The
+        // service-only query deletes matching generic-password items without
+        // reading their contents.
+        // eslint-disable-next-line no-await-in-loop
+        await execFileAsync('/usr/bin/security', [
+          'delete-generic-password',
+          '-s',
+          this.serviceName,
+        ]);
+      } catch (error) {
+        if (isMacKeychainItemNotFound(error)) return;
+        throw new Error('Failed to delete secure credential accounts');
+      }
+    }
+
+    throw new Error('Failed to verify secure credential account removal');
   }
 
   async getEnvironments(): Promise<string[]> {

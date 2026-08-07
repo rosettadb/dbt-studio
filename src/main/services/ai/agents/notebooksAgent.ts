@@ -6,14 +6,17 @@ import { createStudioConnectionsTools } from '../tools/studio/connections.tools'
 import { createStudioDuckLakeTools } from '../tools/studio/ducklake.tools';
 import { createStudioNotebooksTools } from '../tools/studio/notebooks.tools';
 import { NotebooksService } from '../../notebooks.service';
-import { TOOL_FLAGS } from '../tools/toolRegistry';
+
 import type { NotebookCell } from '../../../../types/notebooks';
+import { composeAgentRuntime } from './composeAgentRuntime';
+import { createDbtTools } from '../tools/dbt.tools';
+import { createFilesystemTools } from '../tools/filesystem.tools';
+import { EnrichedConnectionMeta } from './agentTypes';
 
 export interface NotebooksAgentOptions {
-  connectionMeta: { name: string; type: string };
+  connectionMeta: EnrichedConnectionMeta;
   notebookId?: string;
   connectionId?: string;
-  projectPath?: string;
   enabledTools: Record<string, any>;
   skills: string;
   conversationId: number;
@@ -59,14 +62,8 @@ export async function createNotebooksAgent(
   base: BaseAgentConfig,
   options: NotebooksAgentOptions,
 ) {
-  const {
-    connectionMeta,
-    notebookId,
-    connectionId,
-    projectPath,
-    enabledTools,
-    skills,
-  } = options;
+  const { connectionMeta, notebookId, connectionId, enabledTools, skills } =
+    options;
   const mcpToolKeys = Object.keys(base.mcpTools || {});
   const mcpToolsList =
     mcpToolKeys.length > 0
@@ -138,31 +135,65 @@ You are connected to a DuckLake lakehouse. DuckLake is a DuckDB extension (not a
 
   const isAskMode = options.toolMode === 'chat';
 
-  let notebookSummary = '';
-  if (connectionId && notebookId) {
-    notebookSummary = await buildNotebookContextSummary(
-      connectionId,
-      notebookId,
-    );
-  }
+  const notebookContext =
+    connectionId && notebookId
+      ? await buildNotebookContextSummary(connectionId, notebookId)
+      : '\n## Active Notebook\n(No notebook active)\n';
+
+  const linkedProjectBlock = connectionMeta.linkedDbtProject
+    ? `\n## Linked dbt Project\n\nThis connection is also used by the dbt project **${connectionMeta.linkedDbtProject.name}** ` +
+      `at \`${connectionMeta.linkedDbtProject.path}\`. ` +
+      `You can refer to this project if the user asks about dbt models that query this database.`
+    : '';
+
+  const databaseBlock =
+    connectionMeta.database || connectionMeta.schema
+      ? `\nDatabase: ${connectionMeta.database ?? 'N/A'}\nSchema: ${connectionMeta.schema ?? 'N/A'}`
+      : '';
 
   const systemInstructions = isAskMode
-    ? `You are an expert AI assistant for data notebooks. You are running in **Ask (read-only) mode**.
+    ? `You are an expert AI assistant for data analysis using Notebooks. You are running in **Ask (read-only) mode**.
 
 ## Active Connection
 
 Name: ${connectionMeta.name}
-Type: ${connectionMeta.type}${connectionHints}
-${notebookId ? `\n## Active Notebook\n\nNotebook ID: ${notebookId}\n` : ''}${notebookSummary}
+Type: ${connectionMeta.type}${databaseBlock}${connectionHints}
+${linkedProjectBlock}
+${notebookContext}
+
 ## Ask Mode Constraints
 
-You are in **Ask mode**. You can only read and analyze — you CANNOT execute queries, create tables, or modify data.
-If the user asks you to perform a write operation, explain what it would look like and tell them to switch to **Code mode**.
+You are in **Ask mode**. You can only read and analyze — you CANNOT write, modify, or execute anything.
+Available tools: schema exploration, reading notebook state, listing connections.
+NOT available: Cell creation, cell updates, cell execution, SQL query execution.
+
+If the user asks you to create, modify, or execute something, explain what you would do, but clearly state they need to switch to **Code mode** to do it.
 
 ${skills ?? ''}
-${mcpToolsList}`
-    : `You are an expert data engineering assistant in the Notebooks screen.
-Your goal is to help the user perform complex, multi-step data analysis and engineering workflows autonomously.
+${mcpToolsList}
+
+## Guidelines
+
+1. Explore schema to answer questions accurately.
+2. Read the notebook state to understand the user's current context.
+3. Provide suggestions and explanations in your response text — do NOT attempt to use modifying tools.
+4. Explicitly tell the user to switch to **Code mode** if they want to run or apply changes.`
+    : `You are an expert AI Agent designed to help the user analyze, write, and execute queries directly in their Notebook.
+
+## Active Connection
+
+Name: ${connectionMeta.name}
+Type: ${connectionMeta.type}${databaseBlock}${connectionHints}
+${linkedProjectBlock}
+${notebookContext}
+
+## Context
+
+You have direct access to the Notebook UI. You can read its current state, create new cells, update existing cells, and execute cells.
+You are strictly scoped to the database connection. Do NOT attempt to use DBT project commands.
+
+${skills ?? ''}
+${mcpToolsList}
 
 ## Capabilities & Workflow
 1. **Analyze Schema**: Use DuckLake tools to understand the database structure (tables, columns).
@@ -191,17 +222,7 @@ The notebook UI handles large datasets efficiently using server-side pagination.
 - **No Suggestions**: Your users are Data Engineers who already have specific tasks defined by stakeholders. Do NOT suggest what to do next. Do NOT ask "Would you like me to...?" or "What would you like to do next?".
 - **Concise Reporting**: Just explain or answer exactly what you have done. Be brief and professional. Do NOT add conversational filler.
 
-## Active Connection
-Name: ${connectionMeta.name}
-Type: ${connectionMeta.type}${connectionHints}
-${notebookId ? `\n## Active Notebook\n\nNotebook ID: ${notebookId}\n` : ''}${notebookSummary}
-${
-  projectPath
-    ? `## Active dbt Project\n\nProject path: ${projectPath}\n`
-    : `## Note\n\nNo dbt project is linked to this connection.\nFocus on: notebook cell authoring, SQL execution, result exploration, and schema inspection.\n`
-}
-${skills ?? ''}
-${mcpToolsList}`;
+`;
 
   const safeEnabledTools = { ...enabledTools };
   // The Notebooks screen does not have the SQL Editor bridge, so studio_ducklake_query
@@ -216,11 +237,28 @@ ${mcpToolsList}`;
     ...createStudioNotebooksTools(options.conversationId),
   };
 
+  // If a dbt project is linked, create the pure NodeJS filesystem/DBT tools
+  const linkedProjectPath = connectionMeta.linkedDbtProject?.path;
+  const projectTools: Record<string, any> = linkedProjectPath
+    ? {
+        ...createDbtTools(linkedProjectPath, undefined, base.mainWindow),
+        ...createFilesystemTools(linkedProjectPath),
+      }
+    : {};
+
   const READ_ONLY_TOOLS = [
     'studio_ducklake_schema_extract',
     'studio_connections_list',
     'studio_cloud_list_objects',
     'studio_cloud_preview_data',
+    'notebook_read',
+    'notebook_list',
+    'readDbtModel',
+    'listDbtModels',
+    'getDbtLogs',
+    'listDirectory',
+    'readFile',
+    'pathExists',
     'notebooks_get_state',
     'notebooks_cell_read',
     'notebooks_cell_result',
@@ -231,18 +269,21 @@ ${mcpToolsList}`;
       description: `[ASK MODE] ${toolName} is not available. Inform the user to switch to Code mode.`,
       inputSchema: z.object({}),
       execute: async () => ({
-        error: `"${toolName}" is not available in Ask mode. To execute queries or modify data, please switch to Code mode using the mode selector at the bottom of the chat.`,
+        error: `"${toolName}" is not available in Ask mode. To execute queries or modify the notebook, please switch to Code mode using the mode selector at the bottom of the chat.`,
       }),
     } as any);
   };
 
   const baseTools: Record<string, any> = {};
-  Object.entries(studioNotebookTools).forEach(([name, toolDef]) => {
-    const isEnabledInRegistry =
-      (TOOL_FLAGS as Record<string, boolean>)[name] !== false;
-    const isEnabledInMode = safeEnabledTools?.[name] !== false;
 
-    if (isEnabledInRegistry && isEnabledInMode) {
+  // Combine native UI tools and project filesystem tools
+  const allAvailableTools = { ...studioNotebookTools, ...projectTools };
+
+  Object.entries(allAvailableTools).forEach(([name, toolDef]) => {
+    const isUI = name in studioNotebookTools;
+    const isAllowedProjectTool = enabledTools && enabledTools[name];
+
+    if ((isUI && enabledTools?.[name] !== false) || isAllowedProjectTool) {
       if (isAskMode && !READ_ONLY_TOOLS.includes(name)) {
         baseTools[name] = makeAskModeStub(name);
       } else {
@@ -255,11 +296,12 @@ ${mcpToolsList}`;
   // second step to explain the tool result. A single-step limit can otherwise
   // persist a tool-only assistant message with no natural-language answer.
   const maxSteps = Math.max(base.maxSteps, 2);
+  const runtime = composeAgentRuntime(base, systemInstructions, baseTools);
 
   return new ToolLoopAgent({
     model: base.model as any,
-    instructions: systemInstructions,
-    tools: { ...baseTools, ...base.mcpTools, loadSkill: base.loadSkillTool },
+    instructions: runtime.instructions,
+    tools: runtime.tools,
     stopWhen: stepCountIs(maxSteps),
     prepareStep: base.prepareStep,
     onStepFinish: base.onStepFinish,

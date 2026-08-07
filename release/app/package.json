@@ -1,6 +1,6 @@
 {
   "name": "rosetta-dbt-studio",
-  "version": "1.6.2",
+  "version": "1.6.3",
   "description": "A modern DBT desktop IDE",
   "license": "MIT",
   "author": {
@@ -19,6 +19,7 @@
     "@duckdb/node-api": "^1.5.2-r.1",
     "better-sqlite3": "^12.2.0",
     "drizzle-orm": "^0.44.4",
+    "fs-extra": "^11.4.0",
     "keytar": "^7.9.0"
   }
 }

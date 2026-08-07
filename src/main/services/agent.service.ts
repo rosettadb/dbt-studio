@@ -8,6 +8,7 @@ import { createProjectAgent } from './ai/agents/projectAgent';
 import { createSqlAgent } from './ai/agents/sqlAgent';
 import { createNotebooksAgent } from './ai/agents/notebooksAgent';
 import { createAnalyticsAgent } from './ai/agents/analyticsAgent';
+import { EnrichedConnectionMeta } from './ai/agents/agentTypes';
 import ConnectorsService from './connectors.service';
 import { getVercelModel } from './ai/agentAdapter';
 import { buildMCPToolset } from './ai/mcp/mcpToolAdapter';
@@ -24,6 +25,7 @@ import {
 import MainDatabaseService from './mainDatabase.service';
 import ProjectsService from './projects.service';
 import SelectedFileContextProvider from './selectedFileContextProvider.service';
+import { buildSessionContextBlock } from './ai/sessionContext.service';
 import type {
   NewContextItem,
   ChatMessage,
@@ -40,10 +42,14 @@ import {
   getToolResultError,
   isToolResultFailure,
 } from '../../shared/toolResult';
+import SecondBrainService from './ai/secondBrain/secondBrain.service';
+import SecondBrainRuntimeService from './ai/secondBrain/secondBrainRuntime.service';
+import { createSecondBrainTools } from './ai/tools/studio/secondBrain.tools';
+import { readProjectAgentContext } from './ai/projectAgentContext';
 
 // ─── AI Settings ─────────────────────────────────────────────────────────────
 
-const AI_SETTINGS_DEFAULTS: AISettingsConfig = {
+export const AI_SETTINGS_DEFAULTS: AISettingsConfig = {
   chat: {
     streamResponses: true,
     autoIncludeFileContext: true,
@@ -68,6 +74,86 @@ const AI_SETTINGS_DEFAULTS: AISettingsConfig = {
     autoGenerateMemories: true,
   },
   advanced: { maxWorkspaceFileCount: 5000 },
+  secondBrain: {
+    enabled: false,
+    initialized: false,
+    maxPromptChars: 6000,
+    maxPageBytes: 64 * 1024,
+    maxTotalBytes: 10 * 1024 * 1024,
+    includeGlobalPages: true,
+    inlineSelfLearning: true,
+  },
+};
+
+const clampInteger = (
+  value: unknown,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.min(maximum, Math.max(minimum, Math.trunc(value)));
+};
+
+export const normalizeAISettings = (raw: unknown): AISettingsConfig => {
+  const input =
+    raw && typeof raw === 'object'
+      ? (raw as Partial<AISettingsConfig>)
+      : ({} as Partial<AISettingsConfig>);
+  const secondBrain =
+    input.secondBrain && typeof input.secondBrain === 'object'
+      ? input.secondBrain
+      : ({} as Partial<AISettingsConfig['secondBrain']>);
+  const maxPageBytes = clampInteger(
+    secondBrain.maxPageBytes,
+    AI_SETTINGS_DEFAULTS.secondBrain.maxPageBytes,
+    1024,
+    1024 * 1024,
+  );
+  const maxTotalBytes = clampInteger(
+    secondBrain.maxTotalBytes,
+    AI_SETTINGS_DEFAULTS.secondBrain.maxTotalBytes,
+    maxPageBytes,
+    1024 * 1024 * 1024,
+  );
+
+  return {
+    chat: { ...AI_SETTINGS_DEFAULTS.chat, ...input.chat },
+    tools: { ...AI_SETTINGS_DEFAULTS.tools, ...input.tools },
+    configuration: {
+      ...AI_SETTINGS_DEFAULTS.configuration,
+      ...input.configuration,
+    },
+    advanced: { ...AI_SETTINGS_DEFAULTS.advanced, ...input.advanced },
+    secondBrain: {
+      ...AI_SETTINGS_DEFAULTS.secondBrain,
+      ...secondBrain,
+      enabled:
+        typeof secondBrain.enabled === 'boolean'
+          ? secondBrain.enabled
+          : AI_SETTINGS_DEFAULTS.secondBrain.enabled,
+      initialized:
+        typeof secondBrain.initialized === 'boolean'
+          ? secondBrain.initialized
+          : AI_SETTINGS_DEFAULTS.secondBrain.initialized,
+      includeGlobalPages:
+        typeof secondBrain.includeGlobalPages === 'boolean'
+          ? secondBrain.includeGlobalPages
+          : AI_SETTINGS_DEFAULTS.secondBrain.includeGlobalPages,
+      inlineSelfLearning:
+        typeof secondBrain.inlineSelfLearning === 'boolean'
+          ? secondBrain.inlineSelfLearning
+          : AI_SETTINGS_DEFAULTS.secondBrain.inlineSelfLearning,
+      maxPromptChars: clampInteger(
+        secondBrain.maxPromptChars,
+        AI_SETTINGS_DEFAULTS.secondBrain.maxPromptChars,
+        1000,
+        50_000,
+      ),
+      maxPageBytes,
+      maxTotalBytes,
+    },
+  };
 };
 
 const aiSettingsFilePath = () =>
@@ -76,20 +162,12 @@ const aiSettingsFilePath = () =>
 export const loadAISettings = async (): Promise<AISettingsConfig> => {
   try {
     const fp = aiSettingsFilePath();
-    if (!fs.existsSync(fp)) return AI_SETTINGS_DEFAULTS;
+    if (!fs.existsSync(fp)) return normalizeAISettings(undefined);
     const raw = await fs.readJson(fp);
-    return {
-      chat: { ...AI_SETTINGS_DEFAULTS.chat, ...raw.chat },
-      tools: { ...AI_SETTINGS_DEFAULTS.tools, ...raw.tools },
-      configuration: {
-        ...AI_SETTINGS_DEFAULTS.configuration,
-        ...raw.configuration,
-      },
-      advanced: { ...AI_SETTINGS_DEFAULTS.advanced, ...raw.advanced },
-    };
+    return normalizeAISettings(raw);
   } catch (error) {
     console.error(error);
-    return AI_SETTINGS_DEFAULTS;
+    return normalizeAISettings(undefined);
   }
 };
 
@@ -97,7 +175,9 @@ export const saveAISettings = async (
   config: AISettingsConfig,
 ): Promise<void> => {
   try {
-    await fs.writeJson(aiSettingsFilePath(), config, { spaces: 2 });
+    await fs.writeJson(aiSettingsFilePath(), normalizeAISettings(config), {
+      spaces: 2,
+    });
   } catch (error) {
     console.error(error);
     throw error;
@@ -206,6 +286,19 @@ export interface AgentRunRequest {
   connectionId?: string;
   notebookId?: string;
   pageId?: string; // Analytics: currently open page ID
+  includeProjectAiContext?: boolean;
+}
+
+export type AgentContextOverheadRequest = Omit<
+  AgentRunRequest,
+  'content' | 'contextItems'
+>;
+
+export interface AgentContextOverhead {
+  skills: number;
+  mcpTools: number;
+  secondBrain: number;
+  contextWindow: number;
 }
 
 /**
@@ -225,10 +318,107 @@ export interface ContextUsageBreakdown {
   userFiles: number;
   skills: number;
   mcpTools: number;
+  secondBrain: number;
   total: number;
   contextWindow: number;
   percentUsed: number;
 }
+
+export const sanitizeWikiToolCallForPersistence = (
+  toolName: string,
+  input: unknown,
+  output: unknown,
+): { input: unknown; output: unknown } => {
+  if (!toolName.startsWith('wiki_')) return { input, output };
+
+  let persistedInput = input;
+  if (
+    toolName === 'wiki_update' &&
+    input &&
+    typeof input === 'object' &&
+    'operation' in input
+  ) {
+    const typedInput = input as Record<string, any>;
+    const operation = typedInput.operation as Record<string, any> | undefined;
+    persistedInput = {
+      ...typedInput,
+      operation: operation
+        ? {
+            type: operation.type,
+            headingChars:
+              typeof operation.heading === 'string'
+                ? operation.heading.length
+                : 0,
+            headingOmitted: typeof operation.heading === 'string',
+            searchQueryChars:
+              typeof operation.searchQuery === 'string'
+                ? operation.searchQuery.length
+                : 0,
+            searchQueryOmitted: typeof operation.searchQuery === 'string',
+            contentChars:
+              typeof operation.content === 'string'
+                ? operation.content.length
+                : 0,
+            contentOmitted: true,
+          }
+        : undefined,
+      sourceRefsCount: Array.isArray(typedInput.sourceRefs)
+        ? typedInput.sourceRefs.length
+        : 0,
+      sourceRefsOmitted: Array.isArray(typedInput.sourceRefs),
+      rationaleChars:
+        typeof typedInput.rationale === 'string'
+          ? typedInput.rationale.length
+          : 0,
+      rationaleOmitted: typeof typedInput.rationale === 'string',
+    };
+    delete (persistedInput as Record<string, any>).sourceRefs;
+    delete (persistedInput as Record<string, any>).rationale;
+  } else if (
+    toolName === 'wiki_archive' &&
+    input &&
+    typeof input === 'object'
+  ) {
+    const typedInput = input as Record<string, any>;
+    persistedInput = {
+      ...typedInput,
+      rationaleChars:
+        typeof typedInput.rationale === 'string'
+          ? typedInput.rationale.length
+          : 0,
+      rationaleOmitted: typeof typedInput.rationale === 'string',
+    };
+    delete (persistedInput as Record<string, any>).rationale;
+  }
+
+  let persistedOutput = output;
+  if (toolName === 'wiki_read' && output && typeof output === 'object') {
+    const typedOutput = output as Record<string, any>;
+    persistedOutput = {
+      ok: typedOutput.ok,
+      pageId: typedOutput.pageId,
+      title: typedOutput.title,
+      hash: typedOutput.hash,
+      modifiedAt: typedOutput.modifiedAt,
+      links: typedOutput.links,
+      bodyChars:
+        typeof typedOutput.body === 'string' ? typedOutput.body.length : 0,
+      bodyOmitted: true,
+      error: typedOutput.error,
+    };
+  }
+  return { input: persistedInput, output: persistedOutput };
+};
+
+export const getToolFailureMessage = (value: unknown): string | undefined => {
+  if (!value || typeof value !== 'object') return undefined;
+  const result = value as Record<string, any>;
+  if (result.ok !== false) return undefined;
+  const { error } = result;
+  if (typeof error === 'string') return error;
+  if (error && typeof error.message === 'string') return error.message;
+  return 'Tool returned an unsuccessful result.';
+};
 
 /** Tracks which conversations are actively compacting (prevent duplicate calls) */
 const activeCompactions = new Set<number>();
@@ -814,7 +1004,11 @@ COMBINED SUMMARY:`,
     contextItems: Omit<NewContextItem, 'messageId'>[] | undefined,
     modelId: string,
     event: IpcMainInvokeEvent,
-    fixedOverheadTokens: { skills: number; mcpTools: number },
+    fixedOverheadTokens: {
+      skills: number;
+      mcpTools: number;
+      secondBrain?: number;
+    },
   ): Promise<{
     messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
     breakdown: ContextUsageBreakdown;
@@ -859,19 +1053,18 @@ COMBINED SUMMARY:`,
       newMsgTokens +
       ctxItemTokens +
       fixedOverheadTokens.skills +
-      fixedOverheadTokens.mcpTools;
+      fixedOverheadTokens.mcpTools +
+      (fixedOverheadTokens.secondBrain ?? 0);
 
     const breakdown: ContextUsageBreakdown = {
       conversation: historyTokens,
       userFiles: ctxItemTokens,
       skills: fixedOverheadTokens.skills,
       mcpTools: fixedOverheadTokens.mcpTools,
+      secondBrain: fixedOverheadTokens.secondBrain ?? 0,
       total: totalBeforeCompaction,
       contextWindow,
-      percentUsed: Math.min(
-        100,
-        Math.round((totalBeforeCompaction / contextWindow) * 100),
-      ),
+      percentUsed: Math.min(100, (totalBeforeCompaction / contextWindow) * 100),
     };
 
     if (totalBeforeCompaction >= compactThreshold) {
@@ -888,7 +1081,8 @@ COMBINED SUMMARY:`,
         newMsgTokens +
         ctxItemTokens +
         fixedOverheadTokens.skills +
-        fixedOverheadTokens.mcpTools;
+        fixedOverheadTokens.mcpTools +
+        (fixedOverheadTokens.secondBrain ?? 0);
 
       return {
         messages: compactedMessages,
@@ -898,7 +1092,7 @@ COMBINED SUMMARY:`,
           total: totalAfterCompaction,
           percentUsed: Math.min(
             100,
-            Math.round((totalAfterCompaction / contextWindow) * 100),
+            (totalAfterCompaction / contextWindow) * 100,
           ),
         },
       };
@@ -921,17 +1115,166 @@ COMBINED SUMMARY:`,
     }
   }
 
+  private static async buildFixedPromptContext(
+    request: AgentContextOverheadRequest,
+    aiSettings: AISettingsConfig,
+    projectPath?: string,
+  ): Promise<{
+    secondBrainContext: string;
+    secondBrainTools: Record<string, any>;
+    fixedOverheadTokens: Omit<AgentContextOverhead, 'contextWindow'>;
+  }> {
+    let secondBrainContext = '';
+    let secondBrainTools: Record<string, any> = {};
+    let secondBrainTokens = 0;
+    if (aiSettings.secondBrain.enabled) {
+      try {
+        const secondBrain = new SecondBrainService({
+          maxPageBytes: aiSettings.secondBrain.maxPageBytes,
+          maxTotalBytes: aiSettings.secondBrain.maxTotalBytes,
+        });
+        const status = await secondBrain.getStatus();
+        if (status.initialized) {
+          const secondBrainRuntime = new SecondBrainRuntimeService(secondBrain);
+          const scope = await secondBrainRuntime.resolveScope(
+            request.conversationId,
+            {
+              screenKey: request.screenKey ?? 'project',
+              connectionId: request.connectionId,
+              notebookId: request.notebookId,
+              pageId: request.pageId,
+              projectPath,
+            },
+          );
+          const contextResult = await secondBrainRuntime.buildContext(
+            scope,
+            aiSettings.secondBrain,
+          );
+          secondBrainContext = contextResult.context;
+          secondBrainTokens = estimateTokens(secondBrainContext);
+          secondBrainTools = createSecondBrainTools({
+            secondBrain,
+            runtime: secondBrainRuntime,
+            scope,
+            settings: aiSettings.secondBrain,
+            toolMode: request.toolMode ?? 'agent',
+          });
+        }
+      } catch (error) {
+        console.warn(
+          '[SecondBrain] Memory disabled for this context:',
+          error instanceof Error ? error.message : error,
+        );
+      }
+    }
+
+    const mcpTools = await buildMCPToolset();
+    const skills = await discoverSkills();
+    const skillsPrompt = buildSkillsPrompt(skills);
+    return {
+      secondBrainContext,
+      secondBrainTools,
+      fixedOverheadTokens: {
+        skills: estimateTokens(skillsPrompt),
+        mcpTools: estimateTokens(Object.keys(mcpTools || {}).join(' ')),
+        secondBrain: secondBrainTokens,
+      },
+    };
+  }
+
+  public static async getContextOverhead(
+    request: AgentContextOverheadRequest,
+  ): Promise<AgentContextOverhead> {
+    let { projectPath } = request;
+    if (!projectPath) {
+      const selectedProject = await ProjectsService.getSelectedProject();
+      projectPath = selectedProject?.path;
+    }
+    const aiSettings = await loadAISettings();
+    const model = await getVercelModel(request.requestedModel);
+    const modelId: string =
+      (model as any).modelId ||
+      (model as any).model ||
+      request.requestedModel ||
+      'default';
+    const { fixedOverheadTokens } = await this.buildFixedPromptContext(
+      request,
+      aiSettings,
+      projectPath,
+    );
+    return {
+      ...fixedOverheadTokens,
+      contextWindow: getContextWindow(modelId),
+    };
+  }
+
+  static async resolveEnrichedConnectionMeta(
+    connectionId?: string,
+  ): Promise<EnrichedConnectionMeta> {
+    const base = { name: 'unknown', type: 'unknown' };
+    if (!connectionId) return base;
+    try {
+      let meta: typeof base & { database?: string; schema?: string } = base;
+      if (connectionId.startsWith('ducklake-')) {
+        const instanceId = connectionId.replace(/^ducklake-/, '');
+        const { default: DuckLakeService } = await import('./duckLake.service');
+        const instance = await DuckLakeService.getInstance(instanceId);
+        if (instance) {
+          meta = {
+            name: instance.name || 'DuckLake Instance',
+            type: 'ducklake',
+          };
+        }
+      } else {
+        const conn = await ConnectorsService.getConnectionById(connectionId);
+        if (conn?.connection) {
+          meta = {
+            name: conn.connection.name,
+            type: conn.connection.type,
+            database: (conn.connection as any).database,
+            schema: (conn.connection as any).schema,
+          };
+        }
+      }
+
+      // Detect if this connection backs a dbt project
+      let linkedDbtProject: {
+        id: string;
+        name: string;
+        path: string;
+      } | null = null;
+      try {
+        const projects = await ProjectsService.loadProjects();
+        const linked = projects.find((p) => p.connectionId === connectionId);
+        if (linked) {
+          linkedDbtProject = {
+            id: linked.id,
+            name: linked.name,
+            path: linked.path,
+          };
+        }
+      } catch {
+        // non-fatal — linkedDbtProject stays null
+      }
+      return { ...meta, linkedDbtProject };
+    } catch {
+      return base;
+    }
+  }
+
   static async runAgent(
     event: IpcMainInvokeEvent,
     request: AgentRunRequest,
   ): Promise<{ success: boolean }> {
     const { conversationId, content, contextItems, requestedModel } = request;
 
-    // Resolve projectPath: use what was sent, or fall back to the selected project
-    let { projectPath } = request;
-    if (!projectPath) {
+    // Resolve projectPath and connectionId from selected project if not provided
+    let { projectPath, connectionId } = request;
+    const screenKey = request.screenKey ?? 'project';
+    if (screenKey === 'project' && (!projectPath || !connectionId)) {
       const selectedProject = await ProjectsService.getSelectedProject();
-      projectPath = selectedProject?.path;
+      projectPath = projectPath ?? selectedProject?.path;
+      connectionId = connectionId ?? selectedProject?.connectionId;
     }
 
     try {
@@ -939,8 +1282,8 @@ COMBINED SUMMARY:`,
       agentContexts.set(conversationId, {
         event,
         conversationId,
-        screenKey: request.screenKey ?? 'project',
-        connectionId: request.connectionId,
+        screenKey,
+        connectionId,
         notebookId: request.notebookId,
         pageId: request.pageId,
         projectPath,
@@ -974,14 +1317,13 @@ COMBINED SUMMARY:`,
       // 4. Load & potentially compact conversation history
       const toolMode = request.toolMode || 'agent';
 
-      // Estimate non-history prompt overhead before compaction decision.
-      const mcpTools = await buildMCPToolset();
-      const skills = await discoverSkills();
-      const skillsPrompt = buildSkillsPrompt(skills);
-      const fixedOverheadTokens = {
-        skills: estimateTokens(skillsPrompt),
-        mcpTools: estimateTokens(Object.keys(mcpTools || {}).join(' ')),
-      };
+      const { secondBrainContext, secondBrainTools, fixedOverheadTokens } =
+        await this.buildFixedPromptContext(
+          { ...request, projectPath, toolMode },
+          aiSettings,
+          projectPath,
+        );
+      const secondBrainTokens = fixedOverheadTokens.secondBrain;
 
       const { messages, breakdown } = await this.buildTurnMessages(
         conversationId,
@@ -1008,40 +1350,10 @@ COMBINED SUMMARY:`,
       const mainWindow =
         BrowserWindow.fromWebContents(event.sender) || undefined;
 
-      // Resolve connection name + type — no credentials returned
-      let connectionMeta: { name: string; type: string } = {
-        name: 'unknown',
-        type: 'unknown',
-      };
-      if (request.connectionId) {
-        try {
-          if (request.connectionId.startsWith('ducklake-')) {
-            const instanceId = request.connectionId.replace(/^ducklake-/, '');
-            const { default: DuckLakeService } = await import(
-              './duckLake.service'
-            );
-            const instance = await DuckLakeService.getInstance(instanceId);
-            if (instance) {
-              connectionMeta = {
-                name: instance.name || 'DuckLake Instance',
-                type: 'ducklake',
-              };
-            }
-          } else {
-            const conn = await ConnectorsService.getConnectionById(
-              request.connectionId,
-            );
-            if (conn) {
-              connectionMeta = {
-                name: conn.connection.name,
-                type: conn.connection.type,
-              };
-            }
-          }
-        } catch {
-          // safe fallback — agent still works without connection name
-        }
-      }
+      // Resolve enriched connection meta
+      const connectionMeta = await AgentService.resolveEnrichedConnectionMeta(
+        request.connectionId,
+      );
 
       const base = await buildBaseAgentConfig({
         requestedModel,
@@ -1049,14 +1361,95 @@ COMBINED SUMMARY:`,
         aiSettings,
         event,
         mainWindow,
+        secondBrainContext,
+        secondBrainTools,
+        secondBrainTokens,
       });
 
+      let projectConnectionMeta: {
+        name?: string;
+        type?: string;
+        database?: string;
+        schema?: string;
+      } = {};
+
+      if (screenKey === 'project') {
+        try {
+          if (connectionId) {
+            const conn =
+              await ConnectorsService.getConnectionById(connectionId);
+            if (conn?.connection) {
+              projectConnectionMeta = {
+                name: conn.connection.name,
+                type: conn.connection.type,
+                database: (conn.connection as any).database,
+                schema: (conn.connection as any).schema,
+              };
+            }
+          } else {
+            // Fallback for older projects where connection might be nested
+            const selectedProject = await ProjectsService.getSelectedProject();
+            if (selectedProject?.dbtConnection) {
+              projectConnectionMeta = {
+                name: selectedProject.name,
+                type: (selectedProject.dbtConnection as any).type,
+                database: (selectedProject.dbtConnection as any).database,
+                schema: (selectedProject.dbtConnection as any).schema,
+              };
+            }
+          }
+        } catch (err) {
+          console.warn(
+            '[AgentService] Could not resolve project connection meta:',
+            err,
+          );
+        }
+      }
+
+      let sessionContextBlock = '';
+      const projectAiContext =
+        screenKey === 'project' && request.includeProjectAiContext
+          ? await readProjectAgentContext(projectPath)
+          : undefined;
+      if (screenKey === 'project') {
+        try {
+          // Derive the selected file path from contextItems (type 'file' entries)
+          // The file path is stored in the metadata JSON field as { path: string }
+          const fileContextItem = contextItems?.find(
+            (ci) => ci.type === 'file',
+          );
+          const selectedFilePath =
+            fileContextItem && (fileContextItem.metadata as any)?.path
+              ? ((fileContextItem.metadata as any).path as string)
+              : undefined;
+          sessionContextBlock = await buildSessionContextBlock(
+            projectPath,
+            selectedFilePath,
+          );
+        } catch (err) {
+          console.warn(
+            '[AgentService] Failed to build session context block:',
+            err,
+          );
+        }
+      }
+
       let agent: any;
+      const isProjectAgent = (request.screenKey ?? 'project') === 'project';
+
+      // SQL, Notebooks, and Analytics agents should only have read access to the project
+      const agentEnabledTools = { ...enabledTools };
+      if (!isProjectAgent) {
+        delete agentEnabledTools.writeDbtModel;
+        delete agentEnabledTools.runDbtCommand;
+        delete agentEnabledTools.writeFile;
+      }
+
       switch (request.screenKey ?? 'project') {
         case 'sql':
           agent = await createSqlAgent(base, {
             connectionMeta,
-            enabledTools,
+            enabledTools: agentEnabledTools,
             skills: base.skillsPrompt,
             conversationId,
             toolMode: request.toolMode || 'agent',
@@ -1067,8 +1460,7 @@ COMBINED SUMMARY:`,
             connectionMeta,
             notebookId: request.notebookId,
             connectionId: request.connectionId,
-            projectPath,
-            enabledTools,
+            enabledTools: agentEnabledTools,
             skills: base.skillsPrompt,
             conversationId,
             toolMode: request.toolMode || 'agent',
@@ -1079,7 +1471,7 @@ COMBINED SUMMARY:`,
             connectionMeta,
             connectionId: request.connectionId,
             pageId: request.pageId,
-            enabledTools,
+            enabledTools: agentEnabledTools,
             skills: base.skillsPrompt,
             conversationId,
             toolMode: request.toolMode || 'agent',
@@ -1092,6 +1484,9 @@ COMBINED SUMMARY:`,
             skills: base.skillsPrompt,
             conversationId,
             toolMode: request.toolMode || 'agent',
+            projectAiContext,
+            sessionContextBlock,
+            connectionMeta: projectConnectionMeta,
           });
       }
 
@@ -1116,6 +1511,7 @@ COMBINED SUMMARY:`,
         output: unknown;
         stepNumber: number;
         status: 'done' | 'error';
+        error?: string;
       }> = [];
       const collectedParts: any[] = [];
 
@@ -1209,13 +1605,20 @@ COMBINED SUMMARY:`,
                   break;
                 }
                 case 'tool-call':
-                  collectedParts.push({
-                    type: 'tool-call',
-                    toolCallId: chunk.toolCallId,
-                    toolName: chunk.toolName,
-                    args: (chunk as any).input ?? {},
-                    status: 'running',
-                  });
+                  {
+                    const persisted = sanitizeWikiToolCallForPersistence(
+                      chunk.toolName,
+                      (chunk as any).input ?? {},
+                      undefined,
+                    );
+                    collectedParts.push({
+                      type: 'tool-call',
+                      toolCallId: chunk.toolCallId,
+                      toolName: chunk.toolName,
+                      args: persisted.input,
+                      status: 'running',
+                    });
+                  }
                   break;
                 case 'tool-result': {
                   const toolOutput =
@@ -1260,6 +1663,30 @@ COMBINED SUMMARY:`,
               }
             }
             /* eslint-enable no-restricted-syntax */
+
+            collectedParts.forEach((part) => {
+              if (part.type !== 'tool-call' || part.status !== 'running')
+                return;
+              const errorMessage =
+                'Tool call ended without a result. Check the tool arguments and try again.';
+              part.status = 'error';
+              part.error = errorMessage;
+              if (
+                !collectedToolCalls.some(
+                  (toolCall) => toolCall.toolCallId === part.toolCallId,
+                )
+              ) {
+                collectedToolCalls.push({
+                  toolName: part.toolName,
+                  toolCallId: part.toolCallId,
+                  input: part.args,
+                  output: { ok: false, error: { message: errorMessage } },
+                  stepNumber: currentStepNumber >= 0 ? currentStepNumber : 0,
+                  status: 'error',
+                  error: errorMessage,
+                });
+              }
+            });
 
             clearTimeout(timeoutId);
 
@@ -1455,6 +1882,27 @@ COMBINED SUMMARY:`,
     }
 
     return { success: false, message: 'No active agent execution found' };
+  }
+
+  static cancelAllForFactoryReset(): void {
+    TerminalConfirmGate.abortAll();
+    activeAgents.forEach((controller) => controller.abort());
+    activeAgents.clear();
+    agentContexts.clear();
+    activeCompactions.clear();
+
+    const resetError = new Error('Factory reset is in progress');
+    [
+      pendingEditorBridgeRequests,
+      pendingNotebookBridgeRequests,
+      pendingAnalyticsBridgeRequests,
+    ].forEach((requests) => {
+      requests.forEach(({ reject, timeout }) => {
+        clearTimeout(timeout);
+        reject(resetError);
+      });
+      requests.clear();
+    });
   }
 
   /**
