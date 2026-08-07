@@ -1637,7 +1637,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
 
           <Typography variant="body2" color="text.secondary">
             {isPipelineMode
-              ? 'Run a pipeline on the cloud. Pipelines execute a sequence of steps defined in your .rosetta/ directory.'
+              ? 'Run a pipeline on the cloud. Pipelines execute a sequence of steps defined in your rosetta/pipelines/ directory.'
               : 'Run your deployed project on the cloud.'}
           </Typography>
 

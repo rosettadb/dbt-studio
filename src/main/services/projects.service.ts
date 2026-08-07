@@ -20,6 +20,7 @@ import {
 import {
   createNewFile,
   createNewFolder,
+  asyncCreateNewFolder,
   copyPath,
   createZipArchive,
   deleteDirectory,
@@ -954,6 +955,19 @@ export default class ProjectsService {
     createNewFolder(filePath, name);
   }
 
+  // Awaitable counterpart to createFolder — use when the folder must exist
+  // on disk before a subsequent write into it (e.g. writing a file right
+  // after creating its parent directory).
+  static async createFolderAsync({
+    filePath,
+    name,
+  }: {
+    filePath: string;
+    name: string;
+  }) {
+    await asyncCreateNewFolder(filePath, name);
+  }
+
   static copyPath({ source, target }: { source: string; target: string }) {
     copyPath(source, target);
   }
@@ -1337,7 +1351,45 @@ export default class ProjectsService {
   }
 
   /**
-   * List pipeline YAML files under .rosetta/ directory
+   * Recursively lists pipeline YAML files under a directory, ignoring
+   * non-pipeline yaml files such as main.conf. `name` is the path relative to
+   * `baseDir` (POSIX-style, extension stripped) so pipelines nested in
+   * subdirectories keep their directory prefix, e.g. `test/test` for
+   * `<baseDir>/test/test.yml`.
+   */
+  private static async listPipelineFilesInDir(
+    dir: string,
+    baseDir: string = dir,
+  ): Promise<{ name: string; path: string }[]> {
+    if (!fs.existsSync(dir)) return [];
+
+    const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    const results: { name: string; path: string }[] = [];
+
+    for (const entry of entries) {
+      const entryPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        const nested = await this.listPipelineFilesInDir(entryPath, baseDir);
+        results.push(...nested);
+      } else if (
+        (entry.name.endsWith('.yml') || entry.name.endsWith('.yaml')) &&
+        entry.name !== 'main.conf'
+      ) {
+        const relative = path
+          .relative(baseDir, entryPath)
+          .replace(/\\/g, '/')
+          .replace(/\.(yml|yaml)$/, '');
+        results.push({ name: relative, path: entryPath });
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * List pipeline YAML files under rosetta/pipelines/ (current location) and
+   * .rosetta/ (deprecated location, kept during the transition to
+   * rosetta/pipelines/ — remove once existing projects have migrated).
    */
   static async listPipelines(
     projectId: string,
@@ -1345,17 +1397,15 @@ export default class ProjectsService {
     const project = await this.getProject(projectId);
     if (!project) throw new Error('Project not found');
 
-    const rosettaDir = path.join(project.path, '.rosetta');
-    if (!fs.existsSync(rosettaDir)) return [];
+    const pipelinesDir = path.join(project.path, 'rosetta', 'pipelines');
+    const legacyPipelinesDir = path.join(project.path, '.rosetta');
 
-    const entries = await fs.promises.readdir(rosettaDir);
-    return entries
-      .filter(
-        (f) => (f.endsWith('.yml') || f.endsWith('.yaml')) && f !== 'main.conf',
-      )
-      .map((f) => ({
-        name: f.replace(/\.(yml|yaml)$/, ''),
-        path: path.join(rosettaDir, f),
-      }));
+    const [current, legacy] = await Promise.all([
+      this.listPipelineFilesInDir(pipelinesDir),
+      this.listPipelineFilesInDir(legacyPipelinesDir),
+    ]);
+
+    const currentNames = new Set(current.map((p) => p.name));
+    return [...current, ...legacy.filter((p) => !currentNames.has(p.name))];
   }
 }

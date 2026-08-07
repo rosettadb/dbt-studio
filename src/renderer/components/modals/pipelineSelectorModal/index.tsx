@@ -136,13 +136,13 @@ export const PipelineSelectorModal: React.FC<PipelineSelectorModalProps> = ({
   const handleCreatePipeline = async () => {
     setIsCreating(true);
     try {
-      // Ensure .rosetta directory exists
-      await projectsServices.createFolder({
+      // Ensure rosetta/pipelines directory exists before writing into it
+      await projectsServices.createFolderAsync({
         filePath: project.path,
-        name: '.rosetta',
+        name: 'rosetta/pipelines',
       });
 
-      const pipelinePath = `${project.path}/.rosetta/pipeline.yml`;
+      const pipelinePath = `${project.path}/rosetta/pipelines/pipeline.yml`;
       await projectsServices.saveFileContent({
         path: pipelinePath,
         content: PIPELINE_TEMPLATE,
@@ -150,7 +150,7 @@ export const PipelineSelectorModal: React.FC<PipelineSelectorModalProps> = ({
 
       await window.electron.ipcRenderer.invoke('git:add', {
         repoPath: project.path,
-        files: ['.rosetta/pipeline.yml'],
+        files: ['rosetta/pipelines/pipeline.yml'],
       });
       await window.electron.ipcRenderer.invoke('git:commit', {
         repoPath: project.path,
@@ -229,9 +229,9 @@ export const PipelineSelectorModal: React.FC<PipelineSelectorModalProps> = ({
             </Typography>
             <Typography variant="body2" color="text.secondary">
               No pipeline configuration files were found under{' '}
-              <code>.rosetta/</code>. A pipeline defines a sequence of steps
-              (e.g., dbt deps, dbt run, dbt test) that will be executed on the
-              cloud.
+              <code>rosetta/pipelines/</code>. A pipeline defines a sequence of
+              steps (e.g., dbt deps, dbt run, dbt test) that will be executed on
+              the cloud.
             </Typography>
             <Button
               variant="contained"
@@ -245,8 +245,8 @@ export const PipelineSelectorModal: React.FC<PipelineSelectorModalProps> = ({
               {isCreating ? 'Creating...' : 'Create Default Pipeline & Push'}
             </Button>
             <Typography variant="caption" color="text.secondary">
-              This will create <code>.rosetta/pipeline.yml</code>, commit, and
-              push it to your remote repository.
+              This will create <code>rosetta/pipelines/pipeline.yml</code>,
+              commit, and push it to your remote repository.
             </Typography>
           </Stack>
         </Paper>

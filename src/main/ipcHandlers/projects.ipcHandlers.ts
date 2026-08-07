@@ -130,6 +130,13 @@ const registerProjectHandlers = () => {
   );
 
   ipcMain.handle(
+    'project:createFolderAsync',
+    async (_event, body: { filePath: string; name: string }) => {
+      return ProjectsService.createFolderAsync(body);
+    },
+  );
+
+  ipcMain.handle(
     'project:createFile',
     async (
       _event,

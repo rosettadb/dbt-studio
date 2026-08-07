@@ -58,6 +58,7 @@ export type ProjectChannels =
   | 'project:createFile'
   | 'project:deleteItem'
   | 'project:createFolder'
+  | 'project:createFolderAsync'
   | 'project:copyPath'
   | 'project:select'
   | 'project:selected'

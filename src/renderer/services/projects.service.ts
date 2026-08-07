@@ -199,6 +199,19 @@ export const createFolder = async (body: {
   return data;
 };
 
+// Awaitable counterpart to createFolder — resolves only once the folder
+// actually exists on disk, safe to use right before writing a file into it.
+export const createFolderAsync = async (body: {
+  filePath: string;
+  name: string;
+}): Promise<void> => {
+  const { data } = await client.post<{
+    filePath: string;
+    name: string;
+  }>('project:createFolderAsync', body);
+  return data;
+};
+
 export const copyPath = async (body: {
   source: string;
   target: string;

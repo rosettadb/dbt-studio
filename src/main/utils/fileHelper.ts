@@ -162,6 +162,18 @@ export const createNewFolder = (parentPath: string, folderName: string) => {
   });
 };
 
+// Like createNewFolder, but actually awaitable: fs.promises.mkdir only
+// resolves once the directory exists, so callers that need to write into
+// the folder immediately after can safely await this instead of racing
+// createNewFolder's fire-and-forget callback.
+export const asyncCreateNewFolder = async (
+  parentPath: string,
+  folderName: string,
+): Promise<void> => {
+  const folderPath = path.join(parentPath, folderName);
+  await fs.promises.mkdir(folderPath, { recursive: true });
+};
+
 // helper functions for file copy
 const copyFile = async (source: string, target: string) => {
   // Normalize the destination: check if target already ends with the basename
