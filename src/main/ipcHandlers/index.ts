@@ -24,6 +24,7 @@ import registerFlowfileHandlers from './flowfile.ipcHandlers';
 import { registerPipelineTemplatesHandlers } from './pipelineTemplates.ipcHandlers';
 import registerTaskManagerHandlers from './taskManager.ipcHandlers';
 import { registerSecondBrainHandlers } from './secondBrain.ipcHandlers';
+import { registerIcebergDatalakeHandlers } from './icebergDatalake.ipcHandlers';
 
 export {
   registerCliHandlers,
@@ -52,4 +53,5 @@ export {
   registerPipelineTemplatesHandlers,
   registerTaskManagerHandlers,
   registerSecondBrainHandlers,
+  registerIcebergDatalakeHandlers,
 };
