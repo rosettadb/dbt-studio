@@ -8,6 +8,10 @@ import { ipcMain } from 'electron';
 import { IcebergDatalakeService } from '../services/icebergDatalake.service';
 
 export const registerIcebergDatalakeHandlers = () => {
+  ipcMain.handle('iceberg:getCapabilities', () =>
+    IcebergDatalakeService.getCapabilities(),
+  );
+
   ipcMain.handle('iceberg:list', () => IcebergDatalakeService.listInstances());
 
   ipcMain.handle('iceberg:get', (_e, id: string) =>

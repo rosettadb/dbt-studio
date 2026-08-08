@@ -4,6 +4,7 @@
  * Follows the React Query v3 pattern used throughout the app.
  */
 
+import React from 'react';
 import { useMutation, useQuery, useQueryClient } from 'react-query';
 import type {
   CreateIcebergInstanceDTO,
@@ -17,6 +18,11 @@ import * as icebergService from '../services/iceberg.service';
 
 export const useListIcebergInstances = () =>
   useQuery(['iceberg', 'list'], icebergService.listIcebergInstances);
+
+export const useIcebergCapabilities = () =>
+  useQuery(['iceberg', 'capabilities'], icebergService.getIcebergCapabilities, {
+    staleTime: Infinity,
+  });
 
 export const useGetIcebergInstance = (id: string) =>
   useQuery(
@@ -102,6 +108,11 @@ export const useTestIcebergCatalog = () =>
     icebergService.testIcebergCatalog(params),
   );
 
+export const useCreateIcebergMetadataFile = () =>
+  useMutation((warehousePath: string) =>
+    icebergService.createIcebergMetadataFile(warehousePath),
+  );
+
 export const usePreviewIcebergTable = () =>
   useMutation(
     ({
@@ -128,3 +139,37 @@ export const usePreviewIcebergTable = () =>
 
 export const useEnsureIcebergInstalled = () =>
   useMutation(() => icebergService.ensureIcebergInstalled());
+
+/**
+ * FE-05 — Install gate hook.
+ * Wraps useMutation side-effect in a dedicated controller hook so components
+ * never call `mutate` directly inside a `useEffect`.
+ * Has a built-in 5-second timeout so the banner never blocks indefinitely.
+ */
+export const useEnsureIcebergInstalledOnMount = () => {
+  const { mutate, isLoading, data } = useEnsureIcebergInstalled();
+  const hasRun = React.useRef(false);
+  const [timedOut, setTimedOut] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!hasRun.current) {
+      hasRun.current = true;
+      mutate(undefined, {
+        onError: () => {
+          // Suppress — install errors are not fatal for the DataLake UI
+        },
+      });
+      // Safety timeout — dismiss banner after 5 seconds regardless
+      const timer = setTimeout(() => setTimedOut(true), 5000);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return {
+    // Hide banner if timed out or mutation resolved
+    isInstalling: isLoading && !timedOut,
+    installResult: data,
+  };
+};

@@ -18,7 +18,6 @@ import {
 } from '@mui/material';
 import {
   Add,
-  CloudQueue,
   Storage as StorageIcon,
   Close,
   CheckCircle,
@@ -35,34 +34,45 @@ import {
 import useSecureStorage from '../../hooks/useSecureStorage';
 import {
   CloudConnection,
+  CloudProvider,
   S3Config,
   AzureConfig,
   GCSConfig,
 } from '../../../types/frontend';
+import { cloudStorageImages } from '../../../../assets/connectionIcons';
+import { ConnectionForm } from '../cloudExplorer/ConnectionForm';
 
 interface DataLakeConnectionSelectorProps {
   onSelectExisting: (
     connectionId: string,
     bucket: string,
     prefix?: string,
+    provider?: CloudProvider,
   ) => void;
-  selectedProvider: 'aws' | 'azure' | 'gcs';
+  selectedProvider: CloudProvider | 'all';
   initialConnectionId?: string;
   initialBucket?: string;
   initialPrefix?: string;
 }
 
-const getProviderIcon = (provider: string) => {
-  switch (provider) {
-    case 'aws':
-      return <CloudQueue sx={{ color: '#FF9900' }} />;
-    case 'azure':
-      return <CloudQueue sx={{ color: '#0078D4' }} />;
-    case 'gcs':
-      return <CloudQueue sx={{ color: '#4285F4' }} />;
-    default:
-      return <StorageIcon />;
-  }
+type InlineProvider = 'aws' | 'azure' | 'gcs';
+
+const isInlineProvider = (
+  provider: CloudProvider | 'all',
+): provider is InlineProvider =>
+  provider === 'aws' || provider === 'azure' || provider === 'gcs';
+
+const getProviderIcon = (provider: CloudProvider) => {
+  const iconSrc = cloudStorageImages[provider];
+  return iconSrc ? (
+    <img
+      src={iconSrc}
+      alt=""
+      style={{ width: 20, height: 20, objectFit: 'contain' }}
+    />
+  ) : (
+    <StorageIcon />
+  );
 };
 
 const getProviderLabel = (provider: string) => {
@@ -73,6 +83,18 @@ const getProviderLabel = (provider: string) => {
       return 'Azure Blob Storage';
     case 'gcs':
       return 'Google Cloud Storage';
+    case 'minio':
+      return 'MinIO';
+    case 'cloudflare-r2':
+      return 'Cloudflare R2';
+    case 'backblaze-b2':
+      return 'Backblaze B2';
+    case 'rustfs':
+      return 'rustfs';
+    case 'garage':
+      return 'Garage';
+    case 'all':
+      return 'Cloud Explorer';
     default:
       return provider.toUpperCase();
   }
@@ -99,8 +121,12 @@ export const DataLakeConnectionSelector: React.FC<
 
   // Filter connections by selected provider
   const filteredConnections =
-    connections?.filter((conn: any) => conn.provider === selectedProvider) ||
-    [];
+    connections?.filter(
+      (conn: any) =>
+        selectedProvider === 'all' || conn.provider === selectedProvider,
+    ) || [];
+
+  const supportsInlineCreate = isInlineProvider(selectedProvider);
 
   const [selectedConnectionId, setSelectedConnectionId] = useState<string>('');
   const [bucket, setBucket] = useState<string>('');
@@ -115,9 +141,17 @@ export const DataLakeConnectionSelector: React.FC<
   // Update parent when connection or bucket changes
   React.useEffect(() => {
     if (selectedConnectionId && bucket) {
-      onSelectExisting(selectedConnectionId, bucket, prefix || undefined);
+      const selectedConnection = connections?.find(
+        (connection: CloudConnection) => connection.id === selectedConnectionId,
+      );
+      onSelectExisting(
+        selectedConnectionId,
+        bucket,
+        prefix || undefined,
+        selectedConnection?.provider,
+      );
     }
-  }, [selectedConnectionId, bucket, prefix, onSelectExisting]);
+  }, [selectedConnectionId, bucket, prefix, connections, onSelectExisting]);
 
   // Sync initial values from parent when revisiting the step
   useEffect(() => {
@@ -160,6 +194,8 @@ export const DataLakeConnectionSelector: React.FC<
   >('idle');
 
   const handleTestConnection = async () => {
+    if (!isInlineProvider(selectedProvider)) return;
+
     setTestError(null);
     setTestStatus('testing');
 
@@ -224,6 +260,8 @@ export const DataLakeConnectionSelector: React.FC<
   };
 
   const handleSaveConnection = async () => {
+    if (!isInlineProvider(selectedProvider)) return;
+
     setTestError(null);
 
     // Validate required fields
@@ -628,78 +666,100 @@ export const DataLakeConnectionSelector: React.FC<
       <Dialog
         open={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        maxWidth="sm"
+        maxWidth={supportsInlineCreate ? 'sm' : 'lg'}
         fullWidth
       >
-        <DialogTitle>
-          Create New {getProviderLabel(selectedProvider)} Connection
-          <IconButton
-            onClick={() => setIsModalOpen(false)}
-            sx={{ position: 'absolute', right: 8, top: 8 }}
-          >
-            <Close />
-          </IconButton>
-        </DialogTitle>
-        <DialogContent>
-          {renderNewConnectionForm()}
+        {!supportsInlineCreate ? (
+          <DialogContent sx={{ p: 0 }}>
+            <ConnectionForm
+              initialProvider={
+                selectedProvider === 'all' ? undefined : selectedProvider
+              }
+              onCancel={() => setIsModalOpen(false)}
+              onSaved={async (connection) => {
+                await refetch();
+                setSelectedConnectionId(connection.id);
+                setBucket('');
+                setPrefix('');
+                setIsModalOpen(false);
+              }}
+            />
+          </DialogContent>
+        ) : (
+          <>
+            <DialogTitle>
+              Create New {getProviderLabel(selectedProvider)} Connection
+              <IconButton
+                onClick={() => setIsModalOpen(false)}
+                sx={{ position: 'absolute', right: 8, top: 8 }}
+              >
+                <Close />
+              </IconButton>
+            </DialogTitle>
+            <DialogContent>
+              {renderNewConnectionForm()}
 
-          {testStatus === 'error' && (
-            <Alert severity="error" sx={{ mt: 2 }} icon={<ErrorIcon />}>
-              <Typography variant="subtitle2">Connection Error</Typography>
-              <Typography variant="body2">
-                {testError ||
-                  'Failed to connect to storage provider. Please check your credentials.'}
-              </Typography>
-            </Alert>
-          )}
+              {testStatus === 'error' && (
+                <Alert severity="error" sx={{ mt: 2 }} icon={<ErrorIcon />}>
+                  <Typography variant="subtitle2">Connection Error</Typography>
+                  <Typography variant="body2">
+                    {testError ||
+                      'Failed to connect to storage provider. Please check your credentials.'}
+                  </Typography>
+                </Alert>
+              )}
 
-          {testStatus === 'success' && (
-            <Alert severity="success" sx={{ mt: 2 }} icon={<CheckCircle />}>
-              <Typography variant="subtitle2">Connection Successful</Typography>
-              <Typography variant="body2">
-                Successfully connected to storage provider.
-              </Typography>
-            </Alert>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button
-            variant="outlined"
-            onClick={() => setIsModalOpen(false)}
-            color="inherit"
-            startIcon={<Close />}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="outlined"
-            onClick={handleTestConnection}
-            disabled={testStatus === 'testing' || !newConnectionName}
-            startIcon={
-              testStatus === 'testing' ? (
-                <CircularProgress size={16} />
-              ) : (
-                <Speed />
-              )
-            }
-          >
-            {testStatus === 'testing' ? 'Testing...' : 'Test Connection'}
-          </Button>
-          <Button
-            onClick={handleSaveConnection}
-            variant="contained"
-            disabled={!newConnectionName || createConnection.isLoading}
-            startIcon={
-              createConnection.isLoading ? (
-                <CircularProgress size={16} />
-              ) : (
-                <Save />
-              )
-            }
-          >
-            {createConnection.isLoading ? 'Saving...' : 'Save Connection'}
-          </Button>
-        </DialogActions>
+              {testStatus === 'success' && (
+                <Alert severity="success" sx={{ mt: 2 }} icon={<CheckCircle />}>
+                  <Typography variant="subtitle2">
+                    Connection Successful
+                  </Typography>
+                  <Typography variant="body2">
+                    Successfully connected to storage provider.
+                  </Typography>
+                </Alert>
+              )}
+            </DialogContent>
+            <DialogActions>
+              <Button
+                variant="outlined"
+                onClick={() => setIsModalOpen(false)}
+                color="inherit"
+                startIcon={<Close />}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="outlined"
+                onClick={handleTestConnection}
+                disabled={testStatus === 'testing' || !newConnectionName}
+                startIcon={
+                  testStatus === 'testing' ? (
+                    <CircularProgress size={16} />
+                  ) : (
+                    <Speed />
+                  )
+                }
+              >
+                {testStatus === 'testing' ? 'Testing...' : 'Test Connection'}
+              </Button>
+              <Button
+                onClick={handleSaveConnection}
+                variant="contained"
+                disabled={!newConnectionName || createConnection.isLoading}
+                startIcon={
+                  createConnection.isLoading ? (
+                    <CircularProgress size={16} />
+                  ) : (
+                    <Save />
+                  )
+                }
+              >
+                {createConnection.isLoading ? 'Saving...' : 'Save Connection'}
+              </Button>
+            </DialogActions>
+          </>
+        )}
       </Dialog>
     </Box>
   );

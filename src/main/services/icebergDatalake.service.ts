@@ -9,6 +9,7 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import * as path from 'path';
+import { pathToFileURL } from 'url';
 import { spawn } from 'child_process';
 import { app } from 'electron';
 
@@ -26,10 +27,88 @@ import type {
   IcebergFieldSpec,
   IcebergSnapshotInfo,
   IcebergPreviewResult,
+  IcebergLocalCatalogResult,
+  IcebergCapabilities,
+  IcebergCatalogCapability,
 } from '../../types/iceberg';
 import type { CloudConnection } from '../../types/frontend';
+import type { PostgresConnection } from '../../types/backend';
 
 export class IcebergDatalakeService {
+  private static readonly cloudProviders = [
+    'aws',
+    'azure',
+    'gcs',
+    'minio',
+    'cloudflare-r2',
+    'backblaze-b2',
+    'rustfs',
+    'garage',
+  ] as const;
+
+  private static readonly catalogCapabilities: IcebergCatalogCapability[] = [
+    {
+      type: 'sqlite',
+      label: 'SQLite (Local)',
+      pyicebergType: 'sql',
+      enabled: true,
+      requiredFields: ['catalogPath'],
+      authModes: ['none'],
+      allowedStorageTypes: ['local', 'cloud'],
+    },
+    {
+      type: 'sql',
+      label: 'PostgreSQL / Neon',
+      pyicebergType: 'sql',
+      enabled: true,
+      requiredFields: ['databaseConnectionId'],
+      authModes: ['none'],
+      allowedStorageTypes: ['local', 'cloud'],
+    },
+    {
+      type: 'rest',
+      label: 'REST Catalog',
+      pyicebergType: 'rest',
+      enabled: true,
+      requiredFields: ['endpoint', 'catalogName'],
+      authModes: ['none', 'token'],
+      allowedStorageTypes: ['server-managed'],
+    },
+    {
+      type: 'polaris',
+      label: 'Apache Polaris',
+      pyicebergType: 'rest',
+      enabled: true,
+      requiredFields: ['endpoint', 'catalogName'],
+      authModes: ['none', 'token'],
+      allowedStorageTypes: ['server-managed'],
+    },
+    ...(
+      [
+        ['hive', 'Hive Metastore', 'hive'],
+        ['hadoop', 'Hadoop Catalog', 'custom'],
+        ['glue', 'AWS Glue', 'glue'],
+        ['nessie', 'Project Nessie', 'rest'],
+      ] as const
+    ).map(([type, label, pyicebergType]) => ({
+      type,
+      label,
+      pyicebergType,
+      enabled: false,
+      disabledReason: 'Planned for the next catalog adapter slice.',
+      requiredFields: [],
+      authModes: ['none'] as IcebergCatalogCapability['authModes'],
+      allowedStorageTypes: [],
+    })),
+  ];
+
+  // In-process cache: once we confirm pyiceberg is installed for this app
+  // session we skip the Python bridge check on subsequent calls.
+  private static installedCache: {
+    installed: boolean;
+    version?: string;
+  } | null = null;
+
   // ─────────────────────────────────────────────
   //  Private: persistence helpers
   // ─────────────────────────────────────────────
@@ -37,7 +116,11 @@ export class IcebergDatalakeService {
   private static async readInstances(): Promise<IcebergInstanceConfig[]> {
     try {
       const db = await loadDatabaseFile();
-      return db.icebergInstances ?? [];
+      return (db.icebergInstances ?? []).map((instance) => {
+        const persisted = instance as unknown as { catalogType: string };
+        if (persisted.catalogType !== 'file') return instance;
+        return { ...instance, catalogType: 'sqlite' };
+      });
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('[IcebergDatalakeService] readInstances error:', error);
@@ -61,7 +144,6 @@ export class IcebergDatalakeService {
     }
     return path.join(
       __dirname,
-      '..',
       '..',
       '..',
       'resources',
@@ -136,14 +218,27 @@ export class IcebergDatalakeService {
     const env: Record<string, string> = {};
 
     switch (instance.catalogType) {
-      case 'file':
-        props.type = 'rest';
-        if (instance.catalogPath) props.uri = instance.catalogPath;
+      case 'sqlite':
+        props.type = 'sql';
+        if (instance.catalogPath) {
+          props.uri = `sqlite:///${instance.catalogPath}`;
+        }
+        if (instance.localPath) {
+          props.warehouse = `file://${instance.localPath}`;
+        }
         break;
 
+      case 'sql': {
+        const sqlCatalog =
+          await IcebergDatalakeService.buildPostgresCatalogUri(instance);
+        props.type = 'sql';
+        props.uri = '__ENV:ICEBERG_SQL_CATALOG_URI';
+        env.ICEBERG_SQL_CATALOG_URI = sqlCatalog;
+        break;
+      }
+
+      case 'rest':
       case 'polaris':
-      case 'hive':
-      case 'sql':
         props.type = 'rest';
         if (instance.endpoint) props.uri = instance.endpoint;
         if (instance.catalogName) props.warehouse = instance.catalogName;
@@ -154,9 +249,9 @@ export class IcebergDatalakeService {
               instance.catalogAccessTokenKey,
             );
             if (token) {
-              props.token = '__ENV:ICEBERG_ACCESS_TOKEN__';
+              props.token = '__ENV:ICEBERG_ACCESS_TOKEN';
               // eslint-disable-next-line dot-notation
-              env['ICEBERG_ACCESS_TOKEN__'] = token;
+              env['ICEBERG_ACCESS_TOKEN'] = token;
             }
           } catch (tokenError) {
             // eslint-disable-next-line no-console
@@ -168,31 +263,29 @@ export class IcebergDatalakeService {
         }
         break;
 
-      case 'glue':
-        props.type = 'glue';
-        if (instance.catalogName) props['glue.database'] = instance.catalogName;
-        break;
-
-      case 'dynamodb':
-        props.type = 'dynamodb';
-        if (instance.catalogName)
-          props['dynamodb.table-name'] = instance.catalogName;
-        break;
-
-      case 'bigquery':
-        props.type = 'bigquery';
-        if (instance.catalogName) props.gcp_project = instance.catalogName;
-        break;
-
-      case 'in-memory':
-        props.type = 'in-memory';
-        break;
-
       default:
-        break;
+        throw new Error(`ICEBERG_CATALOG_NOT_ENABLED: ${instance.catalogType}`);
     }
 
-    // Storage credentials via Cloud Explorer connection
+    const warehouse =
+      await IcebergDatalakeService.buildWarehouseProperties(instance);
+    return {
+      props: { ...props, ...warehouse.props },
+      env: { ...env, ...warehouse.env },
+    };
+  }
+
+  private static async buildWarehouseProperties(
+    instance: IcebergInstanceConfig,
+  ): Promise<{ props: Record<string, string>; env: Record<string, string> }> {
+    const props: Record<string, string> = {};
+    const env: Record<string, string> = {};
+
+    if (instance.storageType === 'server-managed') return { props, env };
+    if (instance.storageType === 'local' && instance.localPath) {
+      props.warehouse = `file://${instance.localPath}`;
+    }
+
     if (instance.storageConnectionId) {
       try {
         const db = await loadDatabaseFile();
@@ -266,6 +359,19 @@ export class IcebergDatalakeService {
               env['ICEBERG_GCS_CREDS__'] = gcsCreds;
             }
           }
+
+          if (instance.storageBucket) {
+            const prefix = instance.storagePrefix
+              ? `/${instance.storagePrefix.replace(/^\/+|\/+$/g, '')}`
+              : '';
+            if (provider === 'azure' && cfg.accountName) {
+              props.warehouse = `abfs://${instance.storageBucket}@${cfg.accountName}.dfs.core.windows.net${prefix}`;
+            } else if (provider === 'gcs') {
+              props.warehouse = `gs://${instance.storageBucket}${prefix}`;
+            } else if (s3LikeProviders.includes(provider)) {
+              props.warehouse = `s3://${instance.storageBucket}${prefix}`;
+            }
+          }
         }
       } catch (connError) {
         // eslint-disable-next-line no-console
@@ -276,10 +382,113 @@ export class IcebergDatalakeService {
       }
     }
 
-    if (instance.storageBucket) props['s3.bucket'] = instance.storageBucket;
-    if (instance.storagePrefix) props['s3.prefix'] = instance.storagePrefix;
-
     return { props, env };
+  }
+
+  private static async buildPostgresCatalogUri(
+    config: Pick<IcebergInstanceConfig, 'databaseConnectionId'>,
+  ): Promise<string> {
+    if (!config.databaseConnectionId) {
+      throw new Error('ICEBERG_REQUIRED_FIELD: databaseConnectionId');
+    }
+    const db = await loadDatabaseFile();
+    const model = (db.connections ?? []).find(
+      (item) => item.id === config.databaseConnectionId,
+    );
+    if (!model || model.connection.type !== 'postgres') {
+      throw new Error('ICEBERG_SQL_CONNECTION_INVALID');
+    }
+    const connection = model.connection as PostgresConnection;
+    const username = await secureStorage.getCredential(
+      `db-user-${connection.name}`,
+    );
+    const password = await secureStorage.getCredential(
+      `db-password-${connection.name}`,
+    );
+    if (!username || !password) {
+      throw new Error('ICEBERG_SQL_CREDENTIALS_MISSING');
+    }
+    const auth = `${encodeURIComponent(username)}:${encodeURIComponent(
+      password,
+    )}`;
+    const host = connection.host.trim();
+    const database = encodeURIComponent(connection.database);
+    const sslMode = connection.ssl ? '?sslmode=require' : '';
+    return `postgresql+psycopg2://${auth}@${host}:${connection.port}/${database}${sslMode}`;
+  }
+
+  private static getCatalogCapability(
+    catalogType: IcebergInstanceConfig['catalogType'],
+  ): IcebergCatalogCapability {
+    const capability = IcebergDatalakeService.catalogCapabilities.find(
+      (item) => item.type === catalogType,
+    );
+    if (!capability) {
+      throw new Error(`ICEBERG_CATALOG_UNSUPPORTED: ${catalogType}`);
+    }
+    return capability;
+  }
+
+  private static validateCatalogWarehousePair(
+    config: Pick<
+      IcebergInstanceConfig,
+      | 'catalogType'
+      | 'storageType'
+      | 'catalogPath'
+      | 'endpoint'
+      | 'catalogName'
+      | 'databaseConnectionId'
+      | 'localPath'
+      | 'storageConnectionId'
+      | 'storageBucket'
+    >,
+    validateWarehouseFields = true,
+  ): void {
+    const capability = IcebergDatalakeService.getCatalogCapability(
+      config.catalogType,
+    );
+    if (!capability.enabled) {
+      throw new Error(`ICEBERG_CATALOG_NOT_ENABLED: ${config.catalogType}`);
+    }
+    if (!capability.allowedStorageTypes.includes(config.storageType)) {
+      throw new Error(
+        `ICEBERG_WAREHOUSE_NOT_ALLOWED: ${config.catalogType}/${config.storageType}`,
+      );
+    }
+    const missingField = capability.requiredFields.find(
+      (field) => !config[field]?.trim(),
+    );
+    if (missingField) {
+      throw new Error(`ICEBERG_REQUIRED_FIELD: ${missingField}`);
+    }
+    if (
+      validateWarehouseFields &&
+      config.storageType === 'local' &&
+      !config.localPath?.trim()
+    ) {
+      throw new Error('ICEBERG_REQUIRED_FIELD: localPath');
+    }
+    if (
+      validateWarehouseFields &&
+      config.storageType === 'cloud' &&
+      (!config.storageConnectionId?.trim() || !config.storageBucket?.trim())
+    ) {
+      throw new Error(
+        'ICEBERG_REQUIRED_FIELD: storageConnectionId/storageBucket',
+      );
+    }
+  }
+
+  static getCapabilities(): IcebergCapabilities {
+    return {
+      catalogs: IcebergDatalakeService.catalogCapabilities.map((item) => ({
+        ...item,
+        authModes: [...item.authModes],
+        requiredFields: [...item.requiredFields],
+        allowedStorageTypes: [...item.allowedStorageTypes],
+      })),
+      cloudProviders: [...IcebergDatalakeService.cloudProviders],
+    };
   }
 
   // ─────────────────────────────────────────────
@@ -296,6 +505,9 @@ export class IcebergDatalakeService {
           description,
           catalogType,
           storageType,
+          catalogPath,
+          localPath,
+          storageBucket,
           createdAt,
           updatedAt,
         }) => ({
@@ -304,6 +516,9 @@ export class IcebergDatalakeService {
           description,
           catalogType,
           storageType,
+          catalogPath,
+          localPath,
+          storageBucket,
           createdAt,
           updatedAt,
         }),
@@ -332,6 +547,7 @@ export class IcebergDatalakeService {
     data: CreateIcebergInstanceDTO,
   ): Promise<IcebergInstanceConfig> {
     try {
+      IcebergDatalakeService.validateCatalogWarehousePair(data);
       const id = uuidv4();
       const now = new Date().toISOString();
 
@@ -377,6 +593,11 @@ export class IcebergDatalakeService {
       const instances = await IcebergDatalakeService.readInstances();
       const idx = instances.findIndex((i) => i.id === id);
       if (idx < 0) throw new Error(`Iceberg instance not found: ${id}`);
+
+      IcebergDatalakeService.validateCatalogWarehousePair({
+        ...instances[idx],
+        ...data,
+      });
 
       // Handle access token update
       if (data.accessToken) {
@@ -444,44 +665,61 @@ export class IcebergDatalakeService {
       const props: Record<string, string> = {};
       const env: Record<string, string> = {};
 
+      const storageType =
+        params.storageType ??
+        (params.catalogType === 'sqlite' ? 'local' : 'server-managed');
+      IcebergDatalakeService.validateCatalogWarehousePair(
+        {
+          ...params,
+          storageType,
+        },
+        false,
+      );
+
       if (params.endpoint) props.uri = params.endpoint;
       if (params.catalogName) props.warehouse = params.catalogName;
       if (params.catalogPath) props.uri = params.catalogPath;
 
       switch (params.catalogType) {
-        case 'file':
-          props.type = 'rest';
-          break;
-        case 'polaris':
-        case 'hive':
-        case 'sql':
-          props.type = 'rest';
-          if (params.accessToken) {
-            props.token = '__ENV:ICEBERG_ACCESS_TOKEN__';
-            // eslint-disable-next-line dot-notation
-            env['ICEBERG_ACCESS_TOKEN__'] = params.accessToken;
+        case 'sqlite':
+          props.type = 'sql';
+          if (params.catalogPath) {
+            props.uri = `sqlite:///${params.catalogPath}`;
+            props.warehouse = `file://${path.join(
+              path.dirname(params.catalogPath),
+              'warehouse',
+            )}`;
           }
           break;
-        case 'glue':
-          props.type = 'glue';
+        case 'sql':
+          props.type = 'sql';
+          props.uri = '__ENV:ICEBERG_SQL_CATALOG_URI';
+          env.ICEBERG_SQL_CATALOG_URI =
+            await IcebergDatalakeService.buildPostgresCatalogUri(params);
+          props.warehouse = pathToFileURL(
+            path.join(app.getPath('temp'), 'dbt-studio-iceberg-test'),
+          ).href;
           break;
-        case 'dynamodb':
-          props.type = 'dynamodb';
-          break;
-        case 'bigquery':
-          props.type = 'bigquery';
-          break;
-        case 'in-memory':
-          props.type = 'in-memory';
+        case 'rest':
+        case 'polaris':
+          props.type = 'rest';
+          if (params.accessToken) {
+            props.token = '__ENV:ICEBERG_ACCESS_TOKEN';
+            // eslint-disable-next-line dot-notation
+            env['ICEBERG_ACCESS_TOKEN'] = params.accessToken;
+          }
           break;
         default:
-          props.type = 'rest';
+          throw new Error(`ICEBERG_CATALOG_NOT_ENABLED: ${params.catalogType}`);
       }
 
       await IcebergDatalakeService.runBridge(
         {
           command: 'test_connection',
-          catalog_name: params.catalogName ?? 'test',
+          catalog_name:
+            params.catalogType === 'sqlite'
+              ? 'local'
+              : (params.catalogName ?? 'test'),
           catalog_properties: props,
         },
         env,
@@ -505,13 +743,18 @@ export class IcebergDatalakeService {
     installed: boolean;
     version?: string;
   }> {
-    try {
-      const settings = await SettingsService.loadSettings();
-      if (settings.icebergInstalled) {
-        return { installed: true, version: settings.icebergVersion };
-      }
+    // Fast path 1: in-process session cache
+    if (IcebergDatalakeService.installedCache?.installed) {
+      return IcebergDatalakeService.installedCache;
+    }
 
-      // Check if already installed
+    try {
+      // Settings record the last successful installation for diagnostics, but
+      // do not prove the currently selected Python still has every required
+      // extra. Verify once per app session before trusting it.
+      const settings = await SettingsService.loadSettings();
+
+      // Check via Python bridge (runs pip only if the runtime profile is incomplete)
       const checkResult = (await IcebergDatalakeService.runBridge({
         command: 'install_check',
       })) as Record<string, unknown>;
@@ -523,7 +766,8 @@ export class IcebergDatalakeService {
           icebergInstalled: true,
           icebergVersion: version,
         });
-        return { installed: true, version };
+        IcebergDatalakeService.installedCache = { installed: true, version };
+        return IcebergDatalakeService.installedCache;
       }
 
       // Install pyiceberg with common extras
@@ -533,7 +777,10 @@ export class IcebergDatalakeService {
           '-m',
           'pip',
           'install',
-          'pyiceberg[s3fs,glue,hive,sql-sqlite,sql-postgres,pyarrow]',
+          // SQLite and PostgreSQL SQL catalogs plus the current FileIO profile.
+          // --prefer-binary avoids slow source compilation where wheels exist.
+          'pyiceberg[s3fs,sql-sqlite,sql-postgres,pyarrow]',
+          '--prefer-binary',
           '--quiet',
         ]);
         child.on('close', (code: number) => {
@@ -556,7 +803,8 @@ export class IcebergDatalakeService {
           icebergInstalled: true,
           icebergVersion: version,
         });
-        return { installed: true, version };
+        IcebergDatalakeService.installedCache = { installed: true, version };
+        return IcebergDatalakeService.installedCache;
       }
 
       return { installed: false };
@@ -585,7 +833,10 @@ export class IcebergDatalakeService {
       const result = (await IcebergDatalakeService.runBridge(
         {
           command: 'list_namespaces',
-          catalog_name: instance.catalogName ?? id,
+          catalog_name:
+            instance.catalogType === 'sqlite'
+              ? 'local'
+              : (instance.catalogName ?? id),
           catalog_properties: props,
           parent: parent ?? [],
         },
@@ -607,7 +858,10 @@ export class IcebergDatalakeService {
       const result = (await IcebergDatalakeService.runBridge(
         {
           command: 'list_tables',
-          catalog_name: instance.catalogName ?? id,
+          catalog_name:
+            instance.catalogType === 'sqlite'
+              ? 'local'
+              : (instance.catalogName ?? id),
           catalog_properties: props,
           namespace,
         },
@@ -633,7 +887,10 @@ export class IcebergDatalakeService {
       const result = (await IcebergDatalakeService.runBridge(
         {
           command: 'get_schema',
-          catalog_name: instance.catalogName ?? id,
+          catalog_name:
+            instance.catalogType === 'sqlite'
+              ? 'local'
+              : (instance.catalogName ?? id),
           catalog_properties: props,
           namespace,
           table,
@@ -660,7 +917,10 @@ export class IcebergDatalakeService {
       const result = (await IcebergDatalakeService.runBridge(
         {
           command: 'get_snapshots',
-          catalog_name: instance.catalogName ?? id,
+          catalog_name:
+            instance.catalogType === 'sqlite'
+              ? 'local'
+              : (instance.catalogName ?? id),
           catalog_properties: props,
           namespace,
           table,
@@ -689,7 +949,10 @@ export class IcebergDatalakeService {
       const result = (await IcebergDatalakeService.runBridge(
         {
           command: 'preview_table',
-          catalog_name: instance.catalogName ?? id,
+          catalog_name:
+            instance.catalogType === 'sqlite'
+              ? 'local'
+              : (instance.catalogName ?? id),
           catalog_properties: props,
           namespace,
           table,
@@ -714,13 +977,20 @@ export class IcebergDatalakeService {
   //  Public: file helpers
   // ─────────────────────────────────────────────
 
-  static async createMetadataFile(warehousePath: string): Promise<string> {
+  static async createMetadataFile(
+    warehousePath: string,
+  ): Promise<IcebergLocalCatalogResult> {
     try {
       const result = (await IcebergDatalakeService.runBridge({
         command: 'create_metadata_file',
         warehouse_path: warehousePath,
       })) as Record<string, unknown>;
-      return (result.metadata_path as string) ?? '';
+      return {
+        catalogPath: (result.metadata_path as string) ?? '',
+        warehousePath: (result.warehouse_path as string) ?? '',
+        namespaces: (result.namespaces as string[][]) ?? [],
+        tables: (result.tables as string[][]) ?? [],
+      };
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error(

@@ -13,7 +13,12 @@ import type {
   IcebergFieldSpec,
   IcebergSnapshotInfo,
   IcebergPreviewResult,
+  IcebergLocalCatalogResult,
+  IcebergCapabilities,
 } from '../../types/iceberg';
+
+export const getIcebergCapabilities = (): Promise<IcebergCapabilities> =>
+  window.electron.ipcRenderer.invoke('iceberg:getCapabilities');
 
 export const listIcebergInstances = (): Promise<IcebergInstanceListItem[]> =>
   window.electron.ipcRenderer.invoke('iceberg:list');
@@ -91,7 +96,7 @@ export const previewIcebergTable = (
 
 export const createIcebergMetadataFile = (
   warehousePath: string,
-): Promise<string> =>
+): Promise<IcebergLocalCatalogResult> =>
   window.electron.ipcRenderer.invoke(
     'iceberg:createMetadataFile',
     warehousePath,

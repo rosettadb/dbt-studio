@@ -2,18 +2,54 @@
 // Iceberg Data Lake — Phase 1: TypeScript type definitions
 
 export type IcebergCatalogType =
-  | 'file'
-  | 'polaris'
-  | 'glue'
-  | 'hive'
-  | 'dynamodb'
+  | 'sqlite'
   | 'sql'
-  | 'bigquery'
-  | 'in-memory';
+  | 'rest'
+  | 'polaris'
+  | 'hive'
+  | 'hadoop'
+  | 'glue'
+  | 'nessie';
 
-export type IcebergStorageType = 'local' | 'cloud';
+export type IcebergStorageType =
+  | 'server-managed'
+  | 'local'
+  | 'nfs'
+  | 'hdfs'
+  | 'cloud';
 
-export type IcebergCloudProvider = 's3-compatible' | 'aws' | 'azure' | 'gcs';
+export type IcebergCatalogAuthMode =
+  | 'none'
+  | 'token'
+  | 'oauth-client-credentials';
+
+export type IcebergCloudProvider =
+  | 'aws'
+  | 'azure'
+  | 'gcs'
+  | 'minio'
+  | 'cloudflare-r2'
+  | 'backblaze-b2'
+  | 'rustfs'
+  | 'garage';
+
+export interface IcebergCatalogCapability {
+  type: IcebergCatalogType;
+  label: string;
+  pyicebergType: 'sql' | 'rest' | 'hive' | 'glue' | 'custom';
+  enabled: boolean;
+  disabledReason?: string;
+  requiredFields: Array<
+    'catalogPath' | 'endpoint' | 'catalogName' | 'databaseConnectionId'
+  >;
+  authModes: IcebergCatalogAuthMode[];
+  allowedStorageTypes: IcebergStorageType[];
+}
+
+export interface IcebergCapabilities {
+  catalogs: IcebergCatalogCapability[];
+  cloudProviders: IcebergCloudProvider[];
+}
 
 export interface IcebergInstanceConfig {
   id: string;
@@ -21,9 +57,10 @@ export interface IcebergInstanceConfig {
   description?: string;
   // Catalog
   catalogType: IcebergCatalogType;
-  catalogPath?: string; // file-based: path to metadata.json
+  catalogPath?: string; // local testing: path to the SQLite catalog database
   endpoint?: string; // REST: Polaris/Lakekeeper endpoint URL
   catalogName?: string; // REST: catalog name or warehouse
+  databaseConnectionId?: string; // Existing PostgreSQL/Neon connection
   catalogAccessTokenKey?: string; // keytar key: "iceberg-catalog-token-{id}"
   catalogConnectionId?: string; // Cloud Explorer connectionId for vended credentials
   catalogBucket?: string;
@@ -46,6 +83,9 @@ export interface IcebergInstanceListItem {
   description?: string;
   catalogType: IcebergCatalogType;
   storageType: IcebergStorageType;
+  catalogPath?: string;
+  localPath?: string;
+  storageBucket?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -89,6 +129,13 @@ export interface IcebergTestResult {
   error?: string;
 }
 
+export interface IcebergLocalCatalogResult {
+  catalogPath: string;
+  warehousePath: string;
+  namespaces: string[][];
+  tables: string[][];
+}
+
 export interface IcebergTestCatalogParams {
   catalogType: IcebergCatalogType;
   catalogPath?: string;
@@ -96,4 +143,6 @@ export interface IcebergTestCatalogParams {
   catalogName?: string;
   connectionId?: string; // resolves credentials from Cloud Explorer
   accessToken?: string; // raw token (not stored yet at test time)
+  databaseConnectionId?: string;
+  storageType?: IcebergStorageType;
 }

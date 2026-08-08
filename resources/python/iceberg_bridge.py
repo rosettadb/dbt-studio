@@ -27,9 +27,13 @@ def resolve_env_vars(props: dict) -> dict:
 
 
 def handle_install_check(_cmd: dict) -> dict:
-    """Check if pyiceberg is installed and return its version."""
+    """Check the complete runtime profile required by the implemented catalogs."""
     try:
         import pyiceberg  # noqa: PLC0415
+        import pyarrow  # noqa: F401, PLC0415
+        import psycopg2  # noqa: F401, PLC0415
+        import s3fs  # noqa: F401, PLC0415
+        import sqlalchemy  # noqa: F401, PLC0415
         return {"ok": True, "installed": True, "version": pyiceberg.__version__}
     except ImportError:
         return {"ok": True, "installed": False}
@@ -155,33 +159,43 @@ def handle_preview_table(cmd: dict) -> dict:
 
 def handle_create_metadata_file(cmd: dict) -> dict:
     """
-    Initialize a local file-based Iceberg catalog at the given warehouse path.
-    Creates the metadata directory and writes a minimal catalog metadata JSON.
+    Initialize a development-only SQL catalog backed by SQLite.
+
+    The IPC command keeps its historical name for compatibility. It creates a
+    durable catalog database and local warehouse, then reloads the catalog to
+    prove the persisted contract works.
     """
     try:
-        import uuid  # noqa: PLC0415
-        warehouse_path = cmd["warehouse_path"]
-        metadata_dir = os.path.join(warehouse_path, "metadata")
-        os.makedirs(metadata_dir, exist_ok=True)
-        metadata_path = os.path.join(metadata_dir, "v1.metadata.json")
-        if not os.path.exists(metadata_path):
-            catalog_metadata = {
-                "format-version": 1,
-                "table-uuid": str(uuid.uuid4()),
-                "location": warehouse_path,
-                "last-updated-ms": 0,
-                "last-column-id": 0,
-                "schema": {"type": "struct", "fields": []},
-                "partition-spec": [],
-                "properties": {},
-                "current-snapshot-id": -1,
-                "snapshots": [],
-                "snapshot-log": [],
-                "metadata-log": [],
-            }
-            with open(metadata_path, "w", encoding="utf-8") as f:
-                json.dump(catalog_metadata, f, indent=2)
-        return {"ok": True, "metadata_path": metadata_path}
+        from pathlib import Path  # noqa: PLC0415
+        from pyiceberg.catalog import load_catalog  # noqa: PLC0415
+
+        catalog_dir = Path(cmd["warehouse_path"]).expanduser().resolve()
+        catalog_dir.mkdir(parents=True, exist_ok=True)
+        warehouse_dir = catalog_dir / "warehouse"
+        warehouse_dir.mkdir(parents=True, exist_ok=True)
+        catalog_path = catalog_dir / "pyiceberg_catalog.db"
+
+        properties = {
+            "type": "sql",
+            "uri": f"sqlite:///{catalog_path.as_posix()}",
+            "warehouse": warehouse_dir.as_uri(),
+        }
+        catalog = load_catalog("local", **properties)
+        catalog.create_namespace_if_not_exists("default")
+        catalog.close()
+
+        reloaded = load_catalog("local", **properties)
+        namespaces = [list(namespace) for namespace in reloaded.list_namespaces()]
+        tables = [list(identifier) for identifier in reloaded.list_tables("default")]
+        reloaded.close()
+
+        return {
+            "ok": True,
+            "metadata_path": str(catalog_path),
+            "warehouse_path": str(warehouse_dir),
+            "namespaces": namespaces,
+            "tables": tables,
+        }
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "error": str(exc)}
 

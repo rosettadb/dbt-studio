@@ -10,11 +10,12 @@ import {
   styled,
   Button,
 } from '@mui/material';
-import { Dashboard, History, Add } from '@mui/icons-material';
+import { Dashboard, History, Add, LocalFireDepartment } from '@mui/icons-material';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { SettingsSidebarElement } from '../../screens/settings/settingsElements';
 import { icons } from '../../../../assets';
 import type { DuckLakeInstance } from '../../../types/duckLake';
+import type { IcebergInstanceListItem } from '../../../types/iceberg';
 import { DataLakeSVG } from '../sidebar/icons';
 
 export const DataLakeIcon: React.FC<{
@@ -74,23 +75,30 @@ export const dataLakeSidebarElements: SettingsSidebarElement[] = [
 
 interface DataLakeSidebarProps {
   instances?: DuckLakeInstance[];
+  icebergInstances?: IcebergInstanceListItem[];
 }
 
 export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
   instances = [],
+  icebergInstances = [],
 }) => {
   const theme = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Extract instanceId from current path
+  // Extract lake type + instanceId from current path
   const pathSegments = location.pathname.split('/');
-  const instanceId = pathSegments.includes('instances')
-    ? pathSegments[pathSegments.indexOf('instances') + 1]
-    : null;
+  const instancesIndex = pathSegments.indexOf('instances');
+  const instanceId =
+    instancesIndex >= 0 ? pathSegments[instancesIndex + 1] : null;
+  const lakeType =
+    instancesIndex > 0 ? pathSegments[instancesIndex - 1] : null;
 
-  const selectedInstance = instances.find(
-    (instance) => instance.id === instanceId,
+  const selectedDuckLakeInstance = instances.find(
+    (instance) => lakeType === 'duck-lake' && instance.id === instanceId,
+  );
+  const selectedIcebergInstance = icebergInstances.find(
+    (instance) => lakeType === 'iceberg' && instance.id === instanceId,
   );
 
   return (
@@ -165,7 +173,7 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
             ))}
           </List>
 
-          {/* Instances List */}
+          {/* DuckLake Instances */}
           {instances.length > 0 && (
             <Box sx={{ mt: 3 }}>
               <Typography
@@ -180,7 +188,7 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
                   letterSpacing: '0.5px',
                 }}
               >
-                DataLakes
+                DuckLake
               </Typography>
               <List
                 sx={{
@@ -206,13 +214,76 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
                         mb: 0,
                         width: '270px',
                         backgroundColor:
-                          selectedInstance?.id === instance.id
+                          selectedDuckLakeInstance?.id === instance.id
                             ? theme.palette.divider
                             : 'transparent',
                       }}
                     >
                       <ListItemIcon sx={{ minWidth: 32 }}>
                         <DataLakeIcon fontSize="small" />
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={instance.name}
+                        primaryTypographyProps={{
+                          variant: 'body2',
+                          sx: { fontSize: '0.875rem' },
+                        }}
+                      />
+                    </ListItem>
+                  </StyledDuckLakeNavLink>
+                ))}
+              </List>
+            </Box>
+          )}
+
+          {/* Iceberg Instances */}
+          {icebergInstances.length > 0 && (
+            <Box sx={{ mt: 3 }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  display: 'block',
+                  px: 2,
+                  pb: 1,
+                  fontWeight: 600,
+                  color: theme.palette.text.secondary,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                }}
+              >
+                Apache Iceberg
+              </Typography>
+              <List
+                sx={{
+                  py: 0,
+                  width: '100%',
+                  '& .MuiListItem-root': {
+                    py: 0.25,
+                    px: 1,
+                    minHeight: '32px',
+                    width: '100%',
+                  },
+                }}
+              >
+                {icebergInstances.map((instance) => (
+                  <StyledDuckLakeNavLink
+                    key={instance.id}
+                    to={`/app/data-lake/iceberg/instances/${instance.id}`}
+                  >
+                    <ListItem
+                      sx={{
+                        cursor: 'pointer',
+                        borderRadius: 1,
+                        mb: 0,
+                        width: '270px',
+                        backgroundColor:
+                          selectedIcebergInstance?.id === instance.id
+                            ? theme.palette.divider
+                            : 'transparent',
+                      }}
+                    >
+                      <ListItemIcon sx={{ minWidth: 32 }}>
+                        <LocalFireDepartment fontSize="small" color="primary" />
                       </ListItemIcon>
                       <ListItemText
                         primary={instance.name}
