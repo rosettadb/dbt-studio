@@ -51,6 +51,7 @@ def handle_install_check(_cmd: dict) -> dict:
         import psycopg2  # noqa: F401, PLC0415
         import s3fs  # noqa: F401, PLC0415
         import sqlalchemy  # noqa: F401, PLC0415
+        from pyiceberg.catalog.hive import HiveCatalog  # noqa: F401, PLC0415
         return {"ok": True, "installed": True, "version": pyiceberg.__version__}
     except ImportError:
         return {"ok": True, "installed": False}

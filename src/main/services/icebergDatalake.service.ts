@@ -93,9 +93,17 @@ export class IcebergDatalakeService {
       authModes: ['none', 'token', 'oauth-client-credentials'],
       allowedStorageTypes: ['server-managed'],
     },
+    {
+      type: 'hive',
+      label: 'Hive Metastore',
+      pyicebergType: 'hive',
+      enabled: true,
+      requiredFields: ['hiveUri'],
+      authModes: ['none'],
+      allowedStorageTypes: ['local'],
+    },
     ...(
       [
-        ['hive', 'Hive Metastore', 'hive'],
         ['hadoop', 'Hadoop Catalog', 'custom'],
         ['glue', 'AWS Glue', 'glue'],
       ] as const
@@ -343,6 +351,12 @@ export class IcebergDatalakeService {
         }
         break;
 
+      case 'hive':
+        props.type = 'hive';
+        props.uri = IcebergDatalakeService.buildHiveMetastoreUri(instance);
+        if (instance.hiveUgi?.trim()) props.ugi = instance.hiveUgi.trim();
+        break;
+
       default:
         throw new Error(`ICEBERG_CATALOG_NOT_ENABLED: ${instance.catalogType}`);
     }
@@ -383,6 +397,35 @@ export class IcebergDatalakeService {
     return `${endpoint}/${encodeURIComponent(reference)}${
       warehouse ? `|${encodeURIComponent(warehouse)}` : ''
     }`;
+  }
+
+  private static buildHiveMetastoreUri(
+    config: Pick<IcebergInstanceConfig, 'hiveUri'>,
+  ): string {
+    const rawUri = config.hiveUri?.trim();
+    if (!rawUri) throw new Error('ICEBERG_REQUIRED_FIELD: hiveUri');
+
+    const uris = rawUri.split(',').map((value) => value.trim());
+    if (uris.some((value) => !value)) {
+      throw new Error('ICEBERG_HIVE_URI_INVALID');
+    }
+    const hasInvalidUri = uris.some((uri) => {
+      try {
+        const parsed = new URL(uri);
+        return (
+          parsed.protocol !== 'thrift:' ||
+          !parsed.hostname ||
+          !parsed.port ||
+          !!parsed.username ||
+          !!parsed.password ||
+          (!!parsed.pathname && parsed.pathname !== '/')
+        );
+      } catch {
+        return true;
+      }
+    });
+    if (hasInvalidUri) throw new Error('ICEBERG_HIVE_URI_INVALID');
+    return uris.join(',');
   }
 
   private static async buildWarehouseProperties(
@@ -553,6 +596,8 @@ export class IcebergDatalakeService {
       | 'storageBucket'
       | 'nessieReference'
       | 'nessieWarehouse'
+      | 'hiveUri'
+      | 'hiveUgi'
     >,
     validateWarehouseFields = true,
   ): void {
@@ -575,6 +620,12 @@ export class IcebergDatalakeService {
     }
     if (config.catalogType === 'nessie') {
       IcebergDatalakeService.buildNessieRestUri(config);
+    }
+    if (config.catalogType === 'hive') {
+      IcebergDatalakeService.buildHiveMetastoreUri(config);
+      if (config.hiveUgi && !/^[^:]+:[^:]+$/.test(config.hiveUgi.trim())) {
+        throw new Error('ICEBERG_HIVE_UGI_INVALID');
+      }
     }
     if (
       validateWarehouseFields &&
@@ -933,6 +984,11 @@ export class IcebergDatalakeService {
             delete env.ICEBERG_ACCESS_TOKEN;
           }
           break;
+        case 'hive':
+          props.type = 'hive';
+          props.uri = IcebergDatalakeService.buildHiveMetastoreUri(params);
+          if (params.hiveUgi?.trim()) props.ugi = params.hiveUgi.trim();
+          break;
         default:
           throw new Error(`ICEBERG_CATALOG_NOT_ENABLED: ${params.catalogType}`);
       }
@@ -1060,9 +1116,9 @@ export class IcebergDatalakeService {
           '-m',
           'pip',
           'install',
-          // SQLite and PostgreSQL SQL catalogs plus the current FileIO profile.
+          // Enabled SQL/Hive catalogs plus the current FileIO profile.
           // --prefer-binary avoids slow source compilation where wheels exist.
-          'pyiceberg[s3fs,sql-sqlite,sql-postgres,pyarrow]',
+          'pyiceberg[s3fs,sql-sqlite,sql-postgres,pyarrow,hive]',
           '--prefer-binary',
           '--quiet',
         ]);

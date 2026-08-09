@@ -56,6 +56,14 @@ describe('IcebergDatalakeService compatibility and secret persistence', () => {
       requiredFields: ['endpoint', 'nessieReference'],
       allowedStorageTypes: ['server-managed'],
     });
+    expect(
+      capabilities.catalogs.find(({ type }) => type === 'hive'),
+    ).toMatchObject({
+      enabled: true,
+      pyicebergType: 'hive',
+      requiredFields: ['hiveUri'],
+      allowedStorageTypes: ['local'],
+    });
   });
 
   it('rejects invalid OAuth configuration before bridge execution', () => {
@@ -183,5 +191,69 @@ describe('IcebergDatalakeService compatibility and secret persistence', () => {
       },
       env: {},
     });
+  });
+
+  it('validates Hive Thrift URIs and optional UGI identity', () => {
+    const validate = (IcebergDatalakeService as any)
+      .validateCatalogWarehousePair as (config: unknown) => void;
+
+    expect(() =>
+      validate({
+        catalogType: 'hive',
+        hiveUri: 'http://localhost:9083',
+        storageType: 'local',
+        localPath: '/tmp/hive-warehouse',
+      }),
+    ).toThrow('ICEBERG_HIVE_URI_INVALID');
+    expect(() =>
+      validate({
+        catalogType: 'hive',
+        hiveUri: 'thrift://localhost:9083',
+        hiveUgi: 'invalid',
+        storageType: 'local',
+        localPath: '/tmp/hive-warehouse',
+      }),
+    ).toThrow('ICEBERG_HIVE_UGI_INVALID');
+  });
+
+  it('builds native Hive catalog properties independently from storage', async () => {
+    const buildProperties = (IcebergDatalakeService as any)
+      .buildCatalogProperties as (config: unknown) => Promise<{
+      props: Record<string, string>;
+      env: Record<string, string>;
+    }>;
+
+    const result = await buildProperties({
+      catalogType: 'hive',
+      hiveUri: 'thrift://localhost:9083',
+      hiveUgi: 'dbt:analytics',
+      storageType: 'local',
+      localPath: '/tmp/hive-warehouse',
+    });
+
+    expect(result).toEqual({
+      props: {
+        type: 'hive',
+        uri: 'thrift://localhost:9083',
+        ugi: 'dbt:analytics',
+        warehouse: 'file:///tmp/hive-warehouse',
+      },
+      env: {},
+    });
+  });
+
+  it('rejects unverified Hive cloud warehouses before Python executes', () => {
+    const validate = (IcebergDatalakeService as any)
+      .validateCatalogWarehousePair as (config: unknown) => void;
+
+    expect(() =>
+      validate({
+        catalogType: 'hive',
+        hiveUri: 'thrift://localhost:9083',
+        storageType: 'cloud',
+        storageConnectionId: 'minio',
+        storageBucket: 'iceberg-hive',
+      }),
+    ).toThrow('ICEBERG_WAREHOUSE_NOT_ALLOWED: hive/cloud');
   });
 });

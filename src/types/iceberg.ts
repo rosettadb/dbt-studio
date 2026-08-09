@@ -44,6 +44,7 @@ export interface IcebergCatalogCapability {
     | 'endpoint'
     | 'catalogName'
     | 'databaseConnectionId'
+    | 'hiveUri'
     | 'nessieReference'
   >;
   authModes: IcebergCatalogAuthMode[];
@@ -71,6 +72,8 @@ export interface IcebergInstanceConfig {
   oauthScope?: string;
   nessieReference?: string; // Nessie branch or tag, usually "main"
   nessieWarehouse?: string; // optional named Nessie warehouse
+  hiveUri?: string; // Hive Metastore Thrift URI, e.g. thrift://localhost:9083
+  hiveUgi?: string; // optional Hive user:group identity for non-Kerberos HMS
   databaseConnectionId?: string; // Existing PostgreSQL/Neon connection
   catalogAccessTokenKey?: string; // keytar key: "iceberg-catalog-token-{id}"
   catalogConnectionId?: string; // Cloud Explorer connectionId for vended credentials
@@ -172,6 +175,8 @@ export interface IcebergTestCatalogParams {
   oauthScope?: string;
   nessieReference?: string;
   nessieWarehouse?: string;
+  hiveUri?: string;
+  hiveUgi?: string;
   databaseConnectionId?: string;
   storageType?: IcebergStorageType;
 }

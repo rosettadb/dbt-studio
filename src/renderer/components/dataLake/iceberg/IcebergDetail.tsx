@@ -902,6 +902,16 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
     );
   };
 
+  let catalogIdentityLabel = 'Catalog Name';
+  let catalogIdentityValue = instance.catalogName ?? 'Local catalog';
+  if (instance.catalogType === 'nessie') {
+    catalogIdentityLabel = 'Reference';
+    catalogIdentityValue = instance.nessieReference ?? 'main';
+  } else if (instance.catalogType === 'hive') {
+    catalogIdentityLabel = 'Metastore URI';
+    catalogIdentityValue = instance.hiveUri ?? '—';
+  }
+
   return (
     <Box sx={{ p: 2 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
@@ -1063,16 +1073,8 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
                         <Badge fontSize="small" color="action" />
                       </ListItemIcon>
                       <ListItemText
-                        primary={
-                          instance.catalogType === 'nessie'
-                            ? 'Reference'
-                            : 'Catalog Name'
-                        }
-                        secondary={
-                          instance.catalogType === 'nessie'
-                            ? (instance.nessieReference ?? 'main')
-                            : (instance.catalogName ?? 'Local catalog')
-                        }
+                        primary={catalogIdentityLabel}
+                        secondary={catalogIdentityValue}
                       />
                     </ListItem>
                     {instance.catalogType === 'nessie' && (
@@ -1085,6 +1087,17 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
                           secondary={
                             instance.nessieWarehouse ?? 'Default warehouse'
                           }
+                        />
+                      </ListItem>
+                    )}
+                    {instance.catalogType === 'hive' && (
+                      <ListItem disableGutters>
+                        <ListItemIcon sx={{ minWidth: 36 }}>
+                          <Badge fontSize="small" color="action" />
+                        </ListItemIcon>
+                        <ListItemText
+                          primary="Hive User / Group"
+                          secondary={instance.hiveUgi ?? '(none)'}
                         />
                       </ListItem>
                     )}

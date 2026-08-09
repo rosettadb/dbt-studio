@@ -74,6 +74,8 @@ export interface IcebergWizardData {
     oauthScope?: string;
     nessieReference?: string;
     nessieWarehouse?: string;
+    hiveUri?: string;
+    hiveUgi?: string;
     polarisConnectionId?: string;
     polarisBucket?: string;
     polarisPrefix?: string;
@@ -131,6 +133,8 @@ function buildInitialData(initial?: IcebergInstanceConfig): IcebergWizardData {
       oauthScope: initial.oauthScope,
       nessieReference: initial.nessieReference,
       nessieWarehouse: initial.nessieWarehouse,
+      hiveUri: initial.hiveUri,
+      hiveUgi: initial.hiveUgi,
       polarisConnectionId: initial.catalogConnectionId,
       polarisBucket: initial.catalogBucket,
       polarisPrefix: initial.catalogPrefix,
@@ -175,6 +179,16 @@ function validateStep(
     }
     if (data.catalog.catalogType === 'sql' && !data.catalog.catalogName) {
       return 'SQL catalog name is required.';
+    }
+    if (data.catalog.catalogType === 'hive' && !data.catalog.hiveUri) {
+      return 'Hive Metastore Thrift URI is required.';
+    }
+    if (
+      data.catalog.catalogType === 'hive' &&
+      data.catalog.hiveUgi &&
+      !/^[^:]+:[^:]+$/.test(data.catalog.hiveUgi.trim())
+    ) {
+      return 'Hive UGI must use the user:group format.';
     }
     if (
       data.catalog.catalogType === 'rest' ||
@@ -269,6 +283,9 @@ export const IcebergConnectionWizard: React.FC<
   const createLocalCatalogMutation = useCreateIcebergMetadataFile();
   const capabilitiesQuery = useIcebergCapabilities();
   const catalogCapabilities = capabilitiesQuery.data?.catalogs ?? [];
+  const selectedCatalogCapability = catalogCapabilities.find(
+    (capability) => capability.type === data.catalog.catalogType,
+  );
   const databaseConnectionsQuery = useGetConnections();
   const postgresConnections = (databaseConnectionsQuery.data ?? []).filter(
     (connection) => connection.connection.type === 'postgres',
@@ -384,6 +401,8 @@ export const IcebergConnectionWizard: React.FC<
         oauthScope: data.catalog.oauthScope,
         nessieReference: data.catalog.nessieReference,
         nessieWarehouse: data.catalog.nessieWarehouse,
+        hiveUri: data.catalog.hiveUri,
+        hiveUgi: data.catalog.hiveUgi,
         databaseConnectionId: data.catalog.databaseConnectionId,
         storageType: data.storage.storageType,
       });
@@ -458,6 +477,8 @@ export const IcebergConnectionWizard: React.FC<
               databaseConnectionId: undefined,
               nessieReference: catalogType === 'nessie' ? 'main' : undefined,
               nessieWarehouse: undefined,
+              hiveUri: undefined,
+              hiveUgi: undefined,
               accessToken: undefined,
               polarisConnectionId: undefined,
               polarisBucket: undefined,
@@ -569,6 +590,32 @@ export const IcebergConnectionWizard: React.FC<
             required
             helperText="Must match catalog_name for existing PyIceberg tables"
           />
+        </>
+      )}
+
+      {data.catalog.catalogType === 'hive' && (
+        <>
+          <TextField
+            label="Hive Metastore Thrift URI"
+            placeholder="thrift://localhost:9083"
+            value={data.catalog.hiveUri ?? ''}
+            onChange={(event) => patchCatalog({ hiveUri: event.target.value })}
+            fullWidth
+            required
+            helperText="Use the standalone Hive Metastore Thrift service, not HiveServer2. Comma-separated URIs are supported for high availability."
+          />
+          <TextField
+            label="Hive User / Group (Optional)"
+            placeholder="dbt:analytics"
+            value={data.catalog.hiveUgi ?? ''}
+            onChange={(event) => patchCatalog({ hiveUgi: event.target.value })}
+            fullWidth
+            helperText="Optional non-Kerberos UGI identity in user:group format."
+          />
+          <Alert severity="info">
+            Kerberos-authenticated Hive Metastores are not enabled in this
+            slice. Warehouse storage is configured separately in the next step.
+          </Alert>
         </>
       )}
 
@@ -841,6 +888,14 @@ export const IcebergConnectionWizard: React.FC<
           Storage Configuration
         </Typography>
 
+        {data.catalog.catalogType === 'hive' && (
+          <Alert severity="info">
+            For a local warehouse, the same absolute path must be accessible to
+            both DBT Studio and the Hive Metastore service. Mount that path into
+            a containerized Metastore at the identical location.
+          </Alert>
+        )}
+
         <FormControl fullWidth>
           <InputLabel>Storage Type</InputLabel>
           <Select
@@ -858,9 +913,13 @@ export const IcebergConnectionWizard: React.FC<
             }
           >
             <MenuItem value="local">Local Filesystem</MenuItem>
-            <MenuItem value="cloud">
-              Cloud Storage (Cloud Explorer connection)
-            </MenuItem>
+            {selectedCatalogCapability?.allowedStorageTypes.includes(
+              'cloud',
+            ) && (
+              <MenuItem value="cloud">
+                Cloud Storage (Cloud Explorer connection)
+              </MenuItem>
+            )}
           </Select>
         </FormControl>
 
@@ -968,6 +1027,22 @@ export const IcebergConnectionWizard: React.FC<
                   <ListItemText
                     primary="Catalog Name"
                     secondary={data.catalog.catalogName}
+                  />
+                </ListItem>
+              </>
+            )}
+            {data.catalog.catalogType === 'hive' && (
+              <>
+                <ListItem disableGutters>
+                  <ListItemText
+                    primary="Metastore URI"
+                    secondary={data.catalog.hiveUri}
+                  />
+                </ListItem>
+                <ListItem disableGutters>
+                  <ListItemText
+                    primary="Hive User / Group"
+                    secondary={data.catalog.hiveUgi ?? '(none)'}
                   />
                 </ListItem>
               </>
