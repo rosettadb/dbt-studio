@@ -60,6 +60,11 @@ export interface IcebergInstanceConfig {
   catalogPath?: string; // local testing: path to the SQLite catalog database
   endpoint?: string; // REST: Polaris/Lakekeeper endpoint URL
   catalogName?: string; // REST: catalog name or warehouse
+  catalogAuthMode?: IcebergCatalogAuthMode;
+  oauthClientId?: string;
+  oauthClientSecretKey?: string; // keytar key: "iceberg-oauth-secret-{id}"
+  oauthServerUri?: string;
+  oauthScope?: string;
   databaseConnectionId?: string; // Existing PostgreSQL/Neon connection
   catalogAccessTokenKey?: string; // keytar key: "iceberg-catalog-token-{id}"
   catalogConnectionId?: string; // Cloud Explorer connectionId for vended credentials
@@ -96,6 +101,7 @@ export type CreateIcebergInstanceDTO = Omit<
   'id' | 'createdAt' | 'updatedAt'
 > & {
   accessToken?: string; // raw token — service stores in keytar, strips before saving
+  oauthClientSecret?: string; // raw secret — service stores in keytar, strips before saving
 };
 
 export type UpdateIcebergInstanceDTO = Partial<CreateIcebergInstanceDTO>;
@@ -153,6 +159,11 @@ export interface IcebergTestCatalogParams {
   catalogName?: string;
   connectionId?: string; // resolves credentials from Cloud Explorer
   accessToken?: string; // raw token (not stored yet at test time)
+  authMode?: IcebergCatalogAuthMode;
+  oauthClientId?: string;
+  oauthClientSecret?: string; // raw secret (not stored yet at test time)
+  oauthServerUri?: string;
+  oauthScope?: string;
   databaseConnectionId?: string;
   storageType?: IcebergStorageType;
 }

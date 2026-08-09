@@ -1,0 +1,119 @@
+import { IcebergDatalakeService } from '../../../../src/main/services/icebergDatalake.service';
+import secureStorage from '../../../../src/main/services/secureStorage.service';
+import {
+  loadDatabaseFile,
+  updateDatabase,
+} from '../../../../src/main/utils/fileHelper';
+
+jest.mock('../../../../src/main/utils/fileHelper', () => ({
+  loadDatabaseFile: jest.fn(),
+  updateDatabase: jest.fn(),
+}));
+
+jest.mock('../../../../src/main/services/secureStorage.service', () => ({
+  __esModule: true,
+  default: {
+    setCredential: jest.fn(),
+    getCredential: jest.fn(),
+    deleteCredential: jest.fn(),
+  },
+}));
+
+jest.mock('../../../../src/main/services/settings.service', () => ({
+  __esModule: true,
+  default: { loadSettings: jest.fn() },
+}));
+
+const mockedLoadDatabase = loadDatabaseFile as jest.Mock;
+const mockedUpdateDatabase = updateDatabase as jest.Mock;
+const mockedSecureStorage = secureStorage as jest.Mocked<typeof secureStorage>;
+
+describe('IcebergDatalakeService compatibility and secret persistence', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockedLoadDatabase.mockResolvedValue({ icebergInstances: [] });
+    mockedUpdateDatabase.mockResolvedValue(undefined);
+    mockedSecureStorage.setCredential.mockResolvedValue(undefined);
+  });
+
+  it('keeps Hadoop disabled while exposing modern catalog capabilities', () => {
+    const capabilities = IcebergDatalakeService.getCapabilities();
+
+    expect(
+      capabilities.catalogs.find(({ type }) => type === 'hadoop'),
+    ).toMatchObject({ enabled: false });
+    expect(
+      capabilities.catalogs.find(({ type }) => type === 'polaris'),
+    ).toMatchObject({
+      enabled: true,
+      authModes: expect.arrayContaining(['oauth-client-credentials']),
+    });
+  });
+
+  it('rejects invalid OAuth configuration before bridge execution', () => {
+    const validate = (IcebergDatalakeService as any)
+      .validateCatalogAuthentication as (config: unknown) => void;
+
+    expect(() =>
+      validate({
+        catalogType: 'polaris',
+        catalogAuthMode: 'oauth-client-credentials',
+        oauthClientId: 'root',
+        oauthClientSecret: 'secret',
+      }),
+    ).toThrow('ICEBERG_OAUTH_SERVER_URI_REQUIRED');
+    expect(() =>
+      validate({
+        catalogType: 'polaris',
+        catalogAuthMode: 'oauth-client-credentials',
+        oauthClientId: 'invalid:id',
+        oauthClientSecret: 'secret',
+        oauthServerUri: 'http://localhost/oauth/tokens',
+      }),
+    ).toThrow('ICEBERG_OAUTH_CLIENT_ID_INVALID');
+  });
+
+  it('stores the OAuth secret in keytar and excludes it from database persistence', async () => {
+    const created = await IcebergDatalakeService.createInstance({
+      name: 'polaris-test',
+      catalogType: 'polaris',
+      endpoint: 'http://localhost:8181/api/catalog',
+      catalogName: 'quickstart_catalog',
+      catalogAuthMode: 'oauth-client-credentials',
+      oauthClientId: 'root',
+      oauthClientSecret: 'top-secret',
+      oauthServerUri: 'http://localhost:8181/api/catalog/v1/oauth/tokens',
+      oauthScope: 'PRINCIPAL_ROLE:ALL',
+      storageType: 'server-managed',
+    });
+
+    expect(mockedSecureStorage.setCredential).toHaveBeenCalledWith(
+      `iceberg-oauth-secret-${created.id}`,
+      'top-secret',
+    );
+    const persisted = mockedUpdateDatabase.mock.calls[0][1][0];
+    expect(persisted.oauthClientSecret).toBeUndefined();
+    expect(JSON.stringify(persisted)).not.toContain('top-secret');
+    expect(persisted.oauthClientSecretKey).toBe(
+      `iceberg-oauth-secret-${created.id}`,
+    );
+  });
+
+  it('redacts OAuth and database secrets from bridge errors', () => {
+    const redact = (IcebergDatalakeService as any).redactBridgeSecrets as (
+      message: string,
+      env: Record<string, string>,
+    ) => string;
+    const message = redact(
+      'OAuth top-secret failed; URI postgresql+psycopg2://user:db-secret@host/db',
+      {
+        ICEBERG_OAUTH_CREDENTIAL: 'client-id:top-secret',
+        ICEBERG_SQL_CATALOG_URI: 'postgresql+psycopg2://user:db-secret@host/db',
+      },
+    );
+
+    expect(message).not.toContain('top-secret');
+    expect(message).not.toContain('db-secret');
+    expect(message).toContain('[REDACTED]');
+  });
+});

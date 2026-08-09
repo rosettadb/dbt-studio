@@ -241,7 +241,12 @@ const DataLake: React.FC = () => {
       endpoint: wizardData.catalog.endpoint,
       catalogName: wizardData.catalog.catalogName,
       databaseConnectionId: wizardData.catalog.databaseConnectionId,
+      catalogAuthMode: wizardData.catalog.authMode,
       accessToken: wizardData.catalog.accessToken,
+      oauthClientId: wizardData.catalog.oauthClientId,
+      oauthClientSecret: wizardData.catalog.oauthClientSecret,
+      oauthServerUri: wizardData.catalog.oauthServerUri,
+      oauthScope: wizardData.catalog.oauthScope,
       catalogConnectionId: wizardData.catalog.polarisConnectionId,
       catalogBucket: wizardData.catalog.polarisBucket,
       catalogPrefix: wizardData.catalog.polarisPrefix,
@@ -274,10 +279,17 @@ const DataLake: React.FC = () => {
       endpoint: wizardData.catalog.endpoint,
       catalogName: wizardData.catalog.catalogName,
       databaseConnectionId: wizardData.catalog.databaseConnectionId,
+      catalogAuthMode: wizardData.catalog.authMode,
       // Only send token if the user typed a new one; empty = preserve existing
       ...(wizardData.catalog.accessToken
         ? { accessToken: wizardData.catalog.accessToken }
         : {}),
+      ...(wizardData.catalog.oauthClientSecret
+        ? { oauthClientSecret: wizardData.catalog.oauthClientSecret }
+        : {}),
+      oauthClientId: wizardData.catalog.oauthClientId,
+      oauthServerUri: wizardData.catalog.oauthServerUri,
+      oauthScope: wizardData.catalog.oauthScope,
       catalogConnectionId: wizardData.catalog.polarisConnectionId,
       catalogBucket: wizardData.catalog.polarisBucket,
       catalogPrefix: wizardData.catalog.polarisPrefix,

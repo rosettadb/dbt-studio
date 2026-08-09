@@ -66,7 +66,12 @@ export interface IcebergWizardData {
     endpoint?: string;
     catalogName?: string;
     databaseConnectionId?: string;
+    authMode?: 'none' | 'token' | 'oauth-client-credentials';
     accessToken?: string;
+    oauthClientId?: string;
+    oauthClientSecret?: string;
+    oauthServerUri?: string;
+    oauthScope?: string;
     polarisConnectionId?: string;
     polarisBucket?: string;
     polarisPrefix?: string;
@@ -115,8 +120,13 @@ function buildInitialData(initial?: IcebergInstanceConfig): IcebergWizardData {
       endpoint: initial.endpoint,
       catalogName: initial.catalogName,
       databaseConnectionId: initial.databaseConnectionId,
+      authMode: initial.catalogAuthMode ?? 'none',
       // Token is masked — never pre-filled; placeholder shown instead
       accessToken: undefined,
+      oauthClientId: initial.oauthClientId,
+      oauthClientSecret: undefined,
+      oauthServerUri: initial.oauthServerUri,
+      oauthScope: initial.oauthScope,
       polarisConnectionId: initial.catalogConnectionId,
       polarisBucket: initial.catalogBucket,
       polarisPrefix: initial.catalogPrefix,
@@ -137,7 +147,11 @@ function buildInitialData(initial?: IcebergInstanceConfig): IcebergWizardData {
 
 // ─── Validation helpers ───────────────────────────────────────────────────────
 
-function validateStep(step: number, data: IcebergWizardData): string | null {
+function validateStep(
+  step: number,
+  data: IcebergWizardData,
+  hasExistingOAuthSecret = false,
+): string | null {
   if (step === 0) {
     if (!data.basics.name.trim()) return 'Instance name is required.';
     if (data.basics.name.trim().length > 80)
@@ -163,6 +177,25 @@ function validateStep(step: number, data: IcebergWizardData): string | null {
       if (!data.catalog.endpoint) return 'REST endpoint is required.';
       if (!data.catalog.catalogName)
         return 'Catalog name / warehouse is required.';
+      if (
+        data.catalog.authMode === 'oauth-client-credentials' &&
+        !data.catalog.oauthClientId
+      ) {
+        return 'OAuth Client ID is required.';
+      }
+      if (
+        data.catalog.authMode === 'oauth-client-credentials' &&
+        !data.catalog.oauthClientSecret &&
+        !hasExistingOAuthSecret
+      ) {
+        return 'OAuth Client Secret is required.';
+      }
+      if (
+        data.catalog.authMode === 'oauth-client-credentials' &&
+        !data.catalog.oauthServerUri
+      ) {
+        return 'OAuth Token Endpoint is required.';
+      }
     }
   }
   if (step === 2) {
@@ -202,6 +235,7 @@ export const IcebergConnectionWizard: React.FC<
   );
   const [stepError, setStepError] = useState<string | null>(null);
   const [showToken, setShowToken] = useState(false);
+  const [showClientSecret, setShowClientSecret] = useState(false);
   const [catalogTestResult, setCatalogTestResult] = useState<{
     success: boolean;
     message: string;
@@ -244,7 +278,11 @@ export const IcebergConnectionWizard: React.FC<
   // ── Step navigation ─────────────────────────────────────────────────────
 
   const handleNext = () => {
-    const err = validateStep(activeStep, data);
+    const err = validateStep(
+      activeStep,
+      data,
+      mode === 'edit' && !!initialData?.oauthClientSecretKey,
+    );
     if (err) {
       setStepError(err);
       return;
@@ -261,7 +299,11 @@ export const IcebergConnectionWizard: React.FC<
   };
 
   const handleFinish = async () => {
-    const err = validateStep(3, data);
+    const err = validateStep(
+      3,
+      data,
+      mode === 'edit' && !!initialData?.oauthClientSecretKey,
+    );
     if (err) {
       setStepError(err);
       return;
@@ -321,6 +363,11 @@ export const IcebergConnectionWizard: React.FC<
         catalogName: data.catalog.catalogName,
         connectionId: data.catalog.polarisConnectionId,
         accessToken: data.catalog.accessToken,
+        authMode: data.catalog.authMode,
+        oauthClientId: data.catalog.oauthClientId,
+        oauthClientSecret: data.catalog.oauthClientSecret,
+        oauthServerUri: data.catalog.oauthServerUri,
+        oauthScope: data.catalog.oauthScope,
         databaseConnectionId: data.catalog.databaseConnectionId,
         storageType: data.storage.storageType,
       });
@@ -416,7 +463,7 @@ export const IcebergConnectionWizard: React.FC<
               disabled={!capability.enabled}
             >
               {capability.label}
-              {!capability.enabled ? ' — Coming next' : ''}
+              {!capability.enabled ? ' — Coming Next' : ''}
             </MenuItem>
           ))}
         </Select>
@@ -528,7 +575,30 @@ export const IcebergConnectionWizard: React.FC<
             required
             helperText="The catalog name or warehouse identifier"
           />
-          <Box sx={{ position: 'relative' }}>
+          <FormControl fullWidth>
+            <InputLabel>Authentication</InputLabel>
+            <Select
+              label="Authentication"
+              value={data.catalog.authMode ?? 'none'}
+              onChange={(event) =>
+                patchCatalog({
+                  authMode: event.target.value as
+                    | 'none'
+                    | 'token'
+                    | 'oauth-client-credentials',
+                  accessToken: undefined,
+                  oauthClientSecret: undefined,
+                })
+              }
+            >
+              <MenuItem value="none">None</MenuItem>
+              <MenuItem value="token">Access Token</MenuItem>
+              <MenuItem value="oauth-client-credentials">
+                OAuth2 Client Credentials
+              </MenuItem>
+            </Select>
+          </FormControl>
+          {data.catalog.authMode === 'token' && (
             <TextField
               label="Access Token"
               type={showToken ? 'text' : 'password'}
@@ -556,7 +626,72 @@ export const IcebergConnectionWizard: React.FC<
                 ),
               }}
             />
-          </Box>
+          )}
+          {data.catalog.authMode === 'oauth-client-credentials' && (
+            <>
+              <TextField
+                label="OAuth Client ID"
+                value={data.catalog.oauthClientId ?? ''}
+                onChange={(event) =>
+                  patchCatalog({ oauthClientId: event.target.value })
+                }
+                fullWidth
+                required
+              />
+              <TextField
+                label="OAuth Client Secret"
+                type={showClientSecret ? 'text' : 'password'}
+                placeholder={
+                  mode === 'edit' && initialData?.oauthClientSecretKey
+                    ? '••••••••••••••••'
+                    : ''
+                }
+                value={data.catalog.oauthClientSecret ?? ''}
+                onChange={(event) =>
+                  patchCatalog({ oauthClientSecret: event.target.value })
+                }
+                fullWidth
+                required={
+                  !(mode === 'edit' && initialData?.oauthClientSecretKey)
+                }
+                helperText={
+                  mode === 'edit' && initialData?.oauthClientSecretKey
+                    ? 'Leave blank to keep the existing secret.'
+                    : 'Stored securely in the system keychain.'
+                }
+                InputProps={{
+                  endAdornment: (
+                    <IconButton
+                      size="small"
+                      onClick={() => setShowClientSecret((value) => !value)}
+                    >
+                      {showClientSecret ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  ),
+                }}
+              />
+              <TextField
+                label="OAuth Token Endpoint"
+                placeholder="http://localhost:8181/api/catalog/v1/oauth/tokens"
+                value={data.catalog.oauthServerUri ?? ''}
+                onChange={(event) =>
+                  patchCatalog({ oauthServerUri: event.target.value })
+                }
+                fullWidth
+                required
+                helperText="Explicit endpoint avoids deprecated REST catalog URL inference."
+              />
+              <TextField
+                label="OAuth Scope (Optional)"
+                placeholder="PRINCIPAL_ROLE:ALL"
+                value={data.catalog.oauthScope ?? ''}
+                onChange={(event) =>
+                  patchCatalog({ oauthScope: event.target.value })
+                }
+                fullWidth
+              />
+            </>
+          )}
         </>
       )}
 

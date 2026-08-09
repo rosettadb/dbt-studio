@@ -72,7 +72,7 @@ export class IcebergDatalakeService {
       pyicebergType: 'rest',
       enabled: true,
       requiredFields: ['endpoint', 'catalogName'],
-      authModes: ['none', 'token'],
+      authModes: ['none', 'token', 'oauth-client-credentials'],
       allowedStorageTypes: ['server-managed'],
     },
     {
@@ -81,7 +81,7 @@ export class IcebergDatalakeService {
       pyicebergType: 'rest',
       enabled: true,
       requiredFields: ['endpoint', 'catalogName'],
-      authModes: ['none', 'token'],
+      authModes: ['none', 'token', 'oauth-client-credentials'],
       allowedStorageTypes: ['server-managed'],
     },
     ...(
@@ -163,6 +163,37 @@ export class IcebergDatalakeService {
     return 'python3';
   }
 
+  private static redactBridgeSecrets(
+    message: string,
+    env: Record<string, string>,
+  ): string {
+    const secrets = new Set<string>();
+    Object.entries(env).forEach(([key, value]) => {
+      if (!value) return;
+      secrets.add(value);
+      if (key === 'ICEBERG_OAUTH_CREDENTIAL') {
+        secrets.add(value.slice(value.indexOf(':') + 1));
+      }
+      if (key === 'ICEBERG_SQL_CATALOG_URI') {
+        try {
+          const parsed = new URL(
+            value.replace(/^postgresql\+psycopg2:/, 'postgresql:'),
+          );
+          if (parsed.password) secrets.add(decodeURIComponent(parsed.password));
+        } catch {
+          // The complete URI is still redacted below.
+        }
+      }
+    });
+    return [...secrets]
+      .filter((secret) => secret.length >= 4)
+      .sort((left, right) => right.length - left.length)
+      .reduce(
+        (redacted, secret) => redacted.split(secret).join('[REDACTED]'),
+        message,
+      );
+  }
+
   /**
    * Spawns the Python bridge, writes command JSON to stdin, reads result from stdout.
    * BE-04: all async values resolved BEFORE entering new Promise constructor.
@@ -192,12 +223,26 @@ export class IcebergDatalakeService {
         try {
           const result = JSON.parse(stdout) as Record<string, unknown>;
           if (!result.ok) {
-            reject(new Error((result.error as string) ?? 'Bridge error'));
+            reject(
+              new Error(
+                IcebergDatalakeService.redactBridgeSecrets(
+                  (result.error as string) ?? 'Bridge error',
+                  env,
+                ),
+              ),
+            );
           } else {
             resolve(result);
           }
         } catch {
-          reject(new Error(`Bridge parse error (exit ${code}): ${stderr}`));
+          reject(
+            new Error(
+              IcebergDatalakeService.redactBridgeSecrets(
+                `Bridge parse error (exit ${code}): ${stderr}`,
+                env,
+              ),
+            ),
+          );
         }
       });
       child.on('error', (err: Error) => reject(err));
@@ -261,6 +306,26 @@ export class IcebergDatalakeService {
               tokenError,
             );
           }
+        }
+        if (
+          instance.catalogAuthMode === 'oauth-client-credentials' &&
+          instance.oauthClientId &&
+          instance.oauthClientSecretKey
+        ) {
+          const clientSecret = await secureStorage.getCredential(
+            instance.oauthClientSecretKey,
+          );
+          if (!clientSecret) {
+            throw new Error('ICEBERG_OAUTH_SECRET_NOT_FOUND');
+          }
+          props.credential = '__ENV:ICEBERG_OAUTH_CREDENTIAL';
+          env.ICEBERG_OAUTH_CREDENTIAL = `${instance.oauthClientId}:${clientSecret}`;
+          if (instance.oauthServerUri) {
+            props['oauth2-server-uri'] = instance.oauthServerUri;
+          }
+          if (instance.oauthScope) props.scope = instance.oauthScope;
+          delete props.token;
+          delete env.ICEBERG_ACCESS_TOKEN;
         }
         break;
 
@@ -480,6 +545,47 @@ export class IcebergDatalakeService {
     }
   }
 
+  private static validateCatalogAuthentication(config: {
+    catalogType: IcebergInstanceConfig['catalogType'];
+    catalogAuthMode?: IcebergInstanceConfig['catalogAuthMode'];
+    accessToken?: string;
+    catalogAccessTokenKey?: string;
+    oauthClientId?: string;
+    oauthClientSecret?: string;
+    oauthClientSecretKey?: string;
+    oauthServerUri?: string;
+  }): void {
+    const mode = config.catalogAuthMode ?? 'none';
+    if (
+      mode !== 'none' &&
+      config.catalogType !== 'rest' &&
+      config.catalogType !== 'polaris' &&
+      config.catalogType !== 'nessie'
+    ) {
+      throw new Error(
+        `ICEBERG_AUTH_MODE_NOT_ALLOWED: ${config.catalogType}/${mode}`,
+      );
+    }
+    if (
+      mode === 'token' &&
+      !config.accessToken &&
+      !config.catalogAccessTokenKey
+    ) {
+      throw new Error('ICEBERG_ACCESS_TOKEN_REQUIRED');
+    }
+    if (mode === 'oauth-client-credentials') {
+      if (!config.oauthClientId?.trim() || config.oauthClientId.includes(':')) {
+        throw new Error('ICEBERG_OAUTH_CLIENT_ID_INVALID');
+      }
+      if (!config.oauthClientSecret && !config.oauthClientSecretKey) {
+        throw new Error('ICEBERG_OAUTH_CLIENT_SECRET_REQUIRED');
+      }
+      if (!config.oauthServerUri?.trim()) {
+        throw new Error('ICEBERG_OAUTH_SERVER_URI_REQUIRED');
+      }
+    }
+  }
+
   static getCapabilities(): IcebergCapabilities {
     return {
       catalogs: IcebergDatalakeService.catalogCapabilities.map((item) => ({
@@ -549,6 +655,7 @@ export class IcebergDatalakeService {
   ): Promise<IcebergInstanceConfig> {
     try {
       IcebergDatalakeService.validateCatalogWarehousePair(data);
+      IcebergDatalakeService.validateCatalogAuthentication(data);
       const id = uuidv4();
       const now = new Date().toISOString();
 
@@ -561,15 +668,30 @@ export class IcebergDatalakeService {
         );
       }
 
-      // Strip the raw accessToken before persisting
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { accessToken: _accessTokenCreate, ...rest } = data;
+      let oauthClientSecretKey: string | undefined;
+      if (data.oauthClientSecret) {
+        oauthClientSecretKey = `iceberg-oauth-secret-${id}`;
+        await secureStorage.setCredential(
+          oauthClientSecretKey,
+          data.oauthClientSecret,
+        );
+      }
+
+      // Strip raw secrets before persisting
+      /* eslint-disable @typescript-eslint/no-unused-vars */
+      const {
+        accessToken: _accessTokenCreate,
+        oauthClientSecret: _oauthClientSecretCreate,
+        ...rest
+      } = data;
+      /* eslint-enable @typescript-eslint/no-unused-vars */
 
       const newInstance: IcebergInstanceConfig = {
         ...rest,
         id,
         catalogAccessTokenKey:
           catalogAccessTokenKey ?? data.catalogAccessTokenKey,
+        oauthClientSecretKey: oauthClientSecretKey ?? data.oauthClientSecretKey,
         createdAt: now,
         updatedAt: now,
       };
@@ -595,10 +717,12 @@ export class IcebergDatalakeService {
       const idx = instances.findIndex((i) => i.id === id);
       if (idx < 0) throw new Error(`Iceberg instance not found: ${id}`);
 
-      IcebergDatalakeService.validateCatalogWarehousePair({
+      const updatedConfig = {
         ...instances[idx],
         ...data,
-      });
+      };
+      IcebergDatalakeService.validateCatalogWarehousePair(updatedConfig);
+      IcebergDatalakeService.validateCatalogAuthentication(updatedConfig);
 
       // Handle access token update
       if (data.accessToken) {
@@ -608,9 +732,21 @@ export class IcebergDatalakeService {
         instances[idx].catalogAccessTokenKey = key;
       }
 
-      // Strip the raw accessToken before persisting
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { accessToken: _accessTokenUpdate, ...rest } = data;
+      if (data.oauthClientSecret) {
+        const key =
+          instances[idx].oauthClientSecretKey ?? `iceberg-oauth-secret-${id}`;
+        await secureStorage.setCredential(key, data.oauthClientSecret);
+        instances[idx].oauthClientSecretKey = key;
+      }
+
+      // Strip raw secrets before persisting
+      /* eslint-disable @typescript-eslint/no-unused-vars */
+      const {
+        accessToken: _accessTokenUpdate,
+        oauthClientSecret: _oauthClientSecretUpdate,
+        ...rest
+      } = data;
+      /* eslint-enable @typescript-eslint/no-unused-vars */
 
       instances[idx] = {
         ...instances[idx],
@@ -641,6 +777,17 @@ export class IcebergDatalakeService {
           // eslint-disable-next-line no-console
           console.error(
             '[IcebergDatalakeService] keytar delete error:',
+            keyError,
+          );
+        }
+      }
+      if (instance.oauthClientSecretKey) {
+        try {
+          await secureStorage.deleteCredential(instance.oauthClientSecretKey);
+        } catch (keyError) {
+          // eslint-disable-next-line no-console
+          console.error(
+            '[IcebergDatalakeService] OAuth secret delete error:',
             keyError,
           );
         }
@@ -676,6 +823,14 @@ export class IcebergDatalakeService {
         },
         false,
       );
+      IcebergDatalakeService.validateCatalogAuthentication({
+        catalogType: params.catalogType,
+        catalogAuthMode: params.authMode,
+        accessToken: params.accessToken,
+        oauthClientId: params.oauthClientId,
+        oauthClientSecret: params.oauthClientSecret,
+        oauthServerUri: params.oauthServerUri,
+      });
 
       if (params.endpoint) props.uri = params.endpoint;
       if (params.catalogName) props.warehouse = params.catalogName;
@@ -708,6 +863,19 @@ export class IcebergDatalakeService {
             props.token = '__ENV:ICEBERG_ACCESS_TOKEN';
             // eslint-disable-next-line dot-notation
             env['ICEBERG_ACCESS_TOKEN'] = params.accessToken;
+          }
+          if (params.authMode === 'oauth-client-credentials') {
+            if (!params.oauthClientId || !params.oauthClientSecret) {
+              throw new Error('ICEBERG_OAUTH_CLIENT_CREDENTIALS_REQUIRED');
+            }
+            props.credential = '__ENV:ICEBERG_OAUTH_CREDENTIAL';
+            env.ICEBERG_OAUTH_CREDENTIAL = `${params.oauthClientId}:${params.oauthClientSecret}`;
+            if (params.oauthServerUri) {
+              props['oauth2-server-uri'] = params.oauthServerUri;
+            }
+            if (params.oauthScope) props.scope = params.oauthScope;
+            delete props.token;
+            delete env.ICEBERG_ACCESS_TOKEN;
           }
           break;
         default:
