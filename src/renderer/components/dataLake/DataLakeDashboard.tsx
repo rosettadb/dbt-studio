@@ -17,8 +17,8 @@ import {
   Dashboard,
   Add,
   Folder,
-  LocalFireDepartment,
 } from '@mui/icons-material';
+import { IcebergIcon } from './iceberg/IcebergIcon';
 import {
   cloudStorageImages,
   databaseIcons,
@@ -159,11 +159,7 @@ export const DataLakeDashboard: React.FC<DataLakeDashboardProps> = ({
 
   const getCatalogIcon = (type: string) => {
     if (type.startsWith('iceberg-')) {
-      return (
-        <LocalFireDepartment
-          sx={{ width: 16, height: 16, mr: 0.5, color: 'primary.main' }}
-        />
-      );
+      return <IcebergIcon size={16} />;
     }
 
     let iconSrc;
@@ -412,7 +408,11 @@ export const DataLakeDashboard: React.FC<DataLakeDashboardProps> = ({
             sx={{ pb: 1 }}
           />
           <CardContent sx={{ pt: 0 }}>
-            <Typography variant="h4" component="div" sx={{ fontWeight: 'bold' }}>
+            <Typography
+              variant="h4"
+              component="div"
+              sx={{ fontWeight: 'bold' }}
+            >
               0
             </Typography>
             <Typography variant="body2" color="text.secondary">
@@ -449,7 +449,11 @@ export const DataLakeDashboard: React.FC<DataLakeDashboardProps> = ({
             sx={{ pb: 1 }}
           />
           <CardContent sx={{ pt: 0 }}>
-            <Typography variant="h4" component="div" sx={{ fontWeight: 'bold' }}>
+            <Typography
+              variant="h4"
+              component="div"
+              sx={{ fontWeight: 'bold' }}
+            >
               0
             </Typography>
             <Typography variant="body2" color="text.secondary">
@@ -591,7 +595,7 @@ export const DataLakeDashboard: React.FC<DataLakeDashboardProps> = ({
                         sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
                       >
                         {instance.lakeType === 'iceberg' ? (
-                          <LocalFireDepartment fontSize="small" color="primary" />
+                          <IcebergIcon size={18} />
                         ) : (
                           getStorageIconForInstance(instance.dataPath)
                         )}

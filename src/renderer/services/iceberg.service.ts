@@ -10,7 +10,7 @@ import type {
   IcebergInstanceConfig,
   IcebergTestCatalogParams,
   IcebergTestResult,
-  IcebergFieldSpec,
+  IcebergSchemaResult,
   IcebergSnapshotInfo,
   IcebergPreviewResult,
   IcebergLocalCatalogResult,
@@ -47,6 +47,9 @@ export const testIcebergCatalog = (
 ): Promise<IcebergTestResult> =>
   window.electron.ipcRenderer.invoke('iceberg:testCatalog', params);
 
+export const testIcebergInstance = (id: string): Promise<IcebergTestResult> =>
+  window.electron.ipcRenderer.invoke('iceberg:testInstance', id);
+
 export const listIcebergNamespaces = (
   id: string,
   parent?: string[],
@@ -63,7 +66,7 @@ export const getIcebergTableSchema = (
   id: string,
   namespace: string[],
   table: string,
-): Promise<IcebergFieldSpec[]> =>
+): Promise<IcebergSchemaResult> =>
   window.electron.ipcRenderer.invoke('iceberg:getSchema', id, namespace, table);
 
 export const getIcebergTableSnapshots = (

@@ -25,6 +25,7 @@ import type {
   IcebergTestCatalogParams,
   IcebergTestResult,
   IcebergFieldSpec,
+  IcebergSchemaResult,
   IcebergSnapshotInfo,
   IcebergPreviewResult,
   IcebergLocalCatalogResult,
@@ -61,7 +62,7 @@ export class IcebergDatalakeService {
       label: 'PostgreSQL / Neon',
       pyicebergType: 'sql',
       enabled: true,
-      requiredFields: ['databaseConnectionId'],
+      requiredFields: ['databaseConnectionId', 'catalogName'],
       authModes: ['none'],
       allowedStorageTypes: ['local', 'cloud'],
     },
@@ -713,7 +714,7 @@ export class IcebergDatalakeService {
           throw new Error(`ICEBERG_CATALOG_NOT_ENABLED: ${params.catalogType}`);
       }
 
-      await IcebergDatalakeService.runBridge(
+      const result = (await IcebergDatalakeService.runBridge(
         {
           command: 'test_connection',
           catalog_name:
@@ -723,15 +724,74 @@ export class IcebergDatalakeService {
           catalog_properties: props,
         },
         env,
-      );
-      return { success: true };
+      )) as Record<string, unknown>;
+      return {
+        success: true,
+        catalogConnected: true,
+        warehouseConnected:
+          typeof result.warehouse_connected === 'boolean'
+            ? result.warehouse_connected
+            : undefined,
+        namespaceCount: Number(result.namespace_count ?? 0),
+        tableCount: Number(result.table_count ?? 0),
+        checkedAt: new Date().toISOString(),
+      };
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error(
         '[IcebergDatalakeService] testCatalogConnection error:',
         error,
       );
-      return { success: false, error: String(error) };
+      return {
+        success: false,
+        catalogConnected: false,
+        warehouseConnected: false,
+        checkedAt: new Date().toISOString(),
+        error: String(error),
+      };
+    }
+  }
+
+  static async testInstanceConnection(id: string): Promise<IcebergTestResult> {
+    try {
+      const instance = await IcebergDatalakeService.getInstance(id);
+      const { props, env } =
+        await IcebergDatalakeService.buildCatalogProperties(instance);
+      const result = (await IcebergDatalakeService.runBridge(
+        {
+          command: 'test_connection',
+          catalog_name:
+            instance.catalogType === 'sqlite'
+              ? 'local'
+              : (instance.catalogName ?? id),
+          catalog_properties: props,
+        },
+        env,
+      )) as Record<string, unknown>;
+      return {
+        success: true,
+        catalogConnected: true,
+        warehouseConnected:
+          typeof result.warehouse_connected === 'boolean'
+            ? result.warehouse_connected
+            : undefined,
+        namespaceCount: Number(result.namespace_count ?? 0),
+        tableCount: Number(result.table_count ?? 0),
+        checkedAt: new Date().toISOString(),
+      };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        '[IcebergDatalakeService] testInstanceConnection error:',
+        error,
+      );
+      return {
+        success: false,
+        catalogConnected: false,
+        warehouseConnected: false,
+        checkedAt: new Date().toISOString(),
+        error: String(error),
+      };
     }
   }
 
@@ -879,7 +939,7 @@ export class IcebergDatalakeService {
     id: string,
     namespace: string[],
     table: string,
-  ): Promise<IcebergFieldSpec[]> {
+  ): Promise<IcebergSchemaResult> {
     try {
       const instance = await IcebergDatalakeService.getInstance(id);
       const { props, env } =
@@ -897,7 +957,11 @@ export class IcebergDatalakeService {
         },
         env,
       )) as Record<string, unknown>;
-      return (result.fields as IcebergFieldSpec[]) ?? [];
+      return {
+        fields: (result.fields as IcebergFieldSpec[]) ?? [],
+        properties:
+          (result.properties as Record<string, string> | undefined) ?? {},
+      };
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('[IcebergDatalakeService] getTableSchema error:', error);
@@ -943,6 +1007,16 @@ export class IcebergDatalakeService {
     rowFilter?: string,
   ): Promise<IcebergPreviewResult> {
     try {
+      const safeLimit = Math.min(
+        Math.max(1, Math.floor(Number.isFinite(limit) ? limit : 100)),
+        1000,
+      );
+      const safeRowFilter = rowFilter?.trim();
+      if (safeRowFilter && !/^[A-Za-z0-9_\s.'"<>=!()-]+$/.test(safeRowFilter)) {
+        throw new Error(
+          'Invalid row filter. Use column names, literals, comparison operators, AND/OR, and parentheses only.',
+        );
+      }
       const instance = await IcebergDatalakeService.getInstance(id);
       const { props, env } =
         await IcebergDatalakeService.buildCatalogProperties(instance);
@@ -956,8 +1030,8 @@ export class IcebergDatalakeService {
           catalog_properties: props,
           namespace,
           table,
-          limit: Math.min(Math.max(1, limit), 10000), // clamp per BE-02
-          row_filter: rowFilter,
+          limit: safeLimit,
+          row_filter: safeRowFilter || undefined,
         },
         env,
       )) as Record<string, unknown>;

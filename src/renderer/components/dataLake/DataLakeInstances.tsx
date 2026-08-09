@@ -17,13 +17,7 @@ import {
   CircularProgress,
   Alert,
 } from '@mui/material';
-import {
-  Edit,
-  Delete,
-  Storage,
-  Refresh,
-  LocalFireDepartment,
-} from '@mui/icons-material';
+import { Edit, Delete, Storage, Refresh } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import moment from 'moment';
 import {
@@ -36,6 +30,7 @@ import {
 } from '../../controllers/icebergDatalake.controller';
 import { ConfirmationModal } from '../modals/confirmationModal';
 import type { IcebergInstanceListItem } from '../../../types/iceberg';
+import { IcebergIcon } from './iceberg/IcebergIcon';
 
 type DataLakeTableRow =
   | {
@@ -114,21 +109,23 @@ export const DataLakeInstances: React.FC<DataLakeInstancesProps> = ({
       updatedAt: instance.updatedAt,
     }));
 
-    const icebergRows: DataLakeTableRow[] = icebergInstances.map((instance) => ({
-      id: instance.id,
-      name: instance.name,
-      description: instance.description,
-      lakeType: 'iceberg',
-      catalogType: instance.catalogType.toUpperCase(),
-      dataPath:
-        instance.localPath ||
-        instance.catalogPath ||
-        instance.storageBucket ||
-        instance.storageType,
-      createdAt: instance.createdAt,
-      updatedAt: instance.updatedAt,
-      icebergInstance: instance,
-    }));
+    const icebergRows: DataLakeTableRow[] = icebergInstances.map(
+      (instance) => ({
+        id: instance.id,
+        name: instance.name,
+        description: instance.description,
+        lakeType: 'iceberg',
+        catalogType: instance.catalogType.toUpperCase(),
+        dataPath:
+          instance.localPath ||
+          instance.catalogPath ||
+          instance.storageBucket ||
+          instance.storageType,
+        createdAt: instance.createdAt,
+        updatedAt: instance.updatedAt,
+        icebergInstance: instance,
+      }),
+    );
 
     return [...duckRows, ...icebergRows].sort(
       (a, b) =>
@@ -236,7 +233,7 @@ export const DataLakeInstances: React.FC<DataLakeInstancesProps> = ({
             <Button
               variant="outlined"
               size="small"
-              startIcon={<LocalFireDepartment />}
+              startIcon={<IcebergIcon size={18} />}
               onClick={onAddIceberg}
             >
               Add Iceberg
@@ -297,7 +294,10 @@ export const DataLakeInstances: React.FC<DataLakeInstancesProps> = ({
                 >
                   <TableCell>
                     <Box>
-                      <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
+                      <Typography
+                        variant="subtitle2"
+                        sx={{ fontWeight: 'bold' }}
+                      >
                         {row.name}
                       </Typography>
                       {row.description && (
@@ -317,7 +317,7 @@ export const DataLakeInstances: React.FC<DataLakeInstancesProps> = ({
                       />
                     ) : (
                       <Chip
-                        icon={<LocalFireDepartment />}
+                        icon={<IcebergIcon size={16} />}
                         label="Apache Iceberg"
                         size="small"
                         color="primary"
@@ -326,12 +326,19 @@ export const DataLakeInstances: React.FC<DataLakeInstancesProps> = ({
                     )}
                   </TableCell>
                   <TableCell>
-                    <Chip label={row.catalogType} size="small" variant="outlined" />
+                    <Chip
+                      label={row.catalogType}
+                      size="small"
+                      variant="outlined"
+                    />
                   </TableCell>
                   <TableCell
                     sx={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}
                   >
-                    <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                    <Typography
+                      variant="body2"
+                      sx={{ fontFamily: 'monospace' }}
+                    >
                       {row.dataPath}
                     </Typography>
                   </TableCell>

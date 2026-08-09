@@ -14,13 +14,13 @@ import {
   useTheme,
 } from '@mui/material';
 import {
-  LocalFireDepartment,
   Edit,
   Delete,
   Cloud,
   Storage as StorageIcon,
 } from '@mui/icons-material';
 import type { IcebergInstanceListItem as IcebergInstance } from '../../../types/iceberg';
+import { IcebergIcon } from './iceberg/IcebergIcon';
 
 interface IcebergInstanceListItemProps {
   instance: IcebergInstance;
@@ -70,15 +70,7 @@ export const IcebergInstanceListItem: React.FC<
       }}
     >
       {/* Icon */}
-      <LocalFireDepartment
-        fontSize="small"
-        sx={{
-          color: isSelected
-            ? theme.palette.primary.main
-            : theme.palette.text.secondary,
-          flexShrink: 0,
-        }}
-      />
+      <IcebergIcon size={18} />
 
       {/* Name + chips */}
       <Box sx={{ flex: 1, minWidth: 0 }}>

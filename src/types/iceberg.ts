@@ -109,6 +109,11 @@ export interface IcebergFieldSpec {
   doc?: string;
 }
 
+export interface IcebergSchemaResult {
+  fields: IcebergFieldSpec[];
+  properties: Record<string, string>;
+}
+
 export interface IcebergSnapshotInfo {
   snapshotId: string;
   parentId?: string;
@@ -127,6 +132,11 @@ export interface IcebergPreviewResult {
 export interface IcebergTestResult {
   success: boolean;
   error?: string;
+  catalogConnected?: boolean;
+  warehouseConnected?: boolean;
+  namespaceCount?: number;
+  tableCount?: number;
+  checkedAt?: string;
 }
 
 export interface IcebergLocalCatalogResult {

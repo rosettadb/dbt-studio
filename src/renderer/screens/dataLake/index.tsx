@@ -11,16 +11,7 @@ import {
   DialogContentText,
   Alert,
   CircularProgress,
-  Paper,
-  Chip,
 } from '@mui/material';
-import {
-  LocalFireDepartment,
-  Add,
-  ArrowBack,
-  Edit,
-  Delete,
-} from '@mui/icons-material';
 import { useLocation, useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { AppLayout } from '../../layouts';
@@ -35,6 +26,10 @@ import {
   DataLakeTableDetails,
 } from '../../components/dataLake';
 import { IcebergConnectionWizard } from '../../components/dataLake/IcebergConnectionWizard';
+import {
+  IcebergDetail,
+  IcebergTableDetails,
+} from '../../components/dataLake/iceberg/IcebergDetail';
 import { DataLakeCard } from '../../components/dataLakeCards';
 import {
   useDuckLakeInstances,
@@ -323,141 +318,11 @@ const DataLake: React.FC = () => {
   // ── Render helpers ─────────────────────────────────────────────────────
 
   const renderIcebergInstanceDetail = (inst: IcebergInstanceConfig) => (
-    <Box sx={{ p: 2 }}>
-      <Button
-        variant="text"
-        startIcon={<ArrowBack />}
-        onClick={() => navigate('/app/data-lake/instances')}
-        sx={{ mb: 2 }}
-      >
-        All Instances
-      </Button>
-
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-        <LocalFireDepartment color="primary" />
-        <Typography variant="h5" fontWeight={700}>
-          {inst.name}
-        </Typography>
-        <Chip
-          label="Apache Iceberg"
-          size="small"
-          color="primary"
-          variant="outlined"
-        />
-      </Box>
-      {inst.description && (
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-          {inst.description}
-        </Typography>
-      )}
-
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Typography variant="subtitle2" fontWeight={700} gutterBottom>
-            Catalog
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-            <Box>
-              <Typography variant="caption" color="text.secondary">
-                Type
-              </Typography>
-              <Typography variant="body2">{inst.catalogType}</Typography>
-            </Box>
-            {inst.catalogPath && (
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography variant="caption" color="text.secondary">
-                  Path
-                </Typography>
-                <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
-                  {inst.catalogPath}
-                </Typography>
-              </Box>
-            )}
-            {inst.endpoint && (
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography variant="caption" color="text.secondary">
-                  REST Endpoint
-                </Typography>
-                <Typography variant="body2">{inst.endpoint}</Typography>
-              </Box>
-            )}
-            {inst.catalogName && (
-              <Box>
-                <Typography variant="caption" color="text.secondary">
-                  Catalog Name
-                </Typography>
-                <Typography variant="body2">{inst.catalogName}</Typography>
-              </Box>
-            )}
-          </Box>
-        </Paper>
-
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Typography variant="subtitle2" fontWeight={700} gutterBottom>
-            Storage
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-            <Box>
-              <Typography variant="caption" color="text.secondary">
-                Type
-              </Typography>
-              <Typography variant="body2">{inst.storageType}</Typography>
-            </Box>
-            {inst.localPath && (
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography variant="caption" color="text.secondary">
-                  Local Path
-                </Typography>
-                <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
-                  {inst.localPath}
-                </Typography>
-              </Box>
-            )}
-            {inst.storageBucket && (
-              <Box>
-                <Typography variant="caption" color="text.secondary">
-                  Bucket
-                </Typography>
-                <Typography variant="body2">{inst.storageBucket}</Typography>
-              </Box>
-            )}
-            {inst.storagePrefix && (
-              <Box>
-                <Typography variant="caption" color="text.secondary">
-                  Prefix
-                </Typography>
-                <Typography variant="body2">{inst.storagePrefix}</Typography>
-              </Box>
-            )}
-          </Box>
-        </Paper>
-
-        <Alert severity="info" icon={<LocalFireDepartment />}>
-          Namespace &amp; table browsing coming soon (Plan 57c). Instance is
-          saved and ready.
-        </Alert>
-
-        <Box sx={{ display: 'flex', gap: 1, pt: 1 }}>
-          <Button
-            variant="outlined"
-            startIcon={<Edit />}
-            onClick={() => setIcebergEditId(inst.id)}
-          >
-            Edit Instance
-          </Button>
-          <Button
-            variant="outlined"
-            color="error"
-            startIcon={<Delete />}
-            onClick={() =>
-              setIcebergDeleteTarget({ id: inst.id, name: inst.name })
-            }
-          >
-            Delete
-          </Button>
-        </Box>
-      </Box>
-    </Box>
+    <IcebergDetail
+      instance={inst}
+      onEdit={() => setIcebergEditId(inst.id)}
+      onDelete={() => setIcebergDeleteTarget({ id: inst.id, name: inst.name })}
+    />
   );
 
   const renderContent = () => {
@@ -694,7 +559,11 @@ const DataLake: React.FC = () => {
         );
 
       case 'table-detail':
-        return <DataLakeTableDetails />;
+        return type === 'iceberg' ? (
+          <IcebergTableDetails />
+        ) : (
+          <DataLakeTableDetails />
+        );
 
       default:
         return (

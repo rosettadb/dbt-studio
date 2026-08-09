@@ -10,13 +10,14 @@ import {
   styled,
   Button,
 } from '@mui/material';
-import { Dashboard, History, Add, LocalFireDepartment } from '@mui/icons-material';
+import { Dashboard, History, Add } from '@mui/icons-material';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { SettingsSidebarElement } from '../../screens/settings/settingsElements';
 import { icons } from '../../../../assets';
 import type { DuckLakeInstance } from '../../../types/duckLake';
 import type { IcebergInstanceListItem } from '../../../types/iceberg';
 import { DataLakeSVG } from '../sidebar/icons';
+import { IcebergIcon } from './iceberg/IcebergIcon';
 
 export const DataLakeIcon: React.FC<{
   fontSize?: 'small' | 'medium';
@@ -91,8 +92,7 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
   const instancesIndex = pathSegments.indexOf('instances');
   const instanceId =
     instancesIndex >= 0 ? pathSegments[instancesIndex + 1] : null;
-  const lakeType =
-    instancesIndex > 0 ? pathSegments[instancesIndex - 1] : null;
+  const lakeType = instancesIndex > 0 ? pathSegments[instancesIndex - 1] : null;
 
   const selectedDuckLakeInstance = instances.find(
     (instance) => lakeType === 'duck-lake' && instance.id === instanceId,
@@ -283,7 +283,7 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
                       }}
                     >
                       <ListItemIcon sx={{ minWidth: 32 }}>
-                        <LocalFireDepartment fontSize="small" color="primary" />
+                        <IcebergIcon size={18} />
                       </ListItemIcon>
                       <ListItemText
                         primary={instance.name}

@@ -35,14 +35,14 @@ export const useListIcebergNamespaces = (id: string, parent?: string[]) =>
   useQuery(
     ['iceberg', 'namespaces', id, parent ?? []],
     () => icebergService.listIcebergNamespaces(id, parent),
-    { enabled: !!id },
+    { enabled: !!id, staleTime: 60_000 },
   );
 
 export const useListIcebergTables = (id: string, namespace: string[]) =>
   useQuery(
     ['iceberg', 'tables', id, namespace],
     () => icebergService.listIcebergTables(id, namespace),
-    { enabled: !!id && namespace.length > 0 },
+    { enabled: !!id && namespace.length > 0, staleTime: 60_000 },
   );
 
 export const useGetIcebergSchema = (
@@ -65,6 +65,27 @@ export const useGetIcebergSnapshots = (
     ['iceberg', 'snapshots', id, namespace, table],
     () => icebergService.getIcebergTableSnapshots(id, namespace, table),
     { enabled: !!id && !!table },
+  );
+
+export const useIcebergTablePreview = (
+  id: string,
+  namespace: string[],
+  table: string,
+  limit: number,
+  rowFilter: string,
+  enabled: boolean,
+) =>
+  useQuery(
+    ['iceberg', 'preview', id, namespace, table, limit, rowFilter],
+    () =>
+      icebergService.previewIcebergTable(
+        id,
+        namespace,
+        table,
+        limit,
+        rowFilter || undefined,
+      ),
+    { enabled: enabled && !!id && !!table, staleTime: 30_000 },
   );
 
 // ─────────────────────────────────────────────
@@ -107,6 +128,9 @@ export const useTestIcebergCatalog = () =>
   useMutation((params: IcebergTestCatalogParams) =>
     icebergService.testIcebergCatalog(params),
   );
+
+export const useTestIcebergInstance = () =>
+  useMutation((id: string) => icebergService.testIcebergInstance(id));
 
 export const useCreateIcebergMetadataFile = () =>
   useMutation((warehousePath: string) =>

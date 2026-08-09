@@ -14,6 +14,7 @@ import {
   Step,
   StepLabel,
   FormControl,
+  InputAdornment,
   InputLabel,
   Select,
   MenuItem,
@@ -33,11 +34,11 @@ import {
   ArrowBack,
   CheckCircle,
   FolderOpen,
-  LocalFireDepartment,
   Speed,
   Visibility,
   VisibilityOff,
 } from '@mui/icons-material';
+import { IcebergIcon } from './iceberg/IcebergIcon';
 import type {
   IcebergCatalogType,
   IcebergCloudProvider,
@@ -151,6 +152,9 @@ function validateStep(step: number, data: IcebergWizardData): string | null {
       !data.catalog.databaseConnectionId
     ) {
       return 'A PostgreSQL or Neon connection is required.';
+    }
+    if (data.catalog.catalogType === 'sql' && !data.catalog.catalogName) {
+      return 'SQL catalog name is required.';
     }
     if (
       data.catalog.catalogType === 'rest' ||
@@ -429,54 +433,78 @@ export const IcebergConnectionWizard: React.FC<
       )}
 
       {data.catalog.catalogType === 'sqlite' && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <TextField
-            label="Local Catalog Database"
-            value={data.catalog.catalogPath ?? ''}
-            onChange={(e) => patchCatalog({ catalogPath: e.target.value })}
-            fullWidth
-            required
-            placeholder="/data/my-catalog/pyiceberg_catalog.db"
-            helperText="Choose a folder to initialize a SQLite catalog and local warehouse"
-          />
-          <Tooltip title="Pick folder">
-            <IconButton
-              onClick={() => pickFolder(initializeLocalCatalog)}
-              disabled={createLocalCatalogMutation.isLoading}
-            >
-              {createLocalCatalogMutation.isLoading ? (
-                <CircularProgress size={20} />
-              ) : (
-                <FolderOpen />
-              )}
-            </IconButton>
-          </Tooltip>
-        </Box>
+        <TextField
+          label="Local Catalog Database"
+          value={data.catalog.catalogPath ?? ''}
+          onChange={(e) => patchCatalog({ catalogPath: e.target.value })}
+          fullWidth
+          required
+          placeholder="/data/my-catalog/pyiceberg_catalog.db"
+          helperText="Choose a folder to initialize a SQLite catalog and local warehouse"
+          slotProps={{
+            input: {
+              endAdornment: (
+                <InputAdornment position="end">
+                  <Tooltip title="Pick folder">
+                    <IconButton
+                      edge="end"
+                      onClick={() => pickFolder(initializeLocalCatalog)}
+                      disabled={createLocalCatalogMutation.isLoading}
+                    >
+                      {createLocalCatalogMutation.isLoading ? (
+                        <CircularProgress size={20} />
+                      ) : (
+                        <FolderOpen />
+                      )}
+                    </IconButton>
+                  </Tooltip>
+                </InputAdornment>
+              ),
+            },
+          }}
+        />
       )}
 
       {data.catalog.catalogType === 'sql' && (
-        <FormControl fullWidth required>
-          <InputLabel>PostgreSQL / Neon Connection</InputLabel>
-          <Select
-            value={data.catalog.databaseConnectionId ?? ''}
-            label="PostgreSQL / Neon Connection"
+        <>
+          <FormControl fullWidth required>
+            <InputLabel>PostgreSQL / Neon Connection</InputLabel>
+            <Select
+              value={data.catalog.databaseConnectionId ?? ''}
+              label="PostgreSQL / Neon Connection"
+              onChange={(event) =>
+                patchCatalog({ databaseConnectionId: event.target.value })
+              }
+            >
+              {postgresConnections.map((connection) => (
+                <MenuItem key={connection.id} value={connection.id}>
+                  {connection.connection.name}
+                </MenuItem>
+              ))}
+            </Select>
+            {postgresConnections.length === 0 && (
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ mt: 1 }}
+              >
+                Create and test a PostgreSQL connection in Connections first.
+                Neon uses the same PostgreSQL connection type with SSL enabled.
+              </Typography>
+            )}
+          </FormControl>
+          <TextField
+            label="SQL Catalog Name"
+            placeholder="dbt_studio_neon"
+            value={data.catalog.catalogName ?? ''}
             onChange={(event) =>
-              patchCatalog({ databaseConnectionId: event.target.value })
+              patchCatalog({ catalogName: event.target.value })
             }
-          >
-            {postgresConnections.map((connection) => (
-              <MenuItem key={connection.id} value={connection.id}>
-                {connection.connection.name}
-              </MenuItem>
-            ))}
-          </Select>
-          {postgresConnections.length === 0 && (
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
-              Create and test a PostgreSQL connection in Connections first. Neon
-              uses the same PostgreSQL connection type with SSL enabled.
-            </Typography>
-          )}
-        </FormControl>
+            fullWidth
+            required
+            helperText="Must match catalog_name for existing PyIceberg tables"
+          />
+        </>
       )}
 
       {(data.catalog.catalogType === 'rest' ||
@@ -721,17 +749,25 @@ export const IcebergConnectionWizard: React.FC<
               </ListItem>
             )}
             {data.catalog.catalogType === 'sql' && (
-              <ListItem disableGutters>
-                <ListItemText
-                  primary="Database Connection"
-                  secondary={
-                    postgresConnections.find(
-                      (connection) =>
-                        connection.id === data.catalog.databaseConnectionId,
-                    )?.connection.name ?? data.catalog.databaseConnectionId
-                  }
-                />
-              </ListItem>
+              <>
+                <ListItem disableGutters>
+                  <ListItemText
+                    primary="Database Connection"
+                    secondary={
+                      postgresConnections.find(
+                        (connection) =>
+                          connection.id === data.catalog.databaseConnectionId,
+                      )?.connection.name ?? data.catalog.databaseConnectionId
+                    }
+                  />
+                </ListItem>
+                <ListItem disableGutters>
+                  <ListItemText
+                    primary="Catalog Name"
+                    secondary={data.catalog.catalogName}
+                  />
+                </ListItem>
+              </>
             )}
             {(data.catalog.catalogType === 'rest' ||
               data.catalog.catalogType === 'polaris') && (
@@ -843,7 +879,7 @@ export const IcebergConnectionWizard: React.FC<
             )}
           </List>
         </Paper>
-        <Alert severity="info" icon={<LocalFireDepartment />}>
+        <Alert severity="info" icon={<IcebergIcon size={20} />}>
           {mode === 'create'
             ? 'Clicking "Create Instance" will save these settings and register the Iceberg catalog. No data files will be modified.'
             : 'Clicking "Save Changes" will update the instance configuration.'}
@@ -895,7 +931,7 @@ export const IcebergConnectionWizard: React.FC<
     >
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <LocalFireDepartment color="primary" />
+        <IcebergIcon size={24} />
         <Typography variant="h6" fontWeight={700}>
           {mode === 'edit'
             ? 'Edit Iceberg Instance'

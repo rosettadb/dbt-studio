@@ -34,6 +34,10 @@ export const registerIcebergDatalakeHandlers = () => {
     IcebergDatalakeService.testCatalogConnection(params),
   );
 
+  ipcMain.handle('iceberg:testInstance', (_e, id: string) =>
+    IcebergDatalakeService.testInstanceConnection(id),
+  );
+
   ipcMain.handle('iceberg:listNamespaces', (_e, id: string, parent?) =>
     IcebergDatalakeService.listNamespaces(id, parent),
   );

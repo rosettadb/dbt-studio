@@ -12,6 +12,8 @@ Supported commands:
 import json
 import os
 import sys
+from datetime import date, datetime
+from decimal import Decimal
 
 
 def resolve_env_vars(props: dict) -> dict:
@@ -24,6 +26,21 @@ def resolve_env_vars(props: dict) -> dict:
         else:
             result[k] = v
     return result
+
+
+def json_safe(value):
+    """Normalize Arrow scalar values before crossing the JSON bridge."""
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, bytes):
+        return value.hex()
+    if isinstance(value, dict):
+        return {str(key): json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [json_safe(item) for item in value]
+    return value
 
 
 def handle_install_check(_cmd: dict) -> dict:
@@ -40,13 +57,27 @@ def handle_install_check(_cmd: dict) -> dict:
 
 
 def handle_test_connection(cmd: dict) -> dict:
-    """Test that the catalog is reachable by listing its top-level namespaces."""
+    """Test catalog access and, when a table exists, warehouse metadata access."""
     try:
         from pyiceberg.catalog import load_catalog  # noqa: PLC0415
         props = resolve_env_vars(cmd.get("catalog_properties", {}))
         catalog = load_catalog(cmd["catalog_name"], **props)
         namespaces = catalog.list_namespaces()
-        return {"ok": True, "namespace_count": len(namespaces)}
+        table_count = 0
+        warehouse_connected = None
+        for namespace in namespaces:
+            tables = catalog.list_tables(namespace)
+            table_count += len(tables)
+            if warehouse_connected is None and tables:
+                table = catalog.load_table(tables[0])
+                next(iter(table.scan(limit=1).plan_files()), None)
+                warehouse_connected = True
+        return {
+            "ok": True,
+            "namespace_count": len(namespaces),
+            "table_count": table_count,
+            "warehouse_connected": warehouse_connected,
+        }
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "error": str(exc)}
 
@@ -96,7 +127,11 @@ def handle_get_schema(cmd: dict) -> dict:
                 "required": field.required,
                 "doc": field.doc,
             })
-        return {"ok": True, "fields": fields}
+        return {
+            "ok": True,
+            "fields": fields,
+            "properties": dict(table.properties),
+        }
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "error": str(exc)}
 
@@ -144,7 +179,7 @@ def handle_preview_table(cmd: dict) -> dict:
         rows = arrow_table.to_pydict()
         # Convert column-oriented dict to row-oriented list of lists
         row_list = [
-            [rows[col][i] for col in columns]
+            [json_safe(rows[col][i]) for col in columns]
             for i in range(len(arrow_table))
         ]
         return {
