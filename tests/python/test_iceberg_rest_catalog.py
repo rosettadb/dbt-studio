@@ -25,9 +25,11 @@ class RestCatalogAcceptanceTest(unittest.TestCase):
         properties = {
             "type": "rest",
             "uri": os.environ["ICEBERG_REST_URI"],
-            "warehouse": os.environ["ICEBERG_REST_WAREHOUSE"],
-            "credential": os.environ["ICEBERG_REST_CREDENTIAL"],
         }
+        if warehouse := os.environ.get("ICEBERG_REST_WAREHOUSE"):
+            properties["warehouse"] = warehouse
+        if credential := os.environ.get("ICEBERG_REST_CREDENTIAL"):
+            properties["credential"] = credential
         if oauth_uri := os.environ.get("ICEBERG_REST_OAUTH_URI"):
             properties["oauth2-server-uri"] = oauth_uri
         if scope := os.environ.get("ICEBERG_REST_SCOPE"):

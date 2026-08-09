@@ -40,7 +40,11 @@ export interface IcebergCatalogCapability {
   enabled: boolean;
   disabledReason?: string;
   requiredFields: Array<
-    'catalogPath' | 'endpoint' | 'catalogName' | 'databaseConnectionId'
+    | 'catalogPath'
+    | 'endpoint'
+    | 'catalogName'
+    | 'databaseConnectionId'
+    | 'nessieReference'
   >;
   authModes: IcebergCatalogAuthMode[];
   allowedStorageTypes: IcebergStorageType[];
@@ -65,6 +69,8 @@ export interface IcebergInstanceConfig {
   oauthClientSecretKey?: string; // keytar key: "iceberg-oauth-secret-{id}"
   oauthServerUri?: string;
   oauthScope?: string;
+  nessieReference?: string; // Nessie branch or tag, usually "main"
+  nessieWarehouse?: string; // optional named Nessie warehouse
   databaseConnectionId?: string; // Existing PostgreSQL/Neon connection
   catalogAccessTokenKey?: string; // keytar key: "iceberg-catalog-token-{id}"
   catalogConnectionId?: string; // Cloud Explorer connectionId for vended credentials
@@ -164,6 +170,8 @@ export interface IcebergTestCatalogParams {
   oauthClientSecret?: string; // raw secret (not stored yet at test time)
   oauthServerUri?: string;
   oauthScope?: string;
+  nessieReference?: string;
+  nessieWarehouse?: string;
   databaseConnectionId?: string;
   storageType?: IcebergStorageType;
 }

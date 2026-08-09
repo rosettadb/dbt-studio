@@ -72,6 +72,8 @@ export interface IcebergWizardData {
     oauthClientSecret?: string;
     oauthServerUri?: string;
     oauthScope?: string;
+    nessieReference?: string;
+    nessieWarehouse?: string;
     polarisConnectionId?: string;
     polarisBucket?: string;
     polarisPrefix?: string;
@@ -127,13 +129,17 @@ function buildInitialData(initial?: IcebergInstanceConfig): IcebergWizardData {
       oauthClientSecret: undefined,
       oauthServerUri: initial.oauthServerUri,
       oauthScope: initial.oauthScope,
+      nessieReference: initial.nessieReference,
+      nessieWarehouse: initial.nessieWarehouse,
       polarisConnectionId: initial.catalogConnectionId,
       polarisBucket: initial.catalogBucket,
       polarisPrefix: initial.catalogPrefix,
     },
     storage: {
       storageType:
-        initial.catalogType === 'rest' || initial.catalogType === 'polaris'
+        initial.catalogType === 'rest' ||
+        initial.catalogType === 'polaris' ||
+        initial.catalogType === 'nessie'
           ? 'server-managed'
           : initial.storageType,
       localPath: initial.localPath,
@@ -172,11 +178,18 @@ function validateStep(
     }
     if (
       data.catalog.catalogType === 'rest' ||
-      data.catalog.catalogType === 'polaris'
+      data.catalog.catalogType === 'polaris' ||
+      data.catalog.catalogType === 'nessie'
     ) {
       if (!data.catalog.endpoint) return 'REST endpoint is required.';
-      if (!data.catalog.catalogName)
+      if (data.catalog.catalogType !== 'nessie' && !data.catalog.catalogName)
         return 'Catalog name / warehouse is required.';
+      if (
+        data.catalog.catalogType === 'nessie' &&
+        !data.catalog.nessieReference
+      ) {
+        return 'Nessie reference is required.';
+      }
       if (
         data.catalog.authMode === 'oauth-client-credentials' &&
         !data.catalog.oauthClientId
@@ -201,7 +214,8 @@ function validateStep(
   if (step === 2) {
     if (
       data.catalog.catalogType === 'rest' ||
-      data.catalog.catalogType === 'polaris'
+      data.catalog.catalogType === 'polaris' ||
+      data.catalog.catalogType === 'nessie'
     ) {
       // REST catalogs manage warehouse storage server-side; vended creds optional
       return null;
@@ -368,6 +382,8 @@ export const IcebergConnectionWizard: React.FC<
         oauthClientSecret: data.catalog.oauthClientSecret,
         oauthServerUri: data.catalog.oauthServerUri,
         oauthScope: data.catalog.oauthScope,
+        nessieReference: data.catalog.nessieReference,
+        nessieWarehouse: data.catalog.nessieWarehouse,
         databaseConnectionId: data.catalog.databaseConnectionId,
         storageType: data.storage.storageType,
       });
@@ -440,6 +456,8 @@ export const IcebergConnectionWizard: React.FC<
               endpoint: undefined,
               catalogName: undefined,
               databaseConnectionId: undefined,
+              nessieReference: catalogType === 'nessie' ? 'main' : undefined,
+              nessieWarehouse: undefined,
               accessToken: undefined,
               polarisConnectionId: undefined,
               polarisBucket: undefined,
@@ -555,26 +573,65 @@ export const IcebergConnectionWizard: React.FC<
       )}
 
       {(data.catalog.catalogType === 'rest' ||
-        data.catalog.catalogType === 'polaris') && (
+        data.catalog.catalogType === 'polaris' ||
+        data.catalog.catalogType === 'nessie') && (
         <>
           <TextField
-            label="REST Endpoint"
-            placeholder="https://polaris.example.com/api/catalog"
+            label={
+              data.catalog.catalogType === 'nessie'
+                ? 'Nessie Iceberg REST Endpoint'
+                : 'REST Endpoint'
+            }
+            placeholder={
+              data.catalog.catalogType === 'nessie'
+                ? 'http://localhost:19120/iceberg'
+                : 'https://polaris.example.com/api/catalog'
+            }
             value={data.catalog.endpoint ?? ''}
             onChange={(e) => patchCatalog({ endpoint: e.target.value })}
             fullWidth
             required
-            helperText="The REST catalog server URL"
+            helperText={
+              data.catalog.catalogType === 'nessie'
+                ? 'Use the Iceberg REST endpoint ending in /iceberg, not the Nessie /api/v2 endpoint.'
+                : 'The REST catalog server URL'
+            }
           />
-          <TextField
-            label="Catalog Name / Warehouse"
-            placeholder="my_catalog"
-            value={data.catalog.catalogName ?? ''}
-            onChange={(e) => patchCatalog({ catalogName: e.target.value })}
-            fullWidth
-            required
-            helperText="The catalog name or warehouse identifier"
-          />
+          {data.catalog.catalogType === 'nessie' ? (
+            <>
+              <TextField
+                label="Nessie Reference"
+                placeholder="main"
+                value={data.catalog.nessieReference ?? ''}
+                onChange={(event) =>
+                  patchCatalog({ nessieReference: event.target.value })
+                }
+                fullWidth
+                required
+                helperText="Branch or tag to read and write through Iceberg REST"
+              />
+              <TextField
+                label="Nessie Warehouse (Optional)"
+                placeholder="warehouse"
+                value={data.catalog.nessieWarehouse ?? ''}
+                onChange={(event) =>
+                  patchCatalog({ nessieWarehouse: event.target.value })
+                }
+                fullWidth
+                helperText="Leave blank to use the Nessie server's default warehouse"
+              />
+            </>
+          ) : (
+            <TextField
+              label="Catalog Name / Warehouse"
+              placeholder="my_catalog"
+              value={data.catalog.catalogName ?? ''}
+              onChange={(e) => patchCatalog({ catalogName: e.target.value })}
+              fullWidth
+              required
+              helperText="The catalog name or warehouse identifier"
+            />
+          )}
           <FormControl fullWidth>
             <InputLabel>Authentication</InputLabel>
             <Select
@@ -728,7 +785,8 @@ export const IcebergConnectionWizard: React.FC<
   const renderStorageStep = () => {
     const isRestCatalog =
       data.catalog.catalogType === 'rest' ||
-      data.catalog.catalogType === 'polaris';
+      data.catalog.catalogType === 'polaris' ||
+      data.catalog.catalogType === 'nessie';
 
     if (isRestCatalog) {
       return (
@@ -736,33 +794,43 @@ export const IcebergConnectionWizard: React.FC<
           <Typography variant="subtitle1" fontWeight={600}>
             Storage Configuration
           </Typography>
-          <Alert severity="info">
-            REST catalogs manage table storage on the server. Configure a cloud
-            connection below only if your catalog uses{' '}
-            <strong>vended credentials</strong> to delegate access to object
-            storage.
-          </Alert>
-          <Typography variant="subtitle2" fontWeight={600}>
-            Vended credentials (optional)
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Select a Cloud Explorer connection and bucket the catalog can use
-            when delegating storage access. Leave blank if credentials are
-            handled another way.
-          </Typography>
-          <DataLakeConnectionSelector
-            selectedProvider="all"
-            onSelectExisting={(connectionId, bucket, prefix) =>
-              patchCatalog({
-                polarisConnectionId: connectionId,
-                polarisBucket: bucket,
-                polarisPrefix: prefix,
-              })
-            }
-            initialConnectionId={data.catalog.polarisConnectionId}
-            initialBucket={data.catalog.polarisBucket}
-            initialPrefix={data.catalog.polarisPrefix}
-          />
+          {data.catalog.catalogType === 'nessie' ? (
+            <Alert severity="info">
+              Nessie manages the warehouse and sends the required FileIO and
+              object-store configuration to PyIceberg. DBT Studio uses remote
+              request signing, so no Cloud Explorer credentials are required.
+            </Alert>
+          ) : (
+            <>
+              <Alert severity="info">
+                REST catalogs manage table storage on the server. Configure a
+                cloud connection below only if your catalog uses{' '}
+                <strong>vended credentials</strong> to delegate access to object
+                storage.
+              </Alert>
+              <Typography variant="subtitle2" fontWeight={600}>
+                Vended credentials (optional)
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Select a Cloud Explorer connection and bucket the catalog can
+                use when delegating storage access. Leave blank if credentials
+                are handled another way.
+              </Typography>
+              <DataLakeConnectionSelector
+                selectedProvider="all"
+                onSelectExisting={(connectionId, bucket, prefix) =>
+                  patchCatalog({
+                    polarisConnectionId: connectionId,
+                    polarisBucket: bucket,
+                    polarisPrefix: prefix,
+                  })
+                }
+                initialConnectionId={data.catalog.polarisConnectionId}
+                initialBucket={data.catalog.polarisBucket}
+                initialPrefix={data.catalog.polarisPrefix}
+              />
+            </>
+          )}
         </Box>
       );
     }
@@ -905,7 +973,8 @@ export const IcebergConnectionWizard: React.FC<
               </>
             )}
             {(data.catalog.catalogType === 'rest' ||
-              data.catalog.catalogType === 'polaris') && (
+              data.catalog.catalogType === 'polaris' ||
+              data.catalog.catalogType === 'nessie') && (
               <>
                 <ListItem disableGutters>
                   <ListItemText
@@ -913,12 +982,31 @@ export const IcebergConnectionWizard: React.FC<
                     secondary={data.catalog.endpoint}
                   />
                 </ListItem>
-                <ListItem disableGutters>
-                  <ListItemText
-                    primary="Catalog Name"
-                    secondary={data.catalog.catalogName}
-                  />
-                </ListItem>
+                {data.catalog.catalogType === 'nessie' ? (
+                  <>
+                    <ListItem disableGutters>
+                      <ListItemText
+                        primary="Reference"
+                        secondary={data.catalog.nessieReference}
+                      />
+                    </ListItem>
+                    <ListItem disableGutters>
+                      <ListItemText
+                        primary="Warehouse"
+                        secondary={
+                          data.catalog.nessieWarehouse ?? 'Default warehouse'
+                        }
+                      />
+                    </ListItem>
+                  </>
+                ) : (
+                  <ListItem disableGutters>
+                    <ListItemText
+                      primary="Catalog Name"
+                      secondary={data.catalog.catalogName}
+                    />
+                  </ListItem>
+                )}
                 <ListItem disableGutters>
                   <ListItemText
                     primary="Access Token"
@@ -929,7 +1017,8 @@ export const IcebergConnectionWizard: React.FC<
             )}
             <Divider sx={{ my: 1 }} />
             {data.catalog.catalogType === 'rest' ||
-            data.catalog.catalogType === 'polaris' ? (
+            data.catalog.catalogType === 'polaris' ||
+            data.catalog.catalogType === 'nessie' ? (
               <>
                 <ListItem disableGutters>
                   <ListItemText

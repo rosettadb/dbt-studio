@@ -48,6 +48,14 @@ describe('IcebergDatalakeService compatibility and secret persistence', () => {
       enabled: true,
       authModes: expect.arrayContaining(['oauth-client-credentials']),
     });
+    expect(
+      capabilities.catalogs.find(({ type }) => type === 'nessie'),
+    ).toMatchObject({
+      enabled: true,
+      pyicebergType: 'rest',
+      requiredFields: ['endpoint', 'nessieReference'],
+      allowedStorageTypes: ['server-managed'],
+    });
   });
 
   it('rejects invalid OAuth configuration before bridge execution', () => {
@@ -115,5 +123,65 @@ describe('IcebergDatalakeService compatibility and secret persistence', () => {
     expect(message).not.toContain('top-secret');
     expect(message).not.toContain('db-secret');
     expect(message).toContain('[REDACTED]');
+  });
+
+  it('builds the Nessie Iceberg REST URI from reference and warehouse', () => {
+    const buildUri = (IcebergDatalakeService as any).buildNessieRestUri as (
+      config: unknown,
+    ) => string;
+
+    expect(
+      buildUri({
+        endpoint: 'http://localhost:19120/iceberg/',
+        nessieReference: 'main',
+      }),
+    ).toBe('http://localhost:19120/iceberg/main');
+    expect(
+      buildUri({
+        endpoint: 'http://localhost:19120/iceberg',
+        nessieReference: 'experiments',
+        nessieWarehouse: 'sales',
+      }),
+    ).toBe('http://localhost:19120/iceberg/experiments|sales');
+  });
+
+  it('rejects the native Nessie API when Iceberg REST is required', () => {
+    const validate = (IcebergDatalakeService as any)
+      .validateCatalogWarehousePair as (config: unknown) => void;
+
+    expect(() =>
+      validate({
+        catalogType: 'nessie',
+        endpoint: 'http://localhost:19120/api/v2',
+        nessieReference: 'main',
+        storageType: 'server-managed',
+      }),
+    ).toThrow('ICEBERG_NESSIE_ICEBERG_REST_ENDPOINT_REQUIRED');
+  });
+
+  it('configures Nessie REST with server-managed remote signing', async () => {
+    const buildProperties = (IcebergDatalakeService as any)
+      .buildCatalogProperties as (config: unknown) => Promise<{
+      props: Record<string, string>;
+      env: Record<string, string>;
+    }>;
+
+    const result = await buildProperties({
+      catalogType: 'nessie',
+      endpoint: 'http://localhost:19120/iceberg',
+      nessieReference: 'main',
+      nessieWarehouse: 'warehouse',
+      catalogAuthMode: 'none',
+      storageType: 'server-managed',
+    });
+
+    expect(result).toEqual({
+      props: {
+        type: 'rest',
+        uri: 'http://localhost:19120/iceberg/main|warehouse',
+        'header.X-Iceberg-Access-Delegation': 'remote-signing',
+      },
+      env: {},
+    });
   });
 });

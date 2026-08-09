@@ -84,12 +84,20 @@ export class IcebergDatalakeService {
       authModes: ['none', 'token', 'oauth-client-credentials'],
       allowedStorageTypes: ['server-managed'],
     },
+    {
+      type: 'nessie',
+      label: 'Project Nessie',
+      pyicebergType: 'rest',
+      enabled: true,
+      requiredFields: ['endpoint', 'nessieReference'],
+      authModes: ['none', 'token', 'oauth-client-credentials'],
+      allowedStorageTypes: ['server-managed'],
+    },
     ...(
       [
         ['hive', 'Hive Metastore', 'hive'],
         ['hadoop', 'Hadoop Catalog', 'custom'],
         ['glue', 'AWS Glue', 'glue'],
-        ['nessie', 'Project Nessie', 'rest'],
       ] as const
     ).map(([type, label, pyicebergType]) => ({
       type,
@@ -285,9 +293,15 @@ export class IcebergDatalakeService {
 
       case 'rest':
       case 'polaris':
+      case 'nessie':
         props.type = 'rest';
-        if (instance.endpoint) props.uri = instance.endpoint;
-        if (instance.catalogName) props.warehouse = instance.catalogName;
+        if (instance.catalogType === 'nessie') {
+          props.uri = IcebergDatalakeService.buildNessieRestUri(instance);
+          props['header.X-Iceberg-Access-Delegation'] = 'remote-signing';
+        } else {
+          if (instance.endpoint) props.uri = instance.endpoint;
+          if (instance.catalogName) props.warehouse = instance.catalogName;
+        }
         // Access token via env var
         if (instance.catalogAccessTokenKey) {
           try {
@@ -339,6 +353,36 @@ export class IcebergDatalakeService {
       props: { ...props, ...warehouse.props },
       env: { ...env, ...warehouse.env },
     };
+  }
+
+  private static buildNessieRestUri(
+    config: Pick<
+      IcebergInstanceConfig,
+      'endpoint' | 'nessieReference' | 'nessieWarehouse'
+    >,
+  ): string {
+    const endpoint = config.endpoint?.trim().replace(/\/+$/, '');
+    const reference = config.nessieReference?.trim();
+    if (!endpoint) throw new Error('ICEBERG_REQUIRED_FIELD: endpoint');
+    if (!reference) {
+      throw new Error('ICEBERG_REQUIRED_FIELD: nessieReference');
+    }
+    let parsed: URL;
+    try {
+      parsed = new URL(endpoint);
+    } catch {
+      throw new Error('ICEBERG_NESSIE_ENDPOINT_INVALID');
+    }
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      throw new Error('ICEBERG_NESSIE_ENDPOINT_INVALID');
+    }
+    if (!parsed.pathname.endsWith('/iceberg')) {
+      throw new Error('ICEBERG_NESSIE_ICEBERG_REST_ENDPOINT_REQUIRED');
+    }
+    const warehouse = config.nessieWarehouse?.trim();
+    return `${endpoint}/${encodeURIComponent(reference)}${
+      warehouse ? `|${encodeURIComponent(warehouse)}` : ''
+    }`;
   }
 
   private static async buildWarehouseProperties(
@@ -507,6 +551,8 @@ export class IcebergDatalakeService {
       | 'localPath'
       | 'storageConnectionId'
       | 'storageBucket'
+      | 'nessieReference'
+      | 'nessieWarehouse'
     >,
     validateWarehouseFields = true,
   ): void {
@@ -526,6 +572,9 @@ export class IcebergDatalakeService {
     );
     if (missingField) {
       throw new Error(`ICEBERG_REQUIRED_FIELD: ${missingField}`);
+    }
+    if (config.catalogType === 'nessie') {
+      IcebergDatalakeService.buildNessieRestUri(config);
     }
     if (
       validateWarehouseFields &&
@@ -858,7 +907,13 @@ export class IcebergDatalakeService {
           break;
         case 'rest':
         case 'polaris':
+        case 'nessie':
           props.type = 'rest';
+          if (params.catalogType === 'nessie') {
+            props.uri = IcebergDatalakeService.buildNessieRestUri(params);
+            props['header.X-Iceberg-Access-Delegation'] = 'remote-signing';
+            delete props.warehouse;
+          }
           if (params.accessToken) {
             props.token = '__ENV:ICEBERG_ACCESS_TOKEN';
             // eslint-disable-next-line dot-notation

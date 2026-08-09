@@ -1063,10 +1063,31 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
                         <Badge fontSize="small" color="action" />
                       </ListItemIcon>
                       <ListItemText
-                        primary="Catalog Name"
-                        secondary={instance.catalogName ?? 'Local catalog'}
+                        primary={
+                          instance.catalogType === 'nessie'
+                            ? 'Reference'
+                            : 'Catalog Name'
+                        }
+                        secondary={
+                          instance.catalogType === 'nessie'
+                            ? (instance.nessieReference ?? 'main')
+                            : (instance.catalogName ?? 'Local catalog')
+                        }
                       />
                     </ListItem>
+                    {instance.catalogType === 'nessie' && (
+                      <ListItem disableGutters>
+                        <ListItemIcon sx={{ minWidth: 36 }}>
+                          <Storage fontSize="small" color="action" />
+                        </ListItemIcon>
+                        <ListItemText
+                          primary="Nessie Warehouse"
+                          secondary={
+                            instance.nessieWarehouse ?? 'Default warehouse'
+                          }
+                        />
+                      </ListItem>
+                    )}
                     <ListItem disableGutters>
                       <ListItemIcon sx={{ minWidth: 36 }}>
                         <Folder fontSize="small" color="action" />
@@ -1105,7 +1126,11 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
                       </ListItemIcon>
                       <ListItemText
                         primary="Provider"
-                        secondary={instance.cloudProvider ?? 'Local filesystem'}
+                        secondary={
+                          instance.storageType === 'server-managed'
+                            ? 'Catalog server'
+                            : (instance.cloudProvider ?? 'Local filesystem')
+                        }
                       />
                     </ListItem>
                     <ListItem disableGutters>
@@ -1114,7 +1139,11 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
                       </ListItemIcon>
                       <ListItemText
                         primary="Bucket"
-                        secondary={instance.storageBucket ?? '—'}
+                        secondary={
+                          instance.storageType === 'server-managed'
+                            ? 'Managed by catalog'
+                            : (instance.storageBucket ?? '—')
+                        }
                       />
                     </ListItem>
                   </List>
