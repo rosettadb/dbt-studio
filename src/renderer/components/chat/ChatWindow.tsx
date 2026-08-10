@@ -56,7 +56,10 @@ import {
 import { useGetFileContent } from '../../controllers/projects.controller';
 import { projectsServices } from '../../services';
 import { PROJECT_AGENT_CONTEXT_FILE } from '../../../shared/agentMemoryConstants';
-import { collectSuccessfulPipelineMutations } from './pipelineToolResults';
+import {
+  collectSuccessfulPipelineMutations,
+  isSuccessfulGenericFileWrite,
+} from './pipelineToolResults';
 
 export interface ChatWindowProps {
   screenKey?: 'project' | 'sql' | 'notebooks' | 'analytics';
@@ -682,13 +685,10 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
 
     streamState.steps.forEach((step) => {
       step.toolCalls.forEach((tc) => {
-        if (
-          (tc.toolName === 'writeDbtModel' || tc.toolName === 'writeFile') &&
-          tc.status === 'done'
-        ) {
+        if (isSuccessfulGenericFileWrite(tc.toolName, tc.status, tc.result)) {
+          const result = tc.result as any;
           const path = (tc.args as any)?.filePath || (tc.args as any)?.path;
           if (path) {
-            const result = tc.result as any;
             fileMap.set(path, {
               path,
               added: result?.linesAdded ?? 0,

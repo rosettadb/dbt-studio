@@ -1,6 +1,8 @@
 import {
   collectSuccessfulPipelineMutations,
   getSuccessfulPipelineMutation,
+  isSuccessfulGenericFileWrite,
+  refreshCleanPipelineDraft,
   resolveProjectMutationPath,
 } from '../../../../src/renderer/components/chat/pipelineToolResults';
 
@@ -59,11 +61,11 @@ describe('pipeline tool result presentation policy', () => {
     ).toBeNull();
   });
 
-  it('keeps the latest successful mutation per contained path', () => {
+  it('keeps only generated files in the delete-backed changed-files flow', () => {
     expect(
       collectSuccessfulPipelineMutations('/projects/demo', [
         {
-          toolName: 'studio_pipeline_update',
+          toolName: 'studio_pipeline_generate',
           status: 'done',
           result: {
             success: true,
@@ -74,7 +76,7 @@ describe('pipeline tool result presentation policy', () => {
           },
         },
         {
-          toolName: 'studio_pipeline_update',
+          toolName: 'studio_pipeline_generate',
           status: 'done',
           result: {
             success: true,
@@ -82,6 +84,17 @@ describe('pipeline tool result presentation policy', () => {
             path: 'rosetta/pipelines/nightly.yml',
             linesAdded: 3,
             linesRemoved: 2,
+          },
+        },
+        {
+          toolName: 'studio_pipeline_update',
+          status: 'done',
+          result: {
+            success: true,
+            mutation: 'pipeline-file-written',
+            path: 'rosetta/pipelines/existing.yml',
+            linesAdded: 4,
+            linesRemoved: 1,
           },
         },
         {
@@ -106,5 +119,49 @@ describe('pipeline tool result presentation policy', () => {
         removed: 2,
       },
     ]);
+  });
+
+  it('refreshes only a matching clean pipeline draft', () => {
+    const cleanDraft = {
+      path: '/projects/demo/rosetta/pipelines/nightly.yml',
+      content: 'old',
+      savedContent: 'old',
+      isModified: false,
+    };
+    expect(
+      refreshCleanPipelineDraft(cleanDraft, cleanDraft.path, 'agent update'),
+    ).toEqual({
+      ...cleanDraft,
+      content: 'agent update',
+      savedContent: 'agent update',
+    });
+    expect(
+      refreshCleanPipelineDraft(
+        { ...cleanDraft, content: 'draft', isModified: true },
+        cleanDraft.path,
+        'agent update',
+      ),
+    ).toEqual({ ...cleanDraft, content: 'draft', isModified: true });
+    expect(
+      refreshCleanPipelineDraft(
+        cleanDraft,
+        '/projects/demo/rosetta/pipelines/other.yml',
+        'agent update',
+      ),
+    ).toBe(cleanDraft);
+  });
+
+  it('does not treat rejected generic writes as discardable files', () => {
+    expect(
+      isSuccessfulGenericFileWrite('writeFile', 'done', {
+        error: 'Pipeline writes require the dedicated tool',
+      }),
+    ).toBe(false);
+    expect(
+      isSuccessfulGenericFileWrite('writeDbtModel', 'done', {
+        success: true,
+        bytesWritten: 20,
+      }),
+    ).toBe(true);
   });
 });

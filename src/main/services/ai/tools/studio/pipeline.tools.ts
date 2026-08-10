@@ -137,11 +137,13 @@ const pipelineIdentity = (relativeFromRoot: string): string =>
 
 const isPipelineRelativePath = (relativePath: string): boolean => {
   const normalized = toPosix(relativePath);
+  const normalizedCase = normalized.toLowerCase();
   const fileName = normalized.split('/').pop() ?? '';
   return (
-    isPipelineFileName(fileName) &&
-    (normalized.startsWith(`${PIPELINE_CANONICAL_ROOT}/`) ||
-      normalized.startsWith(`${PIPELINE_LEGACY_ROOT}/`))
+    fileName.toLowerCase() !== 'main.conf' &&
+    /\.ya?ml$/iu.test(fileName) &&
+    (normalizedCase.startsWith(`${PIPELINE_CANONICAL_ROOT}/`) ||
+      normalizedCase.startsWith(`${PIPELINE_LEGACY_ROOT}/`))
   );
 };
 
@@ -558,6 +560,7 @@ type PipelineMutationResult =
       restored?: boolean;
       issues?: PipelineIssue[];
       warnings?: string[];
+      filesystemCode?: string;
     };
 
 const hashContent = (content: string): string =>
@@ -666,7 +669,7 @@ export async function generateProjectPipeline(
     };
   }
 
-  let temporaryPath: string | undefined;
+  let targetHandle: number | undefined;
   let createdTarget = false;
   let createdFileIdentity: { device: number; inode: number } | undefined;
   try {
@@ -680,18 +683,17 @@ export async function generateProjectPipeline(
       };
     }
 
-    temporaryPath = writeTemporaryFile(resolved.absolutePath, content);
-    const temporaryStat = fs.statSync(temporaryPath);
+    targetHandle = fs.openSync(resolved.absolutePath, 'wx', 0o600);
+    createdTarget = true;
+    const temporaryStat = fs.fstatSync(targetHandle);
     createdFileIdentity = {
       device: temporaryStat.dev,
       inode: temporaryStat.ino,
     };
-    // Hard-link creation is atomic and fails if the target appeared after the
-    // existence check. Unlike rename, it never replaces an existing target.
-    fs.linkSync(temporaryPath, resolved.absolutePath);
-    createdTarget = true;
-    fs.unlinkSync(temporaryPath);
-    temporaryPath = undefined;
+    fs.writeFileSync(targetHandle, content, 'utf8');
+    fs.fsyncSync(targetHandle);
+    fs.closeSync(targetHandle);
+    targetHandle = undefined;
     verifyPersistedPipeline(resolved.absolutePath, content);
     return {
       success: true,
@@ -703,9 +705,14 @@ export async function generateProjectPipeline(
       ...calculateLineChanges('', content),
       warnings: validation.warnings,
     };
-  } catch {
-    if (temporaryPath && fs.existsSync(temporaryPath)) {
-      fs.unlinkSync(temporaryPath);
+  } catch (error) {
+    if (targetHandle !== undefined) {
+      try {
+        fs.closeSync(targetHandle);
+      } catch {
+        // Continue with inode-aware cleanup below.
+      }
+      targetHandle = undefined;
     }
     if (
       createdTarget &&
@@ -724,16 +731,18 @@ export async function generateProjectPipeline(
         // Return the bounded write failure below.
       }
     }
+    const errorCode = (error as { code?: unknown })?.code;
+    const filesystemCode =
+      typeof errorCode === 'string' ? errorCode.slice(0, 32) : undefined;
+    const alreadyExists =
+      !createdTarget && fs.existsSync(resolved.absolutePath);
     return {
       success: false,
-      code:
-        !createdTarget && fs.existsSync(resolved.absolutePath)
-          ? 'ALREADY_EXISTS'
-          : 'WRITE_FAILED',
-      error:
-        !createdTarget && fs.existsSync(resolved.absolutePath)
-          ? `Pipeline already exists: ${resolved.relativePath}`
-          : 'Pipeline could not be generated',
+      code: alreadyExists ? 'ALREADY_EXISTS' : 'WRITE_FAILED',
+      error: alreadyExists
+        ? `Pipeline already exists: ${resolved.relativePath}`
+        : `Pipeline could not be generated${filesystemCode ? ` (${filesystemCode})` : ''}`,
+      ...(filesystemCode && !alreadyExists ? { filesystemCode } : {}),
     };
   }
 }

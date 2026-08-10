@@ -100,6 +100,7 @@ import {
 } from '../../components/editor/previewConstants';
 import {
   getSuccessfulPipelineMutation,
+  refreshCleanPipelineDraft,
   resolveProjectMutationPath,
 } from '../../components/chat/pipelineToolResults';
 
@@ -860,7 +861,16 @@ const ProjectDetails: React.FC = () => {
               activePipelineFilePathRef.current === filePath &&
               !hasDirtyPipelineDraft
             ) {
-              await refetchPipelineContentRef.current();
+              const refreshed = await refetchPipelineContentRef.current();
+              if (typeof refreshed.data === 'string') {
+                setPipelineDraftTab((previous) =>
+                  refreshCleanPipelineDraft(
+                    previous,
+                    filePath,
+                    refreshed.data as string,
+                  ),
+                );
+              }
             }
           } else if (!existingTab.isModified) {
             await refreshTabContentByPathRef.current(filePath);

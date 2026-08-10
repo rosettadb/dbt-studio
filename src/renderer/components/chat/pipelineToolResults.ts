@@ -20,6 +20,17 @@ export const isPipelineMutationTool = (toolName: string): boolean =>
     toolName as (typeof PIPELINE_MUTATION_TOOL_NAMES)[number],
   );
 
+export const isSuccessfulGenericFileWrite = (
+  toolName: string,
+  status: string,
+  result: unknown,
+): boolean =>
+  (toolName === 'writeFile' || toolName === 'writeDbtModel') &&
+  status === 'done' &&
+  !!result &&
+  typeof result === 'object' &&
+  (result as { success?: unknown }).success === true;
+
 export const getSuccessfulPipelineMutation = (
   toolName: string,
   result: unknown,
@@ -85,7 +96,11 @@ export const collectSuccessfulPipelineMutations = (
     { path: string; added: number; removed: number }
   >();
   toolCalls.forEach((toolCall) => {
-    if (toolCall.status !== 'done') return;
+    if (
+      toolCall.status !== 'done' ||
+      toolCall.toolName !== 'studio_pipeline_generate'
+    )
+      return;
     const mutation = getSuccessfulPipelineMutation(
       toolCall.toolName,
       toolCall.result,
@@ -101,3 +116,19 @@ export const collectSuccessfulPipelineMutations = (
   });
   return Array.from(latestByPath.values());
 };
+
+export const refreshCleanPipelineDraft = <
+  T extends {
+    path: string;
+    content: string;
+    savedContent?: string;
+    isModified: boolean;
+  },
+>(
+  previous: T | null,
+  filePath: string,
+  content: string,
+): T | null =>
+  previous && previous.path === filePath && !previous.isModified
+    ? { ...previous, content, savedContent: content }
+    : previous;

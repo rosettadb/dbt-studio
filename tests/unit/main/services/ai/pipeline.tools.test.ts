@@ -321,10 +321,18 @@ custom_root:
       const relativePath = 'rosetta/pipelines/race.yml';
       const absolutePath = path.join(projectPath, relativePath);
       const competingContent = `${VALID_PIPELINE}competing: true\n`;
-      const linkSpy = jest.spyOn(fs, 'linkSync').mockImplementation(() => {
-        fs.writeFileSync(absolutePath, competingContent, 'utf8');
-        throw Object.assign(new Error('exists'), { code: 'EEXIST' });
-      });
+      const originalOpenSync = fs.openSync.bind(fs);
+      const openSpy = jest.spyOn(fs, 'openSync').mockImplementation(((
+        candidate: fs.PathLike,
+        flags: fs.OpenMode,
+        mode?: fs.Mode,
+      ) => {
+        if (candidate === absolutePath && flags === 'wx') {
+          fs.writeFileSync(absolutePath, competingContent, 'utf8');
+          throw Object.assign(new Error('exists'), { code: 'EEXIST' });
+        }
+        return originalOpenSync(candidate, flags, mode);
+      }) as typeof fs.openSync);
       try {
         await expect(
           generateProjectPipeline(projectPath, relativePath, VALID_PIPELINE),
@@ -334,8 +342,39 @@ custom_root:
         });
         expect(fs.readFileSync(absolutePath, 'utf8')).toBe(competingContent);
       } finally {
-        linkSpy.mockRestore();
+        openSpy.mockRestore();
       }
+    });
+
+    it('returns a bounded filesystem code when exclusive creation is unsupported', async () => {
+      const relativePath = 'rosetta/pipelines/unsupported.yml';
+      const absolutePath = path.join(projectPath, relativePath);
+      const originalOpenSync = fs.openSync.bind(fs);
+      const openSpy = jest.spyOn(fs, 'openSync').mockImplementation(((
+        candidate: fs.PathLike,
+        flags: fs.OpenMode,
+        mode?: fs.Mode,
+      ) => {
+        if (candidate === absolutePath && flags === 'wx') {
+          throw Object.assign(new Error(`unsupported at ${absolutePath}`), {
+            code: 'ENOTSUP',
+          });
+        }
+        return originalOpenSync(candidate, flags, mode);
+      }) as typeof fs.openSync);
+      try {
+        await expect(
+          generateProjectPipeline(projectPath, relativePath, VALID_PIPELINE),
+        ).resolves.toMatchObject({
+          success: false,
+          code: 'WRITE_FAILED',
+          filesystemCode: 'ENOTSUP',
+          error: 'Pipeline could not be generated (ENOTSUP)',
+        });
+      } finally {
+        openSpy.mockRestore();
+      }
+      expect(fs.existsSync(absolutePath)).toBe(false);
     });
 
     it('removes its own target when post-create verification fails', async () => {
@@ -476,6 +515,18 @@ custom_root:
       const canonical = writeProjectFile('rosetta/pipelines/current.yml');
       const legacy = writeProjectFile('.rosetta/legacy.yaml');
       expect(isProtectedPipelineWritePath(projectPath, canonical)).toBe(true);
+      expect(
+        isProtectedPipelineWritePath(
+          projectPath,
+          path.join(projectPath, 'rosetta', 'Pipelines', 'current.yml'),
+        ),
+      ).toBe(true);
+      expect(
+        isProtectedPipelineWritePath(
+          projectPath,
+          path.join(projectPath, 'rosetta', 'pipelines', 'current.YML'),
+        ),
+      ).toBe(true);
       expect(isProtectedPipelineWritePath(projectPath, legacy)).toBe(true);
       expect(
         isProtectedPipelineWritePath(
