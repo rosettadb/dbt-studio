@@ -77,9 +77,22 @@ const isPipelineFileName = (fileName: string): boolean =>
   fileName !== 'main.conf' &&
   (fileName.endsWith('.yml') || fileName.endsWith('.yaml'));
 
-const boundedMessage = (value: unknown, fallback: string): string => {
-  if (!(value instanceof Error) || !value.message) return fallback;
-  return value.message.slice(0, 300);
+const boundedYamlParseMessage = (value: unknown): string => {
+  const error = value as {
+    reason?: unknown;
+    mark?: { line?: unknown; column?: unknown };
+  };
+  const reason =
+    typeof error?.reason === 'string'
+      ? error.reason.slice(0, 240)
+      : 'Pipeline YAML could not be parsed';
+  const line =
+    typeof error?.mark?.line === 'number' ? error.mark.line + 1 : undefined;
+  const column =
+    typeof error?.mark?.column === 'number' ? error.mark.column + 1 : undefined;
+  return line !== undefined && column !== undefined
+    ? `${reason} (${line}:${column})`
+    : reason;
 };
 
 const assertExistingPathIsNotSymlink = (candidate: string): void => {
@@ -338,7 +351,7 @@ export function validatePipelineContent(content: string): {
       issues: [
         {
           path: '$',
-          message: boundedMessage(error, 'Pipeline YAML could not be parsed'),
+          message: boundedYamlParseMessage(error),
         },
       ],
       warnings: [],

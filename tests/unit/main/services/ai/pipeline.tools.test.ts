@@ -145,6 +145,18 @@ custom_root:
       expect(result).toMatchObject({ valid: false });
       expect(result.issues[0].message).toContain('byte limit');
     });
+
+    it('returns YAML parse diagnostics without source excerpts', () => {
+      const result = validatePipelineContent(
+        'name: broken\njobs: [{ name: build\nsteps: []',
+      );
+
+      expect(result.valid).toBe(false);
+      expect(result.issues[0].message).toMatch(/\(\d+:\d+\)$/u);
+      expect(result.issues[0].message).not.toContain('\n');
+      expect(result.issues[0].message).not.toContain('name: broken');
+      expect(result.issues[0].message).not.toContain('^');
+    });
   });
 
   describe('discovery and context', () => {

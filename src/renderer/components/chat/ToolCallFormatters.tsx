@@ -10,6 +10,11 @@ const PIPELINE_DIAGNOSTIC_LIMIT = 5;
 const pipelinePath = (value: unknown): string =>
   typeof value === 'string' ? value : 'pipeline';
 
+const pipelineDiagnosticMessage = (value: unknown): string =>
+  String(value ?? 'Pipeline warning')
+    .split(/\r?\n/u, 1)[0]
+    .slice(0, 300);
+
 const renderPipelineDiagnostics = (values: unknown) => {
   if (!Array.isArray(values) || values.length === 0) return null;
   return (
@@ -18,7 +23,7 @@ const renderPipelineDiagnostics = (values: unknown) => {
         const diagnostic = item as Record<string, unknown>;
         return (
           <li key={`${String(diagnostic.path ?? '')}-${index}`}>
-            {String(
+            {pipelineDiagnosticMessage(
               diagnostic.message ?? diagnostic.code ?? 'Pipeline warning',
             )}
           </li>

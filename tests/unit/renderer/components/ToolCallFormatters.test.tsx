@@ -121,4 +121,31 @@ describe('ToolCallFormatters arguments', () => {
       screen.getByText(/Pipeline changed since it was read/u),
     ).toBeTruthy();
   });
+
+  it('removes YAML source excerpts from persisted diagnostics', () => {
+    render(
+      <>
+        {renderResult('studio_pipeline_read', {
+          success: true,
+          path: 'rosetta/pipelines/malformed.yml',
+          bytes: 191,
+          valid: false,
+          issues: [
+            {
+              path: '$',
+              message:
+                'missed comma between flow collection entries (8:7)\n 7 | args: { command: run\n 8 | - name: step2\n-----^',
+            },
+          ],
+          warnings: [],
+        })}
+      </>,
+    );
+
+    expect(
+      screen.getByText('missed comma between flow collection entries (8:7)'),
+    ).toBeTruthy();
+    expect(screen.queryByText(/args: \{ command: run/u)).toBeNull();
+    expect(screen.queryByText(/\^/u)).toBeNull();
+  });
 });
