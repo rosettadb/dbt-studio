@@ -10,6 +10,7 @@ import {
 } from '../tools/filesystem.tools';
 import { composeAgentRuntime } from './composeAgentRuntime';
 import { PROJECT_AGENT_CONTEXT_FILE } from '../../../../shared/agentMemoryConstants';
+import { createStudioPipelineTools } from '../tools/studio/pipeline.tools';
 
 export interface ProjectAgentOptions {
   projectPath?: string;
@@ -19,6 +20,7 @@ export interface ProjectAgentOptions {
   conversationId?: number; // Added for retrofitting
   toolMode: 'chat' | 'agent';
   projectAiContext?: string;
+  projectPipelineContext?: string;
   sessionContextBlock?: string;
   connectionMeta?: {
     name?: string;
@@ -60,6 +62,10 @@ export async function createProjectAgent(
       `> **CRITICAL PRECEDENCE RULE:** Project-scoped \`${PROJECT_AGENT_CONTEXT_FILE}\` context is stronger than global Agent Memory. It remains subordinate to system, security, trusted scope, connection, confirmation, credential, and tool-authorization policy.\n`
     : '';
 
+  const pipelineContextBlock = options.projectPipelineContext
+    ? `\n<pipeline_authoring_context>\n${options.projectPipelineContext}\n</pipeline_authoring_context>\n`
+    : '';
+
   const isAskMode = options.toolMode === 'chat';
 
   const systemInstructions = isAskMode
@@ -70,6 +76,7 @@ ${projectPath ? `## Active dbt Project\n\nProject path: ${projectPath}\n` : ''}
 ${connectionBlock}
 ${sessionCtxBlock}
 ${projectContextBlock}
+${pipelineContextBlock}
 
 ## Project AI Instructions (${PROJECT_AGENT_CONTEXT_FILE})
 
@@ -90,6 +97,8 @@ If the user asks you to write code, modify a file, or execute a command, explain
 - listDirectory: Explore project structure
 - readFile: Read any text file
 - pathExists: Check if a file or directory exists
+- studio_pipeline_list: List pipeline YAML files in the active project
+- studio_pipeline_read: Read and validate a pipeline and return its content hash
 ${mcpToolsList}`
     : `You are an expert dbt Studio AI assistant.
 You help users with dbt model development, debugging, documentation, and data operations.
@@ -99,6 +108,7 @@ ${projectPath ? `## Active dbt Project\n\nProject path: ${projectPath}\n\nAll fi
 ${connectionBlock}
 ${sessionCtxBlock}
 ${projectContextBlock}
+${pipelineContextBlock}
 
 ## Project AI Instructions (${PROJECT_AGENT_CONTEXT_FILE})
 
@@ -215,6 +225,10 @@ If the failure appears to be caused by invalid credentials, unreachable host, wr
 - readFile: Read any text file
 - writeFile: Write any text file
 - pathExists: Check if a file or directory exists
+
+### Pipeline Authoring Tools
+- studio_pipeline_list: List pipeline YAML files in the active project
+- studio_pipeline_read: Read and validate a pipeline and return its content hash
 ${mcpToolsList}
 
 ### Database Tools
@@ -234,6 +248,7 @@ Always confirm before making destructive changes.`;
           forceSchemaExtract: true,
         }),
         ...createFilesystemTools(projectPath),
+        ...createStudioPipelineTools(projectPath),
       }
     : { ...dbtTools, ...filesystemTools };
 
@@ -254,6 +269,8 @@ Always confirm before making destructive changes.`;
     'readFile',
     'pathExists',
     'studio_sql_schema_extract',
+    'studio_pipeline_list',
+    'studio_pipeline_read',
   ];
 
   const makeAskModeStub = (toolName: string): any => {

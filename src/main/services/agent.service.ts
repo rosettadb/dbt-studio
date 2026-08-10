@@ -46,6 +46,10 @@ import SecondBrainService from './ai/secondBrain/secondBrain.service';
 import SecondBrainRuntimeService from './ai/secondBrain/secondBrainRuntime.service';
 import { createSecondBrainTools } from './ai/tools/studio/secondBrain.tools';
 import { readProjectAgentContext } from './ai/projectAgentContext';
+import {
+  buildProjectPipelineContext,
+  PROJECT_PIPELINE_TOOL_NAMES,
+} from './ai/tools/studio/pipeline.tools';
 
 // ─── AI Settings ─────────────────────────────────────────────────────────────
 
@@ -66,6 +70,8 @@ export const AI_SETTINGS_DEFAULTS: AISettingsConfig = {
     readFile: true,
     writeFile: true,
     pathExists: true,
+    studio_pipeline_list: true,
+    studio_pipeline_read: true,
   },
   configuration: {
     allowAIInBackground: true,
@@ -243,6 +249,8 @@ const TOOL_CATEGORIES = {
     'listDirectory',
     'readFile',
     'pathExists',
+    'studio_pipeline_list',
+    'studio_pipeline_read',
   ],
   action: ['writeDbtModel', 'runDbtCommand', 'writeFile'],
 };
@@ -251,7 +259,11 @@ export function getToolsForMode(
   mode: 'chat' | 'agent',
   aiSettings: AISettingsConfig,
 ) {
-  const allTools = { ...dbtTools, ...filesystemTools };
+  const allTools = {
+    ...dbtTools,
+    ...filesystemTools,
+    ...PROJECT_PIPELINE_TOOL_NAMES,
+  };
 
   if (mode === 'chat') {
     // Chat Mode: only analysis tools
@@ -1407,11 +1419,13 @@ COMBINED SUMMARY:`,
       }
 
       let sessionContextBlock = '';
+      let projectPipelineContext: string | undefined;
       const projectAiContext =
         screenKey === 'project' && request.includeProjectAiContext
           ? await readProjectAgentContext(projectPath)
           : undefined;
-      if (screenKey === 'project') {
+      if (screenKey === 'project' && projectPath) {
+        projectPipelineContext = await buildProjectPipelineContext(projectPath);
         try {
           // Derive the selected file path from contextItems (type 'file' entries)
           // The file path is stored in the metadata JSON field as { path: string }
@@ -1443,6 +1457,8 @@ COMBINED SUMMARY:`,
         delete agentEnabledTools.writeDbtModel;
         delete agentEnabledTools.runDbtCommand;
         delete agentEnabledTools.writeFile;
+        delete agentEnabledTools.studio_pipeline_list;
+        delete agentEnabledTools.studio_pipeline_read;
       }
 
       switch (request.screenKey ?? 'project') {
@@ -1485,6 +1501,7 @@ COMBINED SUMMARY:`,
             conversationId,
             toolMode: request.toolMode || 'agent',
             projectAiContext,
+            projectPipelineContext,
             sessionContextBlock,
             connectionMeta: projectConnectionMeta,
           });
@@ -1961,6 +1978,16 @@ COMBINED SUMMARY:`,
           name: 'pathExists',
           description: 'Check if a file or directory exists',
           category: 'filesystem',
+        },
+        {
+          name: 'studio_pipeline_list',
+          description: 'List pipeline YAML files in the active project',
+          category: 'dbt',
+        },
+        {
+          name: 'studio_pipeline_read',
+          description: 'Read and validate a pipeline YAML file',
+          category: 'dbt',
         },
       ];
 

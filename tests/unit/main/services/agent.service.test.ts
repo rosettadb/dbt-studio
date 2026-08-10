@@ -97,6 +97,19 @@ jest.mock('../../../../src/main/services/ai/tools/filesystem.tools', () => ({
   },
 }));
 
+jest.mock(
+  '../../../../src/main/services/ai/tools/studio/pipeline.tools',
+  () => ({
+    PROJECT_PIPELINE_TOOL_NAMES: {
+      studio_pipeline_list: true,
+      studio_pipeline_read: true,
+    },
+    buildProjectPipelineContext: jest
+      .fn()
+      .mockResolvedValue('## Project Pipelines\n\n- Existing pipelines: none'),
+  }),
+);
+
 jest.mock('../../../../src/main/services/ai/tokenEstimator', () => ({
   estimateTokens: jest.fn().mockReturnValue(10),
   estimateMessagesTokens: jest.fn().mockReturnValue(50),
@@ -263,6 +276,8 @@ describe('AgentService (Phase 1)', () => {
         readFile: true,
         writeFile: true,
         pathExists: true,
+        studio_pipeline_list: true,
+        studio_pipeline_read: true,
       },
       configuration: {
         allowAIInBackground: true,
@@ -292,6 +307,8 @@ describe('AgentService (Phase 1)', () => {
           'listDirectory',
           'readFile',
           'pathExists',
+          'studio_pipeline_list',
+          'studio_pipeline_read',
         ]),
       );
       expect(Object.keys(tools)).not.toContain('writeDbtModel');
@@ -312,6 +329,8 @@ describe('AgentService (Phase 1)', () => {
           'readFile',
           'writeFile',
           'pathExists',
+          'studio_pipeline_list',
+          'studio_pipeline_read',
         ]),
       );
     });
