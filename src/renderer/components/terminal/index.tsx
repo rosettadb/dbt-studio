@@ -58,7 +58,8 @@ export type TerminalPanelTab =
   | 'process'
   | 'lineage'
   | 'queryResults'
-  | 'runHistory';
+  | 'runHistory'
+  | 'cloudLogs';
 
 export interface TerminalLayoutRef {
   switchTab: (tab: TerminalPanelTab) => void;
@@ -72,6 +73,8 @@ type Props = {
   queryResultsRevision?: number;
   runHistoryPanel?: React.ReactNode;
   showRunHistoryTab?: boolean;
+  cloudLogsPanel?: React.ReactNode;
+  showCloudLogsTab?: boolean;
 };
 
 export const TerminalLayout = React.forwardRef<TerminalLayoutRef, Props>(
@@ -84,6 +87,8 @@ export const TerminalLayout = React.forwardRef<TerminalLayoutRef, Props>(
       queryResultsRevision = 0,
       runHistoryPanel,
       showRunHistoryTab = false,
+      cloudLogsPanel,
+      showCloudLogsTab = false,
     },
     ref,
   ) => {
@@ -572,6 +577,21 @@ export const TerminalLayout = React.forwardRef<TerminalLayoutRef, Props>(
                       </Typography>
                     </Button>
                   )}
+                  {/* Cloud Logs Tab */}
+                  {showCloudLogsTab && (
+                    <Button
+                      size="small"
+                      disableRipple
+                      sx={tabButtonSx(selectedTab === 'cloudLogs')}
+                      onClick={() => setSelectedTab('cloudLogs')}
+                    >
+                      <Typography
+                        sx={{ fontWeight: 500, fontSize: 10.5, lineHeight: 1 }}
+                      >
+                        CLOUD LOGS
+                      </Typography>
+                    </Button>
+                  )}
                   {/* Minimize Button */}
                   <IconButton
                     onClick={handleMinimize}
@@ -634,6 +654,17 @@ export const TerminalLayout = React.forwardRef<TerminalLayoutRef, Props>(
                     }}
                   >
                     {runHistoryPanel}
+                  </Box>
+                )}
+                {selectedTab === 'cloudLogs' && showCloudLogsTab && (
+                  <Box
+                    sx={{
+                      height: '100%',
+                      bgcolor: 'background.default',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {cloudLogsPanel}
                   </Box>
                 )}
               </>
