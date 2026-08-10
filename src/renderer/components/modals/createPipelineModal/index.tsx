@@ -28,6 +28,7 @@ import {
   ErrorOutline,
   Refresh,
   WarningAmber,
+  CreateNewFolderOutlined,
 } from '@mui/icons-material';
 import { useTheme } from '@mui/material/styles';
 import { toast } from 'react-toastify';
@@ -38,6 +39,7 @@ import {
   fetchPipelineTemplateContent,
   RemotePipelineTemplate,
 } from '../../../services/pipelineTemplates.service';
+import { PipelineFolderTree } from './PipelineFolderTree';
 
 interface PipelineTemplate {
   id: string;
@@ -103,7 +105,7 @@ interface CreatePipelineModalProps {
   onCreated: (filePath: string) => void;
 }
 
-type ModalView = 'menu' | 'browse';
+type ModalView = 'menu' | 'browse' | 'location';
 
 export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
   isOpen,
@@ -131,7 +133,17 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
   const [pendingCreate, setPendingCreate] = React.useState<{
     fileName: string;
     getContent: () => Promise<string>;
+    subdir: string;
   } | null>(null);
+
+  // Which view to return to when backing out of the location step.
+  const [locationOrigin, setLocationOrigin] = React.useState<'menu' | 'browse'>(
+    'menu',
+  );
+  const [selectedSubdir, setSelectedSubdir] = React.useState('');
+  // Bumped each time the location step is entered, forcing the folder tree
+  // to refetch in case folders changed since the last visit.
+  const [folderTreeReloadToken, setFolderTreeReloadToken] = React.useState(0);
 
   React.useEffect(() => {
     if (isOpen) {
@@ -141,6 +153,8 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
       setPendingCreate(null);
       setRemoteTemplates([]);
       setRemoteError(null);
+      setLocationOrigin('menu');
+      setSelectedSubdir('');
     }
   }, [isOpen]);
 
@@ -167,13 +181,20 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
     }
   };
 
-  const writePipelineFile = async (fileName: string, content: string) => {
+  const writePipelineFile = async (
+    fileName: string,
+    content: string,
+    subdir: string,
+  ) => {
+    const relativeDir = subdir
+      ? `rosetta/pipelines/${subdir}`
+      : 'rosetta/pipelines';
     await projectsServices.createFolderAsync({
       filePath: project.path,
-      name: 'rosetta/pipelines',
+      name: relativeDir,
     });
 
-    const pipelinePath = `${project.path}/rosetta/pipelines/${fileName}`;
+    const pipelinePath = `${project.path}/${relativeDir}/${fileName}`;
     await projectsServices.saveFileContent({
       path: pipelinePath,
       content,
@@ -182,14 +203,22 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
     return pipelinePath;
   };
 
-  const pipelineExists = async (fileName: string): Promise<boolean> => {
+  const pipelineExists = async (
+    fileName: string,
+    subdir: string,
+  ): Promise<boolean> => {
     const pipelines = await projectsServices.listPipelines(project.id);
     const baseName = fileName.replace(/\.(yml|yaml)$/, '');
-    return pipelines.some((p) => p.name === baseName);
+    const relativeName = subdir ? `${subdir}/${baseName}` : baseName;
+    return pipelines.some((p) => p.name === relativeName);
   };
 
-  const createPipeline = async (fileName: string, content: string) => {
-    const pipelinePath = await writePipelineFile(fileName, content);
+  const createPipeline = async (
+    fileName: string,
+    content: string,
+    subdir: string,
+  ) => {
+    const pipelinePath = await writePipelineFile(fileName, content, subdir);
     toast.success('Pipeline created successfully.');
     onCreated(pipelinePath);
     onClose();
@@ -198,14 +227,15 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
   const prepareCreate = async (
     fileName: string,
     getContent: () => Promise<string>,
+    subdir: string,
   ) => {
     setIsCreating(true);
     try {
-      if (await pipelineExists(fileName)) {
-        setPendingCreate({ fileName, getContent });
+      if (await pipelineExists(fileName, subdir)) {
+        setPendingCreate({ fileName, getContent, subdir });
         return;
       }
-      await createPipeline(fileName, await getContent());
+      await createPipeline(fileName, await getContent(), subdir);
     } catch (error) {
       const msg =
         error instanceof Error ? error.message : 'Failed to create pipeline';
@@ -215,20 +245,42 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
     }
   };
 
-  const handleCreate = async () => {
-    if (view === 'menu') {
-      if (!selectedTemplateId) return;
+  // Selected template info (from whichever list it came from), used by the
+  // location step to know what to create once a directory is chosen.
+  const selectedTemplateInfo = React.useMemo(() => {
+    if (locationOrigin === 'menu') {
       const template = TEMPLATES.find((t) => t.id === selectedTemplateId);
-      if (!template) return;
-      await prepareCreate(template.fileName, async () => template.content);
-      return;
+      if (!template) return null;
+      return {
+        fileName: template.fileName,
+        label: template.label,
+        getContent: async () => template.content,
+      };
     }
-
-    if (!selectedRemoteId) return;
     const template = remoteTemplates.find((t) => t.id === selectedRemoteId);
-    if (!template) return;
-    await prepareCreate(template.fileName, () =>
-      fetchPipelineTemplateContent(template.url),
+    if (!template) return null;
+    return {
+      fileName: template.fileName,
+      label: template.label,
+      getContent: () => fetchPipelineTemplateContent(template.url),
+    };
+  }, [locationOrigin, selectedTemplateId, selectedRemoteId, remoteTemplates]);
+
+  const handleContinueToLocation = () => {
+    if (view === 'menu' && !selectedTemplateId) return;
+    if (view === 'browse' && !selectedRemoteId) return;
+    setLocationOrigin(view === 'browse' ? 'browse' : 'menu');
+    setSelectedSubdir('');
+    setFolderTreeReloadToken((prev) => prev + 1);
+    setView('location');
+  };
+
+  const handleCreate = async () => {
+    if (!selectedTemplateInfo) return;
+    await prepareCreate(
+      selectedTemplateInfo.fileName,
+      selectedTemplateInfo.getContent,
+      selectedSubdir,
     );
   };
 
@@ -237,7 +289,11 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
     setIsCreating(true);
     try {
       const content = await pendingCreate.getContent();
-      await createPipeline(pendingCreate.fileName, content);
+      await createPipeline(
+        pendingCreate.fileName,
+        content,
+        pendingCreate.subdir,
+      );
       setPendingCreate(null);
     } catch (error) {
       const msg =
@@ -249,11 +305,38 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
   };
 
   const isBrowseView = view === 'browse';
-  const isActionDisabled = isBrowseView
-    ? !selectedRemoteId || isCreating
-    : !selectedTemplateId || isCreating;
+  const isLocationView = view === 'location';
+  const showBackButton = view !== 'menu';
+
+  const handleBack = () => {
+    if (view === 'location') {
+      setView(locationOrigin);
+      return;
+    }
+    setView('menu');
+  };
+
+  let HeaderIcon = AccountTree;
+  if (isBrowseView) HeaderIcon = Public;
+  if (isLocationView) HeaderIcon = CreateNewFolderOutlined;
+
+  let headerTitle = 'Create Pipeline';
+  if (isBrowseView) headerTitle = 'Browse Templates';
+  if (isLocationView) headerTitle = 'Choose Location';
+
+  const isActionDisabled = isLocationView
+    ? isCreating
+    : (isBrowseView ? !selectedRemoteId : !selectedTemplateId) || isCreating;
   const hasSelection = isBrowseView ? !!selectedRemoteId : !!selectedTemplateId;
-  const actionLabel = isBrowseView ? 'Use Template' : 'Create Pipeline';
+  const actionLabel = isLocationView ? 'Create Pipeline' : 'Next';
+  const primaryAction = isLocationView
+    ? handleCreate
+    : handleContinueToLocation;
+
+  let primaryButtonIcon = isLocationView ? <PlayArrow /> : <ArrowForward />;
+  if (isCreating) {
+    primaryButtonIcon = <CircularProgress size={15} color="inherit" />;
+  }
 
   return (
     <>
@@ -285,9 +368,9 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
             position: 'relative',
           }}
         >
-          {isBrowseView && (
+          {showBackButton && (
             <IconButton
-              onClick={() => setView('menu')}
+              onClick={handleBack}
               size="small"
               sx={{
                 position: 'absolute',
@@ -330,7 +413,7 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
               alignItems: 'center',
               gap: 1.5,
               mb: 1,
-              pl: isBrowseView ? 4.5 : 0,
+              pl: showBackButton ? 4.5 : 0,
             }}
           >
             <Box
@@ -341,28 +424,19 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
                 display: 'flex',
               }}
             >
-              {isBrowseView ? (
-                <Public
-                  sx={{
-                    fontSize: 22,
-                    color: isDark ? theme.palette.primary.light : '#fff',
-                  }}
-                />
-              ) : (
-                <AccountTree
-                  sx={{
-                    fontSize: 22,
-                    color: isDark ? theme.palette.primary.light : '#fff',
-                  }}
-                />
-              )}
+              <HeaderIcon
+                sx={{
+                  fontSize: 22,
+                  color: isDark ? theme.palette.primary.light : '#fff',
+                }}
+              />
             </Box>
             <Typography
               variant="h6"
               fontWeight={700}
               sx={{ color: isDark ? theme.palette.primary.light : '#fff' }}
             >
-              {isBrowseView ? 'Browse Templates' : 'Create Pipeline'}
+              {headerTitle}
             </Typography>
           </Box>
 
@@ -375,7 +449,7 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
               maxWidth: isBrowseView ? undefined : 420,
             }}
           >
-            {isBrowseView ? (
+            {isBrowseView && (
               <>
                 Community pipeline templates from{' '}
                 <Box
@@ -392,7 +466,27 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
                   rosettadb/dbt-studio-templates
                 </Box>
               </>
-            ) : (
+            )}
+            {isLocationView && selectedTemplateInfo && (
+              <>
+                Choose where <strong>{selectedTemplateInfo.fileName}</strong>{' '}
+                gets created inside{' '}
+                <Box
+                  component="code"
+                  sx={{
+                    fontFamily: 'monospace',
+                    fontSize: '0.8em',
+                    px: 0.5,
+                    py: 0.1,
+                    borderRadius: 0.5,
+                    bgcolor: alpha(theme.palette.common.white, 0.15),
+                  }}
+                >
+                  rosetta/pipelines/
+                </Box>
+              </>
+            )}
+            {view === 'menu' && (
               <>
                 Choose a template to scaffold your pipeline. Files are created
                 inside{' '}
@@ -415,7 +509,7 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
         </Box>
 
         <DialogContent sx={{ p: 0, overflow: 'hidden' }}>
-          {!isBrowseView && (
+          {view === 'menu' && (
             <Stack spacing={0} divider={<Divider />}>
               {TEMPLATES.map((template) => {
                 const isSelected = selectedTemplateId === template.id;
@@ -941,6 +1035,82 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
             </>
           )}
 
+          {isLocationView && selectedTemplateInfo && (
+            <Box sx={{ px: 3, py: 3 }}>
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1.5,
+                  p: 1.5,
+                  mb: 2.5,
+                  borderRadius: 1.5,
+                  border: '1px solid',
+                  borderColor: theme.palette.divider,
+                  bgcolor: isDark
+                    ? alpha(theme.palette.common.white, 0.03)
+                    : alpha(theme.palette.common.black, 0.02),
+                }}
+              >
+                <InsertDriveFileOutlined
+                  sx={{ fontSize: 18, color: 'text.secondary' }}
+                />
+                <Typography variant="body2" fontWeight={600}>
+                  {selectedTemplateInfo.label}
+                </Typography>
+                <Typography
+                  variant="caption"
+                  sx={{ fontFamily: 'monospace', color: 'text.disabled' }}
+                >
+                  {selectedTemplateInfo.fileName}
+                </Typography>
+              </Box>
+
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ display: 'block', mb: 1 }}
+              >
+                Select a folder, or hover a row and use the folder-plus icon to
+                create a new one.
+              </Typography>
+
+              <PipelineFolderTree
+                project={project}
+                value={selectedSubdir}
+                onChange={setSelectedSubdir}
+                reloadToken={folderTreeReloadToken}
+              />
+
+              <Box
+                sx={{
+                  mt: 2,
+                  p: 1.5,
+                  borderRadius: 1.5,
+                  bgcolor: isDark
+                    ? alpha(theme.palette.common.white, 0.03)
+                    : alpha(theme.palette.common.black, 0.02),
+                }}
+              >
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ display: 'block', mb: 0.5 }}
+                >
+                  Pipeline will be created at:
+                </Typography>
+                <Typography
+                  variant="body2"
+                  sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}
+                >
+                  rosetta/pipelines/
+                  {selectedSubdir ? `${selectedSubdir}/` : ''}
+                  {selectedTemplateInfo.fileName}
+                </Typography>
+              </Box>
+            </Box>
+          )}
+
           {/* Footer */}
           <Box
             sx={{
@@ -961,15 +1131,9 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
             <Button
               variant="contained"
               color="primary"
-              onClick={handleCreate}
+              onClick={primaryAction}
               disabled={isActionDisabled}
-              startIcon={
-                isCreating ? (
-                  <CircularProgress size={15} color="inherit" />
-                ) : (
-                  <PlayArrow />
-                )
-              }
+              startIcon={primaryButtonIcon}
               sx={{
                 minWidth: 150,
                 fontWeight: 600,
