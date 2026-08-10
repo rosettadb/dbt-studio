@@ -17,7 +17,6 @@ import {
 import {
   Close,
   ArrowBack,
-  AccountTree,
   InsertDriveFileOutlined,
   CheckCircle,
   PlayArrow,
@@ -32,6 +31,7 @@ import {
 } from '@mui/icons-material';
 import { useTheme } from '@mui/material/styles';
 import { toast } from 'react-toastify';
+import { ReactComponent as RouteIcon } from '../../../assets/icons/lucide/route.svg';
 import { projectsServices } from '../../../services';
 import { Project } from '../../../../types/backend';
 import {
@@ -69,7 +69,7 @@ jobs: []
   {
     id: 'generic',
     label: 'Generic',
-    icon: AccountTree,
+    icon: RouteIcon,
     badge: 'Recommended',
     badgeColor: 'success',
     description:
@@ -316,7 +316,8 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
     setView('menu');
   };
 
-  let HeaderIcon = AccountTree;
+  let HeaderIcon: React.ElementType = Public; // placeholder — overridden below
+  const isDefaultView = !isBrowseView && !isLocationView;
   if (isBrowseView) HeaderIcon = Public;
   if (isLocationView) HeaderIcon = CreateNewFolderOutlined;
 
@@ -424,12 +425,23 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
                 display: 'flex',
               }}
             >
-              <HeaderIcon
-                sx={{
-                  fontSize: 22,
-                  color: isDark ? theme.palette.primary.light : '#fff',
-                }}
-              />
+              {isDefaultView ? (
+                <RouteIcon
+                  width={22}
+                  height={22}
+                  style={{
+                    stroke: isDark ? theme.palette.primary.light : '#fff',
+                    flexShrink: 0,
+                  }}
+                />
+              ) : (
+                <HeaderIcon
+                  sx={{
+                    fontSize: 22,
+                    color: isDark ? theme.palette.primary.light : '#fff',
+                  }}
+                />
+              )}
             </Box>
             <Typography
               variant="h6"
@@ -580,7 +592,7 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
                           transition: 'background-color 0.15s',
                         }}
                       >
-                        <Icon sx={{ fontSize: 20 }} />
+                        <Icon width={20} height={20} sx={{ fontSize: 20 }} />
                       </Box>
 
                       <Box sx={{ flex: 1, minWidth: 0 }}>
