@@ -261,7 +261,7 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
                   tooltip: { sx: { p: 0, bgcolor: 'transparent' } },
                 }}
               >
-                <NodeLabel title={node.data.name}>{node.data.name}</NodeLabel>
+                <NodeLabel>{node.data.name}</NodeLabel>
               </Tooltip>
             ) : (
               <NodeLabel title={node.data.name}>{node.data.name}</NodeLabel>

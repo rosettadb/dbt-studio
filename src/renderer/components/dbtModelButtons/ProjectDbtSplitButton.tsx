@@ -71,6 +71,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
   const { start, stop, isRunning } = useProcess();
   const { data: settings } = useGetSettings();
   const isDbtV2 = !!settings?.dbtVersion?.startsWith('2.');
+  const cloudV2Blocked = environment === 'cloud' && isDbtV2;
   const [stagingPath, setStagingPath] = React.useState('');
   const [rawPath, setRawPath] = React.useState('');
   const [incrementalPath, setIncrementalPath] = React.useState('');
@@ -371,14 +372,20 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
     return !item.cloudOnly;
   });
 
+  let projectTooltipTitle = '';
+  if (cloudV2Blocked) {
+    projectTooltipTitle =
+      'dbt Core v2 is in alpha and not yet supported for cloud runs. Support will be added after the first official v2 release.';
+  } else if (!isDbtConfigured) {
+    projectTooltipTitle = 'Please configure dbt path in settings';
+  }
+
   return (
     <>
       <SplitButton
         title="Project"
-        tooltipTitle={
-          isDbtConfigured ? '' : 'Please configure dbt path in settings'
-        }
-        disabled={isRunningDbt || isRunningRosettaDbt}
+        tooltipTitle={projectTooltipTitle}
+        disabled={isRunningDbt || isRunningRosettaDbt || cloudV2Blocked}
         isLoading={isRunningDbt || isRunningRosettaDbt}
         leftIcon={<PlayCircleOutline />}
         height={24}

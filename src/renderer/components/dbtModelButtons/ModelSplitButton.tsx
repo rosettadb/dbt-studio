@@ -11,6 +11,7 @@ import { CompileModal } from '../modals/CompileModal';
 import { MiniSqlEditorModal } from '../modals/MiniSqlEditorModal';
 import { PushToCloudModal } from '../modals';
 import useDbt from '../../hooks/useDbt';
+import { useGetSettings } from '../../controllers';
 import {
   queryData,
   getConnectionById,
@@ -46,6 +47,10 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
   onQueryPreviewSuccess,
   onQueryPreviewError,
 }) => {
+  const { data: settings } = useGetSettings();
+  const isDbtV2 = !!settings?.dbtVersion?.startsWith('2.');
+  const cloudV2Blocked = environment === 'cloud' && isDbtV2;
+
   const [isCompiling, setIsCompiling] = useState(false);
   const [showCompileModal, setShowCompileModal] = useState(false);
   const [compiledSql, setCompiledSql] = useState<string>('');
@@ -793,19 +798,26 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
     return true; // Show all items in local environment
   });
 
+  let modelTooltipTitle = '';
+  if (cloudV2Blocked) {
+    modelTooltipTitle =
+      'dbt Core v2 is in alpha and not yet supported for cloud runs. Support will be added after the first official v2 release.';
+  } else if (!isDbtConfigured) {
+    modelTooltipTitle = 'Please configure dbt path in settings';
+  }
+
   return (
     <>
       <SplitButton
         title="Model"
-        tooltipTitle={
-          isDbtConfigured ? '' : 'Please configure dbt path in settings'
-        }
+        tooltipTitle={modelTooltipTitle}
         disabled={
           isRunningDbt ||
           isRunningRosettaDbt ||
           isCompiling ||
           isRunningDbtModel ||
-          isPreviewing
+          isPreviewing ||
+          cloudV2Blocked
         }
         isLoading={
           isRunningDbt ||

@@ -61,6 +61,8 @@ type PipelineGraphProps = {
   onSave?: (content: string) => Promise<void>;
   /** When provided (cloud mode), shows a Run button that triggers a cloud run. */
   onRun?: () => void;
+  /** When set, the Run button is shown but disabled with this text as its tooltip. */
+  runDisabledReason?: string;
   onEditingChange?: (isEditing: boolean) => void;
   /** Fired once when the pipeline view first mounts (e.g. tab opened). */
   onEnterView?: () => void;
@@ -178,6 +180,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
   onEdit,
   onSave,
   onRun,
+  runDisabledReason,
   onEditingChange,
   onEnterView,
 }) => {
@@ -592,15 +595,19 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
           </Button>
         )}
         {onRun && (
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={handleRunClick}
-            disabled={isSaving}
-            startIcon={<PlayArrowIcon sx={{ fontSize: 14 }} />}
-          >
-            Run
-          </Button>
+          <Tooltip title={runDisabledReason || ''}>
+            <span>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={handleRunClick}
+                disabled={isSaving || Boolean(runDisabledReason)}
+                startIcon={<PlayArrowIcon sx={{ fontSize: 14 }} />}
+              >
+                Run
+              </Button>
+            </span>
+          </Tooltip>
         )}
         {isEditing && (
           <>
@@ -745,6 +752,7 @@ export const PipelineGraph: React.FC<PipelineGraphProps> = ({
   onEdit,
   onSave,
   onRun,
+  runDisabledReason,
   onEditingChange,
   onEnterView,
 }) => (
@@ -755,6 +763,7 @@ export const PipelineGraph: React.FC<PipelineGraphProps> = ({
       onEdit={onEdit}
       onSave={onSave}
       onRun={onRun}
+      runDisabledReason={runDisabledReason}
       onEditingChange={onEditingChange}
       onEnterView={onEnterView}
     />

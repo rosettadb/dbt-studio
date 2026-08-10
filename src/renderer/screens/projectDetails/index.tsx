@@ -176,6 +176,7 @@ const ProjectDetails: React.FC = () => {
   const { data: project, isLoading, refetch } = useGetSelectedProject();
   const { data: connection } = useGetConnectionById(project?.connectionId);
   const { data: settings } = useGetSettings();
+  const isDbtV2 = !!settings?.dbtVersion?.startsWith('2.');
   const { mutate: updateFileContent } = useSaveFileContent();
 
   const {
@@ -1532,6 +1533,11 @@ const ProjectDetails: React.FC = () => {
                                       handleRunPipelineFile(
                                         activePipelineFilePath,
                                       )
+                                  : undefined
+                              }
+                              runDisabledReason={
+                                isDbtV2
+                                  ? 'dbt Core v2 is in alpha and not yet supported for cloud runs. Support will be added after the first official v2 release.'
                                   : undefined
                               }
                             />
