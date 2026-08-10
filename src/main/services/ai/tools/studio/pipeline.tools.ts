@@ -1,9 +1,10 @@
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { tool } from 'ai';
 import yaml from 'js-yaml';
 import { z } from 'zod';
+import { diffLines } from 'diff';
 
 export const PIPELINE_CANONICAL_ROOT = 'rosetta/pipelines';
 export const PIPELINE_LEGACY_ROOT = '.rosetta';
@@ -121,6 +122,58 @@ const assertSafeExistingPath = (
 const pipelineIdentity = (relativeFromRoot: string): string =>
   toPosix(relativeFromRoot).replace(/\.(yml|yaml)$/, '');
 
+const isPipelineRelativePath = (relativePath: string): boolean => {
+  const normalized = toPosix(relativePath);
+  const fileName = normalized.split('/').pop() ?? '';
+  return (
+    isPipelineFileName(fileName) &&
+    (normalized.startsWith(`${PIPELINE_CANONICAL_ROOT}/`) ||
+      normalized.startsWith(`${PIPELINE_LEGACY_ROOT}/`))
+  );
+};
+
+const resolveThroughNearestExistingAncestor = (candidate: string): string => {
+  let existing = path.resolve(candidate);
+  const missingSegments: string[] = [];
+  while (!fs.existsSync(existing)) {
+    const parent = path.dirname(existing);
+    if (parent === existing) break;
+    missingSegments.unshift(path.basename(existing));
+    existing = parent;
+  }
+  return path.join(fs.realpathSync(existing), ...missingSegments);
+};
+
+export function isProtectedPipelineWritePath(
+  projectPath: string,
+  candidatePath: string,
+): boolean {
+  if (!projectPath || !candidatePath || !fs.existsSync(projectPath)) {
+    return false;
+  }
+  const lexicalProject = path.resolve(projectPath);
+  const lexicalCandidate = path.resolve(candidatePath);
+  const lexicalRelative = path.relative(lexicalProject, lexicalCandidate);
+  if (
+    isContainedPath(lexicalProject, lexicalCandidate) &&
+    isPipelineRelativePath(lexicalRelative)
+  ) {
+    return true;
+  }
+
+  try {
+    const realProject = fs.realpathSync(lexicalProject);
+    const realCandidate =
+      resolveThroughNearestExistingAncestor(lexicalCandidate);
+    return (
+      isContainedPath(realProject, realCandidate) &&
+      isPipelineRelativePath(path.relative(realProject, realCandidate))
+    );
+  } catch {
+    return false;
+  }
+}
+
 const rootDefinitions = (projectPath: string) => [
   {
     location: 'canonical' as const,
@@ -203,6 +256,28 @@ export function resolvePipelineReadPath(
     absolutePath,
     relativePath: normalized,
     location: root.location,
+  };
+}
+
+function resolvePipelineGeneratePath(
+  projectPath: string,
+  candidatePath: string,
+):
+  | { success: true; absolutePath: string; relativePath: string }
+  | { success: false; code: 'INVALID_PATH' | 'UNSAFE_PATH'; error: string } {
+  const resolved = resolvePipelineReadPath(projectPath, candidatePath);
+  if (!resolved.success) return resolved;
+  if (resolved.location !== 'canonical') {
+    return {
+      success: false,
+      code: 'INVALID_PATH',
+      error: 'New pipelines must be generated below rosetta/pipelines',
+    };
+  }
+  return {
+    success: true,
+    absolutePath: resolved.absolutePath,
+    relativePath: resolved.relativePath,
   };
 }
 
@@ -443,6 +518,302 @@ export async function readProjectPipeline(
   }
 }
 
+type PipelineMutationResult =
+  | {
+      success: true;
+      mutation: 'pipeline-file-written';
+      path: string;
+      created: boolean;
+      bytesWritten: number;
+      contentHash: string;
+      linesAdded: number;
+      linesRemoved: number;
+      warnings: string[];
+    }
+  | {
+      success: false;
+      code:
+        | 'INVALID_PATH'
+        | 'UNSAFE_PATH'
+        | 'NOT_FOUND'
+        | 'ALREADY_EXISTS'
+        | 'STALE_CONTENT'
+        | 'INVALID_PIPELINE'
+        | 'WRITE_FAILED';
+      error: string;
+      stale?: boolean;
+      restored?: boolean;
+      issues?: PipelineIssue[];
+      warnings?: string[];
+    };
+
+const hashContent = (content: string): string =>
+  createHash('sha256').update(content, 'utf8').digest('hex');
+
+const calculateLineChanges = (
+  previousContent: string,
+  nextContent: string,
+): { linesAdded: number; linesRemoved: number } => {
+  const changes = diffLines(previousContent, nextContent);
+  return changes.reduce(
+    (counts, change) => ({
+      linesAdded: counts.linesAdded + (change.added ? (change.count ?? 0) : 0),
+      linesRemoved:
+        counts.linesRemoved + (change.removed ? (change.count ?? 0) : 0),
+    }),
+    { linesAdded: 0, linesRemoved: 0 },
+  );
+};
+
+const ensureSafeDirectory = (projectPath: string, directory: string): void => {
+  const projectRoot = path.resolve(projectPath);
+  assertSafeExistingPath(projectRoot, projectRoot);
+  const relative = path.relative(projectRoot, path.resolve(directory));
+  if (!isContainedPath(projectRoot, path.resolve(directory))) {
+    throw new Error('Pipeline directory escapes the active project');
+  }
+  let cursor = projectRoot;
+  relative
+    .split(path.sep)
+    .filter(Boolean)
+    .forEach((segment) => {
+      cursor = path.join(cursor, segment);
+      if (fs.existsSync(cursor)) {
+        const stat = fs.lstatSync(cursor);
+        if (stat.isSymbolicLink() || !stat.isDirectory()) {
+          throw new Error('Pipeline directory is unsafe');
+        }
+      } else {
+        fs.mkdirSync(cursor, { mode: 0o700 });
+        const stat = fs.lstatSync(cursor);
+        if (stat.isSymbolicLink() || !stat.isDirectory()) {
+          throw new Error('Pipeline directory is unsafe');
+        }
+      }
+    });
+  assertSafeExistingPath(projectRoot, directory);
+};
+
+const writeTemporaryFile = (targetPath: string, content: string): string => {
+  const temporaryPath = path.join(
+    path.dirname(targetPath),
+    `.${path.basename(targetPath)}.${randomUUID()}.tmp`,
+  );
+  const handle = fs.openSync(temporaryPath, 'wx', 0o600);
+  try {
+    fs.writeFileSync(handle, content, 'utf8');
+    fs.fsyncSync(handle);
+  } finally {
+    fs.closeSync(handle);
+  }
+  return temporaryPath;
+};
+
+const verifyPersistedPipeline = (
+  targetPath: string,
+  expectedContent: string,
+): void => {
+  const persisted = fs.readFileSync(targetPath, 'utf8');
+  if (persisted !== expectedContent) {
+    throw new Error('Persisted pipeline content did not match the request');
+  }
+  if (!validatePipelineContent(persisted).valid) {
+    throw new Error('Persisted pipeline failed validation');
+  }
+};
+
+const replacePipelineFile = (targetPath: string, content: string): void => {
+  let temporaryPath: string | undefined;
+  try {
+    temporaryPath = writeTemporaryFile(targetPath, content);
+    fs.renameSync(temporaryPath, targetPath);
+    temporaryPath = undefined;
+  } finally {
+    if (temporaryPath && fs.existsSync(temporaryPath)) {
+      fs.unlinkSync(temporaryPath);
+    }
+  }
+};
+
+export async function generateProjectPipeline(
+  projectPath: string,
+  candidatePath: string,
+  content: string,
+): Promise<PipelineMutationResult> {
+  const resolved = resolvePipelineGeneratePath(projectPath, candidatePath);
+  if (!resolved.success) return resolved;
+  const validation = validatePipelineContent(content);
+  if (!validation.valid) {
+    return {
+      success: false,
+      code: 'INVALID_PIPELINE',
+      error: 'Pipeline validation failed',
+      issues: validation.issues,
+      warnings: validation.warnings,
+    };
+  }
+
+  let temporaryPath: string | undefined;
+  let createdTarget = false;
+  let createdFileIdentity: { device: number; inode: number } | undefined;
+  try {
+    ensureSafeDirectory(projectPath, path.dirname(resolved.absolutePath));
+    assertSafeExistingPath(projectPath, resolved.absolutePath);
+    if (fs.existsSync(resolved.absolutePath)) {
+      return {
+        success: false,
+        code: 'ALREADY_EXISTS',
+        error: `Pipeline already exists: ${resolved.relativePath}`,
+      };
+    }
+
+    temporaryPath = writeTemporaryFile(resolved.absolutePath, content);
+    const temporaryStat = fs.statSync(temporaryPath);
+    createdFileIdentity = {
+      device: temporaryStat.dev,
+      inode: temporaryStat.ino,
+    };
+    // Hard-link creation is atomic and fails if the target appeared after the
+    // existence check. Unlike rename, it never replaces an existing target.
+    fs.linkSync(temporaryPath, resolved.absolutePath);
+    createdTarget = true;
+    fs.unlinkSync(temporaryPath);
+    temporaryPath = undefined;
+    verifyPersistedPipeline(resolved.absolutePath, content);
+    return {
+      success: true,
+      mutation: 'pipeline-file-written',
+      path: resolved.relativePath,
+      created: true,
+      bytesWritten: Buffer.byteLength(content, 'utf8'),
+      contentHash: hashContent(content),
+      ...calculateLineChanges('', content),
+      warnings: validation.warnings,
+    };
+  } catch {
+    if (temporaryPath && fs.existsSync(temporaryPath)) {
+      fs.unlinkSync(temporaryPath);
+    }
+    if (
+      createdTarget &&
+      createdFileIdentity &&
+      fs.existsSync(resolved.absolutePath)
+    ) {
+      try {
+        const targetStat = fs.lstatSync(resolved.absolutePath);
+        if (
+          targetStat.dev === createdFileIdentity.device &&
+          targetStat.ino === createdFileIdentity.inode
+        ) {
+          fs.unlinkSync(resolved.absolutePath);
+        }
+      } catch {
+        // Return the bounded write failure below.
+      }
+    }
+    return {
+      success: false,
+      code:
+        !createdTarget && fs.existsSync(resolved.absolutePath)
+          ? 'ALREADY_EXISTS'
+          : 'WRITE_FAILED',
+      error:
+        !createdTarget && fs.existsSync(resolved.absolutePath)
+          ? `Pipeline already exists: ${resolved.relativePath}`
+          : 'Pipeline could not be generated',
+    };
+  }
+}
+
+export async function updateProjectPipeline(
+  projectPath: string,
+  candidatePath: string,
+  content: string,
+  expectedContentHash: string,
+): Promise<PipelineMutationResult> {
+  const resolved = resolvePipelineReadPath(projectPath, candidatePath);
+  if (!resolved.success) return resolved;
+  if (!/^[a-f0-9]{64}$/.test(expectedContentHash)) {
+    return {
+      success: false,
+      code: 'STALE_CONTENT',
+      error: 'A valid content hash from studio_pipeline_read is required',
+      stale: true,
+    };
+  }
+  const validation = validatePipelineContent(content);
+  if (!validation.valid) {
+    return {
+      success: false,
+      code: 'INVALID_PIPELINE',
+      error: 'Pipeline validation failed',
+      issues: validation.issues,
+      warnings: validation.warnings,
+    };
+  }
+
+  let previousContent: string | undefined;
+  let replaced = false;
+  try {
+    assertSafeExistingPath(projectPath, resolved.absolutePath);
+    if (!fs.existsSync(resolved.absolutePath)) {
+      return {
+        success: false,
+        code: 'NOT_FOUND',
+        error: `Pipeline not found: ${resolved.relativePath}`,
+      };
+    }
+    const stat = fs.lstatSync(resolved.absolutePath);
+    if (!stat.isFile() || stat.isSymbolicLink()) {
+      return {
+        success: false,
+        code: 'UNSAFE_PATH',
+        error: 'Pipeline path is not a safe regular file',
+      };
+    }
+    previousContent = fs.readFileSync(resolved.absolutePath, 'utf8');
+    if (hashContent(previousContent) !== expectedContentHash) {
+      return {
+        success: false,
+        code: 'STALE_CONTENT',
+        error: 'Pipeline changed since it was read',
+        stale: true,
+      };
+    }
+
+    replacePipelineFile(resolved.absolutePath, content);
+    replaced = true;
+    verifyPersistedPipeline(resolved.absolutePath, content);
+    return {
+      success: true,
+      mutation: 'pipeline-file-written',
+      path: resolved.relativePath,
+      created: false,
+      bytesWritten: Buffer.byteLength(content, 'utf8'),
+      contentHash: hashContent(content),
+      ...calculateLineChanges(previousContent, content),
+      warnings: validation.warnings,
+    };
+  } catch {
+    let restored: boolean | undefined;
+    if (replaced && previousContent !== undefined) {
+      try {
+        replacePipelineFile(resolved.absolutePath, previousContent);
+        restored =
+          fs.readFileSync(resolved.absolutePath, 'utf8') === previousContent;
+      } catch {
+        restored = false;
+      }
+    }
+    return {
+      success: false,
+      code: 'WRITE_FAILED',
+      error: 'Pipeline could not be updated',
+      restored,
+    };
+  }
+}
+
 export async function buildProjectPipelineContext(
   projectPath: string,
 ): Promise<string> {
@@ -499,10 +870,38 @@ export function createStudioPipelineTools(projectPath: string) {
       execute: async ({ path: pipelinePath }) =>
         readProjectPipeline(projectPath, pipelinePath),
     }),
+    studio_pipeline_generate: tool({
+      description:
+        'Generate a new validated pipeline below rosetta/pipelines. Never overwrites an existing file.',
+      inputSchema: z.object({
+        path: z.string().min(1).max(1024),
+        content: z.string().max(PIPELINE_MAX_BYTES),
+      }),
+      execute: async ({ path: pipelinePath, content }) =>
+        generateProjectPipeline(projectPath, pipelinePath, content),
+    }),
+    studio_pipeline_update: tool({
+      description:
+        'Update an existing validated pipeline after reading it. Requires the exact content hash returned by studio_pipeline_read.',
+      inputSchema: z.object({
+        path: z.string().min(1).max(1024),
+        content: z.string().max(PIPELINE_MAX_BYTES),
+        expectedContentHash: z.string().regex(/^[a-f0-9]{64}$/),
+      }),
+      execute: async ({ path: pipelinePath, content, expectedContentHash }) =>
+        updateProjectPipeline(
+          projectPath,
+          pipelinePath,
+          content,
+          expectedContentHash,
+        ),
+    }),
   };
 }
 
 export const PROJECT_PIPELINE_TOOL_NAMES = {
   studio_pipeline_list: true,
   studio_pipeline_read: true,
+  studio_pipeline_generate: true,
+  studio_pipeline_update: true,
 } as const;

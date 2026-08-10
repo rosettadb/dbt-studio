@@ -4,12 +4,15 @@ import path from 'path';
 import {
   buildProjectPipelineContext,
   createStudioPipelineTools,
+  generateProjectPipeline,
+  isProtectedPipelineWritePath,
   listProjectPipelines,
   PIPELINE_MAX_BYTES,
   PIPELINE_MAX_FILES,
   readProjectPipeline,
   resolvePipelineReadPath,
   validatePipelineContent,
+  updateProjectPipeline,
 } from '../../../../../src/main/services/ai/tools/studio/pipeline.tools';
 
 jest.mock('ai', () => ({
@@ -241,11 +244,248 @@ custom_root:
       expect(JSON.stringify(result)).not.toContain(projectPath);
     });
 
-    it('creates only the two read-only tool definitions', () => {
+    it('creates the two read and two Code-mode mutation definitions', () => {
       expect(Object.keys(createStudioPipelineTools(projectPath))).toEqual([
         'studio_pipeline_list',
         'studio_pipeline_read',
+        'studio_pipeline_generate',
+        'studio_pipeline_update',
       ]);
+    });
+  });
+
+  describe('generate', () => {
+    it('generates a validated nested canonical pipeline without overwriting', async () => {
+      const relativePath = 'rosetta/pipelines/nested/generated.yml';
+      const result = await generateProjectPipeline(
+        projectPath,
+        relativePath,
+        VALID_PIPELINE,
+      );
+      expect(result).toMatchObject({
+        success: true,
+        mutation: 'pipeline-file-written',
+        path: relativePath,
+        created: true,
+        linesAdded: expect.any(Number),
+        linesRemoved: 0,
+      });
+      expect(
+        fs.readFileSync(path.join(projectPath, relativePath), 'utf8'),
+      ).toBe(VALID_PIPELINE);
+
+      await expect(
+        generateProjectPipeline(projectPath, relativePath, VALID_PIPELINE),
+      ).resolves.toMatchObject({
+        success: false,
+        code: 'ALREADY_EXISTS',
+      });
+    });
+
+    it('rejects legacy generation and invalid content before creating directories', async () => {
+      await expect(
+        generateProjectPipeline(
+          projectPath,
+          '.rosetta/new.yml',
+          VALID_PIPELINE,
+        ),
+      ).resolves.toMatchObject({ success: false, code: 'INVALID_PATH' });
+      await expect(
+        generateProjectPipeline(
+          projectPath,
+          'rosetta/pipelines/new/deep/invalid.yml',
+          'name: invalid\njobs: nope\n',
+        ),
+      ).resolves.toMatchObject({
+        success: false,
+        code: 'INVALID_PIPELINE',
+      });
+      expect(
+        fs.existsSync(path.join(projectPath, 'rosetta', 'pipelines')),
+      ).toBe(false);
+    });
+
+    it('does not delete a competing target when exclusive creation loses a race', async () => {
+      const relativePath = 'rosetta/pipelines/race.yml';
+      const absolutePath = path.join(projectPath, relativePath);
+      const competingContent = `${VALID_PIPELINE}competing: true\n`;
+      const linkSpy = jest.spyOn(fs, 'linkSync').mockImplementation(() => {
+        fs.writeFileSync(absolutePath, competingContent, 'utf8');
+        throw Object.assign(new Error('exists'), { code: 'EEXIST' });
+      });
+      try {
+        await expect(
+          generateProjectPipeline(projectPath, relativePath, VALID_PIPELINE),
+        ).resolves.toMatchObject({
+          success: false,
+          code: 'ALREADY_EXISTS',
+        });
+        expect(fs.readFileSync(absolutePath, 'utf8')).toBe(competingContent);
+      } finally {
+        linkSpy.mockRestore();
+      }
+    });
+
+    it('removes its own target when post-create verification fails', async () => {
+      const relativePath = 'rosetta/pipelines/verify-failure.yml';
+      const absolutePath = path.join(projectPath, relativePath);
+      const originalReadFileSync = fs.readFileSync.bind(fs);
+      const readSpy = jest.spyOn(fs, 'readFileSync').mockImplementation(((
+        candidate: fs.PathOrFileDescriptor,
+        options?: any,
+      ) => {
+        if (candidate === absolutePath) return 'corrupted persisted bytes';
+        return originalReadFileSync(candidate, options);
+      }) as typeof fs.readFileSync);
+      try {
+        await expect(
+          generateProjectPipeline(projectPath, relativePath, VALID_PIPELINE),
+        ).resolves.toMatchObject({
+          success: false,
+          code: 'WRITE_FAILED',
+        });
+      } finally {
+        readSpy.mockRestore();
+      }
+      expect(fs.existsSync(absolutePath)).toBe(false);
+    });
+  });
+
+  describe('update', () => {
+    it('updates canonical and legacy files using the read hash', async () => {
+      const paths = ['rosetta/pipelines/current.yml', '.rosetta/legacy.yml'];
+      await Promise.all(
+        paths.map(async (relativePath) => {
+          writeProjectFile(relativePath);
+          const read = await readProjectPipeline(projectPath, relativePath);
+          if (!read.success) throw new Error(read.error);
+          const updated = VALID_PIPELINE.replace('"CI"', '"Updated"');
+          const result = await updateProjectPipeline(
+            projectPath,
+            relativePath,
+            updated,
+            read.contentHash,
+          );
+          expect(result).toMatchObject({
+            success: true,
+            path: relativePath,
+            created: false,
+            linesAdded: expect.any(Number),
+            linesRemoved: expect.any(Number),
+          });
+          expect(
+            fs.readFileSync(path.join(projectPath, relativePath), 'utf8'),
+          ).toBe(updated);
+        }),
+      );
+    });
+
+    it('rejects missing, invalid, and stale hashes without changing bytes', async () => {
+      const relativePath = 'rosetta/pipelines/stale.yml';
+      writeProjectFile(relativePath);
+      const absolutePath = path.join(projectPath, relativePath);
+      const original = fs.readFileSync(absolutePath, 'utf8');
+
+      await expect(
+        updateProjectPipeline(
+          projectPath,
+          relativePath,
+          VALID_PIPELINE.replace('CI', 'Updated'),
+          'bad-hash',
+        ),
+      ).resolves.toMatchObject({
+        success: false,
+        code: 'STALE_CONTENT',
+        stale: true,
+      });
+      await expect(
+        updateProjectPipeline(
+          projectPath,
+          relativePath,
+          VALID_PIPELINE.replace('CI', 'Updated'),
+          'a'.repeat(64),
+        ),
+      ).resolves.toMatchObject({
+        success: false,
+        code: 'STALE_CONTENT',
+        stale: true,
+      });
+      expect(fs.readFileSync(absolutePath, 'utf8')).toBe(original);
+
+      await expect(
+        updateProjectPipeline(
+          projectPath,
+          'rosetta/pipelines/missing.yml',
+          VALID_PIPELINE,
+          'a'.repeat(64),
+        ),
+      ).resolves.toMatchObject({ success: false, code: 'NOT_FOUND' });
+    });
+
+    it('restores the original bytes when persisted verification fails', async () => {
+      const relativePath = 'rosetta/pipelines/restore.yml';
+      const absolutePath = writeProjectFile(relativePath);
+      const read = await readProjectPipeline(projectPath, relativePath);
+      if (!read.success) throw new Error(read.error);
+      const originalReadFileSync = fs.readFileSync.bind(fs);
+      let targetReads = 0;
+      const readSpy = jest.spyOn(fs, 'readFileSync').mockImplementation(((
+        candidate: fs.PathOrFileDescriptor,
+        options?: any,
+      ) => {
+        if (candidate === absolutePath) {
+          targetReads += 1;
+          if (targetReads === 2) return 'corrupted persisted bytes';
+        }
+        return originalReadFileSync(candidate, options);
+      }) as typeof fs.readFileSync);
+      try {
+        await expect(
+          updateProjectPipeline(
+            projectPath,
+            relativePath,
+            VALID_PIPELINE.replace('CI', 'Updated'),
+            read.contentHash,
+          ),
+        ).resolves.toMatchObject({
+          success: false,
+          code: 'WRITE_FAILED',
+          restored: true,
+        });
+      } finally {
+        readSpy.mockRestore();
+      }
+      expect(fs.readFileSync(absolutePath, 'utf8')).toBe(VALID_PIPELINE);
+    });
+  });
+
+  describe('generic write protection policy', () => {
+    it('recognizes canonical, legacy, nested, and symlink-alias targets', () => {
+      const canonical = writeProjectFile('rosetta/pipelines/current.yml');
+      const legacy = writeProjectFile('.rosetta/legacy.yaml');
+      expect(isProtectedPipelineWritePath(projectPath, canonical)).toBe(true);
+      expect(isProtectedPipelineWritePath(projectPath, legacy)).toBe(true);
+      expect(
+        isProtectedPipelineWritePath(
+          projectPath,
+          path.join(projectPath, 'rosetta/pipelines/new/nested.yml'),
+        ),
+      ).toBe(true);
+      expect(
+        isProtectedPipelineWritePath(
+          projectPath,
+          path.join(projectPath, 'models/schema.yml'),
+        ),
+      ).toBe(false);
+
+      const alias = path.join(projectPath, 'pipeline-alias');
+      fs.symlinkSync(path.join(projectPath, 'rosetta', 'pipelines'), alias);
+      expect(
+        isProtectedPipelineWritePath(
+          projectPath,
+          path.join(alias, 'through-alias.yml'),
+        ),
+      ).toBe(true);
     });
   });
 });

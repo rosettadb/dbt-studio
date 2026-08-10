@@ -72,6 +72,8 @@ export const AI_SETTINGS_DEFAULTS: AISettingsConfig = {
     pathExists: true,
     studio_pipeline_list: true,
     studio_pipeline_read: true,
+    studio_pipeline_generate: true,
+    studio_pipeline_update: true,
   },
   configuration: {
     allowAIInBackground: true,
@@ -252,7 +254,13 @@ const TOOL_CATEGORIES = {
     'studio_pipeline_list',
     'studio_pipeline_read',
   ],
-  action: ['writeDbtModel', 'runDbtCommand', 'writeFile'],
+  action: [
+    'writeDbtModel',
+    'runDbtCommand',
+    'writeFile',
+    'studio_pipeline_generate',
+    'studio_pipeline_update',
+  ],
 };
 
 export function getToolsForMode(
@@ -1459,6 +1467,8 @@ COMBINED SUMMARY:`,
         delete agentEnabledTools.writeFile;
         delete agentEnabledTools.studio_pipeline_list;
         delete agentEnabledTools.studio_pipeline_read;
+        delete agentEnabledTools.studio_pipeline_generate;
+        delete agentEnabledTools.studio_pipeline_update;
       }
 
       switch (request.screenKey ?? 'project') {
@@ -1987,6 +1997,16 @@ COMBINED SUMMARY:`,
         {
           name: 'studio_pipeline_read',
           description: 'Read and validate a pipeline YAML file',
+          category: 'dbt',
+        },
+        {
+          name: 'studio_pipeline_generate',
+          description: 'Generate a new validated pipeline YAML file',
+          category: 'dbt',
+        },
+        {
+          name: 'studio_pipeline_update',
+          description: 'Update a pipeline using a read content hash',
           category: 'dbt',
         },
       ];

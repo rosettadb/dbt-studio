@@ -229,6 +229,13 @@ If the failure appears to be caused by invalid credentials, unreachable host, wr
 ### Pipeline Authoring Tools
 - studio_pipeline_list: List pipeline YAML files in the active project
 - studio_pipeline_read: Read and validate a pipeline and return its content hash
+- studio_pipeline_generate: Generate a new validated pipeline under rosetta/pipelines without overwriting
+- studio_pipeline_update: Update an existing validated pipeline using the hash returned by studio_pipeline_read
+
+Always list before selecting a pipeline. Read before every update. Use generate
+only for a new canonical path. If update reports stale content, read again and
+reconcile the requested change. These tools do not run, stage, commit, push, or
+monitor pipelines.
 ${mcpToolsList}
 
 ### Database Tools
@@ -284,8 +291,13 @@ Always confirm before making destructive changes.`;
   };
 
   const baseTools: Record<string, any> = {};
+  const pipelineCodeOnlyTools = new Set([
+    'studio_pipeline_generate',
+    'studio_pipeline_update',
+  ]);
   Object.entries(allBaseTools).forEach(([name, toolDef]) => {
     if (enabledToolNames.has(name) || name === 'studio_sql_schema_extract') {
+      if (isAskMode && pipelineCodeOnlyTools.has(name)) return;
       if (isAskMode && !READ_ONLY_TOOLS.includes(name)) {
         baseTools[name] = makeAskModeStub(name);
       } else {

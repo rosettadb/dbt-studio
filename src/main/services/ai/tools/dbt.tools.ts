@@ -12,6 +12,7 @@ import { DbtCoreVersionService } from '../../dbtCoreVersion.service';
 import AgentService from '../../agent.service';
 import SecureStorageService from '../../secureStorage.service';
 import { TerminalConfirmGate } from './terminalConfirmGate';
+import { isProtectedPipelineWritePath } from './studio/pipeline.tools';
 
 // Security constraints
 const ALLOWED_DBT_COMMANDS = [
@@ -309,7 +310,6 @@ export const readDbtModel = tool({
     console.log('[Tool][DBT] readDbtModel', { filePath, projectPath });
     try {
       assertWithinProject(filePath, projectPath);
-
       if (!fs.existsSync(filePath)) {
         return { error: `File not found: ${filePath}` };
       }
@@ -363,6 +363,12 @@ export const writeDbtModel = tool({
     });
     try {
       assertWithinProject(filePath, projectPath);
+      if (isProtectedPipelineWritePath(projectPath, filePath)) {
+        return {
+          error:
+            'Pipeline files must be generated or updated with studio_pipeline_generate or studio_pipeline_update.',
+        };
+      }
 
       // Only allow writing SQL and YAML files
       if (!/\.(sql|yml|yaml)$/i.test(filePath)) {
@@ -722,6 +728,12 @@ export function createDbtTools(
       execute: async ({ filePath, content }) => {
         try {
           assertWithinProject(filePath, projectPath);
+          if (isProtectedPipelineWritePath(projectPath, filePath)) {
+            return {
+              error:
+                'Pipeline files must be generated or updated with studio_pipeline_generate or studio_pipeline_update.',
+            };
+          }
           if (!/\.(sql|yml|yaml)$/i.test(filePath))
             return {
               error: 'Only .sql, .yml, and .yaml files can be written.',

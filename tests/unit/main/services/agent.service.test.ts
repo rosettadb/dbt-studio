@@ -103,6 +103,8 @@ jest.mock(
     PROJECT_PIPELINE_TOOL_NAMES: {
       studio_pipeline_list: true,
       studio_pipeline_read: true,
+      studio_pipeline_generate: true,
+      studio_pipeline_update: true,
     },
     buildProjectPipelineContext: jest
       .fn()
@@ -278,6 +280,8 @@ describe('AgentService (Phase 1)', () => {
         pathExists: true,
         studio_pipeline_list: true,
         studio_pipeline_read: true,
+        studio_pipeline_generate: true,
+        studio_pipeline_update: true,
       },
       configuration: {
         allowAIInBackground: true,
@@ -314,6 +318,8 @@ describe('AgentService (Phase 1)', () => {
       expect(Object.keys(tools)).not.toContain('writeDbtModel');
       expect(Object.keys(tools)).not.toContain('runDbtCommand');
       expect(Object.keys(tools)).not.toContain('writeFile');
+      expect(Object.keys(tools)).not.toContain('studio_pipeline_generate');
+      expect(Object.keys(tools)).not.toContain('studio_pipeline_update');
     });
 
     it('returns all enabled tools in agent mode', () => {
@@ -331,6 +337,8 @@ describe('AgentService (Phase 1)', () => {
           'pathExists',
           'studio_pipeline_list',
           'studio_pipeline_read',
+          'studio_pipeline_generate',
+          'studio_pipeline_update',
         ]),
       );
     });
