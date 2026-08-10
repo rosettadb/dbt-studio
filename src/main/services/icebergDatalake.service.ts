@@ -85,6 +85,15 @@ export class IcebergDatalakeService {
       allowedStorageTypes: ['server-managed'],
     },
     {
+      type: 'lakekeeper',
+      label: 'Lakekeeper',
+      pyicebergType: 'rest',
+      enabled: true,
+      requiredFields: ['endpoint', 'catalogName'],
+      authModes: ['none', 'token', 'oauth-client-credentials'],
+      allowedStorageTypes: ['server-managed'],
+    },
+    {
       type: 'nessie',
       label: 'Project Nessie',
       pyicebergType: 'rest',
@@ -104,15 +113,19 @@ export class IcebergDatalakeService {
     },
     ...(
       [
-        ['hadoop', 'Hadoop Catalog', 'custom'],
         ['glue', 'AWS Glue', 'glue'],
+        ['biglake', 'Google BigLake', 'custom'],
+        ['onelake', 'Microsoft Fabric OneLake', 'custom'],
+        ['unity', 'Databricks Unity Catalog', 'custom'],
+        ['snowflake', 'Snowflake Iceberg Catalog', 'custom'],
+        ['cloudflare', 'Cloudflare R2 Data Catalog', 'custom'],
       ] as const
     ).map(([type, label, pyicebergType]) => ({
       type,
       label,
       pyicebergType,
       enabled: false,
-      disabledReason: 'Planned for the next catalog adapter slice.',
+      disabledReason: 'Available by request through a GitHub issue.',
       requiredFields: [],
       authModes: ['none'] as IcebergCatalogCapability['authModes'],
       allowedStorageTypes: [],
@@ -301,6 +314,7 @@ export class IcebergDatalakeService {
 
       case 'rest':
       case 'polaris':
+      case 'lakekeeper':
       case 'nessie':
         props.type = 'rest';
         if (instance.catalogType === 'nessie') {
@@ -309,6 +323,9 @@ export class IcebergDatalakeService {
         } else {
           if (instance.endpoint) props.uri = instance.endpoint;
           if (instance.catalogName) props.warehouse = instance.catalogName;
+          if (instance.catalogType === 'lakekeeper') {
+            props['header.X-Iceberg-Access-Delegation'] = 'remote-signing';
+          }
         }
         // Access token via env var
         if (instance.catalogAccessTokenKey) {
@@ -660,6 +677,7 @@ export class IcebergDatalakeService {
       mode !== 'none' &&
       config.catalogType !== 'rest' &&
       config.catalogType !== 'polaris' &&
+      config.catalogType !== 'lakekeeper' &&
       config.catalogType !== 'nessie'
     ) {
       throw new Error(
@@ -958,12 +976,15 @@ export class IcebergDatalakeService {
           break;
         case 'rest':
         case 'polaris':
+        case 'lakekeeper':
         case 'nessie':
           props.type = 'rest';
           if (params.catalogType === 'nessie') {
             props.uri = IcebergDatalakeService.buildNessieRestUri(params);
             props['header.X-Iceberg-Access-Delegation'] = 'remote-signing';
             delete props.warehouse;
+          } else if (params.catalogType === 'lakekeeper') {
+            props['header.X-Iceberg-Access-Delegation'] = 'remote-signing';
           }
           if (params.accessToken) {
             props.token = '__ENV:ICEBERG_ACCESS_TOKEN';

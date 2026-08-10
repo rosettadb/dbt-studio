@@ -143,6 +143,7 @@ function buildInitialData(initial?: IcebergInstanceConfig): IcebergWizardData {
       storageType:
         initial.catalogType === 'rest' ||
         initial.catalogType === 'polaris' ||
+        initial.catalogType === 'lakekeeper' ||
         initial.catalogType === 'nessie'
           ? 'server-managed'
           : initial.storageType,
@@ -193,6 +194,7 @@ function validateStep(
     if (
       data.catalog.catalogType === 'rest' ||
       data.catalog.catalogType === 'polaris' ||
+      data.catalog.catalogType === 'lakekeeper' ||
       data.catalog.catalogType === 'nessie'
     ) {
       if (!data.catalog.endpoint) return 'REST endpoint is required.';
@@ -229,6 +231,7 @@ function validateStep(
     if (
       data.catalog.catalogType === 'rest' ||
       data.catalog.catalogType === 'polaris' ||
+      data.catalog.catalogType === 'lakekeeper' ||
       data.catalog.catalogType === 'nessie'
     ) {
       // REST catalogs manage warehouse storage server-side; vended creds optional
@@ -621,6 +624,7 @@ export const IcebergConnectionWizard: React.FC<
 
       {(data.catalog.catalogType === 'rest' ||
         data.catalog.catalogType === 'polaris' ||
+        data.catalog.catalogType === 'lakekeeper' ||
         data.catalog.catalogType === 'nessie') && (
         <>
           <TextField
@@ -833,6 +837,7 @@ export const IcebergConnectionWizard: React.FC<
     const isRestCatalog =
       data.catalog.catalogType === 'rest' ||
       data.catalog.catalogType === 'polaris' ||
+      data.catalog.catalogType === 'lakekeeper' ||
       data.catalog.catalogType === 'nessie';
 
     if (isRestCatalog) {
@@ -1049,6 +1054,7 @@ export const IcebergConnectionWizard: React.FC<
             )}
             {(data.catalog.catalogType === 'rest' ||
               data.catalog.catalogType === 'polaris' ||
+              data.catalog.catalogType === 'lakekeeper' ||
               data.catalog.catalogType === 'nessie') && (
               <>
                 <ListItem disableGutters>
@@ -1093,6 +1099,7 @@ export const IcebergConnectionWizard: React.FC<
             <Divider sx={{ my: 1 }} />
             {data.catalog.catalogType === 'rest' ||
             data.catalog.catalogType === 'polaris' ||
+            data.catalog.catalogType === 'lakekeeper' ||
             data.catalog.catalogType === 'nessie' ? (
               <>
                 <ListItem disableGutters>

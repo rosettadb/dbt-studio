@@ -36,17 +36,25 @@ describe('IcebergDatalakeService compatibility and secret persistence', () => {
     mockedSecureStorage.setCredential.mockResolvedValue(undefined);
   });
 
-  it('keeps Hadoop disabled while exposing modern catalog capabilities', () => {
+  it('omits Hadoop while exposing modern catalog capabilities', () => {
     const capabilities = IcebergDatalakeService.getCapabilities();
 
-    expect(
-      capabilities.catalogs.find(({ type }) => type === 'hadoop'),
-    ).toMatchObject({ enabled: false });
+    expect(capabilities.catalogs.map(({ type }) => type)).not.toContain(
+      'hadoop',
+    );
     expect(
       capabilities.catalogs.find(({ type }) => type === 'polaris'),
     ).toMatchObject({
       enabled: true,
       authModes: expect.arrayContaining(['oauth-client-credentials']),
+    });
+    expect(
+      capabilities.catalogs.find(({ type }) => type === 'lakekeeper'),
+    ).toMatchObject({
+      enabled: true,
+      pyicebergType: 'rest',
+      requiredFields: ['endpoint', 'catalogName'],
+      allowedStorageTypes: ['server-managed'],
     });
     expect(
       capabilities.catalogs.find(({ type }) => type === 'nessie'),
@@ -63,6 +71,24 @@ describe('IcebergDatalakeService compatibility and secret persistence', () => {
       pyicebergType: 'hive',
       requiredFields: ['hiveUri'],
       allowedStorageTypes: ['local'],
+    });
+    (
+      [
+        'glue',
+        'biglake',
+        'onelake',
+        'unity',
+        'snowflake',
+        'cloudflare',
+      ] as const
+    ).forEach((type) => {
+      expect(
+        capabilities.catalogs.find((catalog) => catalog.type === type),
+      ).toMatchObject({
+        enabled: false,
+        disabledReason: 'Available by request through a GitHub issue.',
+        allowedStorageTypes: [],
+      });
     });
   });
 
@@ -112,6 +138,32 @@ describe('IcebergDatalakeService compatibility and secret persistence', () => {
     expect(JSON.stringify(persisted)).not.toContain('top-secret');
     expect(persisted.oauthClientSecretKey).toBe(
       `iceberg-oauth-secret-${created.id}`,
+    );
+  });
+
+  it('persists Lakekeeper without client or vended storage credentials', async () => {
+    const created = await IcebergDatalakeService.createInstance({
+      name: 'lakekeeper-test',
+      catalogType: 'lakekeeper',
+      endpoint: 'http://localhost:8181/catalog',
+      catalogName: 'minio-warehouse',
+      catalogAuthMode: 'none',
+      storageType: 'server-managed',
+    });
+
+    const persisted = mockedUpdateDatabase.mock.calls[0][1][0];
+    expect(persisted).toMatchObject({
+      id: created.id,
+      catalogType: 'lakekeeper',
+      endpoint: 'http://localhost:8181/catalog',
+      catalogName: 'minio-warehouse',
+      storageType: 'server-managed',
+    });
+    expect(persisted.storageConnectionId).toBeUndefined();
+    expect(persisted.catalogAccessTokenKey).toBeUndefined();
+    expect(persisted.oauthClientSecretKey).toBeUndefined();
+    expect(JSON.stringify(persisted)).not.toMatch(
+      /access.?key|secret.?access|session.?token/i,
     );
   });
 
@@ -190,6 +242,52 @@ describe('IcebergDatalakeService compatibility and secret persistence', () => {
         'header.X-Iceberg-Access-Delegation': 'remote-signing',
       },
       env: {},
+    });
+  });
+
+  it('configures Lakekeeper REST with server-managed remote signing', async () => {
+    const buildProperties = (IcebergDatalakeService as any)
+      .buildCatalogProperties as (config: unknown) => Promise<{
+      props: Record<string, string>;
+      env: Record<string, string>;
+    }>;
+
+    const result = await buildProperties({
+      catalogType: 'lakekeeper',
+      endpoint: 'http://localhost:8181/catalog',
+      catalogName: 'minio-warehouse',
+      catalogAuthMode: 'none',
+      storageType: 'server-managed',
+    });
+
+    expect(result).toEqual({
+      props: {
+        type: 'rest',
+        uri: 'http://localhost:8181/catalog',
+        warehouse: 'minio-warehouse',
+        'header.X-Iceberg-Access-Delegation': 'remote-signing',
+      },
+      env: {},
+    });
+  });
+
+  it('rejects managed catalog placeholders before Python executes', () => {
+    const validate = (IcebergDatalakeService as any)
+      .validateCatalogWarehousePair as (config: unknown) => void;
+
+    (
+      [
+        'glue',
+        'biglake',
+        'onelake',
+        'unity',
+        'snowflake',
+        'cloudflare',
+      ] as const
+    ).forEach((catalogType) => {
+      expect(() =>
+        validate({ catalogType, storageType: 'server-managed' }),
+      ).toThrow(`ICEBERG_CATALOG_NOT_ENABLED: ${catalogType}`);
     });
   });
 

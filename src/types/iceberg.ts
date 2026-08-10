@@ -6,17 +6,17 @@ export type IcebergCatalogType =
   | 'sql'
   | 'rest'
   | 'polaris'
+  | 'lakekeeper'
   | 'hive'
-  | 'hadoop'
   | 'glue'
+  | 'biglake'
+  | 'onelake'
+  | 'unity'
+  | 'snowflake'
+  | 'cloudflare'
   | 'nessie';
 
-export type IcebergStorageType =
-  | 'server-managed'
-  | 'local'
-  | 'nfs'
-  | 'hdfs'
-  | 'cloud';
+export type IcebergStorageType = 'server-managed' | 'local' | 'nfs' | 'cloud';
 
 export type IcebergCatalogAuthMode =
   | 'none'
