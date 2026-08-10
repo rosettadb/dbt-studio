@@ -28,6 +28,13 @@ jobs:
         command: "dbt run"
 `;
 
+const pipelineWithStep = (step: string) => `name: "Plugin test"
+jobs:
+  - name: "build"
+    steps:
+${step}
+`;
+
 describe('Project Agent pipeline read tools', () => {
   let projectPath: string;
 
@@ -157,6 +164,71 @@ custom_root:
       expect(result.issues[0].message).not.toContain('name: broken');
       expect(result.issues[0].message).not.toContain('^');
     });
+
+    it.each([
+      ['dbt@v1', '        command: dbt test\n'],
+      ['rosetta@v1', '        command: rosetta apply -s bigquery\n'],
+      ['terraform@v1', '        command: terraform plan\n'],
+      ['command@v1', '        command: echo ready\n'],
+      ['s3@v1', '        command: aws s3 ls\n'],
+      ['kinetica_cli@v1', '        command: kisql --sql "SELECT 1"\n'],
+    ])('accepts addable plugin %s for authoring', (plugin, fields) => {
+      const content = pipelineWithStep(
+        `      - name: plugin step\n        plugin: ${plugin}\n${fields}`,
+      );
+      expect(validatePipelineContent(content, { mode: 'generate' })).toEqual({
+        valid: true,
+        issues: [],
+        warnings: [],
+      });
+    });
+
+    it.each(['dbt run', 'dbt test', 'dbt compile', 'dbt debug'])(
+      'treats %s as a dbt@v1 command rather than a plugin ID',
+      (command) => {
+        const content = pipelineWithStep(
+          `      - name: dbt command\n        plugin: dbt@v1\n        command: ${command}\n`,
+        );
+        expect(
+          validatePipelineContent(content, { mode: 'generate' }).valid,
+        ).toBe(true);
+      },
+    );
+
+    it('warns when reading unknown plugins and rejects introducing them', () => {
+      const content = pipelineWithStep(
+        '      - name: invented\n        plugin: dbt-test\n        custom: retained\n',
+      );
+      const read = validatePipelineContent(content);
+      expect(read).toMatchObject({ valid: true, issues: [] });
+      expect(read.warnings.join(' ')).toContain('Unknown plugin "dbt-test"');
+
+      const generate = validatePipelineContent(content, { mode: 'generate' });
+      expect(generate.valid).toBe(false);
+      expect(generate.issues[0]).toMatchObject({
+        path: 'jobs.0.steps.0.plugin',
+      });
+    });
+
+    it('requires catalog fields and prevents new compatibility-only steps', () => {
+      const missingCommand = pipelineWithStep(
+        '      - name: missing command\n        plugin: command@v1\n',
+      );
+      expect(
+        validatePipelineContent(missingCommand, { mode: 'generate' }).issues,
+      ).toContainEqual({
+        path: 'jobs.0.steps.0.command',
+        message: 'command@v1 requires command',
+      });
+
+      const gitClone = pipelineWithStep(
+        '      - name: clone\n        plugin: git_clone@v1\n        url: https://example.com/repo.git\n',
+      );
+      expect(validatePipelineContent(gitClone).valid).toBe(true);
+      expect(
+        validatePipelineContent(gitClone, { mode: 'generate' }).valid,
+      ).toBe(false);
+    });
   });
 
   describe('discovery and context', () => {
@@ -227,6 +299,25 @@ custom_root:
       expect(context).toContain('untrusted project data');
       expect(context).not.toContain('secret_body_marker');
       expect(context).not.toContain(projectPath);
+    });
+
+    it('describes the exact visual node and plugin authoring contract', async () => {
+      const context = await buildProjectPipelineContext(projectPath);
+      expect(context).toContain('node represents one YAML step');
+      expect(context).toContain('Jobs group ordered step nodes');
+      [
+        'dbt@v1',
+        'rosetta@v1',
+        'terraform@v1',
+        'command@v1',
+        's3@v1',
+        'kinetica_cli@v1',
+      ].forEach((plugin) => expect(context).toContain(`\`${plugin}\``));
+      expect(context).toContain('`plugin: dbt@v1`');
+      expect(context).toContain('`dbt-run`');
+      expect(context).toContain('are not plugin IDs');
+      expect(context).toContain('`git_clone@v1`');
+      expect(context).toContain('preserved unchanged');
     });
   });
 
@@ -507,6 +598,54 @@ custom_root:
         readSpy.mockRestore();
       }
       expect(fs.readFileSync(absolutePath, 'utf8')).toBe(VALID_PIPELINE);
+    });
+
+    it('preserves an existing unknown step but rejects changing or adding one', async () => {
+      const relativePath = 'rosetta/pipelines/compatibility.yml';
+      const existingUnknown = pipelineWithStep(
+        '      - name: custom step\n        plugin: future@v2\n        custom_option: retained\n',
+      );
+      writeProjectFile(relativePath, existingUnknown);
+      const read = await readProjectPipeline(projectPath, relativePath);
+      if (!read.success) throw new Error(read.error);
+
+      const preserved = existingUnknown.replace(
+        'name: "Plugin test"',
+        'name: "Renamed pipeline"',
+      );
+      await expect(
+        updateProjectPipeline(
+          projectPath,
+          relativePath,
+          preserved,
+          read.contentHash,
+        ),
+      ).resolves.toMatchObject({
+        success: true,
+        warnings: [expect.stringContaining('preserved unchanged')],
+      });
+
+      const reread = await readProjectPipeline(projectPath, relativePath);
+      if (!reread.success) throw new Error(reread.error);
+      const changedUnknown = preserved.replace(
+        'custom_option: retained',
+        'custom_option: changed',
+      );
+      await expect(
+        updateProjectPipeline(
+          projectPath,
+          relativePath,
+          changedUnknown,
+          reread.contentHash,
+        ),
+      ).resolves.toMatchObject({
+        success: false,
+        code: 'INVALID_PIPELINE',
+        issues: [expect.objectContaining({ path: 'jobs.0.steps.0.plugin' })],
+      });
+      expect(
+        fs.readFileSync(path.join(projectPath, relativePath), 'utf8'),
+      ).toBe(preserved);
     });
   });
 

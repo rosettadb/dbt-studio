@@ -20,7 +20,10 @@ const renderPipelineDiagnostics = (values: unknown) => {
   return (
     <Box component="ul" sx={{ mt: 0.5, mb: 0, pl: 2 }}>
       {values.slice(0, PIPELINE_DIAGNOSTIC_LIMIT).map((item, index) => {
-        const diagnostic = item as Record<string, unknown>;
+        const diagnostic =
+          typeof item === 'string'
+            ? { message: item }
+            : (item as Record<string, unknown>);
         return (
           <li key={`${String(diagnostic.path ?? '')}-${index}`}>
             {pipelineDiagnosticMessage(

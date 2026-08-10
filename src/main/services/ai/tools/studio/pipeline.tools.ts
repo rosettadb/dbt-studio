@@ -5,6 +5,10 @@ import { tool } from 'ai';
 import yaml from 'js-yaml';
 import { z } from 'zod';
 import { diffLines } from 'diff';
+import {
+  ADDABLE_PIPELINE_PLUGINS,
+  PIPELINE_PLUGIN_BY_ID,
+} from '../../../../../shared/pipelinePluginCatalog';
 
 export const PIPELINE_CANONICAL_ROOT = 'rosetta/pipelines';
 export const PIPELINE_LEGACY_ROOT = '.rosetta';
@@ -40,26 +44,121 @@ export type PipelineListResult =
       error: string;
     };
 
-const pipelineStepSchema = z.object({
-  name: z.string().trim().min(1, 'Step name is required'),
-  plugin: z.string().trim().min(1, 'Step plugin is required'),
-  command: z.string().optional(),
-  working_dir: z.string().optional(),
-  url: z.string().optional(),
-  branch: z.string().optional(),
-  dest: z.string().optional(),
-});
+const pipelineStepSchema = z
+  .object({
+    name: z.string().trim().min(1, 'Step name is required'),
+    plugin: z.string().trim().min(1, 'Step plugin is required'),
+    command: z.string().optional(),
+    working_dir: z.string().optional(),
+    url: z.string().optional(),
+    branch: z.string().optional(),
+    dest: z.string().optional(),
+  })
+  .passthrough();
 
-const pipelineJobSchema = z.object({
-  name: z.string().trim().min(1, 'Job name is required'),
-  type: z.string().optional(),
-  steps: z.array(pipelineStepSchema),
-});
+const pipelineJobSchema = z
+  .object({
+    name: z.string().trim().min(1, 'Job name is required'),
+    type: z.string().optional(),
+    steps: z.array(pipelineStepSchema),
+  })
+  .passthrough();
 
-const pipelineSchema = z.object({
-  name: z.string().trim().min(1, 'Pipeline name is required'),
-  jobs: z.array(pipelineJobSchema),
-});
+const pipelineSchema = z
+  .object({
+    name: z.string().trim().min(1, 'Pipeline name is required'),
+    jobs: z.array(pipelineJobSchema),
+  })
+  .passthrough();
+
+type ParsedPipeline = z.infer<typeof pipelineSchema>;
+type PipelineValidationMode = 'read' | 'generate' | 'update';
+
+const stableValue = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(stableValue);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, item]) => [key, stableValue(item)]),
+    );
+  }
+  return value;
+};
+
+const compatibilityStepCounts = (
+  pipeline: ParsedPipeline,
+): Map<string, number> => {
+  const counts = new Map<string, number>();
+  pipeline.jobs.forEach((job) => {
+    job.steps.forEach((step) => {
+      const contract = PIPELINE_PLUGIN_BY_ID.get(step.plugin);
+      if (contract?.availability === 'addable') return;
+      const signature = JSON.stringify(stableValue(step));
+      counts.set(signature, (counts.get(signature) ?? 0) + 1);
+    });
+  });
+  return counts;
+};
+
+const validatePluginAuthoring = (
+  pipeline: ParsedPipeline,
+  mode: PipelineValidationMode,
+  previousPipeline?: ParsedPipeline,
+): { issues: PipelineIssue[]; warnings: string[] } => {
+  const issues: PipelineIssue[] = [];
+  const warnings: string[] = [];
+  const previousCompatibilitySteps = previousPipeline
+    ? compatibilityStepCounts(previousPipeline)
+    : new Map<string, number>();
+
+  pipeline.jobs.forEach((job, jobIndex) => {
+    job.steps.forEach((step, stepIndex) => {
+      const pluginPath = `jobs.${jobIndex}.steps.${stepIndex}`;
+      const contract = PIPELINE_PLUGIN_BY_ID.get(step.plugin);
+      if (!contract || contract.availability !== 'addable') {
+        const label = contract
+          ? `Compatibility-only plugin ${JSON.stringify(step.plugin)}`
+          : `Unknown plugin ${JSON.stringify(step.plugin)}`;
+        if (mode === 'read') {
+          warnings.push(
+            `${pluginPath}.plugin: ${label}; preserve existing data`,
+          );
+          return;
+        }
+        const signature = JSON.stringify(stableValue(step));
+        const remaining = previousCompatibilitySteps.get(signature) ?? 0;
+        if (mode === 'update' && remaining > 0) {
+          previousCompatibilitySteps.set(signature, remaining - 1);
+          warnings.push(`${pluginPath}.plugin: ${label} preserved unchanged`);
+          return;
+        }
+        issues.push({
+          path: `${pluginPath}.plugin`,
+          message: `${label} cannot be introduced by pipeline authoring`,
+        });
+        return;
+      }
+
+      contract.fields
+        .filter((field) => field.required)
+        .forEach((field) => {
+          const value = step[field.key];
+          if (typeof value !== 'string' || !value.trim()) {
+            issues.push({
+              path: `${pluginPath}.${field.key}`,
+              message: `${contract.id} requires ${field.key}`,
+            });
+          }
+        });
+    });
+  });
+
+  return {
+    issues: issues.slice(0, PIPELINE_MAX_DIAGNOSTICS),
+    warnings: warnings.slice(0, PIPELINE_MAX_DIAGNOSTICS),
+  };
+};
 
 const toPosix = (value: string): string => value.replace(/\\/g, '/');
 
@@ -296,7 +395,13 @@ function resolvePipelineGeneratePath(
   };
 }
 
-export function validatePipelineContent(content: string): {
+export function validatePipelineContent(
+  content: string,
+  options: {
+    mode?: PipelineValidationMode;
+    previousContent?: string;
+  } = {},
+): {
   valid: boolean;
   issues: PipelineIssue[];
   warnings: string[];
@@ -336,16 +441,37 @@ export function validatePipelineContent(content: string): {
     }
 
     const result = pipelineSchema.safeParse(documents[0]);
-    if (result.success) return { valid: true, issues: [], warnings: [] };
+    if (!result.success) {
+      return {
+        valid: false,
+        issues: result.error.issues
+          .slice(0, PIPELINE_MAX_DIAGNOSTICS)
+          .map((issue) => ({
+            path: issue.path.length > 0 ? issue.path.join('.') : '$',
+            message: issue.message.slice(0, 300),
+          })),
+        warnings: [],
+      };
+    }
+    let previousPipeline: ParsedPipeline | undefined;
+    if (options.mode === 'update' && options.previousContent) {
+      try {
+        const previous = pipelineSchema.safeParse(
+          yaml.load(options.previousContent),
+        );
+        if (previous.success) previousPipeline = previous.data;
+      } catch {
+        // A malformed previous pipeline cannot authorize compatibility plugins.
+      }
+    }
+    const pluginValidation = validatePluginAuthoring(
+      result.data,
+      options.mode ?? 'read',
+      previousPipeline,
+    );
     return {
-      valid: false,
-      issues: result.error.issues
-        .slice(0, PIPELINE_MAX_DIAGNOSTICS)
-        .map((issue) => ({
-          path: issue.path.length > 0 ? issue.path.join('.') : '$',
-          message: issue.message.slice(0, 300),
-        })),
-      warnings: [],
+      valid: pluginValidation.issues.length === 0,
+      ...pluginValidation,
     };
   } catch (error) {
     return {
@@ -658,7 +784,7 @@ export async function generateProjectPipeline(
 ): Promise<PipelineMutationResult> {
   const resolved = resolvePipelineGeneratePath(projectPath, candidatePath);
   if (!resolved.success) return resolved;
-  const validation = validatePipelineContent(content);
+  const validation = validatePipelineContent(content, { mode: 'generate' });
   if (!validation.valid) {
     return {
       success: false,
@@ -763,14 +889,14 @@ export async function updateProjectPipeline(
       stale: true,
     };
   }
-  const validation = validatePipelineContent(content);
-  if (!validation.valid) {
+  const structuralValidation = validatePipelineContent(content);
+  if (!structuralValidation.valid) {
     return {
       success: false,
       code: 'INVALID_PIPELINE',
       error: 'Pipeline validation failed',
-      issues: validation.issues,
-      warnings: validation.warnings,
+      issues: structuralValidation.issues,
+      warnings: structuralValidation.warnings,
     };
   }
 
@@ -800,6 +926,20 @@ export async function updateProjectPipeline(
         code: 'STALE_CONTENT',
         error: 'Pipeline changed since it was read',
         stale: true,
+      };
+    }
+
+    const validation = validatePipelineContent(content, {
+      mode: 'update',
+      previousContent,
+    });
+    if (!validation.valid) {
+      return {
+        success: false,
+        code: 'INVALID_PIPELINE',
+        error: 'Pipeline validation failed',
+        issues: validation.issues,
+        warnings: validation.warnings,
       };
     }
 
@@ -839,6 +979,24 @@ export async function updateProjectPipeline(
 export async function buildProjectPipelineContext(
   projectPath: string,
 ): Promise<string> {
+  const pluginGuidance = ADDABLE_PIPELINE_PLUGINS.map((plugin) => {
+    const required = plugin.fields
+      .filter((field) => field.required)
+      .map((field) => `\`${field.key}\``)
+      .join(', ');
+    const optional = plugin.fields
+      .filter((field) => !field.required)
+      .map((field) => `\`${field.key}\``)
+      .join(', ');
+    return `  - \`${plugin.id}\`: required ${required || 'none'}; optional ${optional || 'none'}`;
+  });
+  const authoringGuidance = [
+    '- One visual pipeline node represents one YAML step. Jobs group ordered step nodes; jobs are not node/plugin types.',
+    '- Addable step plugins:',
+    ...pluginGuidance,
+    '- For dbt operations use `plugin: dbt@v1` and a `command` such as `dbt run`, `dbt test`, `dbt compile`, or `dbt debug`. `dbt-run`, `dbt-test`, `dbt-compile`, and `dbt-debug` are not plugin IDs.',
+    '- `git_clone@v1` and unknown plugins may be preserved unchanged when already present, but must not be introduced by generate or update.',
+  ];
   const result = await listProjectPipelines(projectPath);
   if (!result.success) {
     return [
@@ -846,6 +1004,7 @@ export async function buildProjectPipelineContext(
       '',
       '- Pipeline inventory is unavailable because the project pipeline paths are unsafe or unreadable.',
       '- Do not guess pipeline paths.',
+      ...authoringGuidance,
     ].join('\n');
   }
 
@@ -863,6 +1022,7 @@ export async function buildProjectPipelineContext(
     ...inventory,
     ...(result.truncated ? ['  - additional pipelines omitted'] : []),
     '- Minimum shape: root `name` and `jobs`; every job has `name` and `steps`; every step has `name` and `plugin`.',
+    ...authoringGuidance,
     '- Use `studio_pipeline_list` and `studio_pipeline_read` to inspect pipeline content.',
     '- Read an existing pipeline before proposing an update. Complete pipeline bodies are never injected here.',
     '- Local authoring does not run, stage, commit, push, or monitor a pipeline.',
@@ -894,7 +1054,7 @@ export function createStudioPipelineTools(projectPath: string) {
     }),
     studio_pipeline_generate: tool({
       description:
-        'Generate a new validated pipeline below rosetta/pipelines. Never overwrites an existing file.',
+        'Generate a new validated pipeline below rosetta/pipelines using supported versioned step plugins from Project Pipeline context. Never overwrites an existing file.',
       inputSchema: z.object({
         path: z.string().min(1).max(1024),
         content: z.string().max(PIPELINE_MAX_BYTES),
@@ -904,7 +1064,7 @@ export function createStudioPipelineTools(projectPath: string) {
     }),
     studio_pipeline_update: tool({
       description:
-        'Update an existing validated pipeline after reading it. Requires the exact content hash returned by studio_pipeline_read.',
+        'Update an existing validated pipeline after reading it. Requires the exact content hash, supported plugins for new steps, and preserves compatibility-only steps unchanged.',
       inputSchema: z.object({
         path: z.string().min(1).max(1024),
         content: z.string().max(PIPELINE_MAX_BYTES),

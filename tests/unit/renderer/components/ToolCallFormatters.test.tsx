@@ -148,4 +148,26 @@ describe('ToolCallFormatters arguments', () => {
     expect(screen.queryByText(/args: \{ command: run/u)).toBeNull();
     expect(screen.queryByText(/\^/u)).toBeNull();
   });
+
+  it('renders bounded plugin warning strings', () => {
+    render(
+      <>
+        {renderResult('studio_pipeline_read', {
+          success: true,
+          path: 'rosetta/pipelines/compatibility.yml',
+          bytes: 120,
+          valid: true,
+          issues: [],
+          warnings: [
+            'jobs.0.steps.0.plugin: Unknown plugin "future@v2"; preserve existing data',
+          ],
+        })}
+      </>,
+    );
+
+    expect(
+      screen.getByText(/Unknown plugin "future@v2"; preserve existing data/u),
+    ).toBeTruthy();
+    expect(screen.queryByText('Pipeline warning')).toBeNull();
+  });
 });
