@@ -649,6 +649,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
             nodesConnectable={isEditing}
             fitView
             fitViewOptions={{ padding: 0.15 }}
+            proOptions={{ hideAttribution: true }}
           >
             <Controls>
               {!isEditing && onSave && (
