@@ -56,6 +56,7 @@ import {
 import { useGetFileContent } from '../../controllers/projects.controller';
 import { projectsServices } from '../../services';
 import { PROJECT_AGENT_CONTEXT_FILE } from '../../../shared/agentMemoryConstants';
+import { collectSuccessfulPipelineMutations } from './pipelineToolResults';
 
 export interface ChatWindowProps {
   screenKey?: 'project' | 'sql' | 'notebooks' | 'analytics';
@@ -698,6 +699,13 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       });
     });
 
+    if (project?.path) {
+      collectSuccessfulPipelineMutations(
+        project.path,
+        streamState.steps.flatMap((step) => step.toolCalls),
+      ).forEach((file) => fileMap.set(file.path, file));
+    }
+
     return Array.from(fileMap.values());
   }, [
     streamState.steps,
@@ -705,6 +713,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     selectedSessionId,
     currentRunKey,
     dismissedRunKey,
+    project?.path,
   ]);
 
   const handleOpenFile = (path: string) => {

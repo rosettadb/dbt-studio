@@ -98,6 +98,10 @@ import {
   getPipelineFilePath,
   toPipelineTabPath,
 } from '../../components/editor/previewConstants';
+import {
+  getSuccessfulPipelineMutation,
+  resolveProjectMutationPath,
+} from '../../components/chat/pipelineToolResults';
 
 const VerticalSash = (_: number, active: boolean) => (
   <div
@@ -756,6 +760,9 @@ const ProjectDetails: React.FC = () => {
   const openTabRef = React.useRef(openTab);
   const switchTabRef = React.useRef(switchTab);
   const refreshTabContentByPathRef = React.useRef(refreshTabContentByPath);
+  const activePipelineFilePathRef = React.useRef(activePipelineFilePath);
+  const pipelineDraftTabRef = React.useRef(pipelineDraftTab);
+  const refetchPipelineContentRef = React.useRef(refetchPipelineContent);
   React.useEffect(() => {
     fetchDirectoriesRef.current = fetchDirectories;
   }, [fetchDirectories]);
@@ -774,6 +781,15 @@ const ProjectDetails: React.FC = () => {
   React.useEffect(() => {
     refreshTabContentByPathRef.current = refreshTabContentByPath;
   }, [refreshTabContentByPath]);
+  React.useEffect(() => {
+    activePipelineFilePathRef.current = activePipelineFilePath;
+  }, [activePipelineFilePath]);
+  React.useEffect(() => {
+    pipelineDraftTabRef.current = pipelineDraftTab;
+  }, [pipelineDraftTab]);
+  React.useEffect(() => {
+    refetchPipelineContentRef.current = refetchPipelineContent;
+  }, [refetchPipelineContent]);
 
   // Refresh file tree and open/update tab when agent writes a file
   // Uses refs so the subscription is created only once per project/hydration change
@@ -787,11 +803,21 @@ const ProjectDetails: React.FC = () => {
       const isFileWrite =
         payload.toolName === 'writeFile' ||
         payload.toolName === 'writeDbtModel';
-      if (!isFileWrite || payload.status !== 'done') return;
+      const pipelineMutation = getSuccessfulPipelineMutation(
+        payload.toolName,
+        payload.result,
+      );
+      if ((!isFileWrite && !pipelineMutation) || payload.status !== 'done')
+        return;
 
-      const filePath =
-        (payload.args as any)?.filePath || (payload.args as any)?.path;
+      const filePath = pipelineMutation
+        ? resolveProjectMutationPath(
+            project.path,
+            pipelineMutation.relativePath,
+          )
+        : (payload.args as any)?.filePath || (payload.args as any)?.path;
       if (!filePath) return;
+      const tabPath = pipelineMutation ? toPipelineTabPath(filePath) : filePath;
 
       // Skip if already processing this file
       if (inFlight.has(filePath)) {
@@ -816,7 +842,7 @@ const ProjectDetails: React.FC = () => {
           '[ProjectDetails] fetchDirectories done, checking for existing tab',
         );
 
-        const existingTab = getTabByPathRef.current(filePath);
+        const existingTab = getTabByPathRef.current(tabPath);
         // eslint-disable-next-line no-console
         console.log('[ProjectDetails] existingTab:', existingTab?.id ?? 'none');
 
@@ -826,12 +852,24 @@ const ProjectDetails: React.FC = () => {
             '[ProjectDetails] Tab already exists, switching to:',
             existingTab.id,
           );
-          await refreshTabContentByPathRef.current(filePath);
+          if (pipelineMutation) {
+            const hasDirtyPipelineDraft =
+              activePipelineFilePathRef.current === filePath &&
+              pipelineDraftTabRef.current?.isModified;
+            if (
+              activePipelineFilePathRef.current === filePath &&
+              !hasDirtyPipelineDraft
+            ) {
+              await refetchPipelineContentRef.current();
+            }
+          } else if (!existingTab.isModified) {
+            await refreshTabContentByPathRef.current(filePath);
+          }
           switchTabRef.current(existingTab.id);
         } else {
           // eslint-disable-next-line no-console
           console.log('[ProjectDetails] Opening new tab for:', filePath);
-          const tabId = await openTabRef.current(filePath);
+          const tabId = await openTabRef.current(tabPath);
           // eslint-disable-next-line no-console
           console.log('[ProjectDetails] openTab returned tabId:', tabId);
           if (tabId) switchTabRef.current(tabId);
