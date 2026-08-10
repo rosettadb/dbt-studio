@@ -1,5 +1,6 @@
 import React from 'react';
-import { GlobalStyles, useTheme } from '@mui/material';
+import { Box, GlobalStyles, Typography, alpha, useTheme } from '@mui/material';
+import { UploadFileOutlined } from '@mui/icons-material';
 import * as monaco from 'monaco-editor';
 import {
   useGetFileHeadContent,
@@ -163,6 +164,60 @@ export const Editor: React.FC<EditorProps> = ({
   const [isSaving, setIsSaving] = React.useState(false);
   const { runCommandAsync } = useCli();
   const { data: settings } = useGetSettings();
+
+  // Drag-and-drop for OS files dropped onto the editor — opens each as a
+  // tab without copying it into the project (that's the sidebar's job).
+  const [isDragActive, setIsDragActive] = React.useState(false);
+  const dragCounterRef = React.useRef(0);
+
+  const isExternalFileDrag = (e: React.DragEvent<HTMLDivElement>) =>
+    Array.from(e.dataTransfer.types).includes('Files');
+
+  const handleEditorDragEnter = React.useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      if (!isExternalFileDrag(e)) return;
+      e.preventDefault();
+      dragCounterRef.current += 1;
+      setIsDragActive(true);
+    },
+    [],
+  );
+
+  const handleEditorDragOver = React.useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      if (!isExternalFileDrag(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    },
+    [],
+  );
+
+  const handleEditorDragLeave = React.useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      if (!isExternalFileDrag(e)) return;
+      dragCounterRef.current -= 1;
+      if (dragCounterRef.current <= 0) {
+        dragCounterRef.current = 0;
+        setIsDragActive(false);
+      }
+    },
+    [],
+  );
+
+  const handleEditorDrop = React.useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      if (!isExternalFileDrag(e)) return;
+      e.preventDefault();
+      dragCounterRef.current = 0;
+      setIsDragActive(false);
+
+      Array.from(e.dataTransfer.files).forEach((file) => {
+        const filePath = (file as unknown as { path?: string }).path;
+        if (filePath) onOpenFile?.(filePath);
+      });
+    },
+    [onOpenFile],
+  );
 
   const decorationMode: DecorationMode = React.useMemo(() => {
     if (!activeTab) return 'clean';
@@ -440,10 +495,43 @@ export const Editor: React.FC<EditorProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleSave]);
 
+  const dragOverlay = isDragActive && (
+    <Box
+      sx={{
+        position: 'absolute',
+        inset: 0,
+        zIndex: 10,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 1,
+        border: '2px dashed',
+        borderColor: 'primary.main',
+        bgcolor: alpha(theme.palette.primary.main, 0.08),
+        pointerEvents: 'none',
+      }}
+    >
+      <UploadFileOutlined sx={{ fontSize: 32, color: 'primary.main' }} />
+      <Typography
+        variant="body2"
+        sx={{ fontWeight: 600, color: 'primary.main' }}
+      >
+        Drop to open file
+      </Typography>
+    </Box>
+  );
+
   if (tabs.length === 0) {
     return (
-      <Container>
+      <Container
+        onDragEnter={handleEditorDragEnter}
+        onDragOver={handleEditorDragOver}
+        onDragLeave={handleEditorDragLeave}
+        onDrop={handleEditorDrop}
+      >
         <EditorViewport />
+        {dragOverlay}
       </Container>
     );
   }
@@ -453,7 +541,12 @@ export const Editor: React.FC<EditorProps> = ({
   // --- Markdown preview tab: render MarkdownPreview instead of Monaco ---
   if (isPreviewTab) {
     return (
-      <Container>
+      <Container
+        onDragEnter={handleEditorDragEnter}
+        onDragOver={handleEditorDragOver}
+        onDragLeave={handleEditorDragLeave}
+        onDrop={handleEditorDrop}
+      >
         <EditorHeader
           filePath={previewSourcePath ?? ''}
           projectPath={projectPath}
@@ -475,12 +568,18 @@ export const Editor: React.FC<EditorProps> = ({
             <MarkdownPreview content={previewContent} />
           )}
         </EditorViewport>
+        {dragOverlay}
       </Container>
     );
   }
 
   return (
-    <Container>
+    <Container
+      onDragEnter={handleEditorDragEnter}
+      onDragOver={handleEditorDragOver}
+      onDragLeave={handleEditorDragLeave}
+      onDrop={handleEditorDrop}
+    >
       <EditorHeader
         filePath={activeTab.path}
         projectPath={projectPath}
@@ -554,6 +653,7 @@ export const Editor: React.FC<EditorProps> = ({
           />
         )}
       </EditorViewport>
+      {dragOverlay}
 
       {pendingClose && (
         <UnsavedChangesDialog

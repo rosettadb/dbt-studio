@@ -1545,7 +1545,7 @@ const ProjectDetails: React.FC = () => {
                         </Box>
                       </Box>
                     ) : (
-                      <>
+                      <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
                         {!selectedFilePath && (
                           <NoFileSelected>
                             Please select a file from the explorer on the left!
@@ -1624,7 +1624,7 @@ const ProjectDetails: React.FC = () => {
                             }
                           />
                         )}
-                      </>
+                      </Box>
                     )}
                   </EditorContainer>
                 </Content>
