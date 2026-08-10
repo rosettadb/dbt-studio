@@ -4,6 +4,7 @@ import ReactFlow, {
   Controls,
   ControlButton,
   Background,
+  MiniMap,
   useNodesState,
   useEdgesState,
   useReactFlow,
@@ -661,6 +662,22 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
               )}
             </Controls>
             <Background color={theme.palette.text.disabled} gap={16} />
+            <MiniMap
+              pannable
+              zoomable
+              nodeColor={(node) =>
+                PLUGIN_MAP.get(node.data?.plugin)?.color ??
+                theme.palette.primary.main
+              }
+              maskColor={
+                theme.palette.mode === 'dark'
+                  ? 'rgba(0, 0, 0, 0.6)'
+                  : 'rgba(255, 255, 255, 0.6)'
+              }
+              style={{
+                backgroundColor: theme.palette.background.paper,
+              }}
+            />
           </ReactFlow>
         </Box>
       </Box>
