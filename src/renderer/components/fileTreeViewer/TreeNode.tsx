@@ -2,7 +2,7 @@
 import React, { useRef, useEffect } from 'react';
 import { NodeRendererProps } from 'react-arborist';
 import { styled, alpha } from '@mui/material/styles';
-import { IconButton, TextField } from '@mui/material';
+import { IconButton, TextField, Tooltip } from '@mui/material';
 import {
   Folder as FolderIcon,
   FolderOpen as FolderOpenIcon,
@@ -16,6 +16,7 @@ import { toast } from 'react-toastify';
 import { isFileUnpushed } from '../../services/git.service';
 import { FileNode, FileStatuses } from './types';
 import { GitStatusBadge } from './GitStatusBadge';
+import { PipelineThumbnailPreview } from './PipelineThumbnailPreview';
 
 const NodeContainer = styled('div')<{
   $isSelected: boolean;
@@ -250,7 +251,21 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
           />
         ) : (
           <>
-            <NodeLabel title={node.data.name}>{node.data.name}</NodeLabel>
+            {isPipeline ? (
+              <Tooltip
+                title={<PipelineThumbnailPreview filePath={node.data.path} />}
+                placement="right"
+                enterDelay={500}
+                enterNextDelay={500}
+                slotProps={{
+                  tooltip: { sx: { p: 0, bgcolor: 'transparent' } },
+                }}
+              >
+                <NodeLabel title={node.data.name}>{node.data.name}</NodeLabel>
+              </Tooltip>
+            ) : (
+              <NodeLabel title={node.data.name}>{node.data.name}</NodeLabel>
+            )}
             {gitStatus && <GitStatusBadge status={gitStatus} />}
           </>
         )}

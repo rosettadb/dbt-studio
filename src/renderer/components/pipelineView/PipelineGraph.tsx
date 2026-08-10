@@ -49,10 +49,10 @@ import { validatePipelineGraph } from './validatePipeline';
 import { useTerminalMinimize } from '../terminal';
 import { UnsavedChangesDialog } from '../editor/unsavedChangesDialog';
 
-const nodeTypes = { pipelineNode: PipelineNode };
+export const nodeTypes = { pipelineNode: PipelineNode };
 
-const NODE_WIDTH = 264;
-const NODE_HEIGHT = 110;
+export const NODE_WIDTH = 264;
+export const NODE_HEIGHT = 110;
 
 type PipelineGraphProps = {
   jobs: PipelineJob[];
@@ -66,7 +66,7 @@ type PipelineGraphProps = {
   onEnterView?: () => void;
 };
 
-function getLayoutedElements(flowNodes: Node[], flowEdges: Edge[]) {
+export function getLayoutedElements(flowNodes: Node[], flowEdges: Edge[]) {
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
   g.setGraph({ rankdir: 'LR', ranksep: 60, nodesep: 30 });
@@ -89,7 +89,7 @@ function getLayoutedElements(flowNodes: Node[], flowEdges: Edge[]) {
   };
 }
 
-function buildNodesAndEdges(
+export function buildNodesAndEdges(
   jobs: PipelineJob[],
   theme: Theme,
 ): { nodes: Node<PipelineNodeData>[]; edges: Edge[] } {
