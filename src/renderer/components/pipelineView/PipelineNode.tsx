@@ -145,7 +145,12 @@ export const PipelineNode = memo(
     const displayValue = isGitClone ? (data.url ?? '') : (data.command ?? '');
 
     return (
-      <Box sx={{ position: 'relative' }}>
+      <Box
+        sx={{
+          position: 'relative',
+          '&:hover .edit-hint': { opacity: 1 },
+        }}
+      >
         <Handle
           type="target"
           position={Position.Left}
@@ -157,6 +162,75 @@ export const PipelineNode = memo(
             boxShadow: `0 0 0 1px ${pluginColor}`,
           }}
         />
+
+        {/* Edit / delete hints — float above the card's top-right corner */}
+        {data.editMode && (
+          <Box
+            className="edit-hint"
+            sx={{
+              position: 'absolute',
+              top: -12,
+              right: 8,
+              opacity: 0,
+              transition: 'opacity 0.15s',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.5,
+              zIndex: 10,
+            }}
+          >
+            <Box
+              onClick={(e) => {
+                e.stopPropagation();
+                data.onEditClick?.();
+              }}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                bgcolor: theme.palette.background.paper,
+                borderRadius: '50%',
+                width: 24,
+                height: 24,
+                cursor: 'pointer',
+                boxShadow: theme.shadows[3],
+                border: `1px solid ${theme.palette.divider}`,
+                '&:hover': {
+                  bgcolor: theme.palette.primary.main,
+                  '& .MuiSvgIcon-root': { color: '#fff' },
+                },
+              }}
+            >
+              <Edit sx={{ fontSize: 13, color: theme.palette.primary.main }} />
+            </Box>
+            <Box
+              onClick={(e) => {
+                e.stopPropagation();
+                data.onDeleteClick?.();
+              }}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                bgcolor: theme.palette.background.paper,
+                borderRadius: '50%',
+                width: 24,
+                height: 24,
+                cursor: 'pointer',
+                boxShadow: theme.shadows[3],
+                border: `1px solid ${theme.palette.divider}`,
+                '&:hover': {
+                  bgcolor: theme.palette.error.main,
+                  '& .MuiSvgIcon-root': { color: '#fff' },
+                },
+              }}
+            >
+              <DeleteOutline
+                sx={{ fontSize: 13, color: theme.palette.error.main }}
+              />
+            </Box>
+          </Box>
+        )}
 
         <Paper
           elevation={selected ? 6 : 2}
@@ -179,7 +253,6 @@ export const PipelineNode = memo(
             })(),
             '&:hover': {
               boxShadow: `0 0 0 3px ${alpha(pluginColor, 0.15)}, ${theme.shadows[8]}`,
-              '& .edit-hint': { opacity: 1 },
             },
           }}
         >
@@ -252,63 +325,6 @@ export const PipelineNode = memo(
                 >
                   #{data.stepIndex + 1}
                 </Typography>
-              </Box>
-            )}
-
-            {/* Edit / delete hints */}
-            {data.editMode && (
-              <Box
-                className="edit-hint"
-                sx={{
-                  position: 'absolute',
-                  top: 6,
-                  right: 6,
-                  opacity: 0,
-                  transition: 'opacity 0.15s',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 0.5,
-                  zIndex: 1,
-                }}
-              >
-                <Box
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    data.onEditClick?.();
-                  }}
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    bgcolor: alpha('#fff', 0.25),
-                    borderRadius: '50%',
-                    width: 22,
-                    height: 22,
-                    cursor: 'pointer',
-                    '&:hover': { bgcolor: alpha('#fff', 0.4) },
-                  }}
-                >
-                  <Edit sx={{ fontSize: 12, color: '#fff' }} />
-                </Box>
-                <Box
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    data.onDeleteClick?.();
-                  }}
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    bgcolor: alpha('#fff', 0.25),
-                    borderRadius: '50%',
-                    width: 22,
-                    height: 22,
-                    cursor: 'pointer',
-                    '&:hover': { bgcolor: theme.palette.error.main },
-                  }}
-                >
-                  <DeleteOutline sx={{ fontSize: 12, color: '#fff' }} />
-                </Box>
               </Box>
             )}
           </Box>
