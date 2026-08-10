@@ -34,7 +34,6 @@ export const ExternalDropZone: React.FC<ExternalDropZoneProps> = ({
 
     if (hasFiles && !isInternalDrag) {
       e.preventDefault();
-      e.stopPropagation();
       dragCounter.current += 1;
     }
   }, []);
@@ -48,7 +47,6 @@ export const ExternalDropZone: React.FC<ExternalDropZoneProps> = ({
 
       if (hasFiles && !isInternalDrag) {
         e.preventDefault();
-        e.stopPropagation();
         e.dataTransfer.dropEffect = 'copy';
 
         const target = e.target as HTMLElement;
@@ -93,7 +91,6 @@ export const ExternalDropZone: React.FC<ExternalDropZoneProps> = ({
 
       if (hasFiles && !isInternalDrag) {
         e.preventDefault();
-        e.stopPropagation();
         dragCounter.current -= 1;
         if (dragCounter.current === 0) {
           setHoveredFolderPath(null);
@@ -117,7 +114,6 @@ export const ExternalDropZone: React.FC<ExternalDropZoneProps> = ({
       }
 
       e.preventDefault();
-      e.stopPropagation();
 
       dragCounter.current = 0;
 
