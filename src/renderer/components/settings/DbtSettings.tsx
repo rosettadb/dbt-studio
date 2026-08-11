@@ -736,6 +736,13 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
               </Typography>
             )}
           </Alert>
+          {settings.dbtVersion?.startsWith('2.') && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              dbt Core v2 is still in alpha — cloud pipeline runs and other
+              cloud features are unavailable until the first official v2
+              release.
+            </Alert>
+          )}
         </Box>
       ) : null}
 
@@ -977,6 +984,11 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
               Preview releases are available in Rosetta DBT Studio. Validate
               project and adapter compatibility before production use.
             </Typography>
+            <Alert severity="warning" sx={{ mt: 1.5, mb: 1.5 }}>
+              dbt Core v2 is still in alpha. Cloud pipeline runs are not
+              supported on v2 until the first official release — cloud features
+              will be unavailable while v2 is active.
+            </Alert>
             <Box sx={{ mt: 1.5 }}>
               {renderVersionList(
                 rustDbtVersions,

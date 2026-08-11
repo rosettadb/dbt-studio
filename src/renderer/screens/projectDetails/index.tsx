@@ -7,7 +7,6 @@ import {
   AutoAwesome,
   AutoFixHigh,
   Cable,
-  Cloud,
   Delete,
   Edit,
 } from '@mui/icons-material';
@@ -71,7 +70,6 @@ import {
   parsePipelineConfig,
 } from '../../components/pipelineView';
 import { DbtRunHistoryPanel } from '../../components/dbtRunHistory';
-import { Taskbar, TaskbarItem } from '../../components/terminal/styles';
 import { projectsServices } from '../../services';
 import { Content, EditorContainer, Header, NoFileSelected } from './styles';
 import {
@@ -183,6 +181,7 @@ const ProjectDetails: React.FC = () => {
   const { data: project, isLoading, refetch } = useGetSelectedProject();
   const { data: connection } = useGetConnectionById(project?.connectionId);
   const { data: settings } = useGetSettings();
+  const isDbtV2 = !!settings?.dbtVersion?.startsWith('2.');
   const { mutate: updateFileContent } = useSaveFileContent();
 
   const {
@@ -310,12 +309,6 @@ const ProjectDetails: React.FC = () => {
     setPipelineCodeMode(false);
     setPipelineDraftTab(null);
   }, [activePipelineFilePath]);
-
-  // Cloud logs auto-minimize once when a pipeline is first opened (mirrors
-  // the terminal's own minimize/restore) and can be freely restored
-  // afterward — restoring doesn't get overridden by mode changes.
-  const [pipelineLogsMinimized, setPipelineLogsMinimized] =
-    React.useState(false);
 
   const handleEnterPipelineCodeMode = React.useCallback(
     (content?: string) => {
@@ -1135,7 +1128,7 @@ const ProjectDetails: React.FC = () => {
           rosettaDbt={rosettaDbt}
           onBeforeExecute={() => {
             if (env === 'cloud') {
-              setPipelineLogsMinimized(false);
+              handleTerminalTabSwitch('cloudLogs');
             } else {
               handleTerminalTabSwitch('terminal');
             }
@@ -1420,6 +1413,12 @@ const ProjectDetails: React.FC = () => {
                     onFixWithAI={(prompt) => openChatWithMessage(prompt)}
                   />
                 }
+                showCloudLogsTab={Boolean(activePipelineActionId)}
+                cloudLogsPanel={
+                  activePipelineActionId ? (
+                    <CloudLogViewer actionId={activePipelineActionId} />
+                  ) : undefined
+                }
               >
                 <Content>
                   <EditorContainer>
@@ -1478,15 +1477,7 @@ const ProjectDetails: React.FC = () => {
                           overflow: 'hidden',
                         }}
                       >
-                        <Box
-                          sx={{
-                            flex:
-                              activePipelineActionId && !pipelineLogsMinimized
-                                ? '1 1 60%'
-                                : 1,
-                            minHeight: 0,
-                          }}
-                        >
+                        <Box sx={{ flex: 1, minHeight: 0 }}>
                           {pipelineCodeMode && pipelineDraftTab ? (
                             <Editor
                               projectId={project.id}
@@ -1592,47 +1583,17 @@ const ProjectDetails: React.FC = () => {
                                       )
                                   : undefined
                               }
-                              onEnterView={() => setPipelineLogsMinimized(true)}
+                              runDisabledReason={
+                                isDbtV2
+                                  ? 'dbt Core v2 is in alpha and not yet supported for cloud runs. Support will be added after the first official v2 release.'
+                                  : undefined
+                              }
                             />
                           )}
                         </Box>
-                        {activePipelineActionId &&
-                          (pipelineLogsMinimized ? (
-                            <Taskbar
-                              onClick={() => setPipelineLogsMinimized(false)}
-                              sx={{ cursor: 'pointer' }}
-                            >
-                              <TaskbarItem>
-                                <Typography
-                                  fontSize={13}
-                                  sx={{ mr: 1 }}
-                                  fontWeight="bold"
-                                >
-                                  Cloud Logs
-                                </Typography>
-                                <Cloud fontSize="small" />
-                              </TaskbarItem>
-                            </Taskbar>
-                          ) : (
-                            <Box
-                              sx={{
-                                flex: '1 1 40%',
-                                minHeight: 0,
-                                borderTop: 1,
-                                borderColor: 'divider',
-                              }}
-                            >
-                              <CloudLogViewer
-                                actionId={activePipelineActionId}
-                                onMinimize={() =>
-                                  setPipelineLogsMinimized(true)
-                                }
-                              />
-                            </Box>
-                          ))}
                       </Box>
                     ) : (
-                      <>
+                      <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
                         {!selectedFilePath && (
                           <NoFileSelected>
                             Please select a file from the explorer on the left!
@@ -1688,7 +1649,7 @@ const ProjectDetails: React.FC = () => {
                                       environment={env}
                                       onBeforeExecute={() => {
                                         if (env === 'cloud') {
-                                          setPipelineLogsMinimized(false);
+                                          handleTerminalTabSwitch('cloudLogs');
                                         } else {
                                           handleTerminalTabSwitch('terminal');
                                         }
@@ -1711,7 +1672,7 @@ const ProjectDetails: React.FC = () => {
                             }
                           />
                         )}
-                      </>
+                      </Box>
                     )}
                   </EditorContainer>
                 </Content>
@@ -1794,7 +1755,7 @@ const ProjectDetails: React.FC = () => {
                     setPipelineCloudModal(false);
                     setPipelineRunArgs('');
                   }}
-                  onSuccess={() => setPipelineLogsMinimized(false)}
+                  onSuccess={() => handleTerminalTabSwitch('cloudLogs')}
                   project={project}
                   command="pipeline"
                   initialDbtArguments={pipelineRunArgs}

@@ -110,6 +110,11 @@ export default class MenuBuilder {
             this.mainWindow.webContents.reload();
           },
         },
+        { type: 'separator' },
+        { label: 'Actual Size', role: 'resetZoom' },
+        { label: 'Zoom In', role: 'zoomIn' },
+        { label: 'Zoom Out', role: 'zoomOut' },
+        { type: 'separator' },
         {
           label: 'Toggle Full Screen',
           accelerator: 'Ctrl+Command+F',
@@ -129,6 +134,10 @@ export default class MenuBuilder {
     const subMenuViewProd: MenuItemConstructorOptions = {
       label: 'View',
       submenu: [
+        { label: 'Actual Size', role: 'resetZoom' },
+        { label: 'Zoom In', role: 'zoomIn' },
+        { label: 'Zoom Out', role: 'zoomOut' },
+        { type: 'separator' },
         {
           label: 'Toggle Full Screen',
           accelerator: 'Ctrl+Command+F',
