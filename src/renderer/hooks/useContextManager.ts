@@ -192,6 +192,7 @@ export const useContextManager = () => {
     clearAdditionalFiles,
 
     // Context items
+    selectedFileContext,
     contextItemsForMessage,
     getContextItemsWithAdditionalFiles,
 

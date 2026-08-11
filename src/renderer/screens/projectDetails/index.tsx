@@ -99,6 +99,7 @@ import {
 import {
   getSuccessfulPipelineMutation,
   refreshCleanPipelineDraft,
+  resolveProjectFileMutationPath,
   resolveProjectMutationPath,
 } from '../../components/chat/pipelineToolResults';
 
@@ -662,19 +663,27 @@ const ProjectDetails: React.FC = () => {
       return;
     }
 
+    if (isPipelineFile(selectedFilePath)) {
+      openTab(toPipelineTabPath(selectedFilePath), {
+        title: deriveTitleFromPath(selectedFilePath),
+        content: '',
+        isReadOnly: true,
+      });
+      return;
+    }
+
     openTab(selectedFilePath);
   }, [selectedFilePath, openTab, isHydrated]);
 
   React.useEffect(() => {
     if (activeTab?.path) {
-      // Pipeline tabs don't update selectedFilePath — they manage their own content
-      if (isPipelineTabPath(activeTab.path)) {
-        return;
-      }
       const isPreview = isVirtualPreviewPath(activeTab.path);
-      const realSourcePath = isPreview
-        ? getPreviewSourcePath(activeTab.path) || activeTab.path
-        : activeTab.path;
+      let realSourcePath = activeTab.path;
+      if (isPipelineTabPath(activeTab.path)) {
+        realSourcePath = getPipelineFilePath(activeTab.path) || activeTab.path;
+      } else if (isPreview) {
+        realSourcePath = getPreviewSourcePath(activeTab.path) || activeTab.path;
+      }
 
       if (realSourcePath !== selectedFilePath) {
         setSelectedFilePath(realSourcePath);
@@ -712,18 +721,52 @@ const ProjectDetails: React.FC = () => {
   ]);
 
   React.useEffect(() => {
-    registerOpenFile?.((filePath: string) => {
+    registerOpenFile?.(async (filePath: string) => {
+      if (isPipelineFile(filePath)) {
+        const pipelineTabPath = toPipelineTabPath(filePath);
+        const alreadyOpen = !!getTabByPath(pipelineTabPath);
+        openTab(pipelineTabPath, {
+          title: deriveTitleFromPath(filePath),
+          content: '',
+          isReadOnly: true,
+        });
+        if (alreadyOpen && activePipelineFilePath === filePath) {
+          const refreshed = await refetchPipelineContent();
+          if (typeof refreshed.data === 'string') {
+            setPipelineDraftTab((previous) =>
+              refreshCleanPipelineDraft(previous, filePath, refreshed.data),
+            );
+          }
+        }
+        return;
+      }
+
+      const existingTab = getTabByPath(filePath);
       setSelectedFilePath(filePath);
       openTab(filePath);
+      if (existingTab && !existingTab.isModified) {
+        await refreshTabContentByPath(filePath);
+      }
     });
     return () => {
       registerOpenFile?.(undefined);
     };
-  }, [registerOpenFile, setSelectedFilePath, openTab]);
+  }, [
+    registerOpenFile,
+    setSelectedFilePath,
+    openTab,
+    getTabByPath,
+    activePipelineFilePath,
+    refetchPipelineContent,
+    refreshTabContentByPath,
+  ]);
 
   React.useEffect(() => {
     registerCloseFile?.((filePath: string) => {
-      closeTabByPath(filePath);
+      const tabPath = isPipelineFile(filePath)
+        ? toPipelineTabPath(filePath)
+        : filePath;
+      closeTabByPath(tabPath);
       if (selectedFilePath === filePath) setSelectedFilePath(undefined);
     });
     return () => {
@@ -804,12 +847,15 @@ const ProjectDetails: React.FC = () => {
       if ((!isFileWrite && !pipelineMutation) || payload.status !== 'done')
         return;
 
-      const filePath = pipelineMutation
+      const candidateFilePath = pipelineMutation
         ? resolveProjectMutationPath(
             project.path,
             pipelineMutation.relativePath,
           )
         : (payload.args as any)?.filePath || (payload.args as any)?.path;
+      const filePath = pipelineMutation
+        ? candidateFilePath
+        : resolveProjectFileMutationPath(project.path, candidateFilePath);
       if (!filePath) return;
       const tabPath = pipelineMutation ? toPipelineTabPath(filePath) : filePath;
 

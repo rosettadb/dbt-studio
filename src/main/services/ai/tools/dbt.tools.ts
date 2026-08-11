@@ -30,6 +30,16 @@ const ALLOWED_DBT_COMMANDS = [
 const MAX_FILE_SIZE = 500_000; // 500 KB
 const COMMAND_TIMEOUT = 120_000; // 2 minutes
 
+const captureFileWriteState = (
+  filePath: string,
+): { created: boolean; previousContent?: string } => {
+  if (!fs.existsSync(filePath)) return { created: true };
+  return {
+    created: false,
+    previousContent: fs.readFileSync(filePath, 'utf8'),
+  };
+};
+
 function parseExtraArgs(extraArgs?: string): string[] {
   if (!extraArgs) return [];
   const parsed = extraArgs.match(/(?:[^\s"']+|(["'])[^\1]*?\1)+/g);
@@ -384,6 +394,8 @@ export const writeDbtModel = tool({
         // The write is shown in the UI via AgentStepBlock and can be reverted.
       }
 
+      const writeState = captureFileWriteState(filePath);
+
       // Ensure directory exists
       const dir = path.dirname(filePath);
       if (!fs.existsSync(dir)) {
@@ -396,6 +408,7 @@ export const writeDbtModel = tool({
         success: true,
         filePath,
         bytesWritten: Buffer.byteLength(content, 'utf-8'),
+        ...writeState,
       };
     } catch (error) {
       return {
@@ -743,6 +756,7 @@ export function createDbtTools(
           if (context) {
             // File writes don't require confirmation — only shell commands do.
           }
+          const writeState = captureFileWriteState(filePath);
           const dir = path.dirname(filePath);
           if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
           fs.writeFileSync(filePath, content, 'utf-8');
@@ -751,6 +765,7 @@ export function createDbtTools(
             success: true,
             filePath,
             bytesWritten: Buffer.byteLength(content, 'utf-8'),
+            ...writeState,
           };
         } catch (error) {
           return {

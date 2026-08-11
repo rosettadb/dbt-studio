@@ -59,6 +59,8 @@ import { PROJECT_AGENT_CONTEXT_FILE } from '../../../shared/agentMemoryConstants
 import {
   collectSuccessfulPipelineMutations,
   isSuccessfulGenericFileWrite,
+  resolveProjectFileMutationPath,
+  type PipelineChangedFile,
 } from './pipelineToolResults';
 
 export interface ChatWindowProps {
@@ -127,13 +129,8 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   projectId: propProjectId,
   onClose,
 }) => {
-  const {
-    setIsChatOpen,
-    openFile,
-    setEditingFilePath,
-    closeFile,
-    refreshFileTree,
-  } = useAppContext();
+  const { setIsChatOpen, openFile, closeFile, refreshFileTree } =
+    useAppContext();
   const { data: project } = useGetSelectedProject();
   const projectId =
     propProjectId !== undefined
@@ -680,19 +677,44 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     // Use a Map to keep only the latest update per file
     const fileMap = new Map<
       string,
-      { path: string; added: number; removed: number }
+      {
+        path: string;
+        added: number;
+        removed: number;
+        discard?: PipelineChangedFile['discard'];
+      }
     >();
 
     streamState.steps.forEach((step) => {
       step.toolCalls.forEach((tc) => {
         if (isSuccessfulGenericFileWrite(tc.toolName, tc.status, tc.result)) {
           const result = tc.result as any;
-          const path = (tc.args as any)?.filePath || (tc.args as any)?.path;
+          const candidatePath =
+            (tc.args as any)?.filePath || (tc.args as any)?.path;
+          const path = project?.path
+            ? resolveProjectFileMutationPath(project.path, candidatePath)
+            : null;
           if (path) {
+            const previous = fileMap.get(path);
+            let discard = previous?.discard;
+            if (!discard && result.created === true) {
+              discard = { action: 'delete' };
+            } else if (
+              !discard &&
+              result.created === false &&
+              typeof result.previousContent === 'string'
+            ) {
+              discard = {
+                action: 'restore',
+                content: result.previousContent,
+              };
+            }
+            if (!discard) return;
             fileMap.set(path, {
               path,
               added: result?.linesAdded ?? 0,
               removed: result?.linesRemoved ?? 0,
+              discard,
             });
           }
         }
@@ -717,7 +739,6 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   ]);
 
   const handleOpenFile = (path: string) => {
-    setEditingFilePath?.(path);
     openFile?.(path);
   };
 
@@ -840,16 +861,39 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
                 if (currentRunKey) setDismissedRunKey(currentRunKey);
               }}
               onDiscard={async () => {
-                // Close tabs for discarded files
-                changedFiles.forEach((f) => closeFile?.(f.path));
-                // Delete files from disk
+                // Created files are removed, so their tabs must close. Updated
+                // pipelines stay open and are refreshed after restoration.
+                changedFiles
+                  .filter((f) => f.discard?.action !== 'restore')
+                  .forEach((f) => closeFile?.(f.path));
+                // Delete created files or restore the pre-agent content for
+                // pipeline updates.
                 await Promise.allSettled(
-                  changedFiles.map((f) =>
-                    projectsServices.deleteItem({ filePath: f.path }),
-                  ),
+                  changedFiles.map((f) => {
+                    if (f.discard?.action === 'restore') {
+                      return projectsServices.saveFileContent({
+                        path: f.path,
+                        content: f.discard.content,
+                      });
+                    }
+                    return projectsServices.deleteItem({ filePath: f.path });
+                  }),
                 );
                 // Refresh file tree to remove deleted files
                 await refreshFileTree?.();
+                await Promise.all(
+                  changedFiles
+                    .filter((f) => f.discard?.action === 'restore')
+                    .map((f) =>
+                      queryClient.invalidateQueries([
+                        'GET_FILE_CONTENT',
+                        f.path,
+                      ]),
+                    ),
+                );
+                changedFiles
+                  .filter((f) => f.discard?.action === 'restore')
+                  .forEach((f) => openFile?.(f.path));
                 if (currentRunKey) setDismissedRunKey(currentRunKey);
                 toast.success('Agent-created files discarded.');
               }}

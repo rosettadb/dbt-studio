@@ -13,6 +13,20 @@ jest.mock('../../../../../src/main/services/agent.service', () => ({
   default: { currentAgentContext: null },
 }));
 
+jest.mock('../../../../../src/main/services/settings.service', () => ({
+  __esModule: true,
+  default: {},
+}));
+
+jest.mock('../../../../../src/main/services/dbtCoreVersion.service', () => ({
+  DbtCoreVersionService: {},
+}));
+
+jest.mock('../../../../../src/main/services/secureStorage.service', () => ({
+  __esModule: true,
+  default: {},
+}));
+
 describe('Project Agent generic pipeline write guards', () => {
   let projectPath: string;
 
@@ -62,11 +76,26 @@ describe('Project Agent generic pipeline write guards', () => {
 
     await expect(
       filesystemWrite({ filePath: markdownPath, content: '# Notes\n' }),
-    ).resolves.toMatchObject({ success: true });
+    ).resolves.toMatchObject({ success: true, created: true });
     await expect(
       dbtWrite({ filePath: schemaPath, content: 'version: 2\n' }),
-    ).resolves.toMatchObject({ success: true });
-    expect(fs.readFileSync(markdownPath, 'utf8')).toBe('# Notes\n');
-    expect(fs.readFileSync(schemaPath, 'utf8')).toBe('version: 2\n');
+    ).resolves.toMatchObject({ success: true, created: true });
+
+    await expect(
+      filesystemWrite({ filePath: markdownPath, content: '# Updated\n' }),
+    ).resolves.toMatchObject({
+      success: true,
+      created: false,
+      previousContent: '# Notes\n',
+    });
+    await expect(
+      dbtWrite({ filePath: schemaPath, content: 'version: 3\n' }),
+    ).resolves.toMatchObject({
+      success: true,
+      created: false,
+      previousContent: 'version: 2\n',
+    });
+    expect(fs.readFileSync(markdownPath, 'utf8')).toBe('# Updated\n');
+    expect(fs.readFileSync(schemaPath, 'utf8')).toBe('version: 3\n');
   });
 });

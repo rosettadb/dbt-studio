@@ -11,6 +11,16 @@ import { isProtectedPipelineWritePath } from './studio/pipeline.tools';
 const MAX_FILE_SIZE = 1_000_000; // 1 MB for general files
 const MAX_DIRECTORY_DEPTH = 5;
 
+const captureFileWriteState = (
+  filePath: string,
+): { created: boolean; previousContent?: string } => {
+  if (!fs.existsSync(filePath)) return { created: true };
+  return {
+    created: false,
+    previousContent: fs.readFileSync(filePath, 'utf8'),
+  };
+};
+
 /**
  * Validates that a file path is within the project root
  * For files that do not exist yet, resolves the nearest existing ancestor.
@@ -211,6 +221,8 @@ export const writeFile = tool({
         // File writes don't require confirmation — only shell commands do.
       }
 
+      const writeState = captureFileWriteState(filePath);
+
       // Ensure directory exists
       const dir = path.dirname(filePath);
       if (!fs.existsSync(dir)) {
@@ -223,6 +235,7 @@ export const writeFile = tool({
         success: true,
         filePath: path.relative(projectPath, filePath),
         bytesWritten: Buffer.byteLength(content, 'utf-8'),
+        ...writeState,
       };
     } catch (error) {
       return {
@@ -436,6 +449,7 @@ export function createFilesystemTools(
             // File writes don't require confirmation — only shell commands do.
           }
 
+          const writeState = captureFileWriteState(filePath);
           const dir = path.dirname(filePath);
           if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
           fs.writeFileSync(filePath, content, 'utf-8');
@@ -444,6 +458,7 @@ export function createFilesystemTools(
             success: true,
             filePath: path.relative(projectPath, filePath),
             bytesWritten: Buffer.byteLength(content, 'utf-8'),
+            ...writeState,
           };
         } catch (error) {
           return {

@@ -3,6 +3,7 @@ import {
   getSuccessfulPipelineMutation,
   isSuccessfulGenericFileWrite,
   refreshCleanPipelineDraft,
+  resolveProjectFileMutationPath,
   resolveProjectMutationPath,
 } from '../../../../src/renderer/components/chat/pipelineToolResults';
 
@@ -13,6 +14,7 @@ describe('pipeline tool result presentation policy', () => {
         success: true,
         mutation: 'pipeline-file-written',
         path: 'rosetta/pipelines/nested/new.yml',
+        created: true,
         linesAdded: 12,
         linesRemoved: 0,
       }),
@@ -20,6 +22,8 @@ describe('pipeline tool result presentation policy', () => {
       relativePath: 'rosetta/pipelines/nested/new.yml',
       added: 12,
       removed: 0,
+      created: true,
+      previousContent: undefined,
     });
     expect(
       getSuccessfulPipelineMutation('studio_pipeline_update', {
@@ -48,6 +52,26 @@ describe('pipeline tool result presentation policy', () => {
     ).toBe('/projects/demo/.rosetta/legacy.yaml');
   });
 
+  it('canonicalizes relative and absolute agent-written file paths', () => {
+    const projectPath = '/projects/demo';
+    const expected = '/projects/demo/models/intermediate/orders.sql';
+    expect(
+      resolveProjectFileMutationPath(
+        projectPath,
+        'models/intermediate/orders.sql',
+      ),
+    ).toBe(expected);
+    expect(resolveProjectFileMutationPath(projectPath, expected)).toBe(
+      expected,
+    );
+    expect(
+      resolveProjectFileMutationPath(projectPath, '../outside/orders.sql'),
+    ).toBeNull();
+    expect(
+      resolveProjectFileMutationPath(projectPath, '/other/orders.sql'),
+    ).toBeNull();
+  });
+
   it.each([
     '../outside.yml',
     '/tmp/outside.yml',
@@ -61,7 +85,7 @@ describe('pipeline tool result presentation policy', () => {
     ).toBeNull();
   });
 
-  it('keeps only generated files in the delete-backed changed-files flow', () => {
+  it('tracks creates for deletion and updates for restoration on discard', () => {
     expect(
       collectSuccessfulPipelineMutations('/projects/demo', [
         {
@@ -71,6 +95,7 @@ describe('pipeline tool result presentation policy', () => {
             success: true,
             mutation: 'pipeline-file-written',
             path: 'rosetta/pipelines/nightly.yml',
+            created: true,
             linesAdded: 1,
             linesRemoved: 1,
           },
@@ -82,6 +107,7 @@ describe('pipeline tool result presentation policy', () => {
             success: true,
             mutation: 'pipeline-file-written',
             path: 'rosetta/pipelines/nightly.yml',
+            created: true,
             linesAdded: 3,
             linesRemoved: 2,
           },
@@ -93,6 +119,8 @@ describe('pipeline tool result presentation policy', () => {
             success: true,
             mutation: 'pipeline-file-written',
             path: 'rosetta/pipelines/existing.yml',
+            created: false,
+            previousContent: 'name: original\njobs: []\n',
             linesAdded: 4,
             linesRemoved: 1,
           },
@@ -117,6 +145,16 @@ describe('pipeline tool result presentation policy', () => {
         path: '/projects/demo/rosetta/pipelines/nightly.yml',
         added: 3,
         removed: 2,
+        discard: { action: 'delete' },
+      },
+      {
+        path: '/projects/demo/rosetta/pipelines/existing.yml',
+        added: 4,
+        removed: 1,
+        discard: {
+          action: 'restore',
+          content: 'name: original\njobs: []\n',
+        },
       },
     ]);
   });

@@ -514,6 +514,7 @@ custom_root:
             created: false,
             linesAdded: expect.any(Number),
             linesRemoved: expect.any(Number),
+            previousContent: VALID_PIPELINE,
           });
           expect(
             fs.readFileSync(path.join(projectPath, relativePath), 'utf8'),

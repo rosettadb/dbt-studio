@@ -670,6 +670,7 @@ type PipelineMutationResult =
       linesAdded: number;
       linesRemoved: number;
       warnings: string[];
+      previousContent?: string;
     }
   | {
       success: false;
@@ -955,6 +956,7 @@ export async function updateProjectPipeline(
       contentHash: hashContent(content),
       ...calculateLineChanges(previousContent, content),
       warnings: validation.warnings,
+      previousContent,
     };
   } catch {
     let restored: boolean | undefined;
