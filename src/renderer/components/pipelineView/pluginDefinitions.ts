@@ -5,14 +5,24 @@ import BuildIcon from '@mui/icons-material/Build';
 import TerminalIcon from '@mui/icons-material/Terminal';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import SpeedIcon from '@mui/icons-material/Speed';
-import {
-  ADDABLE_PIPELINE_PLUGINS,
-  PipelinePluginField,
-  PipelinePluginId,
-} from '../../../shared/pipelinePluginCatalog';
 
-export type PluginId = PipelinePluginId;
-export type PluginField = PipelinePluginField;
+export type PluginId =
+  | 'dbt@v1'
+  | 'rosetta@v1'
+  | 'terraform@v1'
+  | 'command@v1'
+  | 's3@v1'
+  | 'kinetica_cli@v1'
+  | 'git_clone@v1';
+
+export interface PluginField {
+  key: string;
+  label: string;
+  required: boolean;
+  multiline?: boolean;
+  placeholder?: string;
+  defaultValue?: string;
+}
 
 export interface PluginDef {
   id: PluginId;
@@ -23,26 +33,124 @@ export interface PluginDef {
   fields: PluginField[];
 }
 
-const VISUAL_PLUGIN_METADATA: Record<
-  Exclude<PluginId, 'git_clone@v1'>,
-  { color: string; icon: SvgIconComponent }
-> = {
-  'dbt@v1': { color: '#FF694B', icon: TransformIcon },
-  'rosetta@v1': { color: '#7C4DFF', icon: LanguageIcon },
-  'terraform@v1': { color: '#7B42BC', icon: BuildIcon },
-  'command@v1': { color: '#455A64', icon: TerminalIcon },
-  's3@v1': { color: '#FF9900', icon: CloudUploadIcon },
-  'kinetica_cli@v1': { color: '#00BCD4', icon: SpeedIcon },
-};
-
-export const PLUGIN_DEFS: PluginDef[] = ADDABLE_PIPELINE_PLUGINS.map(
-  (plugin) => ({
-    ...plugin,
-    fields: [...plugin.fields],
+export const PLUGIN_DEFS: PluginDef[] = [
+  {
+    id: 'dbt@v1',
+    label: 'dbt',
+    color: '#FF694B',
     category: 'Generic',
-    ...VISUAL_PLUGIN_METADATA[plugin.id as Exclude<PluginId, 'git_clone@v1'>],
-  }),
-);
+    icon: TransformIcon,
+    fields: [
+      {
+        key: 'command',
+        label: 'Command',
+        required: true,
+        multiline: true,
+        defaultValue: 'dbt run',
+        placeholder: 'dbt seed && dbt run',
+      },
+      {
+        key: 'working_dir',
+        label: 'Working Dir',
+        required: false,
+        placeholder: 'dbt',
+      },
+    ],
+  },
+  {
+    id: 'rosetta@v1',
+    label: 'rosetta',
+    color: '#7C4DFF',
+    category: 'Generic',
+    icon: LanguageIcon,
+    fields: [
+      {
+        key: 'command',
+        label: 'Command',
+        required: true,
+        multiline: true,
+        placeholder: 'rosetta apply -s bigquery',
+      },
+      {
+        key: 'working_dir',
+        label: 'Working Dir',
+        required: false,
+        placeholder: 'rosetta',
+      },
+    ],
+  },
+  {
+    id: 'terraform@v1',
+    label: 'terraform',
+    color: '#7B42BC',
+    category: 'Generic',
+    icon: BuildIcon,
+    fields: [
+      {
+        key: 'command',
+        label: 'Command',
+        required: true,
+        multiline: true,
+        placeholder: 'terraform init && terraform apply -auto-approve',
+        defaultValue: 'terraform init && terraform apply -auto-approve',
+      },
+      {
+        key: 'working_dir',
+        label: 'Working Dir',
+        required: false,
+        placeholder: 'terraform',
+      },
+    ],
+  },
+  {
+    id: 'command@v1',
+    label: 'shell',
+    color: '#455A64',
+    category: 'Generic',
+    icon: TerminalIcon,
+    fields: [
+      {
+        key: 'command',
+        label: 'Command',
+        required: true,
+        multiline: true,
+        placeholder: 'echo "hello world"',
+      },
+    ],
+  },
+  {
+    id: 's3@v1',
+    label: 's3',
+    color: '#FF9900',
+    category: 'Generic',
+    icon: CloudUploadIcon,
+    fields: [
+      {
+        key: 'command',
+        label: 'Command',
+        required: true,
+        multiline: true,
+        placeholder: 'aws s3 cp results/ s3://my-bucket/ --recursive',
+      },
+    ],
+  },
+  {
+    id: 'kinetica_cli@v1',
+    label: 'kinetica',
+    color: '#00BCD4',
+    category: 'Generic',
+    icon: SpeedIcon,
+    fields: [
+      {
+        key: 'command',
+        label: 'Command',
+        required: true,
+        multiline: true,
+        placeholder: 'kisql --url http://localhost:9191 --sql "SELECT 1"',
+      },
+    ],
+  },
+];
 
 export const PLUGIN_MAP = new Map<string, PluginDef>(
   PLUGIN_DEFS.map((p) => [p.id, p]),
