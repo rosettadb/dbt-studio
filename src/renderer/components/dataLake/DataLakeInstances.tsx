@@ -105,8 +105,8 @@ export const DataLakeInstances: React.FC<DataLakeInstancesProps> = ({
       lakeType: 'duck-lake',
       catalogType: instance.catalog.type.toUpperCase(),
       dataPath: instance.dataPath,
-      createdAt: instance.createdAt,
-      updatedAt: instance.updatedAt,
+      createdAt: new Date(instance.createdAt).toISOString(),
+      updatedAt: new Date(instance.updatedAt).toISOString(),
     }));
 
     const icebergRows: DataLakeTableRow[] = icebergInstances.map(
