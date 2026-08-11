@@ -15,6 +15,10 @@ import type {
   IcebergPreviewResult,
   IcebergLocalCatalogResult,
   IcebergCapabilities,
+  IcebergImportTableResult,
+  IcebergImportFileFormat,
+  IcebergTableOperationResult,
+  IcebergNamespaceOperationResult,
 } from '../../types/iceberg';
 
 export const getIcebergCapabilities = (): Promise<IcebergCapabilities> =>
@@ -96,6 +100,55 @@ export const previewIcebergTable = (
     limit,
     rowFilter,
   );
+
+export const importIcebergTable = (
+  id: string,
+  namespace: string[],
+  table: string,
+  filePath: string,
+  fileFormat: IcebergImportFileFormat,
+): Promise<IcebergImportTableResult> =>
+  window.electron.ipcRenderer.invoke(
+    'iceberg:importTable',
+    id,
+    namespace,
+    table,
+    filePath,
+    fileFormat,
+  );
+
+export const dropIcebergTable = (
+  id: string,
+  namespace: string[],
+  table: string,
+): Promise<IcebergTableOperationResult> =>
+  window.electron.ipcRenderer.invoke('iceberg:dropTable', id, namespace, table);
+
+export const renameIcebergTable = (
+  id: string,
+  namespace: string[],
+  table: string,
+  newTable: string,
+): Promise<IcebergTableOperationResult> =>
+  window.electron.ipcRenderer.invoke(
+    'iceberg:renameTable',
+    id,
+    namespace,
+    table,
+    newTable,
+  );
+
+export const createIcebergNamespace = (
+  id: string,
+  namespace: string[],
+): Promise<IcebergNamespaceOperationResult> =>
+  window.electron.ipcRenderer.invoke('iceberg:createNamespace', id, namespace);
+
+export const dropIcebergNamespace = (
+  id: string,
+  namespace: string[],
+): Promise<IcebergNamespaceOperationResult> =>
+  window.electron.ipcRenderer.invoke('iceberg:dropNamespace', id, namespace);
 
 export const createIcebergMetadataFile = (
   warehousePath: string,

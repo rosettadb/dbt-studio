@@ -354,4 +354,161 @@ describe('IcebergDatalakeService compatibility and secret persistence', () => {
       }),
     ).toThrow('ICEBERG_WAREHOUSE_NOT_ALLOWED: hive/cloud');
   });
+
+  describe('importTable validation', () => {
+    it('rejects unsupported file formats before Python executes', async () => {
+      await expect(
+        IcebergDatalakeService.importTable(
+          'instance-1',
+          ['default'],
+          't',
+          '/tmp/x.txt',
+          'txt',
+        ),
+      ).rejects.toThrow('ICEBERG_IMPORT_FORMAT_UNSUPPORTED');
+    });
+
+    it('rejects invalid table names', async () => {
+      await expect(
+        IcebergDatalakeService.importTable(
+          'instance-1',
+          ['default'],
+          '1bad name!',
+          '/tmp/x.csv',
+          'csv',
+        ),
+      ).rejects.toThrow('ICEBERG_IMPORT_TABLE_NAME_INVALID');
+    });
+
+    it('rejects invalid or empty namespaces', async () => {
+      await expect(
+        IcebergDatalakeService.importTable(
+          'instance-1',
+          [],
+          'valid_table',
+          '/tmp/x.csv',
+          'csv',
+        ),
+      ).rejects.toThrow('ICEBERG_NAMESPACE_INVALID');
+
+      await expect(
+        IcebergDatalakeService.importTable(
+          'instance-1',
+          ['bad namespace!'],
+          'valid_table',
+          '/tmp/x.csv',
+          'csv',
+        ),
+      ).rejects.toThrow('ICEBERG_NAMESPACE_INVALID');
+    });
+
+    it('rejects a missing file path', async () => {
+      await expect(
+        IcebergDatalakeService.importTable(
+          'instance-1',
+          ['default'],
+          'valid_table',
+          '',
+          'csv',
+        ),
+      ).rejects.toThrow('ICEBERG_IMPORT_FILE_REQUIRED');
+    });
+
+    it('rejects a non-existent source file before Python executes', async () => {
+      await expect(
+        IcebergDatalakeService.importTable(
+          'instance-1',
+          ['default'],
+          'valid_table',
+          '/definitely/not/a/real/file.csv',
+          'csv',
+        ),
+      ).rejects.toThrow('ICEBERG_IMPORT_FILE_NOT_FOUND');
+    });
+  });
+
+  describe('createNamespace and dropNamespace validation', () => {
+    it('rejects invalid namespaces before Python executes', async () => {
+      await expect(
+        IcebergDatalakeService.createNamespace('instance-1', []),
+      ).rejects.toThrow('ICEBERG_NAMESPACE_INVALID');
+
+      await expect(
+        IcebergDatalakeService.createNamespace('instance-1', ['bad ns!']),
+      ).rejects.toThrow('ICEBERG_NAMESPACE_INVALID');
+
+      await expect(
+        IcebergDatalakeService.dropNamespace('instance-1', ['bad ns!']),
+      ).rejects.toThrow('ICEBERG_NAMESPACE_INVALID');
+    });
+
+    it('passes sanitized nested namespaces to the bridge', async () => {
+      mockedLoadDatabase.mockResolvedValue({
+        icebergInstances: [
+          {
+            id: 'instance-1',
+            name: 'test',
+            catalogType: 'sqlite',
+            storageType: 'local',
+            localPath: '/tmp/warehouse',
+            createdAt: 'now',
+            updatedAt: 'now',
+          },
+        ],
+      });
+      const runBridgeSpy = jest
+        .spyOn(IcebergDatalakeService as any, 'runBridge')
+        .mockResolvedValue({ ok: true, namespace: ['a', 'b'] });
+
+      const result = await IcebergDatalakeService.createNamespace(
+        'instance-1',
+        [' a ', 'b'],
+      );
+      expect(result).toEqual({ namespace: ['a', 'b'] });
+      expect(runBridgeSpy).toHaveBeenCalledTimes(1);
+      const command = runBridgeSpy.mock.calls[0][0] as Record<string, unknown>;
+      expect(command.command).toBe('create_namespace');
+      expect(command.namespace).toEqual(['a', 'b']);
+
+      runBridgeSpy.mockRestore();
+    });
+  });
+
+  describe('dropTable and renameTable validation', () => {
+    it('rejects invalid table names before Python executes', async () => {
+      await expect(
+        IcebergDatalakeService.dropTable(
+          'instance-1',
+          ['default'],
+          'bad name!',
+        ),
+      ).rejects.toThrow('ICEBERG_TABLE_NAME_INVALID');
+
+      await expect(
+        IcebergDatalakeService.renameTable(
+          'instance-1',
+          ['default'],
+          'valid',
+          'bad name!',
+        ),
+      ).rejects.toThrow('ICEBERG_TABLE_NAME_INVALID');
+    });
+
+    it('rejects invalid namespaces before Python executes', async () => {
+      await expect(
+        IcebergDatalakeService.dropTable('instance-1', ['bad ns'], 'valid'),
+      ).rejects.toThrow('ICEBERG_NAMESPACE_INVALID');
+    });
+
+    it('rejects renaming a table to its own name', async () => {
+      await expect(
+        IcebergDatalakeService.renameTable(
+          'instance-1',
+          ['default'],
+          'customers',
+          'customers',
+        ),
+      ).rejects.toThrow('ICEBERG_RENAME_SAME_NAME');
+    });
+  });
 });

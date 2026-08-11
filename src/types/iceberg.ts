@@ -144,6 +144,20 @@ export interface IcebergPreviewResult {
   total?: number;
 }
 
+export type IcebergImportFileFormat = 'csv' | 'parquet' | 'json';
+
+export interface IcebergImportTableResult {
+  namespace: string[];
+  table: string;
+  rowCount: number;
+  columns: string[];
+}
+
+export interface IcebergTableOperationResult {
+  namespace: string[];
+  table: string;
+}
+
 export interface IcebergTestResult {
   success: boolean;
   error?: string;
@@ -159,6 +173,28 @@ export interface IcebergLocalCatalogResult {
   warehousePath: string;
   namespaces: string[][];
   tables: string[][];
+}
+
+export interface IcebergImportTableParams {
+  id: string;
+  namespace: string[];
+  table: string;
+  filePath: string;
+  fileFormat: IcebergImportFileFormat;
+}
+
+export interface IcebergNamespaceOperationResult {
+  namespace: string[];
+}
+
+export interface IcebergCreateNamespaceParams {
+  id: string;
+  namespace: string[];
+}
+
+export interface IcebergDropNamespaceParams {
+  id: string;
+  namespace: string[];
 }
 
 export interface IcebergTestCatalogParams {

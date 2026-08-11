@@ -355,11 +355,17 @@ export type IcebergChannels =
   | 'iceberg:update'
   | 'iceberg:delete'
   | 'iceberg:testCatalog'
+  | 'iceberg:testInstance'
   | 'iceberg:listNamespaces'
   | 'iceberg:listTables'
   | 'iceberg:getSchema'
   | 'iceberg:getSnapshots'
   | 'iceberg:previewTable'
+  | 'iceberg:importTable'
+  | 'iceberg:dropTable'
+  | 'iceberg:renameTable'
+  | 'iceberg:createNamespace'
+  | 'iceberg:dropNamespace'
   | 'iceberg:createMetadataFile'
   | 'iceberg:ensureInstalled';
 

@@ -7,6 +7,7 @@
  * Follows BE-03 (one cohesive service), BE-04 (no await inside Promise constructor).
  */
 
+import * as fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
@@ -31,6 +32,10 @@ import type {
   IcebergLocalCatalogResult,
   IcebergCapabilities,
   IcebergCatalogCapability,
+  IcebergImportTableResult,
+  IcebergImportFileFormat,
+  IcebergTableOperationResult,
+  IcebergNamespaceOperationResult,
 } from '../../types/iceberg';
 import type { CloudConnection } from '../../types/frontend';
 import type { PostgresConnection } from '../../types/backend';
@@ -1350,6 +1355,232 @@ export class IcebergDatalakeService {
   // ─────────────────────────────────────────────
   //  Public: file helpers
   // ─────────────────────────────────────────────
+
+  // ─────────────────────────────────────────────
+  //  Public: local file import
+  // ─────────────────────────────────────────────
+
+  static async importTable(
+    id: string,
+    namespace: string[],
+    table: string,
+    filePath: string,
+    fileFormat: string,
+  ): Promise<IcebergImportTableResult> {
+    try {
+      const safeFormat = fileFormat?.toLowerCase() as
+        | IcebergImportFileFormat
+        | undefined;
+      if (!safeFormat || !['csv', 'parquet', 'json'].includes(safeFormat)) {
+        throw new Error('ICEBERG_IMPORT_FORMAT_UNSUPPORTED');
+      }
+      const safeTable = table?.trim();
+      if (!safeTable || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(safeTable)) {
+        throw new Error('ICEBERG_IMPORT_TABLE_NAME_INVALID');
+      }
+      const safeNamespace = IcebergDatalakeService.validateNamespace(namespace);
+      if (!filePath?.trim()) {
+        throw new Error('ICEBERG_IMPORT_FILE_REQUIRED');
+      }
+      if (
+        !fs.existsSync(filePath.trim()) ||
+        !fs.statSync(filePath.trim()).isFile()
+      ) {
+        throw new Error('ICEBERG_IMPORT_FILE_NOT_FOUND');
+      }
+
+      const instance = await IcebergDatalakeService.getInstance(id);
+      const { props, env } =
+        await IcebergDatalakeService.buildCatalogProperties(instance);
+      const result = (await IcebergDatalakeService.runBridge(
+        {
+          command: 'import_table',
+          catalog_name:
+            instance.catalogType === 'sqlite'
+              ? 'local'
+              : (instance.catalogName ?? id),
+          catalog_properties: props,
+          namespace: safeNamespace,
+          table: safeTable,
+          file_path: filePath.trim(),
+          file_format: safeFormat,
+        },
+        env,
+      )) as Record<string, unknown>;
+      return {
+        namespace: (result.namespace as string[]) ?? safeNamespace,
+        table: (result.table as string) ?? safeTable,
+        rowCount: Number(result.row_count ?? 0),
+        columns: (result.columns as string[]) ?? [],
+      };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[IcebergDatalakeService] importTable error:', error);
+      throw error;
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  //  Public: table maintenance
+  // ─────────────────────────────────────────────
+
+  static async dropTable(
+    id: string,
+    namespace: string[],
+    table: string,
+  ): Promise<IcebergTableOperationResult> {
+    try {
+      const safeTable = table?.trim();
+      if (!safeTable || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(safeTable)) {
+        throw new Error('ICEBERG_TABLE_NAME_INVALID');
+      }
+      const safeNamespace = IcebergDatalakeService.validateNamespace(namespace);
+      const instance = await IcebergDatalakeService.getInstance(id);
+      const { props, env } =
+        await IcebergDatalakeService.buildCatalogProperties(instance);
+      const result = (await IcebergDatalakeService.runBridge(
+        {
+          command: 'drop_table',
+          catalog_name:
+            instance.catalogType === 'sqlite'
+              ? 'local'
+              : (instance.catalogName ?? id),
+          catalog_properties: props,
+          namespace: safeNamespace,
+          table: safeTable,
+        },
+        env,
+      )) as Record<string, unknown>;
+      return {
+        namespace: (result.namespace as string[]) ?? safeNamespace,
+        table: (result.table as string) ?? safeTable,
+      };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[IcebergDatalakeService] dropTable error:', error);
+      throw error;
+    }
+  }
+
+  static async renameTable(
+    id: string,
+    namespace: string[],
+    table: string,
+    newTable: string,
+  ): Promise<IcebergTableOperationResult> {
+    try {
+      const safeTable = table?.trim();
+      if (!safeTable || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(safeTable)) {
+        throw new Error('ICEBERG_TABLE_NAME_INVALID');
+      }
+      const safeNewTable = newTable?.trim();
+      if (!safeNewTable || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(safeNewTable)) {
+        throw new Error('ICEBERG_TABLE_NAME_INVALID');
+      }
+      if (safeNewTable === safeTable) {
+        throw new Error('ICEBERG_RENAME_SAME_NAME');
+      }
+      const safeNamespace = IcebergDatalakeService.validateNamespace(namespace);
+      const instance = await IcebergDatalakeService.getInstance(id);
+      const { props, env } =
+        await IcebergDatalakeService.buildCatalogProperties(instance);
+      const result = (await IcebergDatalakeService.runBridge(
+        {
+          command: 'rename_table',
+          catalog_name:
+            instance.catalogType === 'sqlite'
+              ? 'local'
+              : (instance.catalogName ?? id),
+          catalog_properties: props,
+          namespace: safeNamespace,
+          table: safeTable,
+          new_table: safeNewTable,
+        },
+        env,
+      )) as Record<string, unknown>;
+      return {
+        namespace: (result.namespace as string[]) ?? safeNamespace,
+        table: (result.table as string) ?? safeNewTable,
+      };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[IcebergDatalakeService] renameTable error:', error);
+      throw error;
+    }
+  }
+
+  static async createNamespace(
+    id: string,
+    namespace: string[],
+  ): Promise<IcebergNamespaceOperationResult> {
+    try {
+      const safeNamespace = IcebergDatalakeService.validateNamespace(namespace);
+      const instance = await IcebergDatalakeService.getInstance(id);
+      const { props, env } =
+        await IcebergDatalakeService.buildCatalogProperties(instance);
+      const result = (await IcebergDatalakeService.runBridge(
+        {
+          command: 'create_namespace',
+          catalog_name:
+            instance.catalogType === 'sqlite'
+              ? 'local'
+              : (instance.catalogName ?? id),
+          catalog_properties: props,
+          namespace: safeNamespace,
+        },
+        env,
+      )) as Record<string, unknown>;
+      return {
+        namespace: (result.namespace as string[]) ?? safeNamespace,
+      };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[IcebergDatalakeService] createNamespace error:', error);
+      throw error;
+    }
+  }
+
+  static async dropNamespace(
+    id: string,
+    namespace: string[],
+  ): Promise<IcebergNamespaceOperationResult> {
+    try {
+      const safeNamespace = IcebergDatalakeService.validateNamespace(namespace);
+      const instance = await IcebergDatalakeService.getInstance(id);
+      const { props, env } =
+        await IcebergDatalakeService.buildCatalogProperties(instance);
+      const result = (await IcebergDatalakeService.runBridge(
+        {
+          command: 'drop_namespace',
+          catalog_name:
+            instance.catalogType === 'sqlite'
+              ? 'local'
+              : (instance.catalogName ?? id),
+          catalog_properties: props,
+          namespace: safeNamespace,
+        },
+        env,
+      )) as Record<string, unknown>;
+      return {
+        namespace: (result.namespace as string[]) ?? safeNamespace,
+      };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[IcebergDatalakeService] dropNamespace error:', error);
+      throw error;
+    }
+  }
+
+  private static validateNamespace(namespace: string[]): string[] {
+    const safeNamespace = (namespace ?? []).map((part) => part.trim());
+    if (
+      safeNamespace.length === 0 ||
+      safeNamespace.some((part) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(part))
+    ) {
+      throw new Error('ICEBERG_NAMESPACE_INVALID');
+    }
+    return safeNamespace;
+  }
 
   static async createMetadataFile(
     warehousePath: string,

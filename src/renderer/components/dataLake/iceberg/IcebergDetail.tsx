@@ -5,6 +5,10 @@ import {
   Button,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControl,
   Grid,
   IconButton,
@@ -27,17 +31,23 @@ import {
   TableRow,
   Tabs,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Tooltip,
   Typography,
 } from '@mui/material';
 import {
   AccountTree,
+  Add,
   ArrowBack,
   Badge,
   ChevronRight,
   CheckCircle,
+  Close,
   CloudQueue,
+  CreateNewFolder,
   Delete,
+  DriveFileRenameOutline,
   Edit,
   ErrorOutline,
   Folder,
@@ -57,17 +67,27 @@ import {
   cloudStorageImages,
   databaseIcons,
 } from '../../../../../assets/connectionIcons';
-import type { IcebergInstanceConfig } from '../../../../types/iceberg';
+import type {
+  IcebergImportFileFormat,
+  IcebergInstanceConfig,
+} from '../../../../types/iceberg';
 import {
+  useCreateIcebergNamespace,
+  useDropIcebergNamespace,
+  useDropIcebergTable,
   useGetIcebergInstance,
   useGetIcebergSchema,
   useGetIcebergSnapshots,
   useIcebergTablePreview,
+  useImportIcebergTable,
   useListIcebergNamespaces,
   useListIcebergTables,
+  useRenameIcebergTable,
   useTestIcebergInstance,
 } from '../../../controllers/icebergDatalake.controller';
 import { IcebergIcon } from './IcebergIcon';
+import { IcebergOperationBackdrop } from './IcebergOperationBackdrop';
+import { IcebergTableImportWizard } from './IcebergTableImportWizard';
 
 interface IcebergDetailProps {
   instance: IcebergInstanceConfig;
@@ -84,7 +104,10 @@ interface NamespaceTableRowsProps {
   instanceId: string;
   namespace: string[];
   filter: string;
+  showEmptyRow?: boolean;
   onSelect: (selection: SelectedTable) => void;
+  onDelete: (selection: SelectedTable) => void;
+  onRename: (selection: SelectedTable) => void;
 }
 
 const errorMessage = (error: unknown): string =>
@@ -122,7 +145,9 @@ const IcebergTableRow: React.FC<{
   namespace: string[];
   table: string;
   onSelect: (selection: SelectedTable) => void;
-}> = ({ instanceId, namespace, table, onSelect }) => {
+  onDelete: (selection: SelectedTable) => void;
+  onRename: (selection: SelectedTable) => void;
+}> = ({ instanceId, namespace, table, onSelect, onDelete, onRename }) => {
   const snapshotsQuery = useGetIcebergSnapshots(instanceId, namespace, table);
   const snapshots = snapshotsQuery.data ?? [];
   const firstSnapshot = snapshots[0];
@@ -164,17 +189,44 @@ const IcebergTableRow: React.FC<{
           : '—'}
       </TableCell>
       <TableCell align="right">
-        <Tooltip title="Open table">
-          <IconButton
-            size="small"
-            onClick={(event) => {
-              event.stopPropagation();
-              onSelect({ namespace, table });
-            }}
-          >
-            <ChevronRight fontSize="small" />
-          </IconButton>
-        </Tooltip>
+        <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
+          <Tooltip title="Rename Table">
+            <IconButton
+              size="small"
+              aria-label="Rename Table"
+              onClick={(event) => {
+                event.stopPropagation();
+                onRename({ namespace, table });
+              }}
+            >
+              <DriveFileRenameOutline fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Delete Table">
+            <IconButton
+              size="small"
+              color="error"
+              aria-label="Delete Table"
+              onClick={(event) => {
+                event.stopPropagation();
+                onDelete({ namespace, table });
+              }}
+            >
+              <Delete fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Open table">
+            <IconButton
+              size="small"
+              onClick={(event) => {
+                event.stopPropagation();
+                onSelect({ namespace, table });
+              }}
+            >
+              <ChevronRight fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Box>
       </TableCell>
     </TableRow>
   );
@@ -184,7 +236,10 @@ const NamespaceTableRows: React.FC<NamespaceTableRowsProps> = ({
   instanceId,
   namespace,
   filter,
+  showEmptyRow = false,
   onSelect,
+  onDelete,
+  onRename,
 }) => {
   const tablesQuery = useListIcebergTables(instanceId, namespace);
   const normalizedFilter = filter.trim().toLowerCase();
@@ -215,9 +270,61 @@ const NamespaceTableRows: React.FC<NamespaceTableRowsProps> = ({
           namespace={namespace}
           table={table}
           onSelect={onSelect}
+          onDelete={onDelete}
+          onRename={onRename}
         />
       ))}
+      {showEmptyRow && tables.length === 0 && (
+        <TableRow>
+          <TableCell colSpan={8} sx={{ color: 'text.secondary', py: 2 }}>
+            No tables found in {namespace.join('.')}.
+          </TableCell>
+        </TableRow>
+      )}
     </>
+  );
+};
+
+const NamespaceGroupHeader: React.FC<{
+  instanceId: string;
+  namespace: string[];
+  onDrop: (namespace: string[]) => void;
+}> = ({ instanceId, namespace, onDrop }) => {
+  const tablesQuery = useListIcebergTables(instanceId, namespace);
+  const count = tablesQuery.data?.length ?? 0;
+  return (
+    <TableRow sx={{ bgcolor: 'action.hover' }}>
+      <TableCell colSpan={8} sx={{ py: 0.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Folder fontSize="small" color="primary" />
+          <Typography variant="subtitle2" fontWeight={600}>
+            {namespace.join('.')}
+          </Typography>
+          <Chip
+            label={
+              count === 0 ? 'empty' : `${count} table${count === 1 ? '' : 's'}`
+            }
+            size="small"
+            variant="outlined"
+            sx={{
+              height: 20,
+              '& .MuiChip-label': { fontSize: '0.6875rem', px: 1 },
+            }}
+          />
+          <Box sx={{ flex: 1 }} />
+          <Tooltip title="Drop namespace (must be empty)">
+            <IconButton
+              size="small"
+              color="error"
+              aria-label="Drop namespace"
+              onClick={() => onDrop(namespace)}
+            >
+              <Delete fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      </TableCell>
+    </TableRow>
   );
 };
 
@@ -737,8 +844,182 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
   const queryClient = useQueryClient();
   const namespacesQuery = useListIcebergNamespaces(instance.id);
   const testInstanceMutation = useTestIcebergInstance();
+  const importTableMutation = useImportIcebergTable();
+  const dropTableMutation = useDropIcebergTable();
+  const renameTableMutation = useRenameIcebergTable();
+  const createNamespaceMutation = useCreateIcebergNamespace();
+  const dropNamespaceMutation = useDropIcebergNamespace();
   const [currentTab, setCurrentTab] = React.useState(0);
   const [tableFilter, setTableFilter] = React.useState('');
+  const [importWizardOpen, setImportWizardOpen] = React.useState(false);
+  const [tableToDelete, setTableToDelete] =
+    React.useState<SelectedTable | null>(null);
+  const [tableToRename, setTableToRename] =
+    React.useState<SelectedTable | null>(null);
+  const [newTableName, setNewTableName] = React.useState('');
+  const [namespaceCreateOpen, setNamespaceCreateOpen] = React.useState(false);
+  const [newNamespaceName, setNewNamespaceName] = React.useState('');
+  const [namespaceToDelete, setNamespaceToDelete] = React.useState<
+    string[] | null
+  >(null);
+  const [namespaceFilter, setNamespaceFilter] = React.useState<string | null>(
+    null,
+  );
+  const [groupByNamespace, setGroupByNamespace] = React.useState(false);
+  const namespaceNameValid = (() => {
+    const parts = newNamespaceName
+      .trim()
+      .split('.')
+      .map((part) => part.trim())
+      .filter(Boolean);
+    return (
+      parts.length > 0 &&
+      parts.every((part) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(part))
+    );
+  })();
+
+  const handleDeleteTable = () => {
+    if (!tableToDelete) return;
+    dropTableMutation.mutate(
+      {
+        id: instance.id,
+        namespace: tableToDelete.namespace,
+        table: tableToDelete.table,
+      },
+      {
+        onSuccess: (result) => {
+          setTableToDelete(null);
+          toast.success(
+            `Deleted ${result.namespace.join('.')}.${result.table}`,
+          );
+        },
+        onError: (error) => {
+          toast.error(errorMessage(error));
+        },
+      },
+    );
+  };
+
+  const handleRenameTable = () => {
+    if (!tableToRename) return;
+    const trimmed = newTableName.trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(trimmed)) {
+      toast.error(
+        'Table name must start with a letter or underscore and contain only letters, numbers, and underscores',
+      );
+      return;
+    }
+    renameTableMutation.mutate(
+      {
+        id: instance.id,
+        namespace: tableToRename.namespace,
+        table: tableToRename.table,
+        newTable: trimmed,
+      },
+      {
+        onSuccess: (result) => {
+          setTableToRename(null);
+          setNewTableName('');
+          toast.success(
+            `Renamed to ${result.namespace.join('.')}.${result.table}`,
+          );
+        },
+        onError: (error) => {
+          toast.error(errorMessage(error));
+        },
+      },
+    );
+  };
+
+  const handleCreateNamespace = () => {
+    const parts = newNamespaceName
+      .trim()
+      .split('.')
+      .map((part) => part.trim())
+      .filter(Boolean);
+    if (
+      parts.length === 0 ||
+      parts.some((part) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(part))
+    ) {
+      toast.error(
+        'Namespace parts must start with a letter or underscore and contain only letters, numbers, and underscores',
+      );
+      return;
+    }
+    const fullName = parts.join('.');
+    if (namespacesQuery.data?.some((ns) => ns.join('.') === fullName)) {
+      toast.error(`Namespace ${fullName} already exists`);
+      return;
+    }
+    createNamespaceMutation.mutate(
+      {
+        id: instance.id,
+        namespace: parts,
+      },
+      {
+        onSuccess: (result) => {
+          setNamespaceCreateOpen(false);
+          setNewNamespaceName('');
+          toast.success(`Created namespace ${result.namespace.join('.')}`);
+        },
+        onError: (error) => {
+          toast.error(errorMessage(error));
+        },
+      },
+    );
+  };
+
+  const handleDropNamespace = () => {
+    if (!namespaceToDelete) return;
+    dropNamespaceMutation.mutate(
+      {
+        id: instance.id,
+        namespace: namespaceToDelete,
+      },
+      {
+        onSuccess: (result) => {
+          setNamespaceToDelete(null);
+          // If the dropped namespace was the active filter, clear it so the
+          // table body does not render empty with no explanation.
+          setNamespaceFilter((current) =>
+            current === result.namespace.join('.') ? null : current,
+          );
+          toast.success(`Dropped namespace ${result.namespace.join('.')}`);
+        },
+        onError: (error) => {
+          toast.error(errorMessage(error));
+        },
+      },
+    );
+  };
+
+  const handleImportTable = (
+    namespace: string[],
+    table: string,
+    filePath: string,
+    fileFormat: IcebergImportFileFormat,
+  ) => {
+    importTableMutation.mutate(
+      {
+        id: instance.id,
+        namespace,
+        table,
+        filePath,
+        fileFormat,
+      },
+      {
+        onSuccess: (result) => {
+          setImportWizardOpen(false);
+          toast.success(
+            `Imported ${result.rowCount} rows into ${result.namespace.join('.')}.${result.table}`,
+          );
+        },
+        onError: (error) => {
+          toast.error(errorMessage(error));
+        },
+      },
+    );
+  };
 
   const refresh = async () => {
     await queryClient.invalidateQueries(['iceberg', 'namespaces', instance.id]);
@@ -840,37 +1121,167 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
       );
     }
     if (namespacesQuery.data?.length === 0) {
-      return <Alert severity="info">No namespaces or tables found.</Alert>;
+      return (
+        <Box>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            No namespaces or tables found. Create a namespace or import a local
+            file to create your first table.
+          </Alert>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<CreateNewFolder />}
+              onClick={() => setNamespaceCreateOpen(true)}
+              sx={{ height: '32px' }}
+            >
+              New Namespace
+            </Button>
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<Add />}
+              onClick={() => setImportWizardOpen(true)}
+              sx={{ height: '32px' }}
+            >
+              Import Data
+            </Button>
+          </Box>
+        </Box>
+      );
     }
     return (
       <>
-        <TextField
-          size="small"
-          value={tableFilter}
-          onChange={(event) => setTableFilter(event.target.value)}
-          placeholder="Search by name or schema…"
-          slotProps={{
-            input: {
-              startAdornment: (
-                <InputAdornment position="start">
-                  <Search fontSize="small" />
-                </InputAdornment>
-              ),
-              sx: { fontSize: '0.8125rem', height: '32px' },
-            },
-          }}
+        <Box
           sx={{
-            width: 280,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 2,
             mb: 2,
-            '& .MuiInputBase-input': {
-              paddingTop: '2px',
-              paddingBottom: '2px',
-            },
-            '& .MuiOutlinedInput-root': {
-              minHeight: '32px',
-            },
+            flexWrap: 'wrap',
           }}
-        />
+        >
+          <TextField
+            size="small"
+            value={tableFilter}
+            onChange={(event) => setTableFilter(event.target.value)}
+            placeholder="Search by name or schema…"
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Search fontSize="small" />
+                  </InputAdornment>
+                ),
+                sx: { fontSize: '0.8125rem', height: '32px' },
+              },
+            }}
+            sx={{
+              width: 280,
+              '& .MuiInputBase-input': {
+                paddingTop: '2px',
+                paddingBottom: '2px',
+              },
+              '& .MuiOutlinedInput-root': {
+                minHeight: '32px',
+              },
+            }}
+          />
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            <ToggleButtonGroup
+              size="small"
+              exclusive
+              value={groupByNamespace ? 'grouped' : 'flat'}
+              onChange={(_event, value) =>
+                setGroupByNamespace(value === 'grouped')
+              }
+              sx={{ height: '32px' }}
+            >
+              <ToggleButton value="flat" aria-label="Flat table list">
+                <Tooltip title="All tables in one list">
+                  <TableChart fontSize="small" />
+                </Tooltip>
+              </ToggleButton>
+              <ToggleButton value="grouped" aria-label="Group by namespace">
+                <Tooltip title="Group tables by namespace">
+                  <AccountTree fontSize="small" />
+                </Tooltip>
+              </ToggleButton>
+            </ToggleButtonGroup>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<CreateNewFolder />}
+              onClick={() => setNamespaceCreateOpen(true)}
+              sx={{ height: '32px' }}
+            >
+              New Namespace
+            </Button>
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<Add />}
+              onClick={() => setImportWizardOpen(true)}
+              sx={{ height: '32px' }}
+            >
+              Import Data
+            </Button>
+          </Box>
+        </Box>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.5,
+            flexWrap: 'wrap',
+            mb: 2,
+          }}
+        >
+          <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>
+            Namespaces:
+          </Typography>
+          <Tooltip title="Show tables from all namespaces">
+            <Chip
+              icon={<Folder fontSize="small" />}
+              label="All"
+              size="small"
+              color={!namespaceFilter ? 'primary' : 'default'}
+              variant={!namespaceFilter ? 'filled' : 'outlined'}
+              onClick={() => setNamespaceFilter(null)}
+            />
+          </Tooltip>
+          {namespacesQuery.data?.map((namespace) => {
+            const fullName = namespace.join('.');
+            const active = namespaceFilter === fullName;
+            return (
+              <Tooltip
+                key={fullName}
+                title={
+                  active
+                    ? `${fullName} — click again to clear filter`
+                    : `${fullName} — click to filter tables`
+                }
+              >
+                <Chip
+                  icon={<Folder fontSize="small" />}
+                  label={fullName}
+                  size="small"
+                  color={active ? 'primary' : 'default'}
+                  variant={active ? 'filled' : 'outlined'}
+                  onClick={() => setNamespaceFilter(active ? null : fullName)}
+                  onDelete={() => setNamespaceToDelete(namespace)}
+                  deleteIcon={
+                    <Delete
+                      fontSize="small"
+                      sx={{ '&:hover': { color: 'error.main' } }}
+                    />
+                  }
+                />
+              </Tooltip>
+            );
+          })}
+        </Box>
         <TableContainer>
           <Table size="small">
             <TableHead>
@@ -886,21 +1297,94 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
               </TableRow>
             </TableHead>
             <TableBody>
-              {namespacesQuery.data?.map((namespace) => (
-                <NamespaceTableRows
-                  key={namespace.join('.')}
-                  instanceId={instance.id}
-                  namespace={namespace}
-                  filter={tableFilter}
-                  onSelect={openTable}
-                />
-              ))}
+              {namespacesQuery.data
+                ?.filter(
+                  (namespace) =>
+                    !namespaceFilter || namespace.join('.') === namespaceFilter,
+                )
+                .map((namespace) =>
+                  groupByNamespace ? (
+                    <React.Fragment key={namespace.join('.')}>
+                      <NamespaceGroupHeader
+                        instanceId={instance.id}
+                        namespace={namespace}
+                        onDrop={(ns) => setNamespaceToDelete(ns)}
+                      />
+                      <NamespaceTableRows
+                        instanceId={instance.id}
+                        namespace={namespace}
+                        filter={tableFilter}
+                        showEmptyRow={!!namespaceFilter}
+                        onSelect={openTable}
+                        onDelete={(selection) => setTableToDelete(selection)}
+                        onRename={(selection) => {
+                          setTableToRename(selection);
+                          setNewTableName(selection.table);
+                        }}
+                      />
+                    </React.Fragment>
+                  ) : (
+                    <NamespaceTableRows
+                      key={namespace.join('.')}
+                      instanceId={instance.id}
+                      namespace={namespace}
+                      filter={tableFilter}
+                      showEmptyRow={!!namespaceFilter}
+                      onSelect={openTable}
+                      onDelete={(selection) => setTableToDelete(selection)}
+                      onRename={(selection) => {
+                        setTableToRename(selection);
+                        setNewTableName(selection.table);
+                      }}
+                    />
+                  ),
+                )}
             </TableBody>
           </Table>
         </TableContainer>
       </>
     );
   };
+
+  const renderImportWizard = () => (
+    <IcebergTableImportWizard
+      open={importWizardOpen}
+      onClose={() => setImportWizardOpen(false)}
+      instanceId={instance.id}
+      onImport={handleImportTable}
+      isLoading={importTableMutation.isLoading}
+    />
+  );
+
+  // Operations that lock the UI behind a full-screen backdrop until they
+  // finish, so the user cannot double-submit, misclick, or navigate away
+  // mid-operation. The first in-flight operation's label is shown.
+  const blockingOperations = [
+    {
+      isLoading: importTableMutation.isLoading,
+      label: 'Importing table…',
+    },
+    {
+      isLoading: dropTableMutation.isLoading,
+      label: 'Deleting table…',
+    },
+    {
+      isLoading: renameTableMutation.isLoading,
+      label: 'Renaming table…',
+    },
+    {
+      isLoading: createNamespaceMutation.isLoading,
+      label: 'Creating namespace…',
+    },
+    {
+      isLoading: dropNamespaceMutation.isLoading,
+      label: 'Dropping namespace…',
+    },
+    {
+      isLoading: testInstanceMutation.isLoading,
+      label: 'Testing connection…',
+    },
+  ];
 
   let catalogIdentityLabel = 'Catalog Name';
   let catalogIdentityValue = instance.catalogName ?? 'Local catalog';
@@ -1172,6 +1656,221 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
           )}
         </Box>
       </Paper>
+
+      {renderImportWizard()}
+
+      {/* Delete table confirmation dialog */}
+      <Dialog
+        open={!!tableToDelete}
+        onClose={() => setTableToDelete(null)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Delete table</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            Are you sure you want to delete{' '}
+            <strong>
+              {tableToDelete?.namespace.join('.')}.{tableToDelete?.table}
+            </strong>
+            ? This removes the table and its metadata from the catalog.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            variant="outlined"
+            onClick={() => setTableToDelete(null)}
+            color="inherit"
+            startIcon={<Close />}
+            disabled={dropTableMutation.isLoading}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDeleteTable}
+            color="error"
+            variant="contained"
+            startIcon={
+              dropTableMutation.isLoading ? (
+                <CircularProgress size={16} color="inherit" />
+              ) : (
+                <Delete />
+              )
+            }
+            disabled={!tableToDelete || dropTableMutation.isLoading}
+          >
+            {dropTableMutation.isLoading ? 'Deleting…' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Rename table dialog */}
+      <Dialog
+        open={!!tableToRename}
+        onClose={() => {
+          setTableToRename(null);
+          setNewTableName('');
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Rename table</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Rename{' '}
+            <strong>
+              {tableToRename?.namespace.join('.')}.{tableToRename?.table}
+            </strong>
+          </Typography>
+          <TextField
+            fullWidth
+            label="New table name"
+            value={newTableName}
+            onChange={(e) => setNewTableName(e.target.value)}
+            disabled={renameTableMutation.isLoading}
+            autoFocus
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button
+            variant="outlined"
+            onClick={() => {
+              setTableToRename(null);
+              setNewTableName('');
+            }}
+            color="inherit"
+            startIcon={<Close />}
+            disabled={renameTableMutation.isLoading}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleRenameTable}
+            variant="contained"
+            startIcon={<DriveFileRenameOutline />}
+            disabled={
+              !tableToRename ||
+              renameTableMutation.isLoading ||
+              !newTableName.trim() ||
+              newTableName.trim() === tableToRename.table
+            }
+          >
+            {renameTableMutation.isLoading ? 'Renaming…' : 'Rename'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Create namespace dialog */}
+      <Dialog
+        open={namespaceCreateOpen}
+        onClose={() => {
+          setNamespaceCreateOpen(false);
+          setNewNamespaceName('');
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Create namespace</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Namespaces organize tables. Use dot notation for nested namespaces
+            (for example <strong>analytics.daily</strong>).
+          </Typography>
+          <TextField
+            fullWidth
+            autoFocus
+            label="Namespace name"
+            placeholder="analytics.daily"
+            value={newNamespaceName}
+            onChange={(e) => setNewNamespaceName(e.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !createNamespaceMutation.isLoading) {
+                handleCreateNamespace();
+              }
+            }}
+            disabled={createNamespaceMutation.isLoading}
+            helperText="Letters, numbers, underscores, and dots only"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button
+            variant="outlined"
+            onClick={() => {
+              setNamespaceCreateOpen(false);
+              setNewNamespaceName('');
+            }}
+            color="inherit"
+            startIcon={<Close />}
+            disabled={createNamespaceMutation.isLoading}
+          >
+            Cancel
+          </Button>{' '}
+          <Button
+            onClick={handleCreateNamespace}
+            variant="contained"
+            startIcon={
+              createNamespaceMutation.isLoading ? (
+                <CircularProgress size={16} color="inherit" />
+              ) : (
+                <CreateNewFolder />
+              )
+            }
+            disabled={createNamespaceMutation.isLoading || !namespaceNameValid}
+          >
+            {createNamespaceMutation.isLoading ? 'Creating…' : 'Create'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Drop namespace confirmation dialog */}
+      <Dialog
+        open={!!namespaceToDelete}
+        onClose={() => setNamespaceToDelete(null)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Drop namespace</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Are you sure you want to drop namespace{' '}
+            <strong>{namespaceToDelete?.join('.')}</strong>?
+          </Typography>
+          <Alert severity="warning">
+            The namespace must be empty. Delete its tables first, otherwise the
+            catalog will reject the drop. Dropping a parent namespace also
+            removes its nested namespaces.
+          </Alert>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            variant="outlined"
+            onClick={() => setNamespaceToDelete(null)}
+            color="inherit"
+            startIcon={<Close />}
+            disabled={dropNamespaceMutation.isLoading}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDropNamespace}
+            color="error"
+            variant="contained"
+            startIcon={
+              dropNamespaceMutation.isLoading ? (
+                <CircularProgress size={16} color="inherit" />
+              ) : (
+                <Delete />
+              )
+            }
+            disabled={!namespaceToDelete || dropNamespaceMutation.isLoading}
+          >
+            {dropNamespaceMutation.isLoading ? 'Dropping…' : 'Drop'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Full-screen lock while any Iceberg operation is in flight */}
+      <IcebergOperationBackdrop operations={blockingOperations} />
     </Box>
   );
 };

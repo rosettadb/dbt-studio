@@ -8,6 +8,9 @@ import React from 'react';
 import { useMutation, useQuery, useQueryClient } from 'react-query';
 import type {
   CreateIcebergInstanceDTO,
+  IcebergCreateNamespaceParams,
+  IcebergDropNamespaceParams,
+  IcebergImportTableParams,
   IcebergTestCatalogParams,
 } from '../../types/iceberg';
 import * as icebergService from '../services/iceberg.service';
@@ -137,6 +140,36 @@ export const useCreateIcebergMetadataFile = () =>
     icebergService.createIcebergMetadataFile(warehousePath),
   );
 
+export const useImportIcebergTable = () => {
+  const qc = useQueryClient();
+  return useMutation(
+    ({
+      id,
+      namespace,
+      table,
+      filePath,
+      fileFormat,
+    }: IcebergImportTableParams) =>
+      icebergService.importIcebergTable(
+        id,
+        namespace,
+        table,
+        filePath,
+        fileFormat,
+      ),
+
+    {
+      onSuccess: (_result, { id }) => {
+        qc.invalidateQueries(['iceberg', 'tables', id]);
+        qc.invalidateQueries(['iceberg', 'schema', id]);
+        qc.invalidateQueries(['iceberg', 'snapshots', id]);
+        qc.invalidateQueries(['iceberg', 'preview', id]);
+        qc.invalidateQueries(['iceberg', 'namespaces', id]);
+      },
+    },
+  );
+};
+
 export const usePreviewIcebergTable = () =>
   useMutation(
     ({
@@ -160,6 +193,82 @@ export const usePreviewIcebergTable = () =>
         rowFilter,
       ),
   );
+
+export const useDropIcebergTable = () => {
+  const qc = useQueryClient();
+  return useMutation(
+    ({
+      id,
+      namespace,
+      table,
+    }: {
+      id: string;
+      namespace: string[];
+      table: string;
+    }) => icebergService.dropIcebergTable(id, namespace, table),
+    {
+      onSuccess: (_result, { id }) => {
+        qc.invalidateQueries(['iceberg', 'tables', id]);
+        qc.invalidateQueries(['iceberg', 'schema', id]);
+        qc.invalidateQueries(['iceberg', 'snapshots', id]);
+        qc.invalidateQueries(['iceberg', 'preview', id]);
+      },
+    },
+  );
+};
+
+export const useRenameIcebergTable = () => {
+  const qc = useQueryClient();
+  return useMutation(
+    ({
+      id,
+      namespace,
+      table,
+      newTable,
+    }: {
+      id: string;
+      namespace: string[];
+      table: string;
+      newTable: string;
+    }) => icebergService.renameIcebergTable(id, namespace, table, newTable),
+    {
+      onSuccess: (_result, { id }) => {
+        qc.invalidateQueries(['iceberg', 'tables', id]);
+        qc.invalidateQueries(['iceberg', 'schema', id]);
+        qc.invalidateQueries(['iceberg', 'snapshots', id]);
+        qc.invalidateQueries(['iceberg', 'preview', id]);
+      },
+    },
+  );
+};
+
+export const useCreateIcebergNamespace = () => {
+  const qc = useQueryClient();
+  return useMutation(
+    ({ id, namespace }: IcebergCreateNamespaceParams) =>
+      icebergService.createIcebergNamespace(id, namespace),
+    {
+      onSuccess: (_result, { id }) => {
+        qc.invalidateQueries(['iceberg', 'namespaces', id]);
+        qc.invalidateQueries(['iceberg', 'tables', id]);
+      },
+    },
+  );
+};
+
+export const useDropIcebergNamespace = () => {
+  const qc = useQueryClient();
+  return useMutation(
+    ({ id, namespace }: IcebergDropNamespaceParams) =>
+      icebergService.dropIcebergNamespace(id, namespace),
+    {
+      onSuccess: (_result, { id }) => {
+        qc.invalidateQueries(['iceberg', 'namespaces', id]);
+        qc.invalidateQueries(['iceberg', 'tables', id]);
+      },
+    },
+  );
+};
 
 export const useEnsureIcebergInstalled = () =>
   useMutation(() => icebergService.ensureIcebergInstalled());

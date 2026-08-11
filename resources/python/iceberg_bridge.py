@@ -6,7 +6,9 @@ All errors are returned as {"ok": false, "error": "..."} — never thrown to std
 
 Supported commands:
   install_check, test_connection, list_namespaces, list_tables,
-  get_schema, get_snapshots, preview_table, create_metadata_file
+  get_schema, get_snapshots, preview_table, import_table,
+  drop_table, rename_table, create_namespace, drop_namespace,
+  create_metadata_file
 """
 
 import json
@@ -193,6 +195,146 @@ def handle_preview_table(cmd: dict) -> dict:
         return {"ok": False, "error": str(exc)}
 
 
+def handle_import_table(cmd: dict) -> dict:
+    """
+    Import a local CSV/Parquet/JSON file into a new Iceberg table.
+
+    Reads the file with PyArrow, infers its schema, creates the table in the
+    requested namespace (creating the namespace when absent), and appends the
+    data as the initial snapshot.
+    """
+    try:
+        import pyarrow as pa  # noqa: PLC0415
+        import pyarrow.csv as pa_csv  # noqa: PLC0415
+        import pyarrow.json as pa_json  # noqa: PLC0415
+        import pyarrow.parquet as pa_parquet  # noqa: PLC0415
+        from pyiceberg.catalog import load_catalog  # noqa: PLC0415
+        from pyiceberg.exceptions import TableAlreadyExistsError  # noqa: PLC0415
+
+        props = resolve_env_vars(cmd.get("catalog_properties", {}))
+        catalog = load_catalog(cmd["catalog_name"], **props)
+        namespace = tuple(cmd["namespace"])
+        table_name = cmd["table"]
+        identifier = (*namespace, table_name)
+        file_path = cmd["file_path"]
+        file_format = cmd.get("file_format", "").lower()
+
+        if not os.path.isfile(file_path):
+            return {"ok": False, "error": f"File not found: {file_path}"}
+
+        if file_format == "parquet":
+            arrow_table = pa_parquet.read_table(file_path)
+        elif file_format == "csv":
+            arrow_table = pa_csv.read_csv(file_path)
+        elif file_format == "json":
+            try:
+                arrow_table = pa_json.read_json(file_path)
+            except Exception as json_error:  # noqa: BLE001
+                # pyarrow.json.read_json only accepts newline-delimited records.
+                # Fall back to parsing a JSON array of objects when present.
+                with open(file_path, encoding="utf-8") as handle:
+                    payload = json.load(handle)
+                if not isinstance(payload, list):
+                    raise ValueError(
+                        f"JSON source must be an array of objects or newline-delimited records: {json_error}"
+                    ) from json_error
+                arrow_table = pa.Table.from_pylist(payload)
+        else:
+            return {"ok": False, "error": f"Unsupported file format: {file_format}"}
+
+        if arrow_table.num_columns == 0:
+            return {"ok": False, "error": "The source file contains no columns."}
+
+        try:
+            catalog.create_namespace_if_not_exists(namespace)
+            table = catalog.create_table(identifier, schema=arrow_table.schema)
+        except TableAlreadyExistsError:
+            return {
+                "ok": False,
+                "error": f"Table already exists: {'.'.join(namespace)}.{table_name}",
+            }
+
+        try:
+            table.append(arrow_table)
+        except Exception:  # noqa: BLE001
+            # Best-effort cleanup of the empty table on write failure so a
+            # failed import does not leave a phantom catalog entry.
+            try:
+                catalog.drop_table(identifier)
+            except Exception:  # noqa: BLE001
+                pass
+            raise
+
+        return {
+            "ok": True,
+            "namespace": list(namespace),
+            "table": table_name,
+            "row_count": arrow_table.num_rows,
+            "columns": arrow_table.schema.names,
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc)}
+
+
+def handle_drop_table(cmd: dict) -> dict:
+    """Drop a table from the catalog."""
+    try:
+        from pyiceberg.catalog import load_catalog  # noqa: PLC0415
+        props = resolve_env_vars(cmd.get("catalog_properties", {}))
+        catalog = load_catalog(cmd["catalog_name"], **props)
+        namespace = tuple(cmd["namespace"])
+        catalog.drop_table((*namespace, cmd["table"]))
+        return {"ok": True, "namespace": list(namespace), "table": cmd["table"]}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc)}
+
+
+def handle_rename_table(cmd: dict) -> dict:
+    """Rename a table within the same namespace."""
+    try:
+        from pyiceberg.catalog import load_catalog  # noqa: PLC0415
+        props = resolve_env_vars(cmd.get("catalog_properties", {}))
+        catalog = load_catalog(cmd["catalog_name"], **props)
+        namespace = tuple(cmd["namespace"])
+        catalog.rename_table(
+            (*namespace, cmd["table"]),
+            (*namespace, cmd["new_table"]),
+        )
+        return {
+            "ok": True,
+            "namespace": list(namespace),
+            "table": cmd["new_table"],
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc)}
+
+
+def handle_create_namespace(cmd: dict) -> dict:
+    """Create a (possibly nested) namespace in the catalog."""
+    try:
+        from pyiceberg.catalog import load_catalog  # noqa: PLC0415
+        props = resolve_env_vars(cmd.get("catalog_properties", {}))
+        catalog = load_catalog(cmd["catalog_name"], **props)
+        namespace = tuple(cmd["namespace"])
+        catalog.create_namespace(namespace)
+        return {"ok": True, "namespace": list(namespace)}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc)}
+
+
+def handle_drop_namespace(cmd: dict) -> dict:
+    """Drop a namespace. The namespace must be empty (no tables)."""
+    try:
+        from pyiceberg.catalog import load_catalog  # noqa: PLC0415
+        props = resolve_env_vars(cmd.get("catalog_properties", {}))
+        catalog = load_catalog(cmd["catalog_name"], **props)
+        namespace = tuple(cmd["namespace"])
+        catalog.drop_namespace(namespace)
+        return {"ok": True, "namespace": list(namespace)}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc)}
+
+
 def handle_create_metadata_file(cmd: dict) -> dict:
     """
     Initialize a development-only SQL catalog backed by SQLite.
@@ -244,6 +386,11 @@ HANDLERS = {
     "get_schema": handle_get_schema,
     "get_snapshots": handle_get_snapshots,
     "preview_table": handle_preview_table,
+    "import_table": handle_import_table,
+    "drop_table": handle_drop_table,
+    "rename_table": handle_rename_table,
+    "create_namespace": handle_create_namespace,
+    "drop_namespace": handle_drop_namespace,
     "create_metadata_file": handle_create_metadata_file,
 }
 

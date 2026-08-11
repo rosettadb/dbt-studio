@@ -53,11 +53,40 @@ export const registerIcebergDatalakeHandlers = () => {
   ipcMain.handle('iceberg:getSnapshots', (_e, id: string, namespace, table) =>
     IcebergDatalakeService.getTableSnapshots(id, namespace, table),
   );
-
   ipcMain.handle(
     'iceberg:previewTable',
     (_e, id: string, namespace, table, limit, filter?) =>
       IcebergDatalakeService.previewTable(id, namespace, table, limit, filter),
+  );
+
+  ipcMain.handle(
+    'iceberg:importTable',
+    (_e, id: string, namespace, table, filePath, fileFormat) =>
+      IcebergDatalakeService.importTable(
+        id,
+        namespace,
+        table,
+        filePath,
+        fileFormat,
+      ),
+  );
+
+  ipcMain.handle('iceberg:dropTable', (_e, id: string, namespace, table) =>
+    IcebergDatalakeService.dropTable(id, namespace, table),
+  );
+
+  ipcMain.handle(
+    'iceberg:renameTable',
+    (_e, id: string, namespace, table, newTable) =>
+      IcebergDatalakeService.renameTable(id, namespace, table, newTable),
+  );
+
+  ipcMain.handle('iceberg:createNamespace', (_e, id: string, namespace) =>
+    IcebergDatalakeService.createNamespace(id, namespace),
+  );
+
+  ipcMain.handle('iceberg:dropNamespace', (_e, id: string, namespace) =>
+    IcebergDatalakeService.dropNamespace(id, namespace),
   );
 
   ipcMain.handle('iceberg:createMetadataFile', (_e, warehousePath: string) =>

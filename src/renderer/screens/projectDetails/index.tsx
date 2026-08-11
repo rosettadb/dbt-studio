@@ -266,6 +266,29 @@ const ProjectDetails: React.FC = () => {
     setPipelineDraftTab(null);
   }, [activePipelineFilePath]);
 
+  // Keep the code-mode draft in sync when the pipeline file is refreshed
+  // externally (e.g. after an agent update or a pipeline override). Only a
+  // CLEAN draft is overwritten — unsaved edits are preserved so a later user
+  // save cannot clobber the agent's change with stale YAML.
+  React.useEffect(() => {
+    if (
+      !pipelineCodeMode ||
+      !pipelineDraftTab ||
+      activePipelineContent === undefined
+    ) {
+      return;
+    }
+    setPipelineDraftTab((prev) => {
+      if (!prev || prev.isModified) return prev;
+      if (activePipelineContent === prev.content) return prev;
+      return {
+        ...prev,
+        content: activePipelineContent,
+        savedContent: activePipelineContent,
+      };
+    });
+  }, [activePipelineContent, pipelineCodeMode, pipelineDraftTab]);
+
   // Cloud logs auto-minimize once when a pipeline is first opened (mirrors
   // the terminal's own minimize/restore) and can be freely restored
   // afterward — restoring doesn't get overridden by mode changes.
