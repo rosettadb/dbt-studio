@@ -19,6 +19,10 @@ export type SettingsChannels =
   | 'version:rosetta:check'
   | 'version:rosetta:install'
   | 'version:rosetta:uninstall'
+  | 'version:runner:check'
+  | 'version:runner:install'
+  | 'version:runner:uninstall'
+  | 'runner:plugins:check'
   | 'settings:reset-factory'
   | 'settings:restart'
   | 'settings:getFileName'
@@ -239,6 +243,16 @@ export type ProcessChannels =
   | 'process:started'
   | 'process:exit'
   | 'process:done';
+
+export type RunnerChannels =
+  | 'runner:run'
+  | 'runner:status'
+  | 'runner:stop'
+  | 'runner:output'
+  | 'runner:error'
+  | 'runner:started'
+  | 'runner:exit'
+  | 'runner:done';
 
 export type SecureStorageChannels =
   | 'secure-storage:set'
@@ -510,6 +524,7 @@ export type Channels =
   | GitChannels
   | UtilChannels
   | ProcessChannels
+  | RunnerChannels
   | SecureStorageChannels
   | UpdateChannels
   | CloudExplorerChannels

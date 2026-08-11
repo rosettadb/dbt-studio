@@ -3,6 +3,8 @@ import {
   FileDialogProperties,
   SettingsType,
   RosettaVersionInfo,
+  RunnerVersionInfo,
+  RunnerPluginStatus,
   InstallResult,
 } from '../../types/backend';
 import { client } from '../config/client';
@@ -150,6 +152,34 @@ export const installRosettaVersion = async (
 
 export const uninstallRosetta = async (): Promise<void> => {
   await client.get<void>('version:rosetta:uninstall');
+};
+
+export const checkRunnerVersions = async (): Promise<RunnerVersionInfo> => {
+  const { data } = await client.get<RunnerVersionInfo>('version:runner:check');
+  return data;
+};
+
+export const installRunnerVersion = async (
+  version: string,
+): Promise<InstallResult> => {
+  const { data } = await client.post<string, InstallResult>(
+    'version:runner:install',
+    version,
+  );
+  return data;
+};
+
+export const uninstallRunnerVersion = async (): Promise<void> => {
+  await client.get<void>('version:runner:uninstall');
+};
+
+export const checkRunnerPluginDependencies = async (): Promise<
+  RunnerPluginStatus[]
+> => {
+  const { data } = await client.get<RunnerPluginStatus[]>(
+    'runner:plugins:check',
+  );
+  return data;
 };
 
 // DuckDB management services

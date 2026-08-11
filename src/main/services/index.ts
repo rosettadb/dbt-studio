@@ -19,6 +19,7 @@ import LineageService from './lineage.service';
 import SqlParserService from './sqlParser.service';
 import { FlowfileService } from './flowfile.service';
 import { TaskManagerService } from './taskManager.service';
+import RunnerService from './runner.service';
 
 export {
   ProjectsService,
@@ -42,4 +43,5 @@ export {
   SqlParserService,
   FlowfileService,
   TaskManagerService,
+  RunnerService,
 };

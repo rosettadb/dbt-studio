@@ -310,6 +310,9 @@ export type DuckDBDiagnostics = {
 export type SettingsType = {
   rosettaPath: string;
   rosettaVersion: string;
+  runnerPath?: string;
+  runnerVersion?: string;
+  runnerHome?: string;
   projectsDirectory: string;
   dbtSampleDirectory: string;
   sampleRosettaMainConf: string;
@@ -380,6 +383,42 @@ export type RosettaVersionInfo = {
   }[];
   latestStable: string;
   latestPrerelease?: string;
+};
+
+export type RunnerVersionInfo = {
+  currentVersion: string | null;
+  currentPath: string | null;
+  availableVersions: {
+    version: string;
+    releaseDate: string;
+    isPrerelease: boolean;
+    downloadUrl: string;
+    isNewer: boolean;
+    isOlder: boolean;
+    releaseNotes?: string;
+  }[];
+  latestStable: string;
+  latestPrerelease?: string;
+};
+
+export type RunnerPluginId =
+  | 'dbt'
+  | 'rosetta'
+  | 'git'
+  | 'terraform'
+  | 's3'
+  | 'kinetica_cli'
+  | 'command';
+
+export type RunnerPluginStatus = {
+  id: RunnerPluginId;
+  label: string;
+  plugin: string;
+  available: boolean;
+  version?: string;
+  path?: string;
+  managedInStudio?: boolean;
+  downloadUrl?: string;
 };
 
 export type DbtCoreVersionListItem = {

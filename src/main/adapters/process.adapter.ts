@@ -13,6 +13,27 @@ interface ProcessInfo {
   platform: string;
 }
 
+interface ProcessDoneResult {
+  code: number | null;
+  signal: string | null;
+  duration: number;
+  success: boolean;
+  errorMessage?: string;
+}
+
+interface ProcessStartOptions {
+  // When provided, the binary is spawned directly with these args (no shell
+  // string interpolation) - needed for callers that must pass structured env
+  // vars / paths safely (e.g. the local runner binary).
+  args?: string[];
+  cwd?: string;
+  env?: Record<string, string>;
+  // Called in the main process when the process exits, in addition to the
+  // 'done' IPC event sent to the renderer - lets a caller (e.g. the runner
+  // IPC handler) react to completion without a renderer round-trip.
+  onDone?: (result: ProcessDoneResult) => void;
+}
+
 class ProcessAdapter {
   private process: ChildProcessWithoutNullStreams | null = null;
 
@@ -23,12 +44,28 @@ class ProcessAdapter {
 
   private mainWindow: BrowserWindow | null = null;
 
-  start(command: string, mainWindow: BrowserWindow) {
+  private onDoneCallback: ProcessStartOptions['onDone'] | null = null;
+
+  // Channel names are prefixed so multiple ProcessAdapter instances (e.g. the
+  // shared "docs serve" process vs. the local runner) can broadcast on
+  // distinct IPC channels instead of colliding on 'process:*'.
+  private channelPrefix: string;
+
+  constructor(channelPrefix: string = 'process') {
+    this.channelPrefix = channelPrefix;
+  }
+
+  start(
+    command: string,
+    mainWindow: BrowserWindow,
+    options?: ProcessStartOptions,
+  ) {
     if (this.process) {
       throw new Error('A process is already running.');
     }
 
     this.mainWindow = mainWindow;
+    this.onDoneCallback = options?.onDone ?? null;
 
     try {
       // Platform-specific command handling
@@ -36,7 +73,10 @@ class ProcessAdapter {
       let spawnCommand: string;
       let spawnArgs: string[];
 
-      if (platform === 'win32') {
+      if (options?.args) {
+        spawnCommand = command;
+        spawnArgs = options.args;
+      } else if (platform === 'win32') {
         spawnCommand = 'cmd';
         spawnArgs = ['/c', command];
       } else {
@@ -50,6 +90,8 @@ class ProcessAdapter {
         detached: platform !== 'win32',
         // Set up proper signal handling
         windowsHide: platform === 'win32',
+        cwd: options?.cwd,
+        env: options?.env ? { ...process.env, ...options.env } : undefined,
       });
 
       const { pid } = this.process;
@@ -66,7 +108,7 @@ class ProcessAdapter {
         platform,
       };
 
-      this.sendEvent('process:started', {
+      this.sendEvent('started', {
         pid,
         command,
         startTime: this.processInfo.startTime,
@@ -130,7 +172,7 @@ class ProcessAdapter {
     const endTime = Date.now();
     const duration = endTime - this.processInfo.startTime;
 
-    this.sendEvent('process:exit', {
+    this.sendEvent('exit', {
       code,
       signal,
       duration,
@@ -142,13 +184,15 @@ class ProcessAdapter {
       `Process ended (${eventType}) with code ${code}${signal ? `, signal ${signal}` : ''} after ${Math.round(duration / 1000)}s`,
     );
 
-    this.sendEvent('process:done', {
+    const doneResult: ProcessDoneResult = {
       code,
       signal,
       duration,
       success: code === 0,
       errorMessage,
-    });
+    };
+    this.sendEvent('done', doneResult);
+    this.onDoneCallback?.(doneResult);
 
     this.cleanup();
   }
@@ -304,23 +348,24 @@ class ProcessAdapter {
     this.process = null;
     this.processInfo = null;
     this.mainWindow = null;
+    this.onDoneCallback = null;
   }
 
   private sendEvent(event: string, data: any) {
     if (this.mainWindow) {
-      this.mainWindow.webContents.send(event, data);
+      this.mainWindow.webContents.send(`${this.channelPrefix}:${event}`, data);
     }
   }
 
   private sendOutput(message: string) {
     if (this.mainWindow) {
-      this.mainWindow.webContents.send('process:output', message);
+      this.mainWindow.webContents.send(`${this.channelPrefix}:output`, message);
     }
   }
 
   private sendError(message: string) {
     if (this.mainWindow) {
-      this.mainWindow.webContents.send('process:error', message);
+      this.mainWindow.webContents.send(`${this.channelPrefix}:error`, message);
     }
   }
 
