@@ -307,7 +307,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   // This keeps the ring meaningful even before the first agent run.
   React.useEffect(() => {
     if (hasAuthoritativeContextBreakdownRef.current) return;
-    if (!selectedSessionId || !contextOverhead) return;
+    if (!selectedSessionId) return;
     if (isLoadingCompactionSummary) return;
 
     const activeMessages =
@@ -340,25 +340,28 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
         }>;
       }>,
     );
+    const overhead = contextOverhead ?? {
+      skills: 0,
+      mcpTools: 0,
+      secondBrain: 0,
+      contextWindow: 32_000,
+    };
 
     const total =
       historyTokens +
-      contextOverhead.skills +
-      contextOverhead.mcpTools +
-      contextOverhead.secondBrain;
-    const percentUsed = Math.min(
-      100,
-      (total / contextOverhead.contextWindow) * 100,
-    );
+      overhead.skills +
+      overhead.mcpTools +
+      overhead.secondBrain;
+    const percentUsed = Math.min(100, (total / overhead.contextWindow) * 100);
 
     setContextBreakdown({
       conversation: historyTokens,
       userFiles: 0,
-      skills: contextOverhead.skills,
-      mcpTools: contextOverhead.mcpTools,
-      secondBrain: contextOverhead.secondBrain,
+      skills: overhead.skills,
+      mcpTools: overhead.mcpTools,
+      secondBrain: overhead.secondBrain,
       total,
-      contextWindow: contextOverhead.contextWindow,
+      contextWindow: overhead.contextWindow,
       percentUsed,
     });
   }, [
