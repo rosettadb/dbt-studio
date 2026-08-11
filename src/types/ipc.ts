@@ -423,6 +423,8 @@ export type AgentChannels =
   | 'agent:context-usage'
   | 'agent:context-compacted'
   | 'agent:tools:list'
+  | 'agent:file-mutation:restore'
+  | 'agent:file-mutation:release'
   | 'ai-settings:load'
   | 'ai-settings:save'
   | 'ai-settings:file-path';

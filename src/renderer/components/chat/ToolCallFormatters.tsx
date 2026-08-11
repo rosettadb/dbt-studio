@@ -4,6 +4,41 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 
+const PIPELINE_DISPLAY_LIMIT = 20;
+const PIPELINE_DIAGNOSTIC_LIMIT = 5;
+
+const pipelinePath = (value: unknown): string =>
+  typeof value === 'string' ? value : 'pipeline';
+
+const pipelineDiagnosticMessage = (value: unknown): string =>
+  String(value ?? 'Pipeline warning')
+    .split(/\r?\n/u, 1)[0]
+    .slice(0, 300);
+
+const renderPipelineDiagnostics = (values: unknown) => {
+  if (!Array.isArray(values) || values.length === 0) return null;
+  return (
+    <Box component="ul" sx={{ mt: 0.5, mb: 0, pl: 2 }}>
+      {values.slice(0, PIPELINE_DIAGNOSTIC_LIMIT).map((item, index) => {
+        const diagnostic =
+          typeof item === 'string'
+            ? { message: item }
+            : (item as Record<string, unknown>);
+        return (
+          <li key={`${String(diagnostic.path ?? '')}-${index}`}>
+            {pipelineDiagnosticMessage(
+              diagnostic.message ?? diagnostic.code ?? 'Pipeline warning',
+            )}
+          </li>
+        );
+      })}
+      {values.length > PIPELINE_DIAGNOSTIC_LIMIT && (
+        <li>More diagnostics omitted</li>
+      )}
+    </Box>
+  );
+};
+
 const stringifyToolValue = (value: unknown): string => {
   try {
     const seen = new WeakSet<object>();
@@ -54,6 +89,14 @@ export const renderArguments = (toolName: string, args: any) => {
   }
 
   switch (toolName) {
+    case 'studio_pipeline_list':
+      return <Box>List project pipelines</Box>;
+    case 'studio_pipeline_read':
+      return <Box>Pipeline: {pipelinePath(args.path)}</Box>;
+    case 'studio_pipeline_generate':
+      return <Box>Generate pipeline: {pipelinePath(args.path)}</Box>;
+    case 'studio_pipeline_update':
+      return <Box>Update pipeline: {pipelinePath(args.path)}</Box>;
     case 'studio_ducklake_query':
     case 'studio_sql_query':
     case 'studio_monaco_update': {
@@ -190,6 +233,59 @@ export const renderResult = (toolName: string, result: any) => {
 
   try {
     switch (toolName) {
+      case 'studio_pipeline_list':
+        if (result.success && Array.isArray(result.pipelines)) {
+          return (
+            <Box>
+              Found {result.count ?? result.pipelines.length} pipeline(s)
+              <Box component="ul" sx={{ mt: 0.5, mb: 0, pl: 2 }}>
+                {result.pipelines
+                  .slice(0, PIPELINE_DISPLAY_LIMIT)
+                  .map((pipeline: any) => (
+                    <li key={pipeline.path}>{pipelinePath(pipeline.path)}</li>
+                  ))}
+                {(result.truncated ||
+                  result.pipelines.length > PIPELINE_DISPLAY_LIMIT) && (
+                  <li>More pipelines omitted</li>
+                )}
+              </Box>
+            </Box>
+          );
+        }
+        break;
+      case 'studio_pipeline_read':
+        if (result.success) {
+          return (
+            <Box>
+              Read {pipelinePath(result.path)} ({result.bytes ?? 0} bytes) —{' '}
+              {result.valid ? 'valid' : 'invalid'}
+              {renderPipelineDiagnostics(result.issues)}
+              {renderPipelineDiagnostics(result.warnings)}
+            </Box>
+          );
+        }
+        break;
+      case 'studio_pipeline_generate':
+      case 'studio_pipeline_update':
+        if (result.success) {
+          return (
+            <Box>
+              {result.created ? 'Created' : 'Updated'}{' '}
+              {pipelinePath(result.path)} ({result.bytesWritten ?? 0} bytes)
+              {renderPipelineDiagnostics(result.warnings)}
+            </Box>
+          );
+        }
+        if (result.error) {
+          return (
+            <Box sx={{ color: 'error.main' }}>
+              {result.stale ? 'Pipeline changed since it was read. ' : ''}
+              {String(result.error)}
+              {renderPipelineDiagnostics(result.issues)}
+            </Box>
+          );
+        }
+        break;
       case 'studio_ducklake_query':
       case 'studio_sql_query':
         if (result.message) {

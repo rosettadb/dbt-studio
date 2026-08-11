@@ -23,6 +23,7 @@ import {
 import { FileTypeBadge } from '../../utils/fileTypeIcon';
 import type { ToolCallState } from '../../hooks/useAgentStream';
 import { renderArguments, renderResult } from './ToolCallFormatters';
+import { isPipelineTool } from './pipelineToolResults';
 
 interface ToolCallRowProps {
   toolCall: ToolCallState;
@@ -62,6 +63,48 @@ export const ToolCallRow: React.FC<ToolCallRowProps> = ({
     };
 
     switch (toolName) {
+      case 'studio_pipeline_list':
+      case 'studio_pipeline_read': {
+        icon = (
+          <FolderOpenIcon
+            fontSize="small"
+            sx={{ color: theme.palette.text.secondary }}
+          />
+        );
+        label = labelForStatus({
+          done:
+            toolName === 'studio_pipeline_list'
+              ? 'Listed pipelines'
+              : 'Read pipeline',
+          error:
+            toolName === 'studio_pipeline_list'
+              ? 'Failed listing pipelines'
+              : 'Failed reading pipeline',
+          running:
+            toolName === 'studio_pipeline_list'
+              ? 'Listing pipelines'
+              : 'Reading pipeline',
+        });
+        category = 'read';
+        break;
+      }
+      case 'studio_pipeline_generate':
+      case 'studio_pipeline_update': {
+        const resultPath = (result as any)?.path;
+        const requestedPath = typeof args?.path === 'string' ? args.path : '';
+        const filename =
+          String(resultPath || requestedPath)
+            .split('/')
+            .pop() || 'pipeline';
+        icon = <FileTypeBadge filename={filename} />;
+        label = labelForStatus({
+          done: `${toolName === 'studio_pipeline_generate' ? 'Created' : 'Updated'} ${filename}`,
+          error: `Failed ${toolName === 'studio_pipeline_generate' ? 'creating' : 'updating'} ${filename}`,
+          running: `${toolName === 'studio_pipeline_generate' ? 'Creating' : 'Updating'} ${filename}`,
+        });
+        category = 'write';
+        break;
+      }
       case 'readDbtModel':
       case 'readFile': {
         const filePath = (args.filePath || args.path || '') as string;
@@ -524,26 +567,28 @@ export const ToolCallRow: React.FC<ToolCallRowProps> = ({
             </>
           )}
 
-          <Collapse in={showDetails}>
-            <Box
-              component="pre"
-              sx={{
-                mt: 0.75,
-                mb: 0,
-                p: 1,
-                borderRadius: 1,
-                bgcolor: 'background.default',
-                color: 'text.primary',
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-                maxHeight: 260,
-                overflow: 'auto',
-                fontSize: '0.72rem',
-              }}
-            >
-              {rawDetails}
-            </Box>
-          </Collapse>
+          {!isPipelineTool(toolCall.toolName) && (
+            <Collapse in={showDetails}>
+              <Box
+                component="pre"
+                sx={{
+                  mt: 0.75,
+                  mb: 0,
+                  p: 1,
+                  borderRadius: 1,
+                  bgcolor: 'background.default',
+                  color: 'text.primary',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  maxHeight: 260,
+                  overflow: 'auto',
+                  fontSize: '0.72rem',
+                }}
+              >
+                {rawDetails}
+              </Box>
+            </Collapse>
+          )}
         </Box>
       </Collapse>
     </Box>

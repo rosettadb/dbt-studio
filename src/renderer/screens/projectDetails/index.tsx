@@ -96,6 +96,12 @@ import {
   getPipelineFilePath,
   toPipelineTabPath,
 } from '../../components/editor/previewConstants';
+import {
+  getSuccessfulPipelineMutation,
+  refreshCleanPipelineDraft,
+  resolveProjectFileMutationPath,
+  resolveProjectMutationPath,
+} from '../../components/chat/pipelineToolResults';
 
 const VerticalSash = (_: number, active: boolean) => (
   <div
@@ -657,19 +663,27 @@ const ProjectDetails: React.FC = () => {
       return;
     }
 
+    if (isPipelineFile(selectedFilePath)) {
+      openTab(toPipelineTabPath(selectedFilePath), {
+        title: deriveTitleFromPath(selectedFilePath),
+        content: '',
+        isReadOnly: true,
+      });
+      return;
+    }
+
     openTab(selectedFilePath);
   }, [selectedFilePath, openTab, isHydrated]);
 
   React.useEffect(() => {
     if (activeTab?.path) {
-      // Pipeline tabs don't update selectedFilePath — they manage their own content
-      if (isPipelineTabPath(activeTab.path)) {
-        return;
-      }
       const isPreview = isVirtualPreviewPath(activeTab.path);
-      const realSourcePath = isPreview
-        ? getPreviewSourcePath(activeTab.path) || activeTab.path
-        : activeTab.path;
+      let realSourcePath = activeTab.path;
+      if (isPipelineTabPath(activeTab.path)) {
+        realSourcePath = getPipelineFilePath(activeTab.path) || activeTab.path;
+      } else if (isPreview) {
+        realSourcePath = getPreviewSourcePath(activeTab.path) || activeTab.path;
+      }
 
       if (realSourcePath !== selectedFilePath) {
         setSelectedFilePath(realSourcePath);
@@ -707,18 +721,52 @@ const ProjectDetails: React.FC = () => {
   ]);
 
   React.useEffect(() => {
-    registerOpenFile?.((filePath: string) => {
+    registerOpenFile?.(async (filePath: string) => {
+      if (isPipelineFile(filePath)) {
+        const pipelineTabPath = toPipelineTabPath(filePath);
+        const alreadyOpen = !!getTabByPath(pipelineTabPath);
+        openTab(pipelineTabPath, {
+          title: deriveTitleFromPath(filePath),
+          content: '',
+          isReadOnly: true,
+        });
+        if (alreadyOpen && activePipelineFilePath === filePath) {
+          const refreshed = await refetchPipelineContent();
+          if (typeof refreshed.data === 'string') {
+            setPipelineDraftTab((previous) =>
+              refreshCleanPipelineDraft(previous, filePath, refreshed.data),
+            );
+          }
+        }
+        return;
+      }
+
+      const existingTab = getTabByPath(filePath);
       setSelectedFilePath(filePath);
       openTab(filePath);
+      if (existingTab && !existingTab.isModified) {
+        await refreshTabContentByPath(filePath);
+      }
     });
     return () => {
       registerOpenFile?.(undefined);
     };
-  }, [registerOpenFile, setSelectedFilePath, openTab]);
+  }, [
+    registerOpenFile,
+    setSelectedFilePath,
+    openTab,
+    getTabByPath,
+    activePipelineFilePath,
+    refetchPipelineContent,
+    refreshTabContentByPath,
+  ]);
 
   React.useEffect(() => {
     registerCloseFile?.((filePath: string) => {
-      closeTabByPath(filePath);
+      const tabPath = isPipelineFile(filePath)
+        ? toPipelineTabPath(filePath)
+        : filePath;
+      closeTabByPath(tabPath);
       if (selectedFilePath === filePath) setSelectedFilePath(undefined);
     });
     return () => {
@@ -749,6 +797,9 @@ const ProjectDetails: React.FC = () => {
   const openTabRef = React.useRef(openTab);
   const switchTabRef = React.useRef(switchTab);
   const refreshTabContentByPathRef = React.useRef(refreshTabContentByPath);
+  const activePipelineFilePathRef = React.useRef(activePipelineFilePath);
+  const pipelineDraftTabRef = React.useRef(pipelineDraftTab);
+  const refetchPipelineContentRef = React.useRef(refetchPipelineContent);
   React.useEffect(() => {
     fetchDirectoriesRef.current = fetchDirectories;
   }, [fetchDirectories]);
@@ -767,6 +818,15 @@ const ProjectDetails: React.FC = () => {
   React.useEffect(() => {
     refreshTabContentByPathRef.current = refreshTabContentByPath;
   }, [refreshTabContentByPath]);
+  React.useEffect(() => {
+    activePipelineFilePathRef.current = activePipelineFilePath;
+  }, [activePipelineFilePath]);
+  React.useEffect(() => {
+    pipelineDraftTabRef.current = pipelineDraftTab;
+  }, [pipelineDraftTab]);
+  React.useEffect(() => {
+    refetchPipelineContentRef.current = refetchPipelineContent;
+  }, [refetchPipelineContent]);
 
   // Refresh file tree and open/update tab when agent writes a file
   // Uses refs so the subscription is created only once per project/hydration change
@@ -780,11 +840,24 @@ const ProjectDetails: React.FC = () => {
       const isFileWrite =
         payload.toolName === 'writeFile' ||
         payload.toolName === 'writeDbtModel';
-      if (!isFileWrite || payload.status !== 'done') return;
+      const pipelineMutation = getSuccessfulPipelineMutation(
+        payload.toolName,
+        payload.result,
+      );
+      if ((!isFileWrite && !pipelineMutation) || payload.status !== 'done')
+        return;
 
-      const filePath =
-        (payload.args as any)?.filePath || (payload.args as any)?.path;
+      const candidateFilePath = pipelineMutation
+        ? resolveProjectMutationPath(
+            project.path,
+            pipelineMutation.relativePath,
+          )
+        : (payload.args as any)?.filePath || (payload.args as any)?.path;
+      const filePath = pipelineMutation
+        ? candidateFilePath
+        : resolveProjectFileMutationPath(project.path, candidateFilePath);
       if (!filePath) return;
+      const tabPath = pipelineMutation ? toPipelineTabPath(filePath) : filePath;
 
       // Skip if already processing this file
       if (inFlight.has(filePath)) {
@@ -809,7 +882,7 @@ const ProjectDetails: React.FC = () => {
           '[ProjectDetails] fetchDirectories done, checking for existing tab',
         );
 
-        const existingTab = getTabByPathRef.current(filePath);
+        const existingTab = getTabByPathRef.current(tabPath);
         // eslint-disable-next-line no-console
         console.log('[ProjectDetails] existingTab:', existingTab?.id ?? 'none');
 
@@ -819,12 +892,33 @@ const ProjectDetails: React.FC = () => {
             '[ProjectDetails] Tab already exists, switching to:',
             existingTab.id,
           );
-          await refreshTabContentByPathRef.current(filePath);
+          if (pipelineMutation) {
+            const hasDirtyPipelineDraft =
+              activePipelineFilePathRef.current === filePath &&
+              pipelineDraftTabRef.current?.isModified;
+            if (
+              activePipelineFilePathRef.current === filePath &&
+              !hasDirtyPipelineDraft
+            ) {
+              const refreshed = await refetchPipelineContentRef.current();
+              if (typeof refreshed.data === 'string') {
+                setPipelineDraftTab((previous) =>
+                  refreshCleanPipelineDraft(
+                    previous,
+                    filePath,
+                    refreshed.data as string,
+                  ),
+                );
+              }
+            }
+          } else if (!existingTab.isModified) {
+            await refreshTabContentByPathRef.current(filePath);
+          }
           switchTabRef.current(existingTab.id);
         } else {
           // eslint-disable-next-line no-console
           console.log('[ProjectDetails] Opening new tab for:', filePath);
-          const tabId = await openTabRef.current(filePath);
+          const tabId = await openTabRef.current(tabPath);
           // eslint-disable-next-line no-console
           console.log('[ProjectDetails] openTab returned tabId:', tabId);
           if (tabId) switchTabRef.current(tabId);
