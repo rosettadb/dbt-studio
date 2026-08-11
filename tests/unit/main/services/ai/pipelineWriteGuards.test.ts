@@ -3,6 +3,7 @@ import os from 'os';
 import path from 'path';
 import { createFilesystemTools } from '../../../../../src/main/services/ai/tools/filesystem.tools';
 import { createDbtTools } from '../../../../../src/main/services/ai/tools/dbt.tools';
+import FileMutationRollbackService from '../../../../../src/main/services/ai/fileMutationRollback.service';
 
 jest.mock('ai', () => ({
   tool: jest.fn((definition) => definition),
@@ -35,6 +36,7 @@ describe('Project Agent generic pipeline write guards', () => {
   });
 
   afterEach(() => {
+    FileMutationRollbackService.clear();
     fs.rmSync(projectPath, { recursive: true, force: true });
   });
 
@@ -81,21 +83,33 @@ describe('Project Agent generic pipeline write guards', () => {
       dbtWrite({ filePath: schemaPath, content: 'version: 2\n' }),
     ).resolves.toMatchObject({ success: true, created: true });
 
-    await expect(
-      filesystemWrite({ filePath: markdownPath, content: '# Updated\n' }),
-    ).resolves.toMatchObject({
+    const filesystemUpdate = await filesystemWrite({
+      filePath: markdownPath,
+      content: '# Updated\n',
+    });
+    const dbtUpdate = await dbtWrite({
+      filePath: schemaPath,
+      content: 'version: 3\n',
+    });
+
+    expect(filesystemUpdate).toMatchObject({
       success: true,
       created: false,
-      previousContent: '# Notes\n',
+      mutationId: expect.any(String),
     });
-    await expect(
-      dbtWrite({ filePath: schemaPath, content: 'version: 3\n' }),
-    ).resolves.toMatchObject({
+    expect(dbtUpdate).toMatchObject({
       success: true,
       created: false,
-      previousContent: 'version: 2\n',
+      mutationId: expect.any(String),
     });
+    expect(filesystemUpdate).not.toHaveProperty('previousContent');
+    expect(dbtUpdate).not.toHaveProperty('previousContent');
     expect(fs.readFileSync(markdownPath, 'utf8')).toBe('# Updated\n');
     expect(fs.readFileSync(schemaPath, 'utf8')).toBe('version: 3\n');
+
+    FileMutationRollbackService.restore(filesystemUpdate.mutationId);
+    FileMutationRollbackService.restore(dbtUpdate.mutationId);
+    expect(fs.readFileSync(markdownPath, 'utf8')).toBe('# Notes\n');
+    expect(fs.readFileSync(schemaPath, 'utf8')).toBe('version: 2\n');
   });
 });

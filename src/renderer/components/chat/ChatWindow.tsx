@@ -55,10 +55,15 @@ import {
 } from '../../controllers/agent.controller';
 import { useGetFileContent } from '../../controllers/projects.controller';
 import { projectsServices } from '../../services';
+import {
+  releaseFileMutations,
+  restoreFileMutation,
+} from '../../services/agent.service';
 import { PROJECT_AGENT_CONTEXT_FILE } from '../../../shared/agentMemoryConstants';
 import {
   collectSuccessfulPipelineMutations,
   isSuccessfulGenericFileWrite,
+  partitionDiscardResults,
   resolveProjectFileMutationPath,
   type PipelineChangedFile,
 } from './pipelineToolResults';
@@ -590,6 +595,10 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   const [dismissedRunKey, setDismissedRunKey] = React.useState<string | null>(
     null,
   );
+  const [completedDiscard, setCompletedDiscard] = React.useState<{
+    runKey: string;
+    paths: string[];
+  } | null>(null);
 
   // Build a stable key for the current run: sessionId + step count fingerprint
   // Resets to null whenever a new stream starts (steps reset to [])
@@ -663,6 +672,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   React.useEffect(() => {
     if (streamState.isStreaming) {
       setDismissedRunKey(null);
+      setCompletedDiscard(null);
     }
   }, [streamState.isStreaming]);
 
@@ -678,15 +688,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     }
 
     // Use a Map to keep only the latest update per file
-    const fileMap = new Map<
-      string,
-      {
-        path: string;
-        added: number;
-        removed: number;
-        discard?: PipelineChangedFile['discard'];
-      }
-    >();
+    const fileMap = new Map<string, PipelineChangedFile>();
 
     streamState.steps.forEach((step) => {
       step.toolCalls.forEach((tc) => {
@@ -705,11 +707,11 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
             } else if (
               !discard &&
               result.created === false &&
-              typeof result.previousContent === 'string'
+              typeof result.mutationId === 'string'
             ) {
               discard = {
-                action: 'restore',
-                content: result.previousContent,
+                action: 'rollback',
+                mutationId: result.mutationId,
               };
             }
             if (!discard) return;
@@ -731,7 +733,13 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       ).forEach((file) => fileMap.set(file.path, file));
     }
 
-    return Array.from(fileMap.values());
+    const completedPaths =
+      completedDiscard?.runKey === currentRunKey
+        ? new Set(completedDiscard.paths)
+        : null;
+    return Array.from(fileMap.values()).filter(
+      (file) => !completedPaths?.has(file.path),
+    );
   }, [
     streamState.steps,
     streamState.isStreaming,
@@ -739,6 +747,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     currentRunKey,
     dismissedRunKey,
     project?.path,
+    completedDiscard,
   ]);
 
   const handleOpenFile = (path: string) => {
@@ -861,44 +870,92 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
               files={changedFiles}
               onOpenFile={handleOpenFile}
               onDismiss={() => {
+                const mutationIds = changedFiles.flatMap((file) =>
+                  file.discard.action === 'rollback'
+                    ? [file.discard.mutationId]
+                    : [],
+                );
+                releaseFileMutations(mutationIds).catch(() => undefined);
                 if (currentRunKey) setDismissedRunKey(currentRunKey);
               }}
               onDiscard={async () => {
-                // Created files are removed, so their tabs must close. Updated
-                // pipelines stay open and are refreshed after restoration.
-                changedFiles
-                  .filter((f) => f.discard?.action !== 'restore')
-                  .forEach((f) => closeFile?.(f.path));
-                // Delete created files or restore the pre-agent content for
-                // pipeline updates.
-                await Promise.allSettled(
-                  changedFiles.map((f) => {
-                    if (f.discard?.action === 'restore') {
-                      return projectsServices.saveFileContent({
-                        path: f.path,
-                        content: f.discard.content,
+                const results = await Promise.allSettled(
+                  changedFiles.map(async (file) => {
+                    if (file.discard.action === 'restore') {
+                      const restored = await projectsServices.saveFileContent({
+                        path: file.path,
+                        content: file.discard.content,
+                      });
+                      const restoredContent = restored
+                        ? await projectsServices.getFileContent({
+                            path: file.path,
+                          })
+                        : null;
+                      if (restoredContent !== file.discard.content) {
+                        throw new Error('Restored file verification failed.');
+                      }
+                    } else if (file.discard.action === 'rollback') {
+                      await restoreFileMutation(file.discard.mutationId);
+                    } else {
+                      await projectsServices.deleteItem({
+                        filePath: file.path,
                       });
                     }
-                    return projectsServices.deleteItem({ filePath: f.path });
                   }),
                 );
-                // Refresh file tree to remove deleted files
-                await refreshFileTree?.();
-                await Promise.all(
-                  changedFiles
-                    .filter((f) => f.discard?.action === 'restore')
-                    .map((f) =>
+                const { successfulFiles, failedFiles } =
+                  partitionDiscardResults(changedFiles, results);
+                const failureCount = failedFiles.length;
+
+                if (successfulFiles.length > 0) {
+                  if (currentRunKey) {
+                    setCompletedDiscard((previous) => ({
+                      runKey: currentRunKey,
+                      paths: Array.from(
+                        new Set([
+                          ...(previous?.runKey === currentRunKey
+                            ? previous.paths
+                            : []),
+                          ...successfulFiles.map((file) => file.path),
+                        ]),
+                      ),
+                    }));
+                  }
+
+                  successfulFiles
+                    .filter((file) => file.discard.action === 'delete')
+                    .forEach((file) => closeFile?.(file.path));
+                  try {
+                    await refreshFileTree?.();
+                  } catch {
+                    toast.warning(
+                      'File changes were discarded, but the project tree could not be refreshed.',
+                    );
+                  }
+
+                  const restoredFiles = successfulFiles.filter(
+                    (file) => file.discard.action !== 'delete',
+                  );
+                  await Promise.allSettled(
+                    restoredFiles.map((file) =>
                       queryClient.invalidateQueries([
                         'GET_FILE_CONTENT',
-                        f.path,
+                        file.path,
                       ]),
                     ),
-                );
-                changedFiles
-                  .filter((f) => f.discard?.action === 'restore')
-                  .forEach((f) => openFile?.(f.path));
+                  );
+                  restoredFiles.forEach((file) => openFile?.(file.path));
+                }
+
+                if (failureCount > 0) {
+                  toast.error(
+                    `Failed to discard ${failureCount} file ${failureCount === 1 ? 'change' : 'changes'}. The failed changes were kept for retry.`,
+                  );
+                  return;
+                }
+
                 if (currentRunKey) setDismissedRunKey(currentRunKey);
-                toast.success('Agent-created files discarded.');
+                toast.success('Agent file changes discarded.');
               }}
             />
           </Box>

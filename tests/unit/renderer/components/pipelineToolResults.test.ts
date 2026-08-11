@@ -2,6 +2,7 @@ import {
   collectSuccessfulPipelineMutations,
   getSuccessfulPipelineMutation,
   isSuccessfulGenericFileWrite,
+  partitionDiscardResults,
   refreshCleanPipelineDraft,
   resolveProjectFileMutationPath,
   resolveProjectMutationPath,
@@ -201,5 +202,32 @@ describe('pipeline tool result presentation policy', () => {
         bytesWritten: 20,
       }),
     ).toBe(true);
+  });
+
+  it('retains only failed discard operations for retry', () => {
+    const files = [
+      {
+        path: '/projects/demo/models/created.sql',
+        added: 1,
+        removed: 0,
+        discard: { action: 'delete' as const },
+      },
+      {
+        path: '/projects/demo/models/updated.sql',
+        added: 1,
+        removed: 1,
+        discard: {
+          action: 'rollback' as const,
+          mutationId: 'opaque-id',
+        },
+      },
+    ];
+    const result = partitionDiscardResults(files, [
+      { status: 'fulfilled', value: undefined },
+      { status: 'rejected', reason: new Error('restore failed') },
+    ]);
+
+    expect(result.successfulFiles).toEqual([files[0]]);
+    expect(result.failedFiles).toEqual([files[1]]);
   });
 });

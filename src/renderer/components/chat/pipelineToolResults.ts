@@ -72,8 +72,33 @@ export interface PipelineChangedFile {
   path: string;
   added: number;
   removed: number;
-  discard: { action: 'delete' } | { action: 'restore'; content: string };
+  discard:
+    | { action: 'delete' }
+    | { action: 'restore'; content: string }
+    | { action: 'rollback'; mutationId: string };
 }
+
+export const partitionDiscardResults = (
+  files: PipelineChangedFile[],
+  results: PromiseSettledResult<unknown>[],
+): {
+  successfulFiles: PipelineChangedFile[];
+  failedFiles: PipelineChangedFile[];
+} =>
+  files.reduce(
+    (partition, file, index) => {
+      if (results[index]?.status === 'fulfilled') {
+        partition.successfulFiles.push(file);
+      } else {
+        partition.failedFiles.push(file);
+      }
+      return partition;
+    },
+    {
+      successfulFiles: [] as PipelineChangedFile[],
+      failedFiles: [] as PipelineChangedFile[],
+    },
+  );
 
 export function resolveProjectFileMutationPath(
   projectPath: string,

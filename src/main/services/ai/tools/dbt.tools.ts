@@ -13,6 +13,7 @@ import AgentService from '../../agent.service';
 import SecureStorageService from '../../secureStorage.service';
 import { TerminalConfirmGate } from './terminalConfirmGate';
 import { isProtectedPipelineWritePath } from './studio/pipeline.tools';
+import FileMutationRollbackService from '../fileMutationRollback.service';
 
 // Security constraints
 const ALLOWED_DBT_COMMANDS = [
@@ -29,16 +30,6 @@ const ALLOWED_DBT_COMMANDS = [
 ];
 const MAX_FILE_SIZE = 500_000; // 500 KB
 const COMMAND_TIMEOUT = 120_000; // 2 minutes
-
-const captureFileWriteState = (
-  filePath: string,
-): { created: boolean; previousContent?: string } => {
-  if (!fs.existsSync(filePath)) return { created: true };
-  return {
-    created: false,
-    previousContent: fs.readFileSync(filePath, 'utf8'),
-  };
-};
 
 function parseExtraArgs(extraArgs?: string): string[] {
   if (!extraArgs) return [];
@@ -371,6 +362,7 @@ export const writeDbtModel = tool({
       contentLength: content?.length ?? 0,
       projectPath,
     });
+    let mutationId: string | undefined;
     try {
       assertWithinProject(filePath, projectPath);
       if (isProtectedPipelineWritePath(projectPath, filePath)) {
@@ -394,7 +386,8 @@ export const writeDbtModel = tool({
         // The write is shown in the UI via AgentStepBlock and can be reverted.
       }
 
-      const writeState = captureFileWriteState(filePath);
+      const writeState = FileMutationRollbackService.capture(filePath);
+      mutationId = writeState.mutationId;
 
       // Ensure directory exists
       const dir = path.dirname(filePath);
@@ -411,6 +404,7 @@ export const writeDbtModel = tool({
         ...writeState,
       };
     } catch (error) {
+      if (mutationId) FileMutationRollbackService.release([mutationId]);
       return {
         error:
           error instanceof Error ? error.message : 'Unknown error writing file',
@@ -739,6 +733,7 @@ export function createDbtTools(
         content: z.string().describe('Complete file content to write'),
       }),
       execute: async ({ filePath, content }) => {
+        let mutationId: string | undefined;
         try {
           assertWithinProject(filePath, projectPath);
           if (isProtectedPipelineWritePath(projectPath, filePath)) {
@@ -756,7 +751,8 @@ export function createDbtTools(
           if (context) {
             // File writes don't require confirmation — only shell commands do.
           }
-          const writeState = captureFileWriteState(filePath);
+          const writeState = FileMutationRollbackService.capture(filePath);
+          mutationId = writeState.mutationId;
           const dir = path.dirname(filePath);
           if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
           fs.writeFileSync(filePath, content, 'utf-8');
@@ -768,6 +764,7 @@ export function createDbtTools(
             ...writeState,
           };
         } catch (error) {
+          if (mutationId) FileMutationRollbackService.release([mutationId]);
           return {
             error:
               error instanceof Error

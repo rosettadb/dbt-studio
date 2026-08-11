@@ -7,19 +7,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import AgentService from '../../agent.service';
 import { isProtectedPipelineWritePath } from './studio/pipeline.tools';
+import FileMutationRollbackService from '../fileMutationRollback.service';
 
 const MAX_FILE_SIZE = 1_000_000; // 1 MB for general files
 const MAX_DIRECTORY_DEPTH = 5;
-
-const captureFileWriteState = (
-  filePath: string,
-): { created: boolean; previousContent?: string } => {
-  if (!fs.existsSync(filePath)) return { created: true };
-  return {
-    created: false,
-    previousContent: fs.readFileSync(filePath, 'utf8'),
-  };
-};
 
 /**
  * Validates that a file path is within the project root
@@ -207,6 +198,7 @@ export const writeFile = tool({
       contentLength: content?.length ?? 0,
       projectPath,
     });
+    let mutationId: string | undefined;
     try {
       assertWithinProject(filePath, projectPath);
       if (isProtectedPipelineWritePath(projectPath, filePath)) {
@@ -221,7 +213,8 @@ export const writeFile = tool({
         // File writes don't require confirmation — only shell commands do.
       }
 
-      const writeState = captureFileWriteState(filePath);
+      const writeState = FileMutationRollbackService.capture(filePath);
+      mutationId = writeState.mutationId;
 
       // Ensure directory exists
       const dir = path.dirname(filePath);
@@ -238,6 +231,7 @@ export const writeFile = tool({
         ...writeState,
       };
     } catch (error) {
+      if (mutationId) FileMutationRollbackService.release([mutationId]);
       return {
         error:
           error instanceof Error ? error.message : 'Unknown error writing file',
@@ -435,6 +429,7 @@ export function createFilesystemTools(
         content: z.string().describe('Content to write to the file'),
       }),
       execute: async ({ filePath, content }) => {
+        let mutationId: string | undefined;
         try {
           assertWithinProject(filePath, projectPath);
           if (isProtectedPipelineWritePath(projectPath, filePath)) {
@@ -449,7 +444,8 @@ export function createFilesystemTools(
             // File writes don't require confirmation — only shell commands do.
           }
 
-          const writeState = captureFileWriteState(filePath);
+          const writeState = FileMutationRollbackService.capture(filePath);
+          mutationId = writeState.mutationId;
           const dir = path.dirname(filePath);
           if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
           fs.writeFileSync(filePath, content, 'utf-8');
@@ -461,6 +457,7 @@ export function createFilesystemTools(
             ...writeState,
           };
         } catch (error) {
+          if (mutationId) FileMutationRollbackService.release([mutationId]);
           return {
             error:
               error instanceof Error
