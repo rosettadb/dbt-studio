@@ -1,6 +1,7 @@
 import { BrowserWindow, shell, app, screen, Menu } from 'electron';
 import path from 'path';
 import { resolveHtmlPath } from '../../utils/setupHelpers';
+import MenuBuilder from './menu';
 
 export const createMainWindow = (
   onCloseCallback: () => void,
@@ -30,8 +31,14 @@ export const createMainWindow = (
     },
   });
 
-  // Set application menu to null to completely remove it
-  Menu.setApplicationMenu(null);
+  // Windows/Linux: no application menu at all. macOS always shows a native
+  // menu bar regardless — Electron falls back to its own default (mostly
+  // non-functional) menu if we pass null, so build a real one there instead.
+  if (process.platform === 'darwin') {
+    new MenuBuilder(mainWindow).buildMenu();
+  } else {
+    Menu.setApplicationMenu(null);
+  }
 
   mainWindow.loadURL(resolveHtmlPath('index.html', 'app'));
 
