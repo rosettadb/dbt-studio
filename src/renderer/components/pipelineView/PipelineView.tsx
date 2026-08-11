@@ -25,6 +25,8 @@ type PipelineViewProps = {
   onSave?: (content: string) => Promise<void>;
   /** When provided (cloud mode), shows a Run button that triggers a cloud run. */
   onRun?: () => void;
+  /** When set, the Run button is shown but disabled with this text as its tooltip. */
+  runDisabledReason?: string;
   /** Notifies parent when the visual graph enters/exits edit mode. */
   onEditingChange?: (isEditing: boolean) => void;
   /** Fired once when the pipeline view first mounts (e.g. tab opened). */
@@ -81,6 +83,7 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
   onActiveActionChange,
   onSave,
   onRun,
+  runDisabledReason,
   onEditingChange,
   onEnterView,
 }) => {
@@ -197,6 +200,7 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
         onEdit={onEdit}
         onSave={onSave}
         onRun={onRun}
+        runDisabledReason={runDisabledReason}
         onEditingChange={onEditingChange}
         onEnterView={onEnterView}
       />

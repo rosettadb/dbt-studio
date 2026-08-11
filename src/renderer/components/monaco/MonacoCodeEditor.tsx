@@ -44,6 +44,10 @@ const BASE_OPTIONS: EditorOptions = {
   // WordHighlighter throws "Canceled" during model swap / dispose. We don't
   // need the feature; turning it off is the root-cause fix.
   occurrencesHighlight: 'off',
+  // Monaco's own drop handler otherwise inserts the dropped OS file's path
+  // as text into whatever model is currently active, racing with our
+  // Editor-level onDrop that opens the file as a new tab.
+  dropIntoEditor: { enabled: false },
 };
 
 /**
