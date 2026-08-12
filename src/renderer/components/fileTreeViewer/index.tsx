@@ -174,7 +174,11 @@ const FileTreeViewer: React.FC<Props> = ({
         selectedPath={selectedPath}
         projectPath={project!.path}
         copyPath={copyPath}
-        onRunPipeline={settings?.env === 'cloud' ? onRunPipeline : undefined}
+        onRunPipeline={
+          settings?.env === 'cloud' && !settings?.dbtVersion?.startsWith('2.')
+            ? onRunPipeline
+            : undefined
+        }
       />
       {(fileModal || folderModal) && (
         <NewFileModal

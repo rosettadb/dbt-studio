@@ -99,6 +99,26 @@ export const listTools = async (): Promise<{
   return data;
 };
 
+export const restoreFileMutation = async (
+  mutationId: string,
+): Promise<{ path: string }> => {
+  const { data } = await client.post<{ mutationId: string }, { path: string }>(
+    'agent:file-mutation:restore',
+    { mutationId },
+  );
+  return data;
+};
+
+export const releaseFileMutations = async (
+  mutationIds: string[],
+): Promise<void> => {
+  if (mutationIds.length === 0) return;
+  await client.post<{ mutationIds: string[] }, void>(
+    'agent:file-mutation:release',
+    { mutationIds },
+  );
+};
+
 export const getContextOverhead = async (
   request: AgentContextOverheadRequest,
 ): Promise<AgentContextOverhead> => {

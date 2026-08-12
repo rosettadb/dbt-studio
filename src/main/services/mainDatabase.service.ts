@@ -1660,10 +1660,16 @@ export default class MainDatabaseService {
     const db = await this.getDatabase();
 
     try {
-      const itemsToInsert = contextItems.map((item) => ({
-        ...item,
-        messageId,
-      }));
+      const itemsToInsert = contextItems.map((item) => {
+        // Context providers use their own string identifiers. Never persist
+        // those into the auto-increment SQLite primary key.
+        const contextItem = { ...item };
+        delete contextItem.id;
+        return {
+          ...contextItem,
+          messageId,
+        };
+      });
 
       const results = await db
         .insert(schema.contextItems)

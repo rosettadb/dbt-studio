@@ -58,6 +58,7 @@ export type ProjectChannels =
   | 'project:createFile'
   | 'project:deleteItem'
   | 'project:createFolder'
+  | 'project:createFolderAsync'
   | 'project:copyPath'
   | 'project:select'
   | 'project:selected'
@@ -446,6 +447,8 @@ export type AgentChannels =
   | 'agent:context-usage'
   | 'agent:context-compacted'
   | 'agent:tools:list'
+  | 'agent:file-mutation:restore'
+  | 'agent:file-mutation:release'
   | 'ai-settings:load'
   | 'ai-settings:save'
   | 'ai-settings:file-path';

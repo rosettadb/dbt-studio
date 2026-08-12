@@ -25,6 +25,8 @@ type PipelineViewProps = {
   onSave?: (content: string) => Promise<void>;
   /** When provided (cloud mode), shows a Run button that triggers a cloud run. */
   onRun?: () => void;
+  /** When set, the Run button is shown but disabled with this text as its tooltip. */
+  runDisabledReason?: string;
   /** Notifies parent when the visual graph enters/exits edit mode. */
   onEditingChange?: (isEditing: boolean) => void;
   /** Fired once when the pipeline view first mounts (e.g. tab opened). */
@@ -81,6 +83,7 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
   onActiveActionChange,
   onSave,
   onRun,
+  runDisabledReason,
   onEditingChange,
   onEnterView,
 }) => {
@@ -98,10 +101,14 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
     return applyStatuses(config.jobs, actionStatus);
   }, [config, actionStatus]);
 
-  // Derive a coarse run state from the matched steps so the header chip can
-  // show something meaningful without a separate /actions/[id] round-trip.
+  // Prefer the overall container status when the API provides one — steps
+  // are updated conditionally and may never all reach a terminal state even
+  // after the run finishes, so deriving from steps alone can get stuck.
+  // Fall back to deriving from steps only for responses that omit it.
   const derivedRunState: CloudActionStatus | null = React.useMemo(() => {
-    if (!actionId || !actionStatus?.steps?.length) return null;
+    if (!actionId || !actionStatus) return null;
+    if (actionStatus.status) return actionStatus.status;
+    if (!actionStatus.steps?.length) return null;
     const statuses = actionStatus.steps.map((s) => s.status);
     if (statuses.includes('failed')) return 'FAILED';
     if (statuses.includes('running')) return 'RUNNING';
@@ -193,6 +200,7 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
         onEdit={onEdit}
         onSave={onSave}
         onRun={onRun}
+        runDisabledReason={runDisabledReason}
         onEditingChange={onEditingChange}
         onEnterView={onEnterView}
       />

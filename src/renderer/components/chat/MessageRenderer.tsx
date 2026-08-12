@@ -25,6 +25,7 @@ import { ThinkingRow } from './ThinkingRow';
 import { ResponseActions } from './ResponseActions';
 import { AgentStepBlock } from './AgentStepBlock';
 import { ToolCallRow } from './ToolCallRow';
+import { isVisibleUserContextItem } from './userContextVisibility';
 import type {
   AgentStep,
   ToolCallState,
@@ -629,6 +630,10 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
 }) => {
   const Container = role === 'user' ? UserMessage : AssistantMessage;
   const { setEditingFilePath } = useAppContext();
+  const visibleContextItems = React.useMemo(
+    () => contextItems?.filter(isVisibleUserContextItem) ?? [],
+    [contextItems],
+  );
 
   // Build AgentStep[] from persisted tool calls for history rendering
   const persistedSteps = React.useMemo(() => {
@@ -668,13 +673,13 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
     <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
       <Container>
         {/* Show context items for user messages */}
-        {contextItems && contextItems.length > 0 && (
+        {visibleContextItems.length > 0 && (
           <Box sx={{ mb: 1 }}>
             <ToggleSection
-              title={`${contextItems.length} context ${contextItems.length > 1 ? 'items' : 'item'}`}
+              title={`${visibleContextItems.length} context ${visibleContextItems.length > 1 ? 'items' : 'item'}`}
               defaultOpen={false}
             >
-              {contextItems.map((item) => (
+              {visibleContextItems.map((item) => (
                 <ContextItemRow
                   key={item.id}
                   name={item.name}

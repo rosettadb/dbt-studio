@@ -16,9 +16,9 @@ import {
   DeleteOutline,
   Storage as DatabaseIcon,
   SwapHoriz,
-  AccountTree,
 } from '@mui/icons-material';
 import { useTheme } from '@mui/material/styles';
+import { ReactComponent as RouteIcon } from '../../assets/icons/lucide/route.svg';
 import { FileTreeViewer } from '../index';
 import { FileTreeContainer } from '../../screens/projectDetails/styles';
 import {
@@ -342,7 +342,7 @@ const ExplorerTab: React.FC<ExplorerTabProps> = ({
               fullWidth
               variant="contained"
               size="small"
-              startIcon={<AccountTree sx={{ fontSize: 16 }} />}
+              startIcon={<RouteIcon width={16} height={16} />}
               onClick={() => setCreatePipelineOpen(true)}
               sx={{
                 fontSize: '0.72rem',

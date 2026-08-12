@@ -7,7 +7,6 @@ import {
   AutoAwesome,
   AutoFixHigh,
   Cable,
-  Cloud,
   Delete,
   Edit,
 } from '@mui/icons-material';
@@ -71,7 +70,6 @@ import {
   parsePipelineConfig,
 } from '../../components/pipelineView';
 import { DbtRunHistoryPanel } from '../../components/dbtRunHistory';
-import { Taskbar, TaskbarItem } from '../../components/terminal/styles';
 import { projectsServices } from '../../services';
 import { Content, EditorContainer, Header, NoFileSelected } from './styles';
 import {
@@ -98,6 +96,12 @@ import {
   getPipelineFilePath,
   toPipelineTabPath,
 } from '../../components/editor/previewConstants';
+import {
+  getSuccessfulPipelineMutation,
+  refreshCleanPipelineDraft,
+  resolveProjectFileMutationPath,
+  resolveProjectMutationPath,
+} from '../../components/chat/pipelineToolResults';
 
 const VerticalSash = (_: number, active: boolean) => (
   <div
@@ -127,6 +131,34 @@ const VerticalSash = (_: number, active: boolean) => (
   </div>
 );
 
+/**
+ * Resolves a pipeline file's identifier relative to whichever pipelines base
+ * directory it lives under (`rosetta/pipelines/` current, `.rosetta/`
+ * legacy), extension stripped — matching the `name` the main process reports
+ * from `ProjectsService.listPipelines`. Falls back to the bare filename if
+ * the file isn't under a known base dir. This is what must be sent as
+ * `PIPELINE_FILE` and used as the `pipelineRuns` lookup key so nested
+ * pipelines don't collide with same-named pipelines in other folders.
+ */
+const getPipelineRelativeName = (
+  filePath: string,
+  projectPath: string,
+): string => {
+  const normalizedFile = filePath.replace(/\\/g, '/');
+  const normalizedProject = projectPath.replace(/\\/g, '/').replace(/\/$/, '');
+  const baseDirs = [
+    `${normalizedProject}/rosetta/pipelines/`,
+    `${normalizedProject}/.rosetta/`,
+  ];
+
+  const base = baseDirs.find((dir) => normalizedFile.startsWith(dir));
+  const relative = base
+    ? normalizedFile.slice(base.length)
+    : (normalizedFile.split('/').pop() ?? normalizedFile);
+
+  return relative.replace(/\.(yml|yaml)$/, '');
+};
+
 const ProjectDetails: React.FC = () => {
   const navigate = useNavigate();
   const [verticalSizes, setVerticalSizes] = React.useState<(number | string)[]>(
@@ -150,6 +182,7 @@ const ProjectDetails: React.FC = () => {
   const { data: project, isLoading, refetch } = useGetSelectedProject();
   const { data: connection } = useGetConnectionById(project?.connectionId);
   const { data: settings } = useGetSettings();
+  const isDbtV2 = !!settings?.dbtVersion?.startsWith('2.');
   const { mutate: updateFileContent } = useSaveFileContent();
 
   const {
@@ -216,17 +249,16 @@ const ProjectDetails: React.FC = () => {
   const [pipelineCloudModal, setPipelineCloudModal] = React.useState(false);
   const theme = useTheme();
 
-  const handleRunPipelineFile = React.useCallback((filePath: string) => {
-    // Extract pipeline name from path (filename without extension)
-    const name =
-      filePath
-        .replace(/\\/g, '/')
-        .split('/')
-        .pop()
-        ?.replace(/\.(yml|yaml)$/, '') || '';
-    setPipelineRunArgs(`--pipeline_name ${name}`);
-    setPipelineCloudModal(true);
-  }, []);
+  const handleRunPipelineFile = React.useCallback(
+    (filePath: string) => {
+      const name = project?.path
+        ? getPipelineRelativeName(filePath, project.path)
+        : '';
+      setPipelineRunArgs(`--pipeline_name ${name}`);
+      setPipelineCloudModal(true);
+    },
+    [project?.path],
+  );
 
   // Pipeline tab support — derive state from the currently active tab
   const activePipelineFilePath = React.useMemo(() => {
@@ -245,13 +277,26 @@ const ProjectDetails: React.FC = () => {
     return parts[parts.length - 1] || null;
   }, [activePipelineFilePath]);
 
-  const recordedPipelineActionId = activePipelineBasename
-    ? (project?.pipelineRuns?.[activePipelineBasename] ?? null)
+  // Identifier matching the PIPELINE_FILE sent to the cloud and the key used
+  // in project.pipelineRuns (relative to the pipelines base dir, e.g.
+  // `test/test.yml`) — must NOT be reduced to just the basename, or nested
+  // pipelines collide with same-named pipelines in other folders.
+  const activePipelineFile = React.useMemo(() => {
+    if (!activePipelineFilePath || !project?.path) return null;
+    const relativeName = getPipelineRelativeName(
+      activePipelineFilePath,
+      project.path,
+    );
+    return relativeName ? `${relativeName}.yml` : null;
+  }, [activePipelineFilePath, project?.path]);
+
+  const recordedPipelineActionId = activePipelineFile
+    ? (project?.pipelineRuns?.[activePipelineFile] ?? null)
     : null;
 
   const activePipelineActionId = usePipelineActionId(
     project?.externalId ? project?.id : null,
-    activePipelineBasename,
+    activePipelineFile,
     recordedPipelineActionId,
   );
 
@@ -265,35 +310,6 @@ const ProjectDetails: React.FC = () => {
     setPipelineCodeMode(false);
     setPipelineDraftTab(null);
   }, [activePipelineFilePath]);
-
-  // Keep the code-mode draft in sync when the pipeline file is refreshed
-  // externally (e.g. after an agent update or a pipeline override). Only a
-  // CLEAN draft is overwritten — unsaved edits are preserved so a later user
-  // save cannot clobber the agent's change with stale YAML.
-  React.useEffect(() => {
-    if (
-      !pipelineCodeMode ||
-      !pipelineDraftTab ||
-      activePipelineContent === undefined
-    ) {
-      return;
-    }
-    setPipelineDraftTab((prev) => {
-      if (!prev || prev.isModified) return prev;
-      if (activePipelineContent === prev.content) return prev;
-      return {
-        ...prev,
-        content: activePipelineContent,
-        savedContent: activePipelineContent,
-      };
-    });
-  }, [activePipelineContent, pipelineCodeMode, pipelineDraftTab]);
-
-  // Cloud logs auto-minimize once when a pipeline is first opened (mirrors
-  // the terminal's own minimize/restore) and can be freely restored
-  // afterward — restoring doesn't get overridden by mode changes.
-  const [pipelineLogsMinimized, setPipelineLogsMinimized] =
-    React.useState(false);
 
   const handleEnterPipelineCodeMode = React.useCallback(
     (content?: string) => {
@@ -647,19 +663,27 @@ const ProjectDetails: React.FC = () => {
       return;
     }
 
+    if (isPipelineFile(selectedFilePath)) {
+      openTab(toPipelineTabPath(selectedFilePath), {
+        title: deriveTitleFromPath(selectedFilePath),
+        content: '',
+        isReadOnly: true,
+      });
+      return;
+    }
+
     openTab(selectedFilePath);
   }, [selectedFilePath, openTab, isHydrated]);
 
   React.useEffect(() => {
     if (activeTab?.path) {
-      // Pipeline tabs don't update selectedFilePath — they manage their own content
-      if (isPipelineTabPath(activeTab.path)) {
-        return;
-      }
       const isPreview = isVirtualPreviewPath(activeTab.path);
-      const realSourcePath = isPreview
-        ? getPreviewSourcePath(activeTab.path) || activeTab.path
-        : activeTab.path;
+      let realSourcePath = activeTab.path;
+      if (isPipelineTabPath(activeTab.path)) {
+        realSourcePath = getPipelineFilePath(activeTab.path) || activeTab.path;
+      } else if (isPreview) {
+        realSourcePath = getPreviewSourcePath(activeTab.path) || activeTab.path;
+      }
 
       if (realSourcePath !== selectedFilePath) {
         setSelectedFilePath(realSourcePath);
@@ -697,18 +721,52 @@ const ProjectDetails: React.FC = () => {
   ]);
 
   React.useEffect(() => {
-    registerOpenFile?.((filePath: string) => {
+    registerOpenFile?.(async (filePath: string) => {
+      if (isPipelineFile(filePath)) {
+        const pipelineTabPath = toPipelineTabPath(filePath);
+        const alreadyOpen = !!getTabByPath(pipelineTabPath);
+        openTab(pipelineTabPath, {
+          title: deriveTitleFromPath(filePath),
+          content: '',
+          isReadOnly: true,
+        });
+        if (alreadyOpen && activePipelineFilePath === filePath) {
+          const refreshed = await refetchPipelineContent();
+          if (typeof refreshed.data === 'string') {
+            setPipelineDraftTab((previous) =>
+              refreshCleanPipelineDraft(previous, filePath, refreshed.data),
+            );
+          }
+        }
+        return;
+      }
+
+      const existingTab = getTabByPath(filePath);
       setSelectedFilePath(filePath);
       openTab(filePath);
+      if (existingTab && !existingTab.isModified) {
+        await refreshTabContentByPath(filePath);
+      }
     });
     return () => {
       registerOpenFile?.(undefined);
     };
-  }, [registerOpenFile, setSelectedFilePath, openTab]);
+  }, [
+    registerOpenFile,
+    setSelectedFilePath,
+    openTab,
+    getTabByPath,
+    activePipelineFilePath,
+    refetchPipelineContent,
+    refreshTabContentByPath,
+  ]);
 
   React.useEffect(() => {
     registerCloseFile?.((filePath: string) => {
-      closeTabByPath(filePath);
+      const tabPath = isPipelineFile(filePath)
+        ? toPipelineTabPath(filePath)
+        : filePath;
+      closeTabByPath(tabPath);
       if (selectedFilePath === filePath) setSelectedFilePath(undefined);
     });
     return () => {
@@ -739,6 +797,9 @@ const ProjectDetails: React.FC = () => {
   const openTabRef = React.useRef(openTab);
   const switchTabRef = React.useRef(switchTab);
   const refreshTabContentByPathRef = React.useRef(refreshTabContentByPath);
+  const activePipelineFilePathRef = React.useRef(activePipelineFilePath);
+  const pipelineDraftTabRef = React.useRef(pipelineDraftTab);
+  const refetchPipelineContentRef = React.useRef(refetchPipelineContent);
   React.useEffect(() => {
     fetchDirectoriesRef.current = fetchDirectories;
   }, [fetchDirectories]);
@@ -757,6 +818,15 @@ const ProjectDetails: React.FC = () => {
   React.useEffect(() => {
     refreshTabContentByPathRef.current = refreshTabContentByPath;
   }, [refreshTabContentByPath]);
+  React.useEffect(() => {
+    activePipelineFilePathRef.current = activePipelineFilePath;
+  }, [activePipelineFilePath]);
+  React.useEffect(() => {
+    pipelineDraftTabRef.current = pipelineDraftTab;
+  }, [pipelineDraftTab]);
+  React.useEffect(() => {
+    refetchPipelineContentRef.current = refetchPipelineContent;
+  }, [refetchPipelineContent]);
 
   // Refresh file tree and open/update tab when agent writes a file
   // Uses refs so the subscription is created only once per project/hydration change
@@ -770,11 +840,24 @@ const ProjectDetails: React.FC = () => {
       const isFileWrite =
         payload.toolName === 'writeFile' ||
         payload.toolName === 'writeDbtModel';
-      if (!isFileWrite || payload.status !== 'done') return;
+      const pipelineMutation = getSuccessfulPipelineMutation(
+        payload.toolName,
+        payload.result,
+      );
+      if ((!isFileWrite && !pipelineMutation) || payload.status !== 'done')
+        return;
 
-      const filePath =
-        (payload.args as any)?.filePath || (payload.args as any)?.path;
+      const candidateFilePath = pipelineMutation
+        ? resolveProjectMutationPath(
+            project.path,
+            pipelineMutation.relativePath,
+          )
+        : (payload.args as any)?.filePath || (payload.args as any)?.path;
+      const filePath = pipelineMutation
+        ? candidateFilePath
+        : resolveProjectFileMutationPath(project.path, candidateFilePath);
       if (!filePath) return;
+      const tabPath = pipelineMutation ? toPipelineTabPath(filePath) : filePath;
 
       // Skip if already processing this file
       if (inFlight.has(filePath)) {
@@ -799,7 +882,7 @@ const ProjectDetails: React.FC = () => {
           '[ProjectDetails] fetchDirectories done, checking for existing tab',
         );
 
-        const existingTab = getTabByPathRef.current(filePath);
+        const existingTab = getTabByPathRef.current(tabPath);
         // eslint-disable-next-line no-console
         console.log('[ProjectDetails] existingTab:', existingTab?.id ?? 'none');
 
@@ -809,12 +892,33 @@ const ProjectDetails: React.FC = () => {
             '[ProjectDetails] Tab already exists, switching to:',
             existingTab.id,
           );
-          await refreshTabContentByPathRef.current(filePath);
+          if (pipelineMutation) {
+            const hasDirtyPipelineDraft =
+              activePipelineFilePathRef.current === filePath &&
+              pipelineDraftTabRef.current?.isModified;
+            if (
+              activePipelineFilePathRef.current === filePath &&
+              !hasDirtyPipelineDraft
+            ) {
+              const refreshed = await refetchPipelineContentRef.current();
+              if (typeof refreshed.data === 'string') {
+                setPipelineDraftTab((previous) =>
+                  refreshCleanPipelineDraft(
+                    previous,
+                    filePath,
+                    refreshed.data as string,
+                  ),
+                );
+              }
+            }
+          } else if (!existingTab.isModified) {
+            await refreshTabContentByPathRef.current(filePath);
+          }
           switchTabRef.current(existingTab.id);
         } else {
           // eslint-disable-next-line no-console
           console.log('[ProjectDetails] Opening new tab for:', filePath);
-          const tabId = await openTabRef.current(filePath);
+          const tabId = await openTabRef.current(tabPath);
           // eslint-disable-next-line no-console
           console.log('[ProjectDetails] openTab returned tabId:', tabId);
           if (tabId) switchTabRef.current(tabId);
@@ -1070,7 +1174,7 @@ const ProjectDetails: React.FC = () => {
           rosettaDbt={rosettaDbt}
           onBeforeExecute={() => {
             if (env === 'cloud') {
-              setPipelineLogsMinimized(false);
+              handleTerminalTabSwitch('cloudLogs');
             } else {
               handleTerminalTabSwitch('terminal');
             }
@@ -1355,6 +1459,12 @@ const ProjectDetails: React.FC = () => {
                     onFixWithAI={(prompt) => openChatWithMessage(prompt)}
                   />
                 }
+                showCloudLogsTab={Boolean(activePipelineActionId)}
+                cloudLogsPanel={
+                  activePipelineActionId ? (
+                    <CloudLogViewer actionId={activePipelineActionId} />
+                  ) : undefined
+                }
               >
                 <Content>
                   <EditorContainer>
@@ -1413,15 +1523,7 @@ const ProjectDetails: React.FC = () => {
                           overflow: 'hidden',
                         }}
                       >
-                        <Box
-                          sx={{
-                            flex:
-                              activePipelineActionId && !pipelineLogsMinimized
-                                ? '1 1 60%'
-                                : 1,
-                            minHeight: 0,
-                          }}
-                        >
+                        <Box sx={{ flex: 1, minHeight: 0 }}>
                           {pipelineCodeMode && pipelineDraftTab ? (
                             <Editor
                               projectId={project.id}
@@ -1527,47 +1629,17 @@ const ProjectDetails: React.FC = () => {
                                       )
                                   : undefined
                               }
-                              onEnterView={() => setPipelineLogsMinimized(true)}
+                              runDisabledReason={
+                                isDbtV2
+                                  ? 'dbt Core v2 is in alpha and not yet supported for cloud runs. Support will be added after the first official v2 release.'
+                                  : undefined
+                              }
                             />
                           )}
                         </Box>
-                        {activePipelineActionId &&
-                          (pipelineLogsMinimized ? (
-                            <Taskbar
-                              onClick={() => setPipelineLogsMinimized(false)}
-                              sx={{ cursor: 'pointer' }}
-                            >
-                              <TaskbarItem>
-                                <Typography
-                                  fontSize={13}
-                                  sx={{ mr: 1 }}
-                                  fontWeight="bold"
-                                >
-                                  Cloud Logs
-                                </Typography>
-                                <Cloud fontSize="small" />
-                              </TaskbarItem>
-                            </Taskbar>
-                          ) : (
-                            <Box
-                              sx={{
-                                flex: '1 1 40%',
-                                minHeight: 0,
-                                borderTop: 1,
-                                borderColor: 'divider',
-                              }}
-                            >
-                              <CloudLogViewer
-                                actionId={activePipelineActionId}
-                                onMinimize={() =>
-                                  setPipelineLogsMinimized(true)
-                                }
-                              />
-                            </Box>
-                          ))}
                       </Box>
                     ) : (
-                      <>
+                      <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
                         {!selectedFilePath && (
                           <NoFileSelected>
                             Please select a file from the explorer on the left!
@@ -1623,7 +1695,7 @@ const ProjectDetails: React.FC = () => {
                                       environment={env}
                                       onBeforeExecute={() => {
                                         if (env === 'cloud') {
-                                          setPipelineLogsMinimized(false);
+                                          handleTerminalTabSwitch('cloudLogs');
                                         } else {
                                           handleTerminalTabSwitch('terminal');
                                         }
@@ -1646,7 +1718,7 @@ const ProjectDetails: React.FC = () => {
                             }
                           />
                         )}
-                      </>
+                      </Box>
                     )}
                   </EditorContainer>
                 </Content>
@@ -1729,7 +1801,7 @@ const ProjectDetails: React.FC = () => {
                     setPipelineCloudModal(false);
                     setPipelineRunArgs('');
                   }}
-                  onSuccess={() => setPipelineLogsMinimized(false)}
+                  onSuccess={() => handleTerminalTabSwitch('cloudLogs')}
                   project={project}
                   command="pipeline"
                   initialDbtArguments={pipelineRunArgs}

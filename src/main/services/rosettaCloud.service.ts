@@ -460,7 +460,8 @@ export default class RosettaCloudService {
       throw new Error(`Failed to fetch action status: ${response.status}`);
     }
 
-    return (await response.json()) as CloudPipelineData;
+    const body = await response.json();
+    return body as CloudPipelineData;
   }
 
   static async validateApiKey(

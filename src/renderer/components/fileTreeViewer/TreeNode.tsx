@@ -2,7 +2,7 @@
 import React, { useRef, useEffect } from 'react';
 import { NodeRendererProps } from 'react-arborist';
 import { styled, alpha } from '@mui/material/styles';
-import { IconButton, TextField } from '@mui/material';
+import { IconButton, TextField, Tooltip } from '@mui/material';
 import {
   Folder as FolderIcon,
   FolderOpen as FolderOpenIcon,
@@ -16,6 +16,7 @@ import { toast } from 'react-toastify';
 import { isFileUnpushed } from '../../services/git.service';
 import { FileNode, FileStatuses } from './types';
 import { GitStatusBadge } from './GitStatusBadge';
+import { PipelineThumbnailPreview } from './PipelineThumbnailPreview';
 
 const NodeContainer = styled('div')<{
   $isSelected: boolean;
@@ -114,12 +115,19 @@ interface TreeNodeProps extends NodeRendererProps<FileNode> {
 const isPipelineYaml = (filePath: string): boolean => {
   const parts = filePath.replace(/\\/g, '/').split('/');
   const fileName = parts[parts.length - 1] || '';
-  const parentDir = parts[parts.length - 2] || '';
-  return (
-    parentDir === '.rosetta' &&
+  const dirParts = parts.slice(0, -1);
+  const isYaml =
     (fileName.endsWith('.yml') || fileName.endsWith('.yaml')) &&
-    fileName !== 'main.conf'
+    fileName !== 'main.conf';
+  // Deprecated location, kept for backward compatibility during the
+  // transition to rosetta/pipelines/. Remove once projects have migrated.
+  // Matches any depth under rosetta/pipelines/ or .rosetta/ so pipelines
+  // nested in subdirectories are still recognized.
+  const isLegacyLocation = dirParts.includes('.rosetta');
+  const isCurrentLocation = dirParts.some(
+    (dir, i) => dir === 'rosetta' && dirParts[i + 1] === 'pipelines',
   );
+  return isYaml && (isLegacyLocation || isCurrentLocation);
 };
 
 export const TreeNode: React.FC<TreeNodeProps> = ({
@@ -243,7 +251,21 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
           />
         ) : (
           <>
-            <NodeLabel title={node.data.name}>{node.data.name}</NodeLabel>
+            {isPipeline ? (
+              <Tooltip
+                title={<PipelineThumbnailPreview filePath={node.data.path} />}
+                placement="right"
+                enterDelay={500}
+                enterNextDelay={500}
+                slotProps={{
+                  tooltip: { sx: { p: 0, bgcolor: 'transparent' } },
+                }}
+              >
+                <NodeLabel>{node.data.name}</NodeLabel>
+              </Tooltip>
+            ) : (
+              <NodeLabel title={node.data.name}>{node.data.name}</NodeLabel>
+            )}
             {gitStatus && <GitStatusBadge status={gitStatus} />}
           </>
         )}
