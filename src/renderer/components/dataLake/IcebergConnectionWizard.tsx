@@ -4,7 +4,7 @@
  * Pattern: mirrors DataLakeConnectionWizard structure (DuckLake).
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Button,
@@ -49,9 +49,13 @@ import { useFilePicker, useGetConnections } from '../../controllers';
 import {
   useCreateIcebergMetadataFile,
   useIcebergCapabilities,
+  useListIcebergStorageBuckets,
   useTestIcebergCatalog,
+  useTestIcebergStorage,
 } from '../../controllers/icebergDatalake.controller';
 import { DataLakeConnectionSelector } from './DataLakeConnectionSelector';
+import { secureStorageService } from '../../services/secureStorage.service';
+import { icebergCatalogImages } from '../../../../assets/connectionIcons';
 
 // ─── Wizard Data ─────────────────────────────────────────────────────────────
 
@@ -271,6 +275,10 @@ export const IcebergConnectionWizard: React.FC<
     success: boolean;
     message: string;
   } | null>(null);
+  const [storageTestResult, setStorageTestResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
 
   useEffect(() => {
     if (initialData) {
@@ -278,11 +286,80 @@ export const IcebergConnectionWizard: React.FC<
       setActiveStep(0);
       setStepError(null);
       setCatalogTestResult(null);
+      setStorageTestResult(null);
     }
   }, [initialData]);
 
+  useEffect(() => {
+    const secretKey = initialData?.oauthClientSecretKey;
+    if (mode !== 'edit' || !secretKey) return undefined;
+
+    let cancelled = false;
+    // eslint-disable-next-line no-void
+    void (async () => {
+      try {
+        const savedSecret = await secureStorageService.get(secretKey);
+        if (!cancelled && savedSecret) {
+          setData((current) => ({
+            ...current,
+            catalog: { ...current.catalog, oauthClientSecret: savedSecret },
+          }));
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setStepError(
+            error instanceof Error
+              ? error.message
+              : 'Failed to load the saved OAuth secret.',
+          );
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initialData?.oauthClientSecretKey, mode]);
+
+  useEffect(() => {
+    if (
+      data.catalog.catalogType !== 'polaris' &&
+      data.catalog.catalogType !== 'lakekeeper'
+    ) {
+      return;
+    }
+    if (
+      !data.catalog.polarisConnectionId &&
+      !data.catalog.polarisBucket &&
+      !data.catalog.polarisPrefix
+    ) {
+      return;
+    }
+    setData((current) => ({
+      ...current,
+      catalog: {
+        ...current.catalog,
+        polarisConnectionId: undefined,
+        polarisBucket: undefined,
+        polarisPrefix: undefined,
+      },
+    }));
+  }, [
+    data.catalog.catalogType,
+    data.catalog.polarisBucket,
+    data.catalog.polarisConnectionId,
+    data.catalog.polarisPrefix,
+  ]);
+
   // Catalog test
   const testCatalogMutation = useTestIcebergCatalog();
+  const testStorageMutation = useTestIcebergStorage();
+  const listStorageBucketsMutation = useListIcebergStorageBuckets();
+  const loadStorageBuckets = useCallback(
+    (connectionId: string) =>
+      listStorageBucketsMutation.mutateAsync({ connectionId }),
+    [listStorageBucketsMutation.mutateAsync],
+  );
   const createLocalCatalogMutation = useCreateIcebergMetadataFile();
   const capabilitiesQuery = useIcebergCapabilities();
   const catalogCapabilities = capabilitiesQuery.data?.catalogs ?? [];
@@ -357,6 +434,43 @@ export const IcebergConnectionWizard: React.FC<
   const patchStorage = (patch: Partial<IcebergWizardData['storage']>) =>
     setData((d) => ({ ...d, storage: { ...d.storage, ...patch } }));
 
+  const handleSelectVendedStorage = useCallback(
+    (connectionId: string, bucket: string, prefix?: string) => {
+      setData((current) => ({
+        ...current,
+        catalog: {
+          ...current.catalog,
+          polarisConnectionId: connectionId,
+          polarisBucket: bucket,
+          polarisPrefix: prefix,
+        },
+      }));
+    },
+    [],
+  );
+
+  const handleSelectCloudStorage = useCallback(
+    (
+      connectionId: string,
+      bucket: string,
+      prefix?: string,
+      provider?: IcebergCloudProvider,
+    ) => {
+      setStorageTestResult(null);
+      setData((current) => ({
+        ...current,
+        storage: {
+          ...current.storage,
+          connectionId,
+          bucket,
+          prefix,
+          cloudProvider: provider,
+        },
+      }));
+    },
+    [],
+  );
+
   const initializeLocalCatalog = (catalogDirectory: string) => {
     setStepError(null);
     createLocalCatalogMutation.mutate(catalogDirectory, {
@@ -391,6 +505,7 @@ export const IcebergConnectionWizard: React.FC<
     setCatalogTestResult(null);
     try {
       const result = await testCatalogMutation.mutateAsync({
+        instanceId: mode === 'edit' ? initialData?.id : undefined,
         catalogType: data.catalog.catalogType,
         catalogPath: data.catalog.catalogPath,
         endpoint: data.catalog.endpoint,
@@ -421,6 +536,35 @@ export const IcebergConnectionWizard: React.FC<
       setCatalogTestResult({
         success: false,
         message: err?.message ?? 'Catalog test failed.',
+      });
+    }
+  };
+
+  const handleTestStorage = async () => {
+    setStorageTestResult(null);
+    const validationError = validateStep(2, data);
+    if (validationError) {
+      setStorageTestResult({ success: false, message: validationError });
+      return;
+    }
+    try {
+      const result = await testStorageMutation.mutateAsync({
+        connectionId: data.storage.connectionId!,
+        bucket: data.storage.bucket!,
+        prefix: data.storage.prefix,
+      });
+      setStorageTestResult({
+        success: result.success,
+        message: result.success
+          ? 'Cloud object storage is accessible.'
+          : (result.error ?? 'Cloud storage test failed.'),
+      });
+    } catch (error: any) {
+      // eslint-disable-next-line no-console
+      console.error(error);
+      setStorageTestResult({
+        success: false,
+        message: error?.message ?? 'Cloud storage test failed.',
       });
     }
   };
@@ -466,6 +610,30 @@ export const IcebergConnectionWizard: React.FC<
         <Select
           value={data.catalog.catalogType}
           label="Catalog Type"
+          renderValue={(value) => {
+            const capability = catalogCapabilities.find(
+              (item) => item.type === value,
+            );
+            const icon =
+              icebergCatalogImages[value as keyof typeof icebergCatalogImages];
+            return (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                {icon ? (
+                  <Box
+                    component="img"
+                    src={icon}
+                    alt=""
+                    sx={{ width: 22, height: 22, objectFit: 'contain' }}
+                  />
+                ) : (
+                  <IcebergIcon size={22} />
+                )}
+                <Typography component="span">
+                  {capability?.label ?? value}
+                </Typography>
+              </Box>
+            );
+          }}
           onChange={(e) => {
             const catalogType = e.target.value as IcebergCatalogType;
             const capability = catalogCapabilities.find(
@@ -498,16 +666,31 @@ export const IcebergConnectionWizard: React.FC<
             });
           }}
         >
-          {catalogCapabilities.map((capability) => (
-            <MenuItem
-              key={capability.type}
-              value={capability.type}
-              disabled={!capability.enabled}
-            >
-              {capability.label}
-              {!capability.enabled ? ' — Coming Next' : ''}
-            </MenuItem>
-          ))}
+          {catalogCapabilities.map((capability) => {
+            const icon =
+              icebergCatalogImages[
+                capability.type as keyof typeof icebergCatalogImages
+              ];
+            return (
+              <MenuItem
+                key={capability.type}
+                value={capability.type}
+                sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
+              >
+                {icon ? (
+                  <Box
+                    component="img"
+                    src={icon}
+                    alt=""
+                    sx={{ width: 22, height: 22, objectFit: 'contain' }}
+                  />
+                ) : (
+                  <IcebergIcon size={22} />
+                )}
+                {capability.label}
+              </MenuItem>
+            );
+          })}
         </Select>
       </FormControl>
 
@@ -764,7 +947,7 @@ export const IcebergConnectionWizard: React.FC<
                 }
                 helperText={
                   mode === 'edit' && initialData?.oauthClientSecretKey
-                    ? 'Leave blank to keep the existing secret.'
+                    ? 'Loaded securely from the system keychain.'
                     : 'Stored securely in the system keychain.'
                 }
                 InputProps={{
@@ -846,43 +1029,55 @@ export const IcebergConnectionWizard: React.FC<
           <Typography variant="subtitle1" fontWeight={600}>
             Storage Configuration
           </Typography>
-          {data.catalog.catalogType === 'nessie' ? (
+          {data.catalog.catalogType === 'polaris' && (
+            <Alert severity="info">
+              Storage is managed by Polaris for this catalog. Polaris provides
+              the authoritative warehouse location and object-store access, so
+              no Cloud Explorer connection is required.
+            </Alert>
+          )}
+          {data.catalog.catalogType === 'nessie' && (
             <Alert severity="info">
               Nessie manages the warehouse and sends the required FileIO and
               object-store configuration to PyIceberg. DBT Studio uses remote
               request signing, so no Cloud Explorer credentials are required.
             </Alert>
-          ) : (
-            <>
-              <Alert severity="info">
-                REST catalogs manage table storage on the server. Configure a
-                cloud connection below only if your catalog uses{' '}
-                <strong>vended credentials</strong> to delegate access to object
-                storage.
-              </Alert>
-              <Typography variant="subtitle2" fontWeight={600}>
-                Vended credentials (optional)
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Select a Cloud Explorer connection and bucket the catalog can
-                use when delegating storage access. Leave blank if credentials
-                are handled another way.
-              </Typography>
-              <DataLakeConnectionSelector
-                selectedProvider="all"
-                onSelectExisting={(connectionId, bucket, prefix) =>
-                  patchCatalog({
-                    polarisConnectionId: connectionId,
-                    polarisBucket: bucket,
-                    polarisPrefix: prefix,
-                  })
-                }
-                initialConnectionId={data.catalog.polarisConnectionId}
-                initialBucket={data.catalog.polarisBucket}
-                initialPrefix={data.catalog.polarisPrefix}
-              />
-            </>
           )}
+          {data.catalog.catalogType === 'lakekeeper' && (
+            <Alert severity="info">
+              Storage is managed by the selected Lakekeeper warehouse. Configure
+              its bucket, prefix, endpoint, and credentials in the Lakekeeper
+              UI. DBT Studio uses remote request signing, so no Cloud Explorer
+              connection is required.
+            </Alert>
+          )}
+          {data.catalog.catalogType !== 'polaris' &&
+            data.catalog.catalogType !== 'lakekeeper' &&
+            data.catalog.catalogType !== 'nessie' && (
+              <>
+                <Alert severity="info">
+                  REST catalogs manage table storage on the server. Configure a
+                  cloud connection below only if your catalog uses{' '}
+                  <strong>vended credentials</strong> to delegate access to
+                  object storage.
+                </Alert>
+                <Typography variant="subtitle2" fontWeight={600}>
+                  Vended credentials (optional)
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Select a Cloud Explorer connection and bucket the catalog can
+                  use when delegating storage access. Leave blank if credentials
+                  are handled another way.
+                </Typography>
+                <DataLakeConnectionSelector
+                  selectedProvider="all"
+                  onSelectExisting={handleSelectVendedStorage}
+                  initialConnectionId={data.catalog.polarisConnectionId}
+                  initialBucket={data.catalog.polarisBucket}
+                  initialPrefix={data.catalog.polarisPrefix}
+                />
+              </>
+            )}
         </Box>
       );
     }
@@ -952,20 +1147,44 @@ export const IcebergConnectionWizard: React.FC<
         )}
 
         {data.storage.storageType === 'cloud' && (
-          <DataLakeConnectionSelector
-            selectedProvider="all"
-            onSelectExisting={(connectionId, bucket, prefix, provider) =>
-              patchStorage({
-                connectionId,
-                bucket,
-                prefix,
-                cloudProvider: provider,
-              })
-            }
-            initialConnectionId={data.storage.connectionId}
-            initialBucket={data.storage.bucket}
-            initialPrefix={data.storage.prefix}
-          />
+          <>
+            <DataLakeConnectionSelector
+              selectedProvider="all"
+              onSelectExisting={handleSelectCloudStorage}
+              initialConnectionId={data.storage.connectionId}
+              initialBucket={data.storage.bucket}
+              initialPrefix={data.storage.prefix}
+              loadBuckets={loadStorageBuckets}
+            />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Button
+                variant="outlined"
+                startIcon={
+                  testStorageMutation.isLoading ? (
+                    <CircularProgress size={16} />
+                  ) : (
+                    <Speed />
+                  )
+                }
+                onClick={handleTestStorage}
+                disabled={testStorageMutation.isLoading}
+                size="small"
+              >
+                {testStorageMutation.isLoading
+                  ? 'Testing…'
+                  : 'Test Cloud Storage'}
+              </Button>
+              {storageTestResult && (
+                <Alert
+                  severity={storageTestResult.success ? 'success' : 'error'}
+                  sx={{ py: 0, flex: 1 }}
+                  icon={storageTestResult.success ? <CheckCircle /> : undefined}
+                >
+                  {storageTestResult.message}
+                </Alert>
+              )}
+            </Box>
+          </>
         )}
       </Box>
     );

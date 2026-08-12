@@ -26,6 +26,11 @@ import anthropic from './anthropic.svg';
 import openaiCompatible from './openai_compatible.svg';
 import lmstudio from './lmstudio.svg';
 import file from './file.png';
+import polaris from './polaris.png';
+import lakekeeper from './lakekeeper.png';
+import nessie from './nessie.png';
+import hive from './hive.png';
+import catalog from './catalog.png';
 import { SupportedConnectionTypes } from '../../src/types/backend';
 
 type Image = Record<SupportedConnectionTypes, string>;
@@ -62,6 +67,18 @@ export const databaseIcons = {
   sqlite,
   postgresql: postgres,
 };
+
+export const icebergCatalogImages = {
+  sqlite,
+  sql: postgres,
+  rest: catalog,
+  polaris,
+  lakekeeper,
+  nessie,
+  hive,
+};
+
+export const genericCatalogImage = catalog;
 
 const obj: { images: Image } = {
   images: {

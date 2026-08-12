@@ -53,6 +53,7 @@ interface DataLakeConnectionSelectorProps {
   initialConnectionId?: string;
   initialBucket?: string;
   initialPrefix?: string;
+  loadBuckets?: (connectionId: string) => Promise<string[]>;
 }
 
 type InlineProvider = 'aws' | 'azure' | 'gcs';
@@ -108,6 +109,7 @@ export const DataLakeConnectionSelector: React.FC<
   initialConnectionId,
   initialBucket,
   initialPrefix,
+  loadBuckets,
 }) => {
   const { data: connections, isLoading, refetch } = useCloudConnections();
   const createConnection = useCreateCloudConnection();
@@ -131,6 +133,9 @@ export const DataLakeConnectionSelector: React.FC<
   const [selectedConnectionId, setSelectedConnectionId] = useState<string>('');
   const [bucket, setBucket] = useState<string>('');
   const [prefix, setPrefix] = useState<string>('');
+  const [bucketOptions, setBucketOptions] = useState<string[]>([]);
+  const [isLoadingBuckets, setIsLoadingBuckets] = useState(false);
+  const [bucketLoadError, setBucketLoadError] = useState<string | null>(null);
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -140,7 +145,7 @@ export const DataLakeConnectionSelector: React.FC<
 
   // Update parent when connection or bucket changes
   React.useEffect(() => {
-    if (selectedConnectionId && bucket) {
+    if (selectedConnectionId) {
       const selectedConnection = connections?.find(
         (connection: CloudConnection) => connection.id === selectedConnectionId,
       );
@@ -152,6 +157,32 @@ export const DataLakeConnectionSelector: React.FC<
       );
     }
   }, [selectedConnectionId, bucket, prefix, connections, onSelectExisting]);
+
+  useEffect(() => {
+    if (!selectedConnectionId || !loadBuckets) return undefined;
+    let cancelled = false;
+    setIsLoadingBuckets(true);
+    setBucketLoadError(null);
+    // eslint-disable-next-line no-void
+    void (async () => {
+      try {
+        const names = await loadBuckets(selectedConnectionId);
+        if (!cancelled) setBucketOptions(names);
+      } catch (error: unknown) {
+        if (!cancelled) {
+          setBucketOptions([]);
+          setBucketLoadError(
+            error instanceof Error ? error.message : 'Failed to load buckets.',
+          );
+        }
+      } finally {
+        if (!cancelled) setIsLoadingBuckets(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedConnectionId, loadBuckets]);
 
   // Sync initial values from parent when revisiting the step
   useEffect(() => {
@@ -601,7 +632,13 @@ export const DataLakeConnectionSelector: React.FC<
         <InputLabel>Cloud Connection</InputLabel>
         <Select
           value={selectedConnectionId}
-          onChange={(e) => setSelectedConnectionId(e.target.value)}
+          onChange={(e) => {
+            setSelectedConnectionId(e.target.value);
+            setBucket('');
+            setPrefix('');
+            setBucketOptions([]);
+            setBucketLoadError(null);
+          }}
           label="Cloud Connection"
         >
           {filteredConnections.length === 0 && (
@@ -639,16 +676,46 @@ export const DataLakeConnectionSelector: React.FC<
       </Button>
 
       {/* Bucket/Container Input */}
-      <TextField
-        label={getBucketLabel()}
-        fullWidth
-        margin="normal"
-        value={bucket}
-        onChange={(e) => setBucket(e.target.value)}
-        required
-        helperText={getBucketHelperText()}
-        disabled={!selectedConnectionId}
-      />
+      {loadBuckets ? (
+        <FormControl fullWidth margin="normal" required>
+          <InputLabel>{getBucketLabel()}</InputLabel>
+          <Select
+            label={getBucketLabel()}
+            value={bucket}
+            onChange={(event) => setBucket(event.target.value)}
+            disabled={!selectedConnectionId || isLoadingBuckets}
+          >
+            {isLoadingBuckets && <MenuItem disabled>Loading buckets…</MenuItem>}
+            {!isLoadingBuckets && bucketOptions.length === 0 && (
+              <MenuItem disabled>No buckets found</MenuItem>
+            )}
+            {bucketOptions.map((name) => (
+              <MenuItem key={name} value={name}>
+                {name}
+              </MenuItem>
+            ))}
+          </Select>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ mx: 1.75, mt: 0.5 }}
+          >
+            {getBucketHelperText()}
+          </Typography>
+        </FormControl>
+      ) : (
+        <TextField
+          label={getBucketLabel()}
+          fullWidth
+          margin="normal"
+          value={bucket}
+          onChange={(e) => setBucket(e.target.value)}
+          required
+          helperText={getBucketHelperText()}
+          disabled={!selectedConnectionId}
+        />
+      )}
+      {bucketLoadError && <Alert severity="error">{bucketLoadError}</Alert>}
 
       {/* Prefix Input */}
       <TextField
@@ -666,8 +733,13 @@ export const DataLakeConnectionSelector: React.FC<
       <Dialog
         open={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        maxWidth={supportsInlineCreate ? 'sm' : 'lg'}
+        maxWidth="sm"
         fullWidth
+        PaperProps={{
+          sx: !supportsInlineCreate
+            ? { bgcolor: 'transparent', boxShadow: 'none' }
+            : undefined,
+        }}
       >
         {!supportsInlineCreate ? (
           <DialogContent sx={{ p: 0 }}>

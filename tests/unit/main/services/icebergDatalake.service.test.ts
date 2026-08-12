@@ -72,24 +72,8 @@ describe('IcebergDatalakeService compatibility and secret persistence', () => {
       requiredFields: ['hiveUri'],
       allowedStorageTypes: ['local'],
     });
-    (
-      [
-        'glue',
-        'biglake',
-        'onelake',
-        'unity',
-        'snowflake',
-        'cloudflare',
-      ] as const
-    ).forEach((type) => {
-      expect(
-        capabilities.catalogs.find((catalog) => catalog.type === type),
-      ).toMatchObject({
-        enabled: false,
-        disabledReason: 'Available by request through a GitHub issue.',
-        allowedStorageTypes: [],
-      });
-    });
+    expect(capabilities.catalogs).toHaveLength(7);
+    expect(capabilities.catalogs.every(({ enabled }) => enabled)).toBe(true);
   });
 
   it('rejects invalid OAuth configuration before bridge execution', () => {
@@ -271,7 +255,7 @@ describe('IcebergDatalakeService compatibility and secret persistence', () => {
     });
   });
 
-  it('rejects managed catalog placeholders before Python executes', () => {
+  it('rejects removed managed catalogs before Python executes', () => {
     const validate = (IcebergDatalakeService as any)
       .validateCatalogWarehousePair as (config: unknown) => void;
 
@@ -287,7 +271,7 @@ describe('IcebergDatalakeService compatibility and secret persistence', () => {
     ).forEach((catalogType) => {
       expect(() =>
         validate({ catalogType, storageType: 'server-managed' }),
-      ).toThrow(`ICEBERG_CATALOG_NOT_ENABLED: ${catalogType}`);
+      ).toThrow(`ICEBERG_CATALOG_UNSUPPORTED: ${catalogType}`);
     });
   });
 

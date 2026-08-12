@@ -34,6 +34,14 @@ export const registerIcebergDatalakeHandlers = () => {
     IcebergDatalakeService.testCatalogConnection(params),
   );
 
+  ipcMain.handle('iceberg:testStorage', (_e, params) =>
+    IcebergDatalakeService.testStorageConnection(params),
+  );
+
+  ipcMain.handle('iceberg:listStorageBuckets', (_e, params) =>
+    IcebergDatalakeService.listStorageBuckets(params),
+  );
+
   ipcMain.handle('iceberg:testInstance', (_e, id: string) =>
     IcebergDatalakeService.testInstanceConnection(id),
   );

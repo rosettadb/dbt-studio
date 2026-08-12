@@ -27,6 +27,7 @@ import {
   FolderOpen,
   Close,
   CloudDownload,
+  Cloud,
   TableChart,
 } from '@mui/icons-material';
 import { useFilePicker } from '../../../controllers/settings.controller';
@@ -174,11 +175,18 @@ export const IcebergTableImportWizard: React.FC<
       <Typography variant="body1" gutterBottom>
         Choose where to import data from
       </Typography>
-      <Card
-        variant="outlined"
-        sx={{ border: 2, borderColor: 'primary.main', mt: 2 }}
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' },
+          gap: 2,
+          mt: 2,
+        }}
       >
-        <CardActionArea onClick={handleFileSelect}>
+        <Card
+          variant="outlined"
+          sx={{ border: 2, borderColor: 'primary.main' }}
+        >
           <CardContent>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
               <Folder sx={{ width: 24, height: 24, mr: 1 }} color="primary" />
@@ -191,8 +199,30 @@ export const IcebergTableImportWizard: React.FC<
               Supports: CSV, Parquet, JSON
             </Typography>
           </CardContent>
-        </CardActionArea>
-      </Card>
+        </Card>
+
+        <Card variant="outlined" sx={{ opacity: 0.55 }}>
+          <CardActionArea disabled sx={{ height: '100%' }}>
+            <CardContent>
+              <Box
+                sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}
+              >
+                <Cloud sx={{ width: 24, height: 24 }} />
+                <Typography variant="h6">From Object Storage</Typography>
+              </Box>
+              <Typography variant="body2" color="text.secondary">
+                Import from a Cloud Explorer bucket or object path
+              </Typography>
+              <Chip
+                label="Coming Soon"
+                size="small"
+                variant="outlined"
+                sx={{ mt: 1 }}
+              />
+            </CardContent>
+          </CardActionArea>
+        </Card>
+      </Box>
     </Box>
   );
 

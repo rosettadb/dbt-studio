@@ -67,7 +67,7 @@ export interface IcebergInstanceConfig {
   catalogName?: string; // REST: catalog name or warehouse
   catalogAuthMode?: IcebergCatalogAuthMode;
   oauthClientId?: string;
-  oauthClientSecretKey?: string; // keytar key: "iceberg-oauth-secret-{id}"
+  oauthClientSecretKey?: `iceberg-oauth-secret-${string}`;
   oauthServerUri?: string;
   oauthScope?: string;
   nessieReference?: string; // Nessie branch or tag, usually "main"
@@ -75,7 +75,7 @@ export interface IcebergInstanceConfig {
   hiveUri?: string; // Hive Metastore Thrift URI, e.g. thrift://localhost:9083
   hiveUgi?: string; // optional Hive user:group identity for non-Kerberos HMS
   databaseConnectionId?: string; // Existing PostgreSQL/Neon connection
-  catalogAccessTokenKey?: string; // keytar key: "iceberg-catalog-token-{id}"
+  catalogAccessTokenKey?: `iceberg-catalog-token-${string}`;
   catalogConnectionId?: string; // Cloud Explorer connectionId for vended credentials
   catalogBucket?: string;
   catalogPrefix?: string;
@@ -168,6 +168,16 @@ export interface IcebergTestResult {
   checkedAt?: string;
 }
 
+export interface IcebergTestStorageParams {
+  connectionId: string;
+  bucket: string;
+  prefix?: string;
+}
+
+export interface IcebergListStorageBucketsParams {
+  connectionId: string;
+}
+
 export interface IcebergLocalCatalogResult {
   catalogPath: string;
   warehousePath: string;
@@ -198,6 +208,7 @@ export interface IcebergDropNamespaceParams {
 }
 
 export interface IcebergTestCatalogParams {
+  instanceId?: string; // edit mode: resolve the existing instance-scoped secret
   catalogType: IcebergCatalogType;
   catalogPath?: string;
   endpoint?: string;

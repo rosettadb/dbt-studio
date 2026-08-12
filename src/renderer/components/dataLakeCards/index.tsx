@@ -1,5 +1,5 @@
 import React from 'react';
-import { Typography, Tooltip } from '@mui/material';
+import { Chip, Typography, Tooltip } from '@mui/material';
 import {
   StyledCard,
   ContentWrapper,
@@ -16,6 +16,7 @@ interface DataLakeTypeDetails {
   description: string;
   img: keyof typeof icons;
   disabled?: boolean;
+  beta?: boolean;
 }
 
 type Props = {
@@ -44,8 +45,21 @@ export const DataLakeCard: React.FC<Props> = ({ itemDetails, onClick }) => {
           {itemDetails.disabled && <ComingSoonBanner>Soon</ComingSoonBanner>}
         </ContentWrapper>
         <StyledCardContent>
-          <Typography gutterBottom variant="h5" component="h2">
+          <Typography
+            gutterBottom
+            variant="h5"
+            component="h2"
+            sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
+          >
             {itemDetails.name}
+            {itemDetails.beta && (
+              <Chip
+                label="BETA"
+                color="primary"
+                size="small"
+                sx={{ height: 20, fontSize: '0.625rem', fontWeight: 700 }}
+              />
+            )}
           </Typography>
         </StyledCardContent>
       </StyledCard>

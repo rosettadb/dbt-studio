@@ -104,7 +104,10 @@ const App: React.FC = () => {
           <Route path="data-lake/dashboard" element={<DataLake />} />
           <Route path="data-lake/instances" element={<DataLake />} />
           <Route path="data-lake/new-instance" element={<DataLake />} />
-          <Route path="data-lake/history" element={<DataLake />} />
+          <Route
+            path="data-lake/history"
+            element={<Navigate to="/app/sql" replace />}
+          />
           <Route
             path="data-lake/:type/instances/:instanceId"
             element={<DataLake />}

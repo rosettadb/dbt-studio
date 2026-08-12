@@ -122,7 +122,6 @@ const DataLake: React.FC = () => {
     }
     if (pathSegments.includes('instances')) return 'instances';
     if (pathSegments.includes('tables')) return 'tables';
-    if (pathSegments.includes('history')) return 'history';
     if (pathSegments.includes('instance') && pathSegments.length > 4)
       return 'instance-detail';
     if (pathSegments.includes('table') && pathSegments.length > 4)
@@ -154,6 +153,7 @@ const DataLake: React.FC = () => {
       description: 'Multi-engine, cloud-agnostic open standard',
       img: 'apacheIcebergLake' as const,
       disabled: false, // now enabled
+      beta: true,
     },
     {
       id: 'delta',
@@ -357,12 +357,7 @@ const DataLake: React.FC = () => {
 
       case 'instances':
         return (
-          <DataLakeInstances
-            onAddIceberg={() =>
-              navigate('/app/data-lake/new-instance?type=iceberg')
-            }
-            onEditIceberg={(id) => setIcebergEditId(id)}
-          />
+          <DataLakeInstances onEditIceberg={(id) => setIcebergEditId(id)} />
         );
 
       case 'instance-tables':
@@ -383,22 +378,6 @@ const DataLake: React.FC = () => {
             </Typography>
             <Typography variant="body1" color="text.secondary">
               Please select an instance from the sidebar to view its tables.
-            </Typography>
-          </Box>
-        );
-
-      case 'history':
-        return (
-          <Box sx={{ p: 2 }}>
-            <Typography
-              variant="h4"
-              component="h1"
-              sx={{ fontWeight: 'bold', mb: 3 }}
-            >
-              Query History
-            </Typography>
-            <Typography variant="body1" color="text.secondary">
-              Query history functionality coming soon...
             </Typography>
           </Box>
         );

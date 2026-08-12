@@ -12,7 +12,6 @@ import {
 import {
   Storage,
   TableChart,
-  QueryStats,
   Settings,
   Dashboard,
   Add,
@@ -400,47 +399,6 @@ export const DataLakeDashboard: React.FC<DataLakeDashboardProps> = ({
                 }}
               >
                 <Typography variant="subtitle2" color="text.secondary">
-                  Recent Queries
-                </Typography>
-                <QueryStats sx={{ color: 'text.secondary', fontSize: 20 }} />
-              </Box>
-            }
-            sx={{ pb: 1 }}
-          />
-          <CardContent sx={{ pt: 0 }}>
-            <Typography
-              variant="h4"
-              component="div"
-              sx={{ fontWeight: 'bold' }}
-            >
-              0
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Coming soon
-            </Typography>
-          </CardContent>
-        </Card>
-
-        <Card
-          sx={{
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-            transition: 'all 0.3s ease',
-            '&:hover': {
-              boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
-              transform: 'translateY(-2px)',
-            },
-          }}
-        >
-          <CardHeader
-            title={
-              <Box
-                sx={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}
-              >
-                <Typography variant="subtitle2" color="text.secondary">
                   Tables Accessed
                 </Typography>
                 <TableChart sx={{ color: 'text.secondary', fontSize: 20 }} />
@@ -645,66 +603,6 @@ export const DataLakeDashboard: React.FC<DataLakeDashboardProps> = ({
             >
               View all DataLakes
             </Button>
-          </CardContent>
-        </Card>
-
-        <Card
-          sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-            transition: 'all 0.3s ease',
-            '&:hover': {
-              boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
-              transform: 'translateY(-2px)',
-            },
-          }}
-        >
-          <CardHeader
-            title={
-              <Box
-                sx={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}
-              >
-                <Box>
-                  <Typography variant="h6" component="h2">
-                    Recent Queries
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Coming soon
-                  </Typography>
-                </Box>
-                <QueryStats sx={{ color: 'text.secondary', fontSize: 24 }} />
-              </Box>
-            }
-          />
-          <CardContent
-            sx={{
-              display: 'flex',
-              flexDirection: 'column',
-              height: '100%',
-              justifyContent: 'center',
-              alignItems: 'center',
-              minHeight: '200px',
-            }}
-          >
-            <Typography
-              variant="h6"
-              color="text.secondary"
-              sx={{ fontWeight: 500, textAlign: 'center' }}
-            >
-              Coming Soon
-            </Typography>
-            <Typography
-              variant="body2"
-              color="text.secondary"
-              sx={{ mt: 1, textAlign: 'center' }}
-            >
-              Query history tracking is not yet implemented
-            </Typography>
           </CardContent>
         </Card>
       </Box>

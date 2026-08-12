@@ -9,6 +9,8 @@ import type {
   IcebergInstanceListItem,
   IcebergInstanceConfig,
   IcebergTestCatalogParams,
+  IcebergTestStorageParams,
+  IcebergListStorageBucketsParams,
   IcebergTestResult,
   IcebergSchemaResult,
   IcebergSnapshotInfo,
@@ -50,6 +52,16 @@ export const testIcebergCatalog = (
   params: IcebergTestCatalogParams,
 ): Promise<IcebergTestResult> =>
   window.electron.ipcRenderer.invoke('iceberg:testCatalog', params);
+
+export const testIcebergStorage = (
+  params: IcebergTestStorageParams,
+): Promise<IcebergTestResult> =>
+  window.electron.ipcRenderer.invoke('iceberg:testStorage', params);
+
+export const listIcebergStorageBuckets = (
+  params: IcebergListStorageBucketsParams,
+): Promise<string[]> =>
+  window.electron.ipcRenderer.invoke('iceberg:listStorageBuckets', params);
 
 export const testIcebergInstance = (id: string): Promise<IcebergTestResult> =>
   window.electron.ipcRenderer.invoke('iceberg:testInstance', id);

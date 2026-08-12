@@ -24,6 +24,8 @@ import type {
   CreateIcebergInstanceDTO,
   UpdateIcebergInstanceDTO,
   IcebergTestCatalogParams,
+  IcebergTestStorageParams,
+  IcebergListStorageBucketsParams,
   IcebergTestResult,
   IcebergFieldSpec,
   IcebergSchemaResult,
@@ -37,7 +39,7 @@ import type {
   IcebergTableOperationResult,
   IcebergNamespaceOperationResult,
 } from '../../types/iceberg';
-import type { CloudConnection } from '../../types/frontend';
+import type { CloudConnection, CloudStorageConfig } from '../../types/frontend';
 import type { PostgresConnection } from '../../types/backend';
 
 export class IcebergDatalakeService {
@@ -116,25 +118,6 @@ export class IcebergDatalakeService {
       authModes: ['none'],
       allowedStorageTypes: ['local'],
     },
-    ...(
-      [
-        ['glue', 'AWS Glue', 'glue'],
-        ['biglake', 'Google BigLake', 'custom'],
-        ['onelake', 'Microsoft Fabric OneLake', 'custom'],
-        ['unity', 'Databricks Unity Catalog', 'custom'],
-        ['snowflake', 'Snowflake Iceberg Catalog', 'custom'],
-        ['cloudflare', 'Cloudflare R2 Data Catalog', 'custom'],
-      ] as const
-    ).map(([type, label, pyicebergType]) => ({
-      type,
-      label,
-      pyicebergType,
-      enabled: false,
-      disabledReason: 'Available by request through a GitHub issue.',
-      requiredFields: [],
-      authModes: ['none'] as IcebergCatalogCapability['authModes'],
-      allowedStorageTypes: [],
-    })),
   ];
 
   // In-process cache: once we confirm pyiceberg is installed for this app
@@ -782,7 +765,7 @@ export class IcebergDatalakeService {
       const id = uuidv4();
       const now = new Date().toISOString();
 
-      let catalogAccessTokenKey: string | undefined;
+      let catalogAccessTokenKey: `iceberg-catalog-token-${string}` | undefined;
       if (data.accessToken) {
         catalogAccessTokenKey = `iceberg-catalog-token-${id}`;
         await secureStorage.setCredential(
@@ -791,7 +774,7 @@ export class IcebergDatalakeService {
         );
       }
 
-      let oauthClientSecretKey: string | undefined;
+      let oauthClientSecretKey: `iceberg-oauth-secret-${string}` | undefined;
       if (data.oauthClientSecret) {
         oauthClientSecretKey = `iceberg-oauth-secret-${id}`;
         await secureStorage.setCredential(
@@ -935,6 +918,30 @@ export class IcebergDatalakeService {
     try {
       const props: Record<string, string> = {};
       const env: Record<string, string> = {};
+      let { oauthClientSecret } = params;
+      if (
+        params.authMode === 'oauth-client-credentials' &&
+        !oauthClientSecret &&
+        params.instanceId
+      ) {
+        const existingInstance = await IcebergDatalakeService.getInstance(
+          params.instanceId,
+        );
+        const matchesSavedAuthentication =
+          existingInstance.catalogType === params.catalogType &&
+          existingInstance.endpoint === params.endpoint &&
+          existingInstance.oauthClientId === params.oauthClientId &&
+          existingInstance.oauthServerUri === params.oauthServerUri;
+        if (!matchesSavedAuthentication) {
+          throw new Error('ICEBERG_OAUTH_CLIENT_SECRET_REQUIRED');
+        }
+        if (existingInstance.oauthClientSecretKey) {
+          oauthClientSecret =
+            (await secureStorage.getCredential(
+              existingInstance.oauthClientSecretKey,
+            )) ?? undefined;
+        }
+      }
 
       const storageType =
         params.storageType ??
@@ -951,7 +958,7 @@ export class IcebergDatalakeService {
         catalogAuthMode: params.authMode,
         accessToken: params.accessToken,
         oauthClientId: params.oauthClientId,
-        oauthClientSecret: params.oauthClientSecret,
+        oauthClientSecret,
         oauthServerUri: params.oauthServerUri,
       });
 
@@ -997,11 +1004,11 @@ export class IcebergDatalakeService {
             env['ICEBERG_ACCESS_TOKEN'] = params.accessToken;
           }
           if (params.authMode === 'oauth-client-credentials') {
-            if (!params.oauthClientId || !params.oauthClientSecret) {
+            if (!params.oauthClientId || !oauthClientSecret) {
               throw new Error('ICEBERG_OAUTH_CLIENT_CREDENTIALS_REQUIRED');
             }
             props.credential = '__ENV:ICEBERG_OAUTH_CREDENTIAL';
-            env.ICEBERG_OAUTH_CREDENTIAL = `${params.oauthClientId}:${params.oauthClientSecret}`;
+            env.ICEBERG_OAUTH_CREDENTIAL = `${params.oauthClientId}:${oauthClientSecret}`;
             if (params.oauthServerUri) {
               props['oauth2-server-uri'] = params.oauthServerUri;
             }
@@ -1055,6 +1062,101 @@ export class IcebergDatalakeService {
         error: String(error),
       };
     }
+  }
+
+  static async testStorageConnection(
+    params: IcebergTestStorageParams,
+  ): Promise<IcebergTestResult> {
+    try {
+      const connectionId = params.connectionId?.trim();
+      const bucket = params.bucket?.trim();
+      if (!connectionId || !bucket) {
+        throw new Error('ICEBERG_REQUIRED_FIELD: connectionId/bucket');
+      }
+
+      const { connection, config } =
+        await IcebergDatalakeService.resolveCloudStorageConnection(
+          connectionId,
+        );
+
+      const CloudExplorerService = (await import('./cloudExplorer.service'))
+        .default;
+      await CloudExplorerService.listObjects(
+        connection.provider,
+        config as unknown as CloudStorageConfig,
+        bucket,
+        undefined,
+        params.prefix?.trim() ?? '',
+      );
+      return {
+        success: true,
+        warehouseConnected: true,
+        checkedAt: new Date().toISOString(),
+      };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        '[IcebergDatalakeService] testStorageConnection error:',
+        error,
+      );
+      return {
+        success: false,
+        warehouseConnected: false,
+        checkedAt: new Date().toISOString(),
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  static async listStorageBuckets(
+    params: IcebergListStorageBucketsParams,
+  ): Promise<string[]> {
+    const connectionId = params.connectionId?.trim();
+    if (!connectionId) {
+      throw new Error('ICEBERG_REQUIRED_FIELD: connectionId');
+    }
+    const { connection, config } =
+      await IcebergDatalakeService.resolveCloudStorageConnection(connectionId);
+    const CloudExplorerService = (await import('./cloudExplorer.service'))
+      .default;
+    const buckets = await CloudExplorerService.listBuckets(
+      connection.provider,
+      config as unknown as CloudStorageConfig,
+    );
+    return buckets.map((bucket) => bucket.name);
+  }
+
+  private static async resolveCloudStorageConnection(connectionId: string) {
+    const db = await loadDatabaseFile();
+    const connection = (db.sources ?? []).find(
+      (source) => source.id === connectionId,
+    );
+    if (!connection) throw new Error('ICEBERG_CLOUD_CONNECTION_NOT_FOUND');
+    if (
+      !IcebergDatalakeService.cloudProviders.includes(
+        connection.provider as (typeof IcebergDatalakeService.cloudProviders)[number],
+      )
+    ) {
+      throw new Error('ICEBERG_CLOUD_PROVIDER_NOT_SUPPORTED');
+    }
+
+    const config = { ...connection.config } as Record<string, unknown>;
+    const secret = await secureStorage.getCredential(
+      `cloud-${connection.provider}-${connection.id}`,
+    );
+    if (connection.provider === 'azure') config.accountKey = secret;
+    else if (connection.provider === 'gcs') config.credentials = secret;
+    else if (connection.provider === 'backblaze-b2') {
+      config.applicationKey = secret;
+    } else config.secretAccessKey = secret;
+
+    if (connection.provider === 'aws') {
+      const sessionToken = await secureStorage.getCredential(
+        `cloud-aws-session-${connection.id}`,
+      );
+      if (sessionToken) config.sessionToken = sessionToken;
+    }
+    return { connection, config };
   }
 
   static async testInstanceConnection(id: string): Promise<IcebergTestResult> {

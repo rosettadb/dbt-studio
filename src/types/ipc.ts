@@ -355,6 +355,8 @@ export type IcebergChannels =
   | 'iceberg:update'
   | 'iceberg:delete'
   | 'iceberg:testCatalog'
+  | 'iceberg:testStorage'
+  | 'iceberg:listStorageBuckets'
   | 'iceberg:testInstance'
   | 'iceberg:listNamespaces'
   | 'iceberg:listTables'

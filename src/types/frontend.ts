@@ -75,6 +75,8 @@ export type SecureStorageAccount =
   | `cloud-backblaze-b2-${string}`
   | `cloud-rustfs-${string}`
   | `cloud-garage-${string}`
+  | `iceberg-oauth-secret-${string}`
+  | `iceberg-catalog-token-${string}`
   | `db-bigquery-${string}`
   | `db-host-${string}`
   | `db-port-${string}`

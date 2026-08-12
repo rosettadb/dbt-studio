@@ -60,12 +60,13 @@ import {
   TableChart,
 } from '@mui/icons-material';
 import { useQueryClient } from 'react-query';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import moment from 'moment';
 import {
   cloudStorageImages,
-  databaseIcons,
+  genericCatalogImage,
+  icebergCatalogImages,
 } from '../../../../../assets/connectionIcons';
 import type {
   IcebergImportFileFormat,
@@ -453,10 +454,20 @@ const TableDetail: React.FC<{
   selection: SelectedTable;
 }> = ({ instance, selection }) => {
   const navigate = useNavigate();
-  const [tab, setTab] = React.useState(0);
-  const [limit, setLimit] = React.useState(100);
-  const [rowFilter, setRowFilter] = React.useState('');
-  const [appliedFilter, setAppliedFilter] = React.useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = Number(searchParams.get('tab'));
+  const initialTab = Number.isInteger(requestedTab)
+    ? Math.min(Math.max(requestedTab, 0), 4)
+    : 0;
+  const requestedLimit = Number(searchParams.get('limit'));
+  const initialLimit = [50, 100, 500, 1000].includes(requestedLimit)
+    ? requestedLimit
+    : 100;
+  const initialFilter = searchParams.get('filter') ?? '';
+  const [tab, setTab] = React.useState(initialTab);
+  const [limit, setLimit] = React.useState(initialLimit);
+  const [rowFilter, setRowFilter] = React.useState(initialFilter);
+  const [appliedFilter, setAppliedFilter] = React.useState(initialFilter);
   const [filterError, setFilterError] = React.useState<string | null>(null);
   const schemaQuery = useGetIcebergSchema(
     instance.id,
@@ -477,6 +488,22 @@ const TableDetail: React.FC<{
     tab === 2,
   );
 
+  const updateTableViewParams = React.useCallback(
+    (updates: { tab?: number; limit?: number; filter?: string }) => {
+      const next = new URLSearchParams(searchParams);
+      if (updates.tab !== undefined) next.set('tab', String(updates.tab));
+      if (updates.limit !== undefined) {
+        next.set('limit', String(updates.limit));
+      }
+      if (updates.filter !== undefined) {
+        if (updates.filter) next.set('filter', updates.filter);
+        else next.delete('filter');
+      }
+      setSearchParams(next, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
+
   const applyFilter = () => {
     const value = rowFilter.trim();
     if (value && !/^[A-Za-z0-9_\s.'"<>=!()-]+$/.test(value)) {
@@ -485,6 +512,7 @@ const TableDetail: React.FC<{
     }
     setFilterError(null);
     setAppliedFilter(value);
+    updateTableViewParams({ filter: value });
     if (value === appliedFilter) previewQuery.refetch();
   };
 
@@ -679,7 +707,11 @@ const TableDetail: React.FC<{
           <Select
             value={limit}
             label="Limit"
-            onChange={(event) => setLimit(Number(event.target.value))}
+            onChange={(event) => {
+              const nextLimit = Number(event.target.value);
+              setLimit(nextLimit);
+              updateTableViewParams({ limit: nextLimit });
+            }}
           >
             {[50, 100, 500, 1000].map((value) => (
               <MenuItem key={value} value={value}>
@@ -785,7 +817,10 @@ const TableDetail: React.FC<{
       </Box>
       <Tabs
         value={tab}
-        onChange={(_event, value) => setTab(value)}
+        onChange={(_event, value) => {
+          setTab(value);
+          updateTableViewParams({ tab: value });
+        }}
         sx={{ borderBottom: 1, borderColor: 'divider' }}
       >
         <Tab icon={<Info />} label="Overview" iconPosition="start" />
@@ -1078,17 +1113,18 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
     warehouseStatusLabel = 'Access failed';
   }
 
-  const catalogIcon = (() => {
-    if (instance.catalogType === 'sql') {
-      return (
-        <ConfigImageIcon src={databaseIcons.postgresql} alt="PostgreSQL" />
-      );
-    }
-    if (instance.catalogType === 'sqlite') {
-      return <ConfigImageIcon src={databaseIcons.sqlite} alt="SQLite" />;
-    }
-    return <AccountTree fontSize="small" color="action" />;
-  })();
+  const catalogImage =
+    icebergCatalogImages[
+      instance.catalogType as keyof typeof icebergCatalogImages
+    ];
+  const catalogIcon = catalogImage ? (
+    <ConfigImageIcon
+      src={catalogImage}
+      alt={`${instance.catalogType} catalog`}
+    />
+  ) : (
+    <AccountTree fontSize="small" color="action" />
+  );
 
   const providerIcon = instance.cloudProvider
     ? cloudStorageImages[instance.cloudProvider]
@@ -1399,7 +1435,15 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
   return (
     <Box sx={{ p: 2 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
-        <IcebergIcon size={24} />
+        {catalogImage ? (
+          <ConfigImageIcon
+            src={catalogImage}
+            alt={`${instance.catalogType} catalog`}
+            size={24}
+          />
+        ) : (
+          <IcebergIcon size={24} />
+        )}
         <Box sx={{ flex: 1 }}>
           <Typography variant="h5" fontWeight={700}>
             {instance.name}
@@ -1539,7 +1583,11 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
                     gutterBottom
                     sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
                   >
-                    <AccountTree color="primary" />
+                    <ConfigImageIcon
+                      src={genericCatalogImage}
+                      alt="Catalog configuration"
+                      size={24}
+                    />
                     Catalog Configuration
                   </Typography>
                   <List dense disablePadding>

@@ -9,8 +9,9 @@ import {
   ListItemText,
   styled,
   Button,
+  Chip,
 } from '@mui/material';
-import { Dashboard, History, Add } from '@mui/icons-material';
+import { Dashboard, Add } from '@mui/icons-material';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { SettingsSidebarElement } from '../../screens/settings/settingsElements';
 import { icons } from '../../../../assets';
@@ -66,11 +67,6 @@ export const dataLakeSidebarElements: SettingsSidebarElement[] = [
     icon: DataLakeIconSmall as any,
     text: 'DataLakes',
     path: '/app/data-lake/instances',
-  },
-  {
-    icon: History,
-    text: 'Query History',
-    path: '/app/data-lake/history',
   },
 ];
 
@@ -239,20 +235,33 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
           {/* Iceberg Instances */}
           {icebergInstances.length > 0 && (
             <Box sx={{ mt: 3 }}>
-              <Typography
-                variant="caption"
+              <Box
                 sx={{
-                  display: 'block',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
                   px: 2,
                   pb: 1,
-                  fontWeight: 600,
-                  color: theme.palette.text.secondary,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
                 }}
               >
-                Apache Iceberg
-              </Typography>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    fontWeight: 600,
+                    color: theme.palette.text.secondary,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                  }}
+                >
+                  Apache Iceberg
+                </Typography>
+                <Chip
+                  label="BETA"
+                  color="primary"
+                  size="small"
+                  sx={{ height: 16, fontSize: '0.55rem', fontWeight: 700 }}
+                />
+              </Box>
               <List
                 sx={{
                   py: 0,

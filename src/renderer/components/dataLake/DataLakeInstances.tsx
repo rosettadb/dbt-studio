@@ -17,7 +17,7 @@ import {
   CircularProgress,
   Alert,
 } from '@mui/material';
-import { Edit, Delete, Storage, Refresh } from '@mui/icons-material';
+import { Edit, Delete, Folder, Storage, Refresh } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import moment from 'moment';
 import {
@@ -31,6 +31,13 @@ import {
 import { ConfirmationModal } from '../modals/confirmationModal';
 import type { IcebergInstanceListItem } from '../../../types/iceberg';
 import { IcebergIcon } from './iceberg/IcebergIcon';
+import {
+  cloudStorageImages,
+  databaseIcons,
+  genericCatalogImage,
+  icebergCatalogImages,
+} from '../../../../assets/connectionIcons';
+import { icons } from '../../../../assets/icons';
 
 type DataLakeTableRow =
   | {
@@ -55,15 +62,45 @@ type DataLakeTableRow =
       icebergInstance: IcebergInstanceListItem;
     };
 
+const getCatalogIcon = (row: DataLakeTableRow) => {
+  if (row.lakeType === 'duck-lake') return databaseIcons.duckdb;
+  return (
+    icebergCatalogImages[
+      row.catalogType.toLowerCase() as keyof typeof icebergCatalogImages
+    ] ?? genericCatalogImage
+  );
+};
+
+const getStorageIcon = (row: DataLakeTableRow) => {
+  const path = row.dataPath.toLowerCase();
+  let icon;
+  if (!icon && path.startsWith('s3://')) icon = cloudStorageImages.s3;
+  if (!icon && path.startsWith('gs://')) icon = cloudStorageImages.gcs;
+  if (!icon && path.startsWith('abfss://')) icon = cloudStorageImages.azure;
+
+  if (icon) {
+    return (
+      <Box
+        component="img"
+        src={icon}
+        alt=""
+        sx={{ width: 16, height: 16, objectFit: 'contain', flexShrink: 0 }}
+      />
+    );
+  }
+  if (path === 'server-managed') {
+    return <Storage sx={{ fontSize: 16, color: 'text.secondary' }} />;
+  }
+  return <Folder sx={{ fontSize: 16, color: 'text.secondary' }} />;
+};
+
 interface DataLakeInstancesProps {
   onInstanceSelect?: (instanceId: string) => void;
-  onAddIceberg?: () => void;
   onEditIceberg?: (instanceId: string) => void;
 }
 
 export const DataLakeInstances: React.FC<DataLakeInstancesProps> = ({
   onInstanceSelect,
-  onAddIceberg,
   onEditIceberg,
 }) => {
   const navigate = useNavigate();
@@ -229,16 +266,6 @@ export const DataLakeInstances: React.FC<DataLakeInstancesProps> = ({
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-          {onAddIceberg && (
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={<IcebergIcon size={18} />}
-              onClick={onAddIceberg}
-            >
-              Add Iceberg
-            </Button>
-          )}
           <IconButton
             onClick={handleRefresh}
             disabled={isLoading}
@@ -310,6 +337,14 @@ export const DataLakeInstances: React.FC<DataLakeInstancesProps> = ({
                   <TableCell>
                     {row.lakeType === 'duck-lake' ? (
                       <Chip
+                        icon={
+                          <Box
+                            component="img"
+                            src={icons.duckLake}
+                            alt=""
+                            sx={{ width: 16, height: 16, objectFit: 'contain' }}
+                          />
+                        }
                         label="DuckLake"
                         size="small"
                         color="primary"
@@ -327,6 +362,14 @@ export const DataLakeInstances: React.FC<DataLakeInstancesProps> = ({
                   </TableCell>
                   <TableCell>
                     <Chip
+                      icon={
+                        <Box
+                          component="img"
+                          src={getCatalogIcon(row)}
+                          alt=""
+                          sx={{ width: 16, height: 16, objectFit: 'contain' }}
+                        />
+                      }
                       label={row.catalogType}
                       size="small"
                       variant="outlined"
@@ -335,12 +378,15 @@ export const DataLakeInstances: React.FC<DataLakeInstancesProps> = ({
                   <TableCell
                     sx={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}
                   >
-                    <Typography
-                      variant="body2"
-                      sx={{ fontFamily: 'monospace' }}
-                    >
-                      {row.dataPath}
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      {getStorageIcon(row)}
+                      <Typography
+                        variant="body2"
+                        sx={{ fontFamily: 'monospace' }}
+                      >
+                        {row.dataPath}
+                      </Typography>
+                    </Box>
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2">

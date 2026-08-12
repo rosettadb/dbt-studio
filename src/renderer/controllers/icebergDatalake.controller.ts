@@ -12,6 +12,8 @@ import type {
   IcebergDropNamespaceParams,
   IcebergImportTableParams,
   IcebergTestCatalogParams,
+  IcebergTestStorageParams,
+  IcebergListStorageBucketsParams,
 } from '../../types/iceberg';
 import * as icebergService from '../services/iceberg.service';
 
@@ -88,7 +90,11 @@ export const useIcebergTablePreview = (
         limit,
         rowFilter || undefined,
       ),
-    { enabled: enabled && !!id && !!table, staleTime: 30_000 },
+    {
+      enabled: enabled && !!id && !!table,
+      staleTime: 30_000,
+      cacheTime: 30 * 60_000,
+    },
   );
 
 // ─────────────────────────────────────────────
@@ -130,6 +136,16 @@ export const useDeleteIcebergInstance = () => {
 export const useTestIcebergCatalog = () =>
   useMutation((params: IcebergTestCatalogParams) =>
     icebergService.testIcebergCatalog(params),
+  );
+
+export const useTestIcebergStorage = () =>
+  useMutation((params: IcebergTestStorageParams) =>
+    icebergService.testIcebergStorage(params),
+  );
+
+export const useListIcebergStorageBuckets = () =>
+  useMutation((params: IcebergListStorageBucketsParams) =>
+    icebergService.listIcebergStorageBuckets(params),
   );
 
 export const useTestIcebergInstance = () =>
