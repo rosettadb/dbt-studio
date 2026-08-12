@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Button,
   Box,
@@ -39,6 +40,7 @@ interface RunnerSettingsProps {
 }
 
 export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
+  const navigate = useNavigate();
   const [versionInfo, setVersionInfo] = useState<RunnerVersionInfo | null>(
     null,
   );
@@ -338,8 +340,7 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
                     <Button
                       size="small"
                       variant="outlined"
-                      component="a"
-                      href={`/app/settings/${dep.id}`}
+                      onClick={() => navigate(`/app/settings/${dep.id}`)}
                     >
                       Manage
                     </Button>

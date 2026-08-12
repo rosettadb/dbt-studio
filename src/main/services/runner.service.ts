@@ -89,7 +89,8 @@ const PLUGIN_DEFINITIONS: {
     plugin: 'kinetica_cli@v1',
     command: 'kinetica_cli',
     versionArgs: ['--version'],
-    downloadUrl: 'https://docs.kinetica.com/7.2/tools/kicli/',
+    downloadUrl:
+      'https://docs.kinetica.com/content/tools/kisql#kinetica-sql-kisql',
   },
   { id: 'command', label: 'Shell command', plugin: 'command@v1' },
 ];

@@ -66,6 +66,7 @@ import { usePipelineActionId } from '../../controllers/rosettaCloud.controller';
 import {
   PipelineView,
   CloudLogViewer,
+  RunnerLogViewer,
   isPipelineFile,
   parsePipelineConfig,
 } from '../../components/pipelineView';
@@ -78,6 +79,7 @@ import {
   useProjectQueryResultsPanel,
   useProjectSqlExecution,
   useRosettaDBT,
+  useRunner,
   useTabManager,
 } from '../../hooks';
 import { Project, SupportedConnectionTypes } from '../../../types/backend';
@@ -293,6 +295,14 @@ const ProjectDetails: React.FC = () => {
     activePipelineFile,
     recordedPipelineActionId,
   );
+
+  const {
+    isRunning: isRunnerRunning,
+    output: runnerOutput,
+    error: runnerError,
+  } = useRunner();
+  const showRunnerLogsTab =
+    isRunnerRunning || runnerOutput.length > 0 || runnerError.length > 0;
 
   // Code/visual toggle for the pipeline tab — the raw YAML is edited inline
   // via a one-off Editor instance instead of opening a second tab.
@@ -1370,6 +1380,10 @@ const ProjectDetails: React.FC = () => {
                   activePipelineActionId ? (
                     <CloudLogViewer actionId={activePipelineActionId} />
                   ) : undefined
+                }
+                showRunnerLogsTab={showRunnerLogsTab}
+                runnerLogsPanel={
+                  showRunnerLogsTab ? <RunnerLogViewer /> : undefined
                 }
               >
                 <Content>

@@ -80,6 +80,18 @@ const registerRunnerHandlers = (mainWindow: BrowserWindow) => {
         env.RUNNER_HOME = settings.runnerHome;
       }
 
+      // In studio mode the dbt@v1/rosetta@v1 plugin scripts just call the
+      // bare `dbt`/`rosetta` commands (no auto-install, no absolute-path
+      // support) - so Studio's own managed installs, which live in a venv /
+      // app-data dir rather than the system PATH, need to be put on PATH for
+      // the runner's child process to find them.
+      const toolDirs = [settings.dbtPath, settings.rosettaPath]
+        .filter((toolPath): toolPath is string => Boolean(toolPath))
+        .map((toolPath) => path.dirname(toolPath));
+      if (toolDirs.length) {
+        env.PATH = [...toolDirs, process.env.PATH].join(path.delimiter);
+      }
+
       TaskManagerService.create({
         id: taskId,
         type: 'runner-pipeline',

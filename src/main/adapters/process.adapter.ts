@@ -94,10 +94,46 @@ class ProcessAdapter {
         env: options?.env ? { ...process.env, ...options.env } : undefined,
       });
 
-      const { pid } = this.process;
+      // Attach listeners (especially 'error') before doing anything else that
+      // could throw. spawn() failures (e.g. EACCES/ENOENT) are reported
+      // asynchronously via the 'error' event on the next tick - if that event
+      // has no listener by the time it fires, Node treats it as an uncaught
+      // exception and crashes the whole process, instead of just this call.
+      const currentProcess = this.process;
+
+      currentProcess.on('error', (err) => {
+        this.sendError(`Process error: ${err.message || err.toString()}`);
+        this.handleProcessEnd(-1, null, 'error', err.message);
+      });
+
+      currentProcess.on('close', (code, signal) => {
+        this.handleProcessEnd(code, signal, 'close');
+      });
+
+      currentProcess.on('exit', (code, signal) => {
+        this.handleProcessEnd(code, signal, 'exit');
+      });
+
+      currentProcess.stdout.on('data', (data) => {
+        if (this.processInfo) {
+          this.processInfo.status = 'running';
+        }
+        this.sendOutput(String(data));
+      });
+
+      currentProcess.stderr.on('data', (data) => {
+        if (this.processInfo) {
+          this.processInfo.status = 'running';
+        }
+        this.sendError(String(data));
+      });
+
+      const { pid } = currentProcess;
 
       if (!pid) {
-        throw new Error('Failed to get process PID');
+        // spawn() already failed synchronously; the 'error'/'exit' listeners
+        // above will handle reporting and cleanup once Node emits them.
+        return;
       }
 
       this.processInfo = {
@@ -119,38 +155,6 @@ class ProcessAdapter {
         `Started process (PID: ${pid}) on ${platform}: ${command}`,
       );
 
-      // Handle stdout
-      this.process.stdout.on('data', (data) => {
-        if (this.processInfo) {
-          this.processInfo.status = 'running';
-        }
-        this.sendOutput(String(data));
-      });
-
-      // Handle stderr
-      this.process.stderr.on('data', (data) => {
-        if (this.processInfo) {
-          this.processInfo.status = 'running';
-        }
-        this.sendError(String(data));
-      });
-
-      // Handle process close
-      this.process.on('close', (code, signal) => {
-        this.handleProcessEnd(code, signal, 'close');
-      });
-
-      // Handle process exit
-      this.process.on('exit', (code, signal) => {
-        this.handleProcessEnd(code, signal, 'exit');
-      });
-
-      // Handle process errors
-      this.process.on('error', (err) => {
-        this.sendError(`Process error: ${err.message || err.toString()}`);
-        this.handleProcessEnd(-1, null, 'error', err.message);
-      });
-
       // Mark as running after successful setup
       if (this.processInfo) {
         this.processInfo.status = 'running';
@@ -167,16 +171,22 @@ class ProcessAdapter {
     eventType: string,
     errorMessage?: string,
   ) {
-    if (!this.processInfo) return;
+    // this.process (not processInfo) is the idempotency guard: 'close' and
+    // 'exit' can both fire for one process, and processInfo may never have
+    // been set at all if spawn() itself failed (e.g. EACCES) before a pid
+    // was assigned - that case must still be reported and cleaned up, not
+    // silently dropped, or the adapter gets stuck "running" forever.
+    if (!this.process) return;
 
+    const startTime = this.processInfo?.startTime ?? Date.now();
     const endTime = Date.now();
-    const duration = endTime - this.processInfo.startTime;
+    const duration = endTime - startTime;
 
     this.sendEvent('exit', {
       code,
       signal,
       duration,
-      pid: this.processInfo.pid,
+      pid: this.processInfo?.pid ?? null,
       eventType,
     });
 
