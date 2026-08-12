@@ -340,6 +340,35 @@ const ProjectDetails: React.FC = () => {
     handleTerminalTabSwitch,
   ]);
 
+  // Same as handleRunPipelineLocally, but for the file-tree's per-pipeline
+  // "Run Pipeline (Local Runner)" button, which passes an explicit filePath
+  // instead of relying on the currently open pipeline tab.
+  const handleRunPipelineFileLocally = React.useCallback(
+    async (filePath: string) => {
+      if (!project?.path || !settings?.runnerPath) return;
+      const pipelineName = getPipelineRelativeName(filePath, project.path);
+      const result = await runPipelineLocally({
+        binaryPath: settings.runnerPath,
+        workspaceDir: project.path,
+        pipelineFile: `${pipelineName}.yml`,
+        connectionName: connection?.connection?.name,
+      });
+      if (result.success) {
+        handleTerminalTabSwitch('runnerLogs');
+        toast.success('Pipeline run started. Track progress in Task Manager.');
+      } else {
+        toast.error(result.error || 'Failed to start the pipeline run');
+      }
+    },
+    [
+      project?.path,
+      settings?.runnerPath,
+      runPipelineLocally,
+      connection,
+      handleTerminalTabSwitch,
+    ],
+  );
+
   const pipelineRunHandler = React.useMemo(() => {
     if (!activePipelineFilePath) return undefined;
     if (settings?.env === 'cloud') {
@@ -1441,6 +1470,7 @@ const ProjectDetails: React.FC = () => {
                 }
               }}
               onRunPipeline={handleRunPipelineFile}
+              onRunPipelineLocal={handleRunPipelineFileLocally}
             />
           </Box>
         </Box>

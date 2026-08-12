@@ -264,6 +264,7 @@ interface ExplorerTabProps {
   onNewFile: (filePath?: string) => void;
   onRenameFile?: (oldPath: string, newPath: string) => void;
   onRunPipeline?: (filePath: string) => void;
+  onRunPipelineLocal?: (filePath: string) => void;
 }
 
 const ExplorerTab: React.FC<ExplorerTabProps> = ({
@@ -279,6 +280,7 @@ const ExplorerTab: React.FC<ExplorerTabProps> = ({
   onNewFile,
   onRenameFile,
   onRunPipeline,
+  onRunPipelineLocal,
 }) => {
   const theme = useTheme();
   const [createPipelineOpen, setCreatePipelineOpen] = React.useState(false);
@@ -318,6 +320,7 @@ const ExplorerTab: React.FC<ExplorerTabProps> = ({
             selectedPath={selectedFilePath}
             onRenameCallback={onRenameFile}
             onRunPipeline={onRunPipeline}
+            onRunPipelineLocal={onRunPipelineLocal}
           />
         )}
       </Box>
@@ -433,6 +436,7 @@ interface ProjectSidebarProps {
 
   // Pipeline
   onRunPipeline?: (filePath: string) => void;
+  onRunPipelineLocal?: (filePath: string) => void;
 }
 
 export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
@@ -458,6 +462,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   onEditConnection,
   onRemoveConnection,
   onRunPipeline,
+  onRunPipelineLocal,
 }) => {
   return (
     <Box
@@ -485,6 +490,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
             onNewFile={onNewFile}
             onRenameFile={onRenameFile}
             onRunPipeline={onRunPipeline}
+            onRunPipelineLocal={onRunPipelineLocal}
           />
         )}
 

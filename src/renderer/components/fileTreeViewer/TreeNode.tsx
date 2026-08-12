@@ -108,6 +108,7 @@ interface TreeNodeProps extends NodeRendererProps<FileNode> {
   onCreateFolder: (parentPath: string) => void;
   onDelete: (path: string) => void;
   onRunPipeline?: (filePath: string) => void;
+  onRunPipelineLocal?: (filePath: string) => void;
   dragOverFolder?: string | null;
   projectPath: string;
 }
@@ -140,6 +141,7 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
   onCreateFolder,
   onDelete,
   onRunPipeline,
+  onRunPipelineLocal,
   dragOverFolder,
   projectPath,
 }) => {
@@ -339,6 +341,19 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
               ? `Pipeline has uncommitted changes (${gitStatus})`
               : 'Run Pipeline'
           }
+          sx={{ padding: '4px', color: 'success.main', flexShrink: 0 }}
+        >
+          <PlayIcon sx={{ fontSize: 16 }} />
+        </IconButton>
+      )}
+      {!node.isEditing && isPipeline && onRunPipelineLocal && (
+        <IconButton
+          size="small"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRunPipelineLocal(node.data.path);
+          }}
+          title="Run Pipeline (Local Runner)"
           sx={{ padding: '4px', color: 'success.main', flexShrink: 0 }}
         >
           <PlayIcon sx={{ fontSize: 16 }} />
