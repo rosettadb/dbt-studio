@@ -12,6 +12,8 @@ import { DbtCoreVersionService } from '../../dbtCoreVersion.service';
 import AgentService from '../../agent.service';
 import SecureStorageService from '../../secureStorage.service';
 import { TerminalConfirmGate } from './terminalConfirmGate';
+import { isProtectedPipelineWritePath } from './studio/pipeline.tools';
+import FileMutationRollbackService from '../fileMutationRollback.service';
 
 // Security constraints
 const ALLOWED_DBT_COMMANDS = [
@@ -309,7 +311,6 @@ export const readDbtModel = tool({
     console.log('[Tool][DBT] readDbtModel', { filePath, projectPath });
     try {
       assertWithinProject(filePath, projectPath);
-
       if (!fs.existsSync(filePath)) {
         return { error: `File not found: ${filePath}` };
       }
@@ -361,8 +362,15 @@ export const writeDbtModel = tool({
       contentLength: content?.length ?? 0,
       projectPath,
     });
+    let mutationId: string | undefined;
     try {
       assertWithinProject(filePath, projectPath);
+      if (isProtectedPipelineWritePath(projectPath, filePath)) {
+        return {
+          error:
+            'Pipeline files must be generated or updated with studio_pipeline_generate or studio_pipeline_update.',
+        };
+      }
 
       // Only allow writing SQL and YAML files
       if (!/\.(sql|yml|yaml)$/i.test(filePath)) {
@@ -378,6 +386,9 @@ export const writeDbtModel = tool({
         // The write is shown in the UI via AgentStepBlock and can be reverted.
       }
 
+      const writeState = FileMutationRollbackService.capture(filePath);
+      mutationId = writeState.mutationId;
+
       // Ensure directory exists
       const dir = path.dirname(filePath);
       if (!fs.existsSync(dir)) {
@@ -390,8 +401,10 @@ export const writeDbtModel = tool({
         success: true,
         filePath,
         bytesWritten: Buffer.byteLength(content, 'utf-8'),
+        ...writeState,
       };
     } catch (error) {
+      if (mutationId) FileMutationRollbackService.release([mutationId]);
       return {
         error:
           error instanceof Error ? error.message : 'Unknown error writing file',
@@ -720,8 +733,15 @@ export function createDbtTools(
         content: z.string().describe('Complete file content to write'),
       }),
       execute: async ({ filePath, content }) => {
+        let mutationId: string | undefined;
         try {
           assertWithinProject(filePath, projectPath);
+          if (isProtectedPipelineWritePath(projectPath, filePath)) {
+            return {
+              error:
+                'Pipeline files must be generated or updated with studio_pipeline_generate or studio_pipeline_update.',
+            };
+          }
           if (!/\.(sql|yml|yaml)$/i.test(filePath))
             return {
               error: 'Only .sql, .yml, and .yaml files can be written.',
@@ -731,6 +751,8 @@ export function createDbtTools(
           if (context) {
             // File writes don't require confirmation — only shell commands do.
           }
+          const writeState = FileMutationRollbackService.capture(filePath);
+          mutationId = writeState.mutationId;
           const dir = path.dirname(filePath);
           if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
           fs.writeFileSync(filePath, content, 'utf-8');
@@ -739,8 +761,10 @@ export function createDbtTools(
             success: true,
             filePath,
             bytesWritten: Buffer.byteLength(content, 'utf-8'),
+            ...writeState,
           };
         } catch (error) {
+          if (mutationId) FileMutationRollbackService.release([mutationId]);
           return {
             error:
               error instanceof Error

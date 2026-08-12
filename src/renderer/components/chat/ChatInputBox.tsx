@@ -144,12 +144,18 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
 
     setInput('');
 
-    const rawAgentContextItems =
-      await activeContextManager.getContextItemsWithAdditionalFiles();
     const agentContextItems =
-      aiSettings?.chat?.autoIncludeFileContext !== false
-        ? rawAgentContextItems
-        : [];
+      await activeContextManager.getContextItemsWithAdditionalFiles();
+    const activeFileContext = activeContextManager.selectedFileContext;
+    if (
+      aiSettings?.chat?.autoIncludeFileContext !== false &&
+      activeFileContext &&
+      !agentContextItems.some(
+        (item) => item.metadata?.path === activeFileContext.metadata?.path,
+      )
+    ) {
+      agentContextItems.unshift(activeFileContext);
+    }
 
     await onStartStream(
       messageContent,
