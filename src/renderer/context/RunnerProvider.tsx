@@ -217,6 +217,9 @@ export const RunnerProvider: React.FC<RunnerProviderProps> = ({ children }) => {
 
   const run = useCallback(
     async (params: RunPipelineLocallyParams) => {
+      // Clear out the previous run's log lines so the log viewer starts
+      // fresh - otherwise old and new output run together in the same view.
+      setState((prev) => ({ ...prev, output: [], error: [] }));
       await setupConnectionEnv(params.connectionName, params.connType);
       return window.electron.ipcRenderer.invoke('runner:run', {
         binaryPath: params.binaryPath,

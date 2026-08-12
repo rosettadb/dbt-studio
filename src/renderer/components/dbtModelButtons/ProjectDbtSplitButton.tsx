@@ -35,6 +35,10 @@ interface ProjectDbtSplitButtonProps {
   connection?: any;
   environment?: 'local' | 'cloud';
   onBeforeExecute?: () => void;
+  // Called once a local pipeline run has successfully started (distinct
+  // from onBeforeExecute, which switches to the plain terminal tab) so the
+  // terminal panel can expand to the runner logs tab instead.
+  onLocalRunStarted?: () => void;
   // Function handlers that are used elsewhere in ProjectDetails
   rosettaDbt: (project: Project, command: Command) => Promise<void>;
 }
@@ -49,6 +53,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
   connection,
   environment = 'local',
   onBeforeExecute,
+  onLocalRunStarted,
   rosettaDbt,
 }) => {
   // Functions that are only used in this component - moved inside
@@ -540,6 +545,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
               connectionName: connection?.connection?.name,
             });
             if (result.success) {
+              onLocalRunStarted?.();
               toast.success(
                 'Pipeline run started. Track progress in Task Manager.',
               );

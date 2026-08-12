@@ -303,12 +303,65 @@ const ProjectDetails: React.FC = () => {
   );
 
   const {
+    run: runPipelineLocally,
     isRunning: isRunnerRunning,
     output: runnerOutput,
     error: runnerError,
   } = useRunner();
   const showRunnerLogsTab =
     isRunnerRunning || runnerOutput.length > 0 || runnerError.length > 0;
+
+  const handleRunPipelineLocally = React.useCallback(async () => {
+    if (!activePipelineFilePath || !project?.path || !settings?.runnerPath) {
+      return;
+    }
+    const pipelineName = getPipelineRelativeName(
+      activePipelineFilePath,
+      project.path,
+    );
+    const result = await runPipelineLocally({
+      binaryPath: settings.runnerPath,
+      workspaceDir: project.path,
+      pipelineFile: `${pipelineName}.yml`,
+      connectionName: connection?.connection?.name,
+    });
+    if (result.success) {
+      handleTerminalTabSwitch('runnerLogs');
+      toast.success('Pipeline run started. Track progress in Task Manager.');
+    } else {
+      toast.error(result.error || 'Failed to start the pipeline run');
+    }
+  }, [
+    activePipelineFilePath,
+    project?.path,
+    settings?.runnerPath,
+    runPipelineLocally,
+    connection,
+    handleTerminalTabSwitch,
+  ]);
+
+  const pipelineRunHandler = React.useMemo(() => {
+    if (!activePipelineFilePath) return undefined;
+    if (settings?.env === 'cloud') {
+      return () => handleRunPipelineFile(activePipelineFilePath);
+    }
+    return handleRunPipelineLocally;
+  }, [
+    activePipelineFilePath,
+    settings?.env,
+    handleRunPipelineFile,
+    handleRunPipelineLocally,
+  ]);
+
+  const pipelineRunDisabledReason = React.useMemo(() => {
+    if (isDbtV2) {
+      return 'dbt Core v2 is in alpha and not yet supported for pipeline runs. Support will be added after the first official v2 release.';
+    }
+    if (settings?.env !== 'cloud' && !settings?.runnerPath) {
+      return 'Install the local runner first (Settings > Local Runner)';
+    }
+    return undefined;
+  }, [isDbtV2, settings?.env, settings?.runnerPath]);
 
   // Code/visual toggle for the pipeline tab — the raw YAML is edited inline
   // via a one-off Editor instance instead of opening a second tab.
@@ -1189,6 +1242,7 @@ const ProjectDetails: React.FC = () => {
               handleTerminalTabSwitch('terminal');
             }
           }}
+          onLocalRunStarted={() => handleTerminalTabSwitch('runnerLogs')}
         />
       }
       panelTitle="DBT Studio"
@@ -1634,20 +1688,8 @@ const ProjectDetails: React.FC = () => {
                                     }
                                   : undefined
                               }
-                              onRun={
-                                settings?.env === 'cloud' &&
-                                activePipelineFilePath
-                                  ? () =>
-                                      handleRunPipelineFile(
-                                        activePipelineFilePath,
-                                      )
-                                  : undefined
-                              }
-                              runDisabledReason={
-                                isDbtV2
-                                  ? 'dbt Core v2 is in alpha and not yet supported for cloud runs. Support will be added after the first official v2 release.'
-                                  : undefined
-                              }
+                              onRun={pipelineRunHandler}
+                              runDisabledReason={pipelineRunDisabledReason}
                             />
                           )}
                         </Box>
