@@ -13,6 +13,27 @@ import {
 } from '../../types/backend';
 import SettingsService from './settings.service';
 
+const KISQL_GITHUB_REPO = 'kineticadb/kisql';
+const KISQL_UNIX_ASSET = 'kisql';
+const KISQL_WIN_ASSET = 'kisql.exe';
+
+function getKisqlAssetName(): string {
+  return process.platform === 'win32' ? KISQL_WIN_ASSET : KISQL_UNIX_ASSET;
+}
+
+function getKisqlDownloadUrl(): string {
+  const asset = getKisqlAssetName();
+  return `https://raw.githubusercontent.com/${KISQL_GITHUB_REPO}/master/${asset}`;
+}
+
+async function getKisqlLatestSha(): Promise<string> {
+  const response = await axios.get(
+    `https://api.github.com/repos/${KISQL_GITHUB_REPO}/commits/master`,
+    { headers: { Accept: 'application/vnd.github.sha' }, responseType: 'text' },
+  );
+  return String(response.data).trim().slice(0, 7);
+}
+
 const RUNNER_RELEASES_API =
   'https://api.github.com/repos/rosettadb/dbt-studio/releases';
 
@@ -85,12 +106,9 @@ const PLUGIN_DEFINITIONS: {
   },
   {
     id: 'kinetica_cli',
-    label: 'Kinetica CLI',
+    label: 'Kinetica CLI (KiSQL)',
     plugin: 'kinetica_cli@v1',
-    command: 'kinetica_cli',
-    versionArgs: ['--version'],
-    downloadUrl:
-      'https://docs.kinetica.com/content/tools/kisql#kinetica-sql-kisql',
+    // No `command` here — managed by Studio, detected from settings like dbt/rosetta
   },
   { id: 'command', label: 'Shell command', plugin: 'command@v1' },
 ];
@@ -303,6 +321,17 @@ export default class RunnerService {
             managedInStudio: true,
           };
         }
+        if (def.id === 'kinetica_cli') {
+          return {
+            id: def.id,
+            label: def.label,
+            plugin: def.plugin,
+            available: Boolean(settings.kisqlPath && settings.kisqlVersion),
+            version: settings.kisqlVersion,
+            path: settings.kisqlPath,
+            managedInStudio: true,
+          };
+        }
         if (!def.command) {
           // command@v1: no external dependency, always usable
           return {
@@ -350,6 +379,100 @@ export default class RunnerService {
         },
       );
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // KiSQL (Kinetica CLI) managed installation
+  // ---------------------------------------------------------------------------
+
+  static async checkKisqlVersion(): Promise<{
+    installed: boolean;
+    version?: string;
+    path?: string;
+    latestSha?: string;
+    updateAvailable?: boolean;
+  }> {
+    const settings = await SettingsService.loadSettings();
+    let latestSha: string | undefined;
+    try {
+      latestSha = await getKisqlLatestSha();
+    } catch {
+      // network unavailable — still report current state
+    }
+    const installed = Boolean(
+      settings.kisqlPath &&
+        settings.kisqlVersion &&
+        fs.existsSync(settings.kisqlPath),
+    );
+    const updateAvailable =
+      installed && latestSha
+        ? latestSha !== settings.kisqlVersion
+        : undefined;
+    return {
+      installed,
+      version: settings.kisqlVersion,
+      path: settings.kisqlPath,
+      latestSha,
+      updateAvailable,
+    };
+  }
+
+  static async installKisql(): Promise<InstallResult> {
+    try {
+      const downloadUrl = getKisqlDownloadUrl();
+      const assetName = getKisqlAssetName();
+
+      // Resolve latest commit SHA for version tracking
+      let sha = 'unknown';
+      try {
+        sha = await getKisqlLatestSha();
+      } catch {
+        // proceed without SHA if network fails for the API call
+      }
+
+      const installDir = path.join(app.getPath('userData'), 'kisql');
+      const binaryPath = path.join(installDir, assetName);
+
+      // Remove previous installation
+      if (fs.existsSync(installDir)) {
+        await fs.remove(installDir);
+      }
+      await fs.mkdirp(installDir);
+
+      const response = await axios.get(downloadUrl, {
+        responseType: 'arraybuffer',
+      });
+      await fs.writeFile(binaryPath, response.data);
+
+      if (process.platform !== 'win32') {
+        await fs.chmod(binaryPath, 0o755);
+      }
+
+      const settings = await SettingsService.loadSettings();
+      settings.kisqlPath = binaryPath;
+      settings.kisqlVersion = sha;
+      await SettingsService.saveSettings(settings);
+
+      return { success: true, version: sha, path: binaryPath };
+    } catch (error) {
+      return {
+        success: false,
+        version: '',
+        path: '',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  static async uninstallKisql(): Promise<void> {
+    const settings = await SettingsService.loadSettings();
+    const installDir = path.join(app.getPath('userData'), 'kisql');
+    if (fs.existsSync(installDir)) {
+      await fs.remove(installDir);
+    }
+    settings.kisqlPath = '';
+    settings.kisqlVersion = '';
+    await SettingsService.saveSettings(settings);
   }
 
   private static compareVersions(version1: string, version2: string): number {

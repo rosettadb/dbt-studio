@@ -44,7 +44,10 @@ export type SettingsChannels =
   | 'dbt:package:installLatest'
   | 'dbt:package:uninstall'
   | 'dbt:packageVersions:list'
-  | 'dbt:packageVersion:install';
+  | 'dbt:packageVersion:install'
+  | 'kisql:install'
+  | 'kisql:uninstall'
+  | 'kisql:check';
 
 export type ProjectChannels =
   | 'project:get'

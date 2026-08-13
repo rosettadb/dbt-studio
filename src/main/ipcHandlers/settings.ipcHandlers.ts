@@ -35,6 +35,9 @@ const handlerChannels: SettingsChannels[] = [
   'dbt:package:uninstall',
   'dbt:packageVersions:list',
   'dbt:packageVersion:install',
+  'kisql:install',
+  'kisql:uninstall',
+  'kisql:check',
 ];
 
 const removeSettingsIpcHandlers = () => {
@@ -216,6 +219,19 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
 
   ipcMain.handle('dbt:packageVersion:install', async (_event, req) => {
     return DbtCoreVersionService.installPackageVersion(req);
+  });
+
+  // KiSQL (Kinetica CLI) handlers
+  ipcMain.handle('kisql:check', async () => {
+    return RunnerService.checkKisqlVersion();
+  });
+
+  ipcMain.handle('kisql:install', async () => {
+    return RunnerService.installKisql();
+  });
+
+  ipcMain.handle('kisql:uninstall', async () => {
+    return RunnerService.uninstallKisql();
   });
 };
 

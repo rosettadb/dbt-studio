@@ -85,7 +85,11 @@ const registerRunnerHandlers = (mainWindow: BrowserWindow) => {
       // support) - so Studio's own managed installs, which live in a venv /
       // app-data dir rather than the system PATH, need to be put on PATH for
       // the runner's child process to find them.
-      const toolDirs = [settings.dbtPath, settings.rosettaPath]
+      const toolDirs = [
+        settings.dbtPath,
+        settings.rosettaPath,
+        settings.kisqlPath,
+      ]
         .filter((toolPath): toolPath is string => Boolean(toolPath))
         .map((toolPath) => path.dirname(toolPath));
       if (toolDirs.length) {

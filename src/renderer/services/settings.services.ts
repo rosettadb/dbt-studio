@@ -128,6 +128,41 @@ export const resetFactorySettings = async (): Promise<void> => {
   await client.post<void, void>('settings:reset-factory', undefined);
 };
 
+// KiSQL (Kinetica CLI) services
+export const checkKisqlVersion = async (): Promise<{
+  installed: boolean;
+  version?: string;
+  path?: string;
+  latestSha?: string;
+  updateAvailable?: boolean;
+}> => {
+  const { data } = await client.get<{
+    installed: boolean;
+    version?: string;
+    path?: string;
+    latestSha?: string;
+    updateAvailable?: boolean;
+  }>('kisql:check');
+  return data;
+};
+
+export const installKisql = async (): Promise<{
+  success: boolean;
+  version: string;
+  path: string;
+  error?: string;
+}> => {
+  const { data } = await client.post<
+    undefined,
+    { success: boolean; version: string; path: string; error?: string }
+  >('kisql:install', undefined);
+  return data;
+};
+
+export const uninstallKisql = async (): Promise<void> => {
+  await client.get('kisql:uninstall');
+};
+
 export const restartApp = async (): Promise<void> => {
   await client.post<void, void>('settings:restart', undefined);
 };

@@ -33,6 +33,9 @@ import {
   useInstallRunnerVersion,
   useUninstallRunnerVersion,
   useCheckRunnerPluginDependencies,
+  useCheckKisqlVersion,
+  useInstallKisql,
+  useUninstallKisql,
 } from '../../controllers';
 
 interface RunnerSettingsProps {
@@ -49,7 +52,10 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
   );
   const [showUninstallConfirmation, setShowUninstallConfirmation] =
     useState(false);
+  const [showKisqlUninstallConfirmation, setShowKisqlUninstallConfirmation] =
+    useState(false);
   const [isBlocking, setIsBlocking] = useState(false);
+  const [kisqlUpdateAvailable, setKisqlUpdateAvailable] = useState(false);
 
   const checkVersions = useCheckRunnerVersions({
     onSuccess: (data) => setVersionInfo(data),
@@ -96,9 +102,47 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
     },
   });
 
+  // KiSQL hooks
+  const checkKisql = useCheckKisqlVersion({
+    onSuccess: (data) => {
+      setKisqlUpdateAvailable(data.updateAvailable ?? false);
+    },
+  });
+
+  const installKisql = useInstallKisql({
+    onSuccess: (result) => {
+      setIsBlocking(false);
+      if (result.success) {
+        toast.success('KiSQL installed successfully');
+        pluginDependencies.mutate();
+        checkKisql.mutate();
+      } else {
+        toast.error(`KiSQL installation failed: ${result.error}`);
+      }
+    },
+    onError: (error) => {
+      setIsBlocking(false);
+      toast.error(`KiSQL installation failed: ${error.message}`);
+    },
+  });
+
+  const uninstallKisql = useUninstallKisql({
+    onSuccess: () => {
+      setIsBlocking(false);
+      setKisqlUpdateAvailable(false);
+      toast.success('KiSQL uninstalled');
+      pluginDependencies.mutate();
+    },
+    onError: (error) => {
+      setIsBlocking(false);
+      toast.error(`KiSQL uninstall failed: ${error.message}`);
+    },
+  });
+
   useEffect(() => {
     checkVersions.mutate();
     pluginDependencies.mutate();
+    checkKisql.mutate();
   }, []);
 
   const handleInstallVersion = (version: string) => {
@@ -107,10 +151,21 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
     installVersion.mutate(version);
   };
 
+  const handleInstallKisql = () => {
+    setIsBlocking(true);
+    installKisql.mutate();
+  };
+
   const confirmUninstall = () => {
     setShowUninstallConfirmation(false);
     setIsBlocking(true);
     uninstallRunner.mutate();
+  };
+
+  const confirmKisqlUninstall = () => {
+    setShowKisqlUninstallConfirmation(false);
+    setIsBlocking(true);
+    uninstallKisql.mutate();
   };
 
   const getButtonText = (version: {
@@ -326,6 +381,13 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
                           color="warning"
                         />
                       )}
+                      {dep.id === 'kinetica_cli' && kisqlUpdateAvailable && (
+                        <Chip
+                          label="Update available"
+                          size="small"
+                          color="info"
+                        />
+                      )}
                     </Box>
                   }
                   secondary={
@@ -336,25 +398,72 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
                   }
                 />
                 <ListItemSecondaryAction>
-                  {(dep.id === 'dbt' || dep.id === 'rosetta') && (
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      onClick={() => navigate(`/app/settings/${dep.id}`)}
-                    >
-                      Manage
-                    </Button>
-                  )}
-                  {!dep.available && dep.downloadUrl && (
-                    <Button
-                      size="small"
-                      variant="contained"
-                      startIcon={<Launch />}
-                      onClick={() => window.open(dep.downloadUrl, '_blank')}
-                    >
-                      Install
-                    </Button>
-                  )}
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    {(dep.id === 'dbt' || dep.id === 'rosetta') && (
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => navigate(`/app/settings/${dep.id}`)}
+                      >
+                        Manage
+                      </Button>
+                    )}
+                    {dep.id === 'kinetica_cli' && (
+                      <>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          onClick={handleInstallKisql}
+                          disabled={
+                            installKisql.isLoading ||
+                            (dep.available && !kisqlUpdateAvailable)
+                          }
+                          startIcon={
+                            installKisql.isLoading ? (
+                              <CircularProgress size={16} />
+                            ) : (
+                              <Download />
+                            )
+                          }
+                        >
+                          {/* eslint-disable-next-line no-nested-ternary */}
+                          {installKisql.isLoading
+                            ? 'Installing...'
+                            : dep.available && !kisqlUpdateAvailable
+                              ? 'Installed'
+                              : kisqlUpdateAvailable
+                                ? 'Update'
+                                : 'Install'}
+                        </Button>
+                        {dep.available && (
+                          <Tooltip title="Uninstall KiSQL">
+                            <IconButton
+                              size="small"
+                              color="error"
+                              onClick={() =>
+                                setShowKisqlUninstallConfirmation(true)
+                              }
+                              disabled={uninstallKisql.isLoading}
+                            >
+                              <Delete fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                      </>
+                    )}
+                    {!dep.available &&
+                      dep.downloadUrl &&
+                      dep.id !== 'kinetica_cli' && (
+                        <Button
+                          size="small"
+                          variant="contained"
+                          startIcon={<Launch />}
+                          onClick={() => window.open(dep.downloadUrl, '_blank')}
+                        >
+                          Install
+                        </Button>
+                      )}
+                  </Box>
                 </ListItemSecondaryAction>
               </ListItem>
               <Divider />
@@ -369,6 +478,14 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
         onConfirm={confirmUninstall}
         title="Uninstall Local Runner"
         question="Are you sure you want to uninstall the local runner? You will need to reinstall it to run pipelines locally again."
+      />
+
+      <ConfirmationModal
+        isOpen={showKisqlUninstallConfirmation}
+        onClose={() => setShowKisqlUninstallConfirmation(false)}
+        onConfirm={confirmKisqlUninstall}
+        title="Uninstall KiSQL"
+        question="Are you sure you want to uninstall KiSQL? Pipeline steps using kinetica_cli@v1 will fail until it is reinstalled."
       />
     </Box>
   );

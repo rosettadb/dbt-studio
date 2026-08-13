@@ -344,6 +344,8 @@ export type SettingsType = {
   flowfileVersion?: string;
   flowfilePort?: string;
   flowfileAutoStart?: string;
+  kisqlPath?: string;
+  kisqlVersion?: string;
 };
 
 export type FileDialogProperties = 'openFile' | 'openDirectory';
