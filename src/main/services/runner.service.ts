@@ -405,9 +405,7 @@ export default class RunnerService {
         fs.existsSync(settings.kisqlPath),
     );
     const updateAvailable =
-      installed && latestSha
-        ? latestSha !== settings.kisqlVersion
-        : undefined;
+      installed && latestSha ? latestSha !== settings.kisqlVersion : undefined;
     return {
       installed,
       version: settings.kisqlVersion,

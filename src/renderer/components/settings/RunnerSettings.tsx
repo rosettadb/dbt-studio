@@ -180,6 +180,17 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
     return 'Install';
   };
 
+  const getKisqlButtonLabel = (
+    isLoading: boolean,
+    isAvailable: boolean,
+    hasUpdate: boolean,
+  ): string => {
+    if (isLoading) return 'Installing...';
+    if (isAvailable && !hasUpdate) return 'Installed';
+    if (hasUpdate) return 'Update';
+    return 'Install';
+  };
+
   return (
     <Box sx={{ maxWidth: 800 }}>
       <Backdrop
@@ -426,14 +437,11 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
                             )
                           }
                         >
-                          {/* eslint-disable-next-line no-nested-ternary */}
-                          {installKisql.isLoading
-                            ? 'Installing...'
-                            : dep.available && !kisqlUpdateAvailable
-                              ? 'Installed'
-                              : kisqlUpdateAvailable
-                                ? 'Update'
-                                : 'Install'}
+                          {getKisqlButtonLabel(
+                            installKisql.isLoading,
+                            dep.available,
+                            kisqlUpdateAvailable,
+                          )}
                         </Button>
                         {dep.available && (
                           <Tooltip title="Uninstall KiSQL">
