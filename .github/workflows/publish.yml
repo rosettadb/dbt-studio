@@ -832,6 +832,9 @@ jobs:
     runs-on: macos-latest
     needs: extract-version
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Download runner release assets (macOS)
         env:
           GH_TOKEN: ${{ secrets.ORCHESTRATOR_REPO_TOKEN }}
@@ -898,6 +901,9 @@ jobs:
     runs-on: windows-2022
     needs: extract-version
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Download runner release assets (Windows)
         env:
           GH_TOKEN: ${{ secrets.ORCHESTRATOR_REPO_TOKEN }}
@@ -939,6 +945,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: extract-version
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Download runner release assets (Linux & plugins)
         env:
           GH_TOKEN: ${{ secrets.ORCHESTRATOR_REPO_TOKEN }}
