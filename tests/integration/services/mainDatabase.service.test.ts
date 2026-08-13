@@ -354,6 +354,26 @@ describeBetterSqlite('MainDatabaseService Integration', () => {
       expect(message.conversationId).toBe(conversationId);
     });
 
+    it('should generate numeric IDs for provider context items', async () => {
+      const message = await MainDatabaseService.addMessageWithContext(
+        conversationId,
+        { role: 'user', content: 'Which file is selected?' },
+        [
+          {
+            id: 'selected-file:/project/rosetta/pipelines/test.yml',
+            type: 'file',
+            name: 'test.yml',
+            description: 'Currently selected file',
+            content: 'name: test',
+            metadata: { path: '/project/rosetta/pipelines/test.yml' },
+          } as any,
+        ],
+      );
+
+      expect(message.contextItems).toHaveLength(1);
+      expect(typeof message.contextItems[0].id).toBe('number');
+    });
+
     it('should get messages from conversation', async () => {
       await MainDatabaseService.addMessage(conversationId, {
         role: 'user',

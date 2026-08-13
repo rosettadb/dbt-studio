@@ -4,6 +4,7 @@ import ReactFlow, {
   Controls,
   ControlButton,
   Background,
+  MiniMap,
   useNodesState,
   useEdgesState,
   useReactFlow,
@@ -48,10 +49,10 @@ import { validatePipelineGraph } from './validatePipeline';
 import { useTerminalMinimize } from '../terminal';
 import { UnsavedChangesDialog } from '../editor/unsavedChangesDialog';
 
-const nodeTypes = { pipelineNode: PipelineNode };
+export const nodeTypes = { pipelineNode: PipelineNode };
 
-const NODE_WIDTH = 264;
-const NODE_HEIGHT = 110;
+export const NODE_WIDTH = 264;
+export const NODE_HEIGHT = 110;
 
 type PipelineGraphProps = {
   jobs: PipelineJob[];
@@ -60,12 +61,14 @@ type PipelineGraphProps = {
   onSave?: (content: string) => Promise<void>;
   /** When provided (cloud mode), shows a Run button that triggers a cloud run. */
   onRun?: () => void;
+  /** When set, the Run button is shown but disabled with this text as its tooltip. */
+  runDisabledReason?: string;
   onEditingChange?: (isEditing: boolean) => void;
   /** Fired once when the pipeline view first mounts (e.g. tab opened). */
   onEnterView?: () => void;
 };
 
-function getLayoutedElements(flowNodes: Node[], flowEdges: Edge[]) {
+export function getLayoutedElements(flowNodes: Node[], flowEdges: Edge[]) {
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
   g.setGraph({ rankdir: 'LR', ranksep: 60, nodesep: 30 });
@@ -88,7 +91,7 @@ function getLayoutedElements(flowNodes: Node[], flowEdges: Edge[]) {
   };
 }
 
-function buildNodesAndEdges(
+export function buildNodesAndEdges(
   jobs: PipelineJob[],
   theme: Theme,
 ): { nodes: Node<PipelineNodeData>[]; edges: Edge[] } {
@@ -177,6 +180,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
   onEdit,
   onSave,
   onRun,
+  runDisabledReason,
   onEditingChange,
   onEnterView,
 }) => {
@@ -591,15 +595,19 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
           </Button>
         )}
         {onRun && (
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={handleRunClick}
-            disabled={isSaving}
-            startIcon={<PlayArrowIcon sx={{ fontSize: 14 }} />}
-          >
-            Run
-          </Button>
+          <Tooltip title={runDisabledReason || ''}>
+            <span>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={handleRunClick}
+                disabled={isSaving || Boolean(runDisabledReason)}
+                startIcon={<PlayArrowIcon sx={{ fontSize: 14 }} />}
+              >
+                Run
+              </Button>
+            </span>
+          </Tooltip>
         )}
         {isEditing && (
           <>
@@ -649,6 +657,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
             nodesConnectable={isEditing}
             fitView
             fitViewOptions={{ padding: 0.15 }}
+            proOptions={{ hideAttribution: true }}
           >
             <Controls>
               {!isEditing && onSave && (
@@ -660,6 +669,22 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
               )}
             </Controls>
             <Background color={theme.palette.text.disabled} gap={16} />
+            <MiniMap
+              pannable
+              zoomable
+              nodeColor={(node) =>
+                PLUGIN_MAP.get(node.data?.plugin)?.color ??
+                theme.palette.primary.main
+              }
+              maskColor={
+                theme.palette.mode === 'dark'
+                  ? 'rgba(0, 0, 0, 0.6)'
+                  : 'rgba(255, 255, 255, 0.6)'
+              }
+              style={{
+                backgroundColor: theme.palette.background.paper,
+              }}
+            />
           </ReactFlow>
         </Box>
       </Box>
@@ -727,6 +752,7 @@ export const PipelineGraph: React.FC<PipelineGraphProps> = ({
   onEdit,
   onSave,
   onRun,
+  runDisabledReason,
   onEditingChange,
   onEnterView,
 }) => (
@@ -737,6 +763,7 @@ export const PipelineGraph: React.FC<PipelineGraphProps> = ({
       onEdit={onEdit}
       onSave={onSave}
       onRun={onRun}
+      runDisabledReason={runDisabledReason}
       onEditingChange={onEditingChange}
       onEnterView={onEnterView}
     />

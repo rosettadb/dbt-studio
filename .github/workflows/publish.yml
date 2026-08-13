@@ -822,6 +822,142 @@ jobs:
             gh release view "$RELEASE_TAG"
           fi
 
+  # These three jobs pull the unsigned runner binaries from the private
+  # rosettadb/cloud-api repo's latest release and re-publish them, signed,
+  # on this repo's release. Signing happens here (not in cloud-api) because
+  # this repo already has working Apple/Azure signing secrets; cloud-api
+  # does not, and re-issuing those credentials is not fast to do.
+  copy-runner-artifacts-macos:
+    name: Copy & sign runner artifacts (macOS)
+    runs-on: macos-latest
+    needs: extract-version
+    steps:
+      - name: Download runner release assets (macOS)
+        env:
+          GH_TOKEN: ${{ secrets.ORCHESTRATOR_REPO_TOKEN }}
+        run: |
+          mkdir -p runner-artifacts
+          gh release download --repo rosettadb/cloud-api --pattern 'rosetta-runner-darwin-*' --dir runner-artifacts --clobber
+
+      - name: Import signing certificate
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 900 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security default-keychain -s "$KEYCHAIN_PATH"
+
+          echo "$CSC_LINK" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN_PATH" -P "$CSC_KEY_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          rm "$RUNNER_TEMP/cert.p12"
+
+      - name: Codesign & notarize binaries
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_ID_PASS }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          IDENTITY=$(security find-identity -v -p codesigning "$RUNNER_TEMP/build.keychain" | grep "Developer ID Application" | head -1 | sed -E 's/.*"(.+)"/\1/')
+          for f in runner-artifacts/rosetta-runner-darwin-*; do
+            chmod +x "$f"
+            codesign --sign "$IDENTITY" --options runtime --timestamp "$f"
+            codesign --verify --verbose "$f"
+
+            # notarytool only accepts zip/dmg/pkg, and a bare CLI binary can't
+            # be stapled (only .app/.pkg/.dmg support that) - Gatekeeper
+            # checks the ticket online instead, so the zip is just a
+            # submission vehicle.
+            ditto -c -k --keepParent "$f" "$f.zip"
+            xcrun notarytool submit "$f.zip" \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" \
+              --wait
+            rm "$f.zip"
+          done
+
+      - name: Upload signed runner artifacts to Studio release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.extract-version.outputs.release_tag }}
+        run: |
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --title "$RELEASE_TAG" --notes "Release $RELEASE_TAG" --draft
+          fi
+          for f in runner-artifacts/rosetta-runner-darwin-*; do
+            gh release upload "$RELEASE_TAG" "$f" --clobber
+          done
+
+  copy-runner-artifacts-windows:
+    name: Copy & sign runner artifacts (Windows)
+    runs-on: windows-2022
+    needs: extract-version
+    steps:
+      - name: Download runner release assets (Windows)
+        env:
+          GH_TOKEN: ${{ secrets.ORCHESTRATOR_REPO_TOKEN }}
+        shell: bash
+        run: |
+          mkdir -p runner-artifacts
+          gh release download --repo rosettadb/cloud-api --pattern 'rosetta-runner-windows-*' --dir runner-artifacts --clobber
+
+      - name: Sign with Azure Trusted Signing
+        uses: azure/trusted-signing-action@v0.5.0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.AZURE_ENDPOINT }}
+          trusted-signing-account-name: ${{ secrets.AZURE_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ secrets.AZURE_CERT_PROFILE }}
+          files-folder: runner-artifacts
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Upload signed runner artifact to Studio release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.extract-version.outputs.release_tag }}
+        shell: bash
+        run: |
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --title "$RELEASE_TAG" --notes "Release $RELEASE_TAG" --draft
+          fi
+          for f in runner-artifacts/rosetta-runner-windows-*; do
+            gh release upload "$RELEASE_TAG" "$f" --clobber
+          done
+
+  copy-runner-artifacts-other:
+    name: Copy runner artifacts (Linux & plugins)
+    runs-on: ubuntu-latest
+    needs: extract-version
+    steps:
+      - name: Download runner release assets (Linux & plugins)
+        env:
+          GH_TOKEN: ${{ secrets.ORCHESTRATOR_REPO_TOKEN }}
+        run: |
+          mkdir -p runner-artifacts
+          gh release download --repo rosettadb/cloud-api --pattern 'rosetta-runner-linux-*' --pattern 'rosetta-runner-plugins.zip' --dir runner-artifacts --clobber
+
+      - name: Upload runner artifacts to Studio release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.extract-version.outputs.release_tag }}
+        run: |
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --title "$RELEASE_TAG" --notes "Release $RELEASE_TAG" --draft
+          fi
+          for f in runner-artifacts/*; do
+            gh release upload "$RELEASE_TAG" "$f" --clobber
+          done
+
   merge-mac-manifests:
     runs-on: ubuntu-latest
     needs: [extract-version, publish-mac-arm64, publish-mac-x64]

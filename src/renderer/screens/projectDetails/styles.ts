@@ -48,7 +48,10 @@ export const NoFileSelected = styled('div')(({ theme }) => ({
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  height: '100%',
-  width: '100%',
+  position: 'absolute',
+  inset: 0,
+  // The (empty) Editor still mounts underneath this message so its drag
+  // handlers stay live; this overlay must not block those events.
+  pointerEvents: 'none',
   color: theme.palette.text.secondary,
 }));

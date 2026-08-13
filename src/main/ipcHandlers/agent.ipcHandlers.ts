@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import AgentService from '../services/agent.service';
 import { TerminalConfirmGate } from '../services/ai/tools/terminalConfirmGate';
 import { AgentEditorBridgeService } from '../services/ai/agentEditorBridge.service';
+import FileMutationRollbackService from '../services/ai/fileMutationRollback.service';
 import type {
   AgentContextOverheadRequest,
   AgentRunRequest,
@@ -18,6 +19,18 @@ export const registerAgentHandlers = () => {
   );
 
   ipcMain.handle('agent:tools:list', async () => AgentService.listTools());
+
+  ipcMain.handle(
+    'agent:file-mutation:restore',
+    async (_event, { mutationId }: { mutationId: string }) =>
+      FileMutationRollbackService.restore(mutationId),
+  );
+
+  ipcMain.handle(
+    'agent:file-mutation:release',
+    async (_event, { mutationIds }: { mutationIds: string[] }) =>
+      FileMutationRollbackService.release(mutationIds),
+  );
 
   ipcMain.handle(
     'agent:context-overhead:get',

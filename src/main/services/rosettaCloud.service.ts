@@ -461,9 +461,6 @@ export default class RosettaCloudService {
     }
 
     const body = await response.json();
-    // TEMP DEBUG — remove once we've confirmed the shape of this response.
-    // eslint-disable-next-line no-console
-    console.log('[getActionStatus] raw response', JSON.stringify(body));
     return body as CloudPipelineData;
   }
 

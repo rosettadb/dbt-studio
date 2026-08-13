@@ -51,7 +51,10 @@ export const useContextManager = () => {
         name: selectedFileContext.name,
         description: selectedFileContext.description,
         content: selectedFileContext.content,
-        metadata: selectedFileContext.metadata,
+        metadata: {
+          ...selectedFileContext.metadata,
+          isAdditional: true,
+        },
       });
     }
 
@@ -79,7 +82,10 @@ export const useContextManager = () => {
           name: selectedFileContext.name,
           description: selectedFileContext.description,
           content: selectedFileContext.content,
-          metadata: selectedFileContext.metadata,
+          metadata: {
+            ...selectedFileContext.metadata,
+            isAdditional: true,
+          },
         });
       }
 
@@ -192,6 +198,7 @@ export const useContextManager = () => {
     clearAdditionalFiles,
 
     // Context items
+    selectedFileContext,
     contextItemsForMessage,
     getContextItemsWithAdditionalFiles,
 
