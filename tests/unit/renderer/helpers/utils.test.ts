@@ -13,6 +13,7 @@ import {
   getNonEditableFileMessage,
   compileCommand,
   generateFilename,
+  getConnectionInput,
 } from '../../../../src/renderer/helpers/utils';
 
 jest.mock('../../../../src/renderer/services', () => {
@@ -67,9 +68,9 @@ describe('renderer/helpers/utils', () => {
 
   describe('splitPath', () => {
     it('should strip project name prefix', () => {
-      expect(
-        splitPath('/Users/me/project/models/my.sql', 'project'),
-      ).toBe('/models/my.sql');
+      expect(splitPath('/Users/me/project/models/my.sql', 'project')).toBe(
+        '/models/my.sql',
+      );
     });
 
     it('should return original path if project name is not present', () => {
@@ -113,9 +114,9 @@ describe('renderer/helpers/utils', () => {
 
   describe('extractModelNameFromPath', () => {
     it('should convert models folder path to dot notation without extension', () => {
-      expect(
-        extractModelNameFromPath('/p/models/staging/my_model.sql'),
-      ).toBe('staging.my_model');
+      expect(extractModelNameFromPath('/p/models/staging/my_model.sql')).toBe(
+        'staging.my_model',
+      );
     });
 
     it('should return empty string when models folder missing', () => {
@@ -185,6 +186,30 @@ describe('renderer/helpers/utils', () => {
       expect(name).toMatch(/^prefix_\d{8}_\d{6}\.csv$/);
 
       jest.useRealTimers();
+    });
+  });
+
+  describe('getConnectionInput', () => {
+    it('maps SQLite connections for SQL Editor and Notebook loading', () => {
+      expect(
+        getConnectionInput({
+          id: 'sqlite-connection',
+          connection: {
+            type: 'sqlite',
+            name: 'SQLite Connection',
+            database_path: '/tmp/analytics.sqlite',
+            short_database_path: 'analytics.sqlite',
+            database: '/tmp/analytics.sqlite',
+            schema: 'main',
+          },
+        } as any),
+      ).toEqual({
+        type: 'sqlite',
+        name: 'SQLite Connection',
+        database_path: '/tmp/analytics.sqlite',
+        database: '/tmp/analytics.sqlite',
+        schema: 'main',
+      });
     });
   });
 });

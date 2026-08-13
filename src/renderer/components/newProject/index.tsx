@@ -293,17 +293,21 @@ export const NewProject: React.FC<NewProjectProps> = ({
                     <Typography>New Connection</Typography>
                   </Box>
                 </MenuItem>
-                {connections.map((connection) => (
-                  <MenuItem key={connection.id} value={connection.id}>
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <ConnectionIconContainer>
-                        {renderConnectionIcon(connection.connection.type)}
-                      </ConnectionIconContainer>
-                      {connection.connection.name} -{' '}
-                      {connection.connection.type}
-                    </Box>
-                  </MenuItem>
-                ))}
+                {connections
+                  .filter(
+                    (connection) => connection.connection.type !== 'sqlite',
+                  )
+                  .map((connection) => (
+                    <MenuItem key={connection.id} value={connection.id}>
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <ConnectionIconContainer>
+                          {renderConnectionIcon(connection.connection.type)}
+                        </ConnectionIconContainer>
+                        {connection.connection.name} -{' '}
+                        {connection.connection.type}
+                      </Box>
+                    </MenuItem>
+                  ))}
               </Select>
             </FormControl>
           ) : (

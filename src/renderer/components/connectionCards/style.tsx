@@ -30,8 +30,8 @@ export const JdbcImage = styled('img')({
 
 export const ContentWrapper = styled(Box)({
   padding: 3,
-  height: 180,
-  width: 240,
+  height: 150,
+  width: 210,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -48,8 +48,8 @@ export const StyledCardContent = styled(CardContent)({
 
 export const StyledCard = styled(Card)({
   maxWidth: 345,
-  width: 240,
-  height: 252,
+  width: 210,
+  height: 220,
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
@@ -63,7 +63,7 @@ export const StyledCard = styled(Card)({
 });
 
 export const MediaImage = styled('img')({
-  width: 140,
+  width: 115,
 });
 
 export const FileMediaImage = styled('img')({
