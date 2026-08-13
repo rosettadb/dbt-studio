@@ -13,8 +13,8 @@ import {
   List,
   ListItem,
   ListItemText,
-  ListItemSecondaryAction,
   Backdrop,
+  Popover,
 } from '@mui/material';
 import {
   Refresh,
@@ -24,9 +24,14 @@ import {
   Info,
   Warning,
   Launch,
+  HelpOutline,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import { SettingsType, RunnerVersionInfo } from '../../../types/backend';
+import {
+  SettingsType,
+  RunnerVersionInfo,
+  RunnerPluginId,
+} from '../../../types/backend';
 import { ConfirmationModal } from '../modals';
 import {
   useCheckRunnerVersions,
@@ -37,6 +42,40 @@ import {
   useInstallKisql,
   useUninstallKisql,
 } from '../../controllers';
+
+// Manual-install guidance shown in the help popover for deps that have no
+// in-app installer.
+const MANUAL_INSTALL_HELP: Partial<
+  Record<RunnerPluginId, { title: string; steps: string[] }>
+> = {
+  git: {
+    title: 'Installing Git',
+    steps: [
+      'macOS: run  xcode-select --install  or install via https://git-scm.com/downloads',
+      'Linux: sudo apt install git  (Debian/Ubuntu) or  sudo dnf install git  (Fedora)',
+      'Windows: download the installer from https://git-scm.com/downloads',
+      'After install, restart dbt Studio so the new PATH is picked up.',
+    ],
+  },
+  terraform: {
+    title: 'Installing Terraform',
+    steps: [
+      'macOS/Linux: use Homebrew —  brew tap hashicorp/tap && brew install hashicorp/tap/terraform',
+      'Or download the binary directly from https://developer.hashicorp.com/terraform/install',
+      'Windows: use the MSI installer linked on the download page above.',
+      'After install, restart dbt Studio so the new PATH is picked up.',
+    ],
+  },
+  s3: {
+    title: 'Installing AWS CLI',
+    steps: [
+      'macOS: brew install awscli',
+      'Linux: follow the official guide at https://aws.amazon.com/cli/',
+      'Windows: download the MSI installer from https://aws.amazon.com/cli/',
+      'After install, restart dbt Studio so the new PATH is picked up.',
+    ],
+  },
+};
 
 interface RunnerSettingsProps {
   settings: SettingsType;
@@ -56,6 +95,10 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
     useState(false);
   const [isBlocking, setIsBlocking] = useState(false);
   const [kisqlUpdateAvailable, setKisqlUpdateAvailable] = useState(false);
+  const [helpAnchor, setHelpAnchor] = useState<{
+    el: HTMLElement;
+    id: RunnerPluginId;
+  } | null>(null);
 
   const checkVersions = useCheckRunnerVersions({
     onSuccess: (data) => setVersionInfo(data),
@@ -251,8 +294,16 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
           <List sx={{ border: 1, borderColor: 'divider', borderRadius: 1 }}>
             {versionInfo.availableVersions.slice(0, 10).map((version) => (
               <React.Fragment key={version.version}>
-                <ListItem>
+                <ListItem
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 1,
+                    pr: 1,
+                  }}
+                >
                   <ListItemText
+                    sx={{ flex: 1, minWidth: 0, mr: 1 }}
                     primary={
                       <Box
                         sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
@@ -279,44 +330,50 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
                       </Typography>
                     }
                   />
-                  <ListItemSecondaryAction>
-                    <Box sx={{ display: 'flex', gap: 1 }}>
-                      {version.releaseNotes && (
-                        <Tooltip title="View release notes">
-                          <IconButton
-                            size="small"
-                            onClick={() =>
-                              window.open(
-                                `https://github.com/rosettadb/dbt-studio/releases/tag/v${version.version}`,
-                                '_blank',
-                              )
-                            }
-                          >
-                            <Info />
-                          </IconButton>
-                        </Tooltip>
-                      )}
-                      <Button
-                        size="small"
-                        variant="contained"
-                        onClick={() => handleInstallVersion(version.version)}
-                        disabled={
-                          version.version === versionInfo.currentVersion ||
-                          installingVersion === version.version ||
-                          installVersion.isLoading
-                        }
-                        startIcon={
-                          installingVersion === version.version ? (
-                            <CircularProgress size={16} />
-                          ) : (
-                            <Download />
-                          )
-                        }
-                      >
-                        {getButtonText(version)}
-                      </Button>
-                    </Box>
-                  </ListItemSecondaryAction>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 0.5,
+                      flexShrink: 0,
+                      pt: 0.5,
+                    }}
+                  >
+                    {version.releaseNotes && (
+                      <Tooltip title="View release notes">
+                        <IconButton
+                          size="small"
+                          onClick={() =>
+                            window.open(
+                              `https://github.com/rosettadb/dbt-studio/releases/tag/v${version.version}`,
+                              '_blank',
+                            )
+                          }
+                        >
+                          <Info />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                    <Button
+                      size="small"
+                      variant="contained"
+                      onClick={() => handleInstallVersion(version.version)}
+                      disabled={
+                        version.version === versionInfo.currentVersion ||
+                        installingVersion === version.version ||
+                        installVersion.isLoading
+                      }
+                      startIcon={
+                        installingVersion === version.version ? (
+                          <CircularProgress size={16} />
+                        ) : (
+                          <Download />
+                        )
+                      }
+                    >
+                      {getButtonText(version)}
+                    </Button>
+                  </Box>
                 </ListItem>
                 <Divider />
               </React.Fragment>
@@ -370,10 +427,27 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
         <List sx={{ border: 1, borderColor: 'divider', borderRadius: 1 }}>
           {pluginDependencies.data.map((dep) => (
             <React.Fragment key={dep.id}>
-              <ListItem>
+              <ListItem
+                sx={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 1,
+                  pr: 1,
+                }}
+                disableGutters={false}
+              >
+                {/* Text — grows to fill available space, truncates long paths */}
                 <ListItemText
+                  sx={{ flex: 1, minWidth: 0, mr: 1 }}
                   primary={
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        flexWrap: 'wrap',
+                      }}
+                    >
                       <Typography variant="body1" sx={{ fontWeight: 500 }}>
                         {dep.label}
                       </Typography>
@@ -402,77 +476,109 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
                     </Box>
                   }
                   secondary={
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
                       Plugin: {dep.plugin}
                       {dep.path ? ` · ${dep.path}` : ''}
                     </Typography>
                   }
                 />
-                <ListItemSecondaryAction>
-                  <Box sx={{ display: 'flex', gap: 1 }}>
-                    {(dep.id === 'dbt' || dep.id === 'rosetta') && (
+
+                {/* Actions — fixed width, never pushed off-screen */}
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 0.5,
+                    flexShrink: 0,
+                    pt: 0.5,
+                  }}
+                >
+                  {(dep.id === 'dbt' || dep.id === 'rosetta') && (
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() => navigate(`/app/settings/${dep.id}`)}
+                    >
+                      Manage
+                    </Button>
+                  )}
+                  {dep.id === 'kinetica_cli' && (
+                    <>
                       <Button
                         size="small"
-                        variant="outlined"
-                        onClick={() => navigate(`/app/settings/${dep.id}`)}
+                        variant="contained"
+                        onClick={handleInstallKisql}
+                        disabled={
+                          installKisql.isLoading ||
+                          (dep.available && !kisqlUpdateAvailable)
+                        }
+                        startIcon={
+                          installKisql.isLoading ? (
+                            <CircularProgress size={16} />
+                          ) : (
+                            <Download />
+                          )
+                        }
                       >
-                        Manage
+                        {getKisqlButtonLabel(
+                          installKisql.isLoading,
+                          dep.available,
+                          kisqlUpdateAvailable,
+                        )}
+                      </Button>
+                      {dep.available && (
+                        <Tooltip title="Uninstall KiSQL">
+                          <IconButton
+                            size="small"
+                            color="error"
+                            onClick={() =>
+                              setShowKisqlUninstallConfirmation(true)
+                            }
+                            disabled={uninstallKisql.isLoading}
+                          >
+                            <Delete fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    </>
+                  )}
+                  {!dep.available &&
+                    dep.downloadUrl &&
+                    dep.id !== 'kinetica_cli' && (
+                      <Button
+                        size="small"
+                        variant="contained"
+                        startIcon={<Launch />}
+                        onClick={() => window.open(dep.downloadUrl, '_blank')}
+                      >
+                        Install
                       </Button>
                     )}
-                    {dep.id === 'kinetica_cli' && (
-                      <>
-                        <Button
+                  {dep.id !== 'kinetica_cli' &&
+                    dep.id !== 'dbt' &&
+                    dep.id !== 'rosetta' &&
+                    dep.id !== 'command' &&
+                    MANUAL_INSTALL_HELP[dep.id] && (
+                      <Tooltip title="Installation help">
+                        <IconButton
                           size="small"
-                          variant="contained"
-                          onClick={handleInstallKisql}
-                          disabled={
-                            installKisql.isLoading ||
-                            (dep.available && !kisqlUpdateAvailable)
-                          }
-                          startIcon={
-                            installKisql.isLoading ? (
-                              <CircularProgress size={16} />
-                            ) : (
-                              <Download />
-                            )
+                          onClick={(e) =>
+                            setHelpAnchor({ el: e.currentTarget, id: dep.id })
                           }
                         >
-                          {getKisqlButtonLabel(
-                            installKisql.isLoading,
-                            dep.available,
-                            kisqlUpdateAvailable,
-                          )}
-                        </Button>
-                        {dep.available && (
-                          <Tooltip title="Uninstall KiSQL">
-                            <IconButton
-                              size="small"
-                              color="error"
-                              onClick={() =>
-                                setShowKisqlUninstallConfirmation(true)
-                              }
-                              disabled={uninstallKisql.isLoading}
-                            >
-                              <Delete fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        )}
-                      </>
+                          <HelpOutline fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
                     )}
-                    {!dep.available &&
-                      dep.downloadUrl &&
-                      dep.id !== 'kinetica_cli' && (
-                        <Button
-                          size="small"
-                          variant="contained"
-                          startIcon={<Launch />}
-                          onClick={() => window.open(dep.downloadUrl, '_blank')}
-                        >
-                          Install
-                        </Button>
-                      )}
-                  </Box>
-                </ListItemSecondaryAction>
+                </Box>
               </ListItem>
               <Divider />
             </React.Fragment>
@@ -495,6 +601,41 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
         title="Uninstall KiSQL"
         question="Are you sure you want to uninstall KiSQL? Pipeline steps using kinetica_cli@v1 will fail until it is reinstalled."
       />
+
+      {/* Manual-install help popover */}
+      <Popover
+        open={Boolean(helpAnchor)}
+        anchorEl={helpAnchor?.el}
+        onClose={() => setHelpAnchor(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+        PaperProps={{ sx: { p: 2, maxWidth: 380 } }}
+      >
+        {helpAnchor && MANUAL_INSTALL_HELP[helpAnchor.id] && (
+          <Box>
+            <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+              {MANUAL_INSTALL_HELP[helpAnchor.id]!.title}
+            </Typography>
+            <Alert severity="info" sx={{ mb: 1.5, py: 0 }}>
+              <Typography variant="caption">
+                Requires manual installation — no in-app installer available.
+              </Typography>
+            </Alert>
+            <Box component="ol" sx={{ m: 0, pl: 2 }}>
+              {MANUAL_INSTALL_HELP[helpAnchor.id]!.steps.map((step) => (
+                <Typography
+                  key={step}
+                  component="li"
+                  variant="body2"
+                  sx={{ mb: 0.5 }}
+                >
+                  {step}
+                </Typography>
+              ))}
+            </Box>
+          </Box>
+        )}
+      </Popover>
     </Box>
   );
 };
