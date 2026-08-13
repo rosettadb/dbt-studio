@@ -689,6 +689,11 @@ export const DataLakeConnectionSelector: React.FC<
             {!isLoadingBuckets && bucketOptions.length === 0 && (
               <MenuItem disabled>No buckets found</MenuItem>
             )}
+            {bucket && !bucketOptions.includes(bucket) && (
+              <MenuItem value={bucket} disabled>
+                {bucket}
+              </MenuItem>
+            )}
             {bucketOptions.map((name) => (
               <MenuItem key={name} value={name}>
                 {name}

@@ -90,8 +90,11 @@ const DataLake: React.FC = () => {
   const createIcebergMutation = useCreateIcebergInstance();
   const updateIcebergMutation = useUpdateIcebergInstance();
   const deleteIcebergMutation = useDeleteIcebergInstance();
-  const { data: editInstanceData, isLoading: editInstanceLoading } =
-    useGetIcebergInstance(icebergEditId ?? '');
+  const {
+    data: editInstanceData,
+    isLoading: editInstanceLoading,
+    error: editInstanceError,
+  } = useGetIcebergInstance(icebergEditId ?? '');
   const activeIcebergId = type === 'iceberg' ? (instanceId ?? '') : '';
   const {
     data: icebergInstance,
@@ -616,11 +619,22 @@ const DataLake: React.FC = () => {
         fullWidth
       >
         <DialogContent sx={{ pt: 3 }}>
-          {editInstanceLoading || !editInstanceData ? (
+          {editInstanceLoading && (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
               <CircularProgress />
             </Box>
-          ) : (
+          )}
+          {!editInstanceLoading && (editInstanceError || !editInstanceData) && (
+            <Box sx={{ py: 2 }}>
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {editInstanceError instanceof Error
+                  ? editInstanceError.message
+                  : 'Failed to load the Iceberg instance.'}
+              </Alert>
+              <Button onClick={() => setIcebergEditId(null)}>Close</Button>
+            </Box>
+          )}
+          {!editInstanceLoading && !editInstanceError && editInstanceData && (
             <IcebergConnectionWizard
               key={icebergEditId}
               onComplete={handleIcebergEditComplete}

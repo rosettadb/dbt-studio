@@ -7,9 +7,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from pyiceberg.catalog import load_catalog
-from pyiceberg.schema import Schema
-from pyiceberg.types import LongType, NestedField, StringType
+try:
+    import pyarrow  # noqa: F401
+    from pyiceberg.catalog import load_catalog
+    from pyiceberg.schema import Schema
+    from pyiceberg.types import LongType, NestedField, StringType
+except ImportError as exc:
+    raise unittest.SkipTest(f"Optional Iceberg test dependencies unavailable: {exc}") from exc
 
 
 BRIDGE_PATH = (

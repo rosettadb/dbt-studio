@@ -71,6 +71,7 @@ import {
 import type {
   IcebergImportFileFormat,
   IcebergInstanceConfig,
+  IcebergSnapshotInfo,
 } from '../../../../types/iceberg';
 import {
   useCreateIcebergNamespace,
@@ -141,6 +142,14 @@ const formatBytes = (value?: string): string => {
   return `${(bytes / 1024 ** unit).toFixed(unit === 0 ? 0 : 2)} ${units[unit]}`;
 };
 
+const sortSnapshots = (snapshots: IcebergSnapshotInfo[]) =>
+  [...snapshots].sort(
+    (left, right) => Number(left.committedAt) - Number(right.committedAt),
+  );
+
+const getCurrentSnapshot = (snapshots: IcebergSnapshotInfo[]) =>
+  snapshots.find((snapshot) => snapshot.isCurrent);
+
 const IcebergTableRow: React.FC<{
   instanceId: string;
   namespace: string[];
@@ -150,9 +159,9 @@ const IcebergTableRow: React.FC<{
   onRename: (selection: SelectedTable) => void;
 }> = ({ instanceId, namespace, table, onSelect, onDelete, onRename }) => {
   const snapshotsQuery = useGetIcebergSnapshots(instanceId, namespace, table);
-  const snapshots = snapshotsQuery.data ?? [];
+  const snapshots = sortSnapshots(snapshotsQuery.data ?? []);
   const firstSnapshot = snapshots[0];
-  const currentSnapshot = snapshots[snapshots.length - 1];
+  const currentSnapshot = getCurrentSnapshot(snapshots);
   const summary = currentSnapshot?.summary ?? {};
   let updatedLabel = '—';
   if (snapshotsQuery.isLoading) {
@@ -360,21 +369,23 @@ function TableHistoryRows({
   }
   return (
     <>
-      {[...(snapshotsQuery.data ?? [])].reverse().map((snapshot) => (
-        <TableRow
-          key={`${namespace.join('.')}.${table}.${snapshot.snapshotId}`}
-        >
-          <TableCell>{namespace.join('.')}</TableCell>
-          <TableCell>{table}</TableCell>
-          <TableCell sx={{ fontFamily: 'monospace' }}>
-            …{snapshot.snapshotId.slice(-8)}
-          </TableCell>
-          <TableCell>{snapshot.operation}</TableCell>
-          <TableCell>
-            {new Date(Number(snapshot.committedAt)).toLocaleString()}
-          </TableCell>
-        </TableRow>
-      ))}
+      {sortSnapshots(snapshotsQuery.data ?? [])
+        .reverse()
+        .map((snapshot) => (
+          <TableRow
+            key={`${namespace.join('.')}.${table}.${snapshot.snapshotId}`}
+          >
+            <TableCell>{namespace.join('.')}</TableCell>
+            <TableCell>{table}</TableCell>
+            <TableCell sx={{ fontFamily: 'monospace' }}>
+              …{snapshot.snapshotId.slice(-8)}
+            </TableCell>
+            <TableCell>{snapshot.operation}</TableCell>
+            <TableCell>
+              {new Date(Number(snapshot.committedAt)).toLocaleString()}
+            </TableCell>
+          </TableRow>
+        ))}
     </>
   );
 }
@@ -517,8 +528,8 @@ const TableDetail: React.FC<{
   };
 
   const renderOverview = () => {
-    const snapshots = snapshotsQuery.data ?? [];
-    const currentSnapshot = snapshots[snapshots.length - 1];
+    const snapshots = sortSnapshots(snapshotsQuery.data ?? []);
+    const currentSnapshot = getCurrentSnapshot(snapshots);
     return (
       <Grid container spacing={2}>
         <Grid item xs={12} md={6}>
@@ -614,7 +625,7 @@ const TableDetail: React.FC<{
         <Alert severity="error">{errorMessage(snapshotsQuery.error)}</Alert>
       );
     }
-    const snapshots = snapshotsQuery.data ?? [];
+    const snapshots = sortSnapshots(snapshotsQuery.data ?? []);
     if (snapshots.length === 0) {
       return <Alert severity="info">No snapshots found.</Alert>;
     }
@@ -631,10 +642,10 @@ const TableDetail: React.FC<{
             </TableRow>
           </TableHead>
           <TableBody>
-            {[...snapshots].reverse().map((snapshot, index) => (
+            {[...snapshots].reverse().map((snapshot) => (
               <TableRow
                 key={snapshot.snapshotId}
-                sx={{ fontWeight: index === 0 ? 700 : 400 }}
+                sx={{ fontWeight: snapshot.isCurrent ? 700 : 400 }}
               >
                 <TableCell sx={{ fontFamily: 'monospace' }}>
                   …{snapshot.snapshotId.slice(-8)}
@@ -808,9 +819,9 @@ const TableDetail: React.FC<{
             Namespace: {selection.namespace.join('.')} • Apache Iceberg
           </Typography>
         </Box>
-        {snapshotsQuery.data?.length ? (
+        {getCurrentSnapshot(snapshotsQuery.data ?? []) ? (
           <Chip
-            label={`Snapshot ${snapshotsQuery.data.at(-1)?.snapshotId}`}
+            label={`Snapshot ${getCurrentSnapshot(snapshotsQuery.data ?? [])?.snapshotId}`}
             variant="outlined"
           />
         ) : null}

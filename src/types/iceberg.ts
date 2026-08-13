@@ -131,6 +131,7 @@ export interface IcebergSchemaResult {
 
 export interface IcebergSnapshotInfo {
   snapshotId: string;
+  isCurrent?: boolean;
   parentId?: string;
   operation: string;
   committedAt: string;

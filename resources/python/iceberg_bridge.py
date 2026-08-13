@@ -54,6 +54,11 @@ def handle_install_check(_cmd: dict) -> dict:
         import s3fs  # noqa: F401, PLC0415
         import sqlalchemy  # noqa: F401, PLC0415
         from pyiceberg.catalog.hive import HiveCatalog  # noqa: F401, PLC0415
+        version_parts = tuple(
+            int(part) for part in pyiceberg.__version__.split(".")[:3]
+        )
+        if version_parts < (0, 10, 0):
+            return {"ok": True, "installed": False, "version": pyiceberg.__version__}
         return {"ok": True, "installed": True, "version": pyiceberg.__version__}
     except ImportError:
         return {"ok": True, "installed": False}
@@ -147,10 +152,12 @@ def handle_get_snapshots(cmd: dict) -> dict:
         catalog = load_catalog(cmd["catalog_name"], **props)
         namespace = tuple(cmd["namespace"])
         table = catalog.load_table((*namespace, cmd["table"]))
+        current_snapshot_id = table.metadata.current_snapshot_id
         snapshots = []
         for snap in table.metadata.snapshots:
             snapshots.append({
                 "snapshotId": str(snap.snapshot_id),
+                "isCurrent": snap.snapshot_id == current_snapshot_id,
                 "parentId": str(snap.parent_snapshot_id) if snap.parent_snapshot_id else None,
                 "operation": snap.summary.operation.value if snap.summary and snap.summary.operation else "unknown",
                 "committedAt": str(snap.timestamp_ms),

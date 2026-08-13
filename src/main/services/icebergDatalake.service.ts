@@ -218,6 +218,7 @@ export class IcebergDatalakeService {
   private static async runBridge(
     command: object,
     env: Record<string, string> = {},
+    timeoutMs = 120_000,
   ): Promise<unknown> {
     const pythonPath = await IcebergDatalakeService.getPythonPath();
     const bridgePath = IcebergDatalakeService.getBridgePath();
@@ -228,41 +229,56 @@ export class IcebergDatalakeService {
       });
       let stdout = '';
       let stderr = '';
+      let settled = false;
+      let timer: ReturnType<typeof setTimeout>;
+      const finish = (fn: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        fn();
+      };
+      timer = setTimeout(() => {
+        child.kill('SIGKILL');
+        finish(() => reject(new Error('ICEBERG_BRIDGE_TIMEOUT')));
+      }, timeoutMs);
       child.stdout.on('data', (d: Buffer) => {
         stdout += d.toString();
       });
       child.stderr.on('data', (d: Buffer) => {
         stderr += d.toString();
       });
+      child.stdin.on('error', (err: Error) => finish(() => reject(err)));
       child.stdin.write(JSON.stringify(command));
       child.stdin.end();
       child.on('close', (code: number) => {
-        try {
-          const result = JSON.parse(stdout) as Record<string, unknown>;
-          if (!result.ok) {
+        finish(() => {
+          try {
+            const result = JSON.parse(stdout) as Record<string, unknown>;
+            if (!result.ok) {
+              reject(
+                new Error(
+                  IcebergDatalakeService.redactBridgeSecrets(
+                    (result.error as string) ?? 'Bridge error',
+                    env,
+                  ),
+                ),
+              );
+            } else {
+              resolve(result);
+            }
+          } catch {
             reject(
               new Error(
                 IcebergDatalakeService.redactBridgeSecrets(
-                  (result.error as string) ?? 'Bridge error',
+                  `Bridge parse error (exit ${code}): ${stderr}`,
                   env,
                 ),
               ),
             );
-          } else {
-            resolve(result);
           }
-        } catch {
-          reject(
-            new Error(
-              IcebergDatalakeService.redactBridgeSecrets(
-                `Bridge parse error (exit ${code}): ${stderr}`,
-                env,
-              ),
-            ),
-          );
-        }
+        });
       });
-      child.on('error', (err: Error) => reject(err));
+      child.on('error', (err: Error) => finish(() => reject(err)));
     });
   }
 
@@ -287,7 +303,7 @@ export class IcebergDatalakeService {
           props.uri = `sqlite:///${instance.catalogPath}`;
         }
         if (instance.localPath) {
-          props.warehouse = `file://${instance.localPath}`;
+          props.warehouse = pathToFileURL(instance.localPath).href;
         }
         break;
 
@@ -441,7 +457,7 @@ export class IcebergDatalakeService {
 
     if (instance.storageType === 'server-managed') return { props, env };
     if (instance.storageType === 'local' && instance.localPath) {
-      props.warehouse = `file://${instance.localPath}`;
+      props.warehouse = pathToFileURL(instance.localPath).href;
     }
 
     if (instance.storageConnectionId) {
@@ -962,19 +978,14 @@ export class IcebergDatalakeService {
         oauthServerUri: params.oauthServerUri,
       });
 
-      if (params.endpoint) props.uri = params.endpoint;
-      if (params.catalogName) props.warehouse = params.catalogName;
-      if (params.catalogPath) props.uri = params.catalogPath;
-
       switch (params.catalogType) {
         case 'sqlite':
           props.type = 'sql';
           if (params.catalogPath) {
             props.uri = `sqlite:///${params.catalogPath}`;
-            props.warehouse = `file://${path.join(
-              path.dirname(params.catalogPath),
-              'warehouse',
-            )}`;
+            props.warehouse = pathToFileURL(
+              path.join(path.dirname(params.catalogPath), 'warehouse'),
+            ).href;
           }
           break;
         case 'sql':
@@ -994,9 +1005,12 @@ export class IcebergDatalakeService {
           if (params.catalogType === 'nessie') {
             props.uri = IcebergDatalakeService.buildNessieRestUri(params);
             props['header.X-Iceberg-Access-Delegation'] = 'remote-signing';
-            delete props.warehouse;
-          } else if (params.catalogType === 'lakekeeper') {
-            props['header.X-Iceberg-Access-Delegation'] = 'remote-signing';
+          } else {
+            if (params.endpoint) props.uri = params.endpoint;
+            if (params.catalogName) props.warehouse = params.catalogName;
+            if (params.catalogType === 'lakekeeper') {
+              props['header.X-Iceberg-Access-Delegation'] = 'remote-signing';
+            }
           }
           if (params.accessToken) {
             props.token = '__ENV:ICEBERG_ACCESS_TOKEN';
@@ -1246,7 +1260,7 @@ export class IcebergDatalakeService {
           'install',
           // Enabled SQL/Hive catalogs plus the current FileIO profile.
           // --prefer-binary avoids slow source compilation where wheels exist.
-          'pyiceberg[s3fs,sql-sqlite,sql-postgres,pyarrow,hive]',
+          'pyiceberg[s3fs,sql-sqlite,sql-postgres,pyarrow,hive]>=0.10.0',
           '--prefer-binary',
           '--quiet',
         ]);

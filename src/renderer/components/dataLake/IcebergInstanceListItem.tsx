@@ -53,7 +53,16 @@ export const IcebergInstanceListItem: React.FC<
 
   return (
     <Box
+      role="button"
+      tabIndex={0}
+      aria-pressed={isSelected}
       onClick={() => onSelect(instance.id)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onSelect(instance.id);
+        }
+      }}
       sx={{
         display: 'flex',
         alignItems: 'center',

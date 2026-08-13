@@ -9,6 +9,7 @@ const isRestorableRoute = (route: string) => {
   return (
     pathname.startsWith('/app/data-lake/') &&
     !pathname.includes('/new-instance') &&
+    !pathname.includes('/history') &&
     !pathname.endsWith('/edit')
   );
 };

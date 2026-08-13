@@ -4,7 +4,7 @@
  * Pattern: mirrors DataLakeConnectionWizard structure (DuckLake).
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box,
   Button,
@@ -279,15 +279,18 @@ export const IcebergConnectionWizard: React.FC<
     success: boolean;
     message: string;
   } | null>(null);
+  const initializedInstanceIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (initialData) {
-      setData(buildInitialData(initialData));
-      setActiveStep(0);
-      setStepError(null);
-      setCatalogTestResult(null);
-      setStorageTestResult(null);
+    if (!initialData || initializedInstanceIdRef.current === initialData.id) {
+      return;
     }
+    initializedInstanceIdRef.current = initialData.id;
+    setData(buildInitialData(initialData));
+    setActiveStep(0);
+    setStepError(null);
+    setCatalogTestResult(null);
+    setStorageTestResult(null);
   }, [initialData]);
 
   useEffect(() => {
@@ -1124,26 +1127,33 @@ export const IcebergConnectionWizard: React.FC<
         </FormControl>
 
         {data.storage.storageType === 'local' && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <TextField
-              label="Local Storage Path"
-              placeholder="/data/iceberg/warehouse"
-              value={data.storage.localPath ?? ''}
-              onChange={(e) => patchStorage({ localPath: e.target.value })}
-              fullWidth
-              required
-              helperText="Local directory where Iceberg data files will be stored"
-            />
-            <Tooltip title="Pick folder">
-              <IconButton
-                onClick={() =>
-                  pickFolder((p) => patchStorage({ localPath: p }))
-                }
-              >
-                <FolderOpen />
-              </IconButton>
-            </Tooltip>
-          </Box>
+          <TextField
+            label="Local Storage Path"
+            placeholder="/data/iceberg/warehouse"
+            value={data.storage.localPath ?? ''}
+            onChange={(e) => patchStorage({ localPath: e.target.value })}
+            fullWidth
+            required
+            helperText="Local directory where Iceberg data files will be stored"
+            slotProps={{
+              input: {
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <Tooltip title="Pick folder">
+                      <IconButton
+                        edge="end"
+                        onClick={() =>
+                          pickFolder((p) => patchStorage({ localPath: p }))
+                        }
+                      >
+                        <FolderOpen />
+                      </IconButton>
+                    </Tooltip>
+                  </InputAdornment>
+                ),
+              },
+            }}
+          />
         )}
 
         {data.storage.storageType === 'cloud' && (

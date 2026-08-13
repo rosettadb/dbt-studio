@@ -80,7 +80,7 @@ class RestCatalogAcceptanceTest(unittest.TestCase):
             )
         else:
             self.assertEqual(
-                existing_rows,
+                sorted(existing_rows, key=lambda row: row["id"]),
                 [
                     {"id": 1, "name": "Ada"},
                     {"id": 2, "name": "Linus"},
@@ -99,7 +99,7 @@ class RestCatalogAcceptanceTest(unittest.TestCase):
         table = reloaded.load_table(self.table_identifier)
         rows = table.scan().to_arrow().to_pylist()
         self.assertEqual(
-            rows,
+            sorted(rows, key=lambda row: row["id"]),
             [
                 {"id": 1, "name": "Ada"},
                 {"id": 2, "name": "Linus"},
