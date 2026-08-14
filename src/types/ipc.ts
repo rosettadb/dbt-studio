@@ -360,6 +360,7 @@ export type IcebergChannels =
   | 'iceberg:listStorageBuckets'
   | 'iceberg:testInstance'
   | 'iceberg:sqlCapability'
+  | 'iceberg:sqlSchema'
   | 'iceberg:verifySqlAccess'
   | 'iceberg:executeSql'
   | 'iceberg:cancelSql'

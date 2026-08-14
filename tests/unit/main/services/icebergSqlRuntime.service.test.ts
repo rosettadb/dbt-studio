@@ -7,6 +7,7 @@ import {
 
 const mockRun = jest.fn();
 const mockRunAndReadUntil = jest.fn();
+const mockExtractStatements = jest.fn();
 const mockCloseConnection = jest.fn();
 const mockCloseInstance = jest.fn();
 const mockInterrupt = jest.fn();
@@ -17,6 +18,7 @@ jest.mock('@duckdb/node-api', () => ({
       connect: jest.fn(async () => ({
         run: mockRun,
         runAndReadUntil: mockRunAndReadUntil,
+        extractStatements: mockExtractStatements,
         closeSync: mockCloseConnection,
         interrupt: mockInterrupt,
       })),
@@ -105,12 +107,50 @@ describe('IcebergDatalakeService DuckDB Iceberg lifecycle', () => {
       return null;
     });
     mockRun.mockResolvedValue(undefined);
+    mockExtractStatements.mockResolvedValue({
+      count: 1,
+      prepare: jest.fn(async () => ({
+        statementType: 1,
+        destroySync: jest.fn(),
+      })),
+    });
     mockRunAndReadUntil.mockResolvedValue({
       columnNames: () => ['table_schema', 'table_name'],
       getRowsJson: () => [],
+      getRowObjectsJson: () => [],
       rowsChanged: 0,
       done: true,
     });
+  });
+
+  it('returns DuckDB row objects keyed for the SQL result table', async () => {
+    mockedLoadDatabase.mockResolvedValue({
+      ...database,
+      icebergInstances: [
+        {
+          ...instance,
+          sqlAccessVerifiedAt: '2026-08-14T00:00:00.000Z',
+          sqlRuntimeFingerprint: (
+            IcebergDatalakeService as any
+          ).getSqlRuntimeFingerprint(),
+        },
+      ],
+    });
+    mockRunAndReadUntil.mockResolvedValue({
+      columnNames: () => ['Id', 'Keywords'],
+      getRowObjectsJson: () => [{ Id: 1, Keywords: 'iceberg' }],
+      rowsChanged: 0,
+      done: true,
+    });
+
+    const result = await IcebergDatalakeService.executeSql({
+      instanceId: instance.id,
+      executionId: 'query-rows',
+      sql: 'SELECT * FROM "iceberg"."default"."keywords"',
+    });
+
+    expect(result.columns).toEqual(['Id', 'Keywords']);
+    expect(result.rows).toEqual([{ Id: 1, Keywords: 'iceberg' }]);
   });
 
   it('verifies with temporary secrets, attach, detach, and cleanup', async () => {
@@ -179,6 +219,50 @@ describe('IcebergDatalakeService DuckDB Iceberg lifecycle', () => {
     expect(mockedUpdateDatabase).not.toHaveBeenCalled();
   });
 
+  it('maps PyIceberg catalog metadata into SQL Editor schema metadata', async () => {
+    mockedLoadDatabase.mockResolvedValue({
+      ...database,
+      icebergInstances: [
+        {
+          ...instance,
+          sqlAccessVerifiedAt: '2026-08-14T00:00:00.000Z',
+          sqlRuntimeFingerprint: (
+            IcebergDatalakeService as any
+          ).getSqlRuntimeFingerprint(),
+        },
+      ],
+    });
+    jest
+      .spyOn(IcebergDatalakeService, 'listNamespaces')
+      .mockResolvedValueOnce([['sales']])
+      .mockResolvedValueOnce([]);
+    jest
+      .spyOn(IcebergDatalakeService, 'listTables')
+      .mockResolvedValue(['customers']);
+    jest.spyOn(IcebergDatalakeService, 'getTableSchema').mockResolvedValue({
+      fields: [{ fieldId: 1, name: 'id', type: 'BIGINT', required: true }],
+      properties: {},
+    });
+
+    await expect(
+      IcebergDatalakeService.getSqlSchema(instance.id),
+    ).resolves.toEqual({
+      catalogName: 'iceberg',
+      namespaces: [
+        {
+          name: 'sales',
+          tables: [
+            {
+              name: 'customers',
+              type: 'TABLE',
+              columns: [{ name: 'id', type: 'BIGINT', position: 1 }],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   it('overrides DuckDB default OAuth scope for Nessie when none is configured', async () => {
     const nessieInstance = {
       ...instance,
@@ -219,9 +303,7 @@ describe('IcebergDatalakeService DuckDB Iceberg lifecycle', () => {
       .map(([sql]) => String(sql))
       .find((sql) => sql.startsWith('ATTACH '));
     expect(attachSql).toContain("ATTACH 'warehouse'");
-    expect(attachSql).toContain(
-      "ENDPOINT 'http://localhost:19120/iceberg/main'",
-    );
+    expect(attachSql).toContain("ENDPOINT 'http://localhost:19120/iceberg'");
   });
 
   it('rejects runtime-control SQL after parsing exactly one statement', async () => {

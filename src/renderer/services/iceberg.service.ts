@@ -24,6 +24,7 @@ import type {
   IcebergSqlCapability,
   IcebergSqlExecutionParams,
   IcebergSqlExecutionResult,
+  IcebergSqlSchemaInfo,
 } from '../../types/iceberg';
 
 export const getIcebergCapabilities = (): Promise<IcebergCapabilities> =>
@@ -73,6 +74,11 @@ export const getIcebergSqlCapability = (
   id: string,
 ): Promise<IcebergSqlCapability> =>
   window.electron.ipcRenderer.invoke('iceberg:sqlCapability', id);
+
+export const getIcebergSqlSchema = (
+  id: string,
+): Promise<IcebergSqlSchemaInfo> =>
+  window.electron.ipcRenderer.invoke('iceberg:sqlSchema', id);
 
 export const verifyIcebergSqlAccess = (
   id: string,

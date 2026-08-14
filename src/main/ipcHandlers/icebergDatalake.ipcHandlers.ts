@@ -50,6 +50,10 @@ export const registerIcebergDatalakeHandlers = () => {
     IcebergDatalakeService.getSqlCapability(id),
   );
 
+  ipcMain.handle('iceberg:sqlSchema', (_e, id: string) =>
+    IcebergDatalakeService.getSqlSchema(id),
+  );
+
   ipcMain.handle('iceberg:verifySqlAccess', (_e, id: string) =>
     IcebergDatalakeService.verifySqlAccess(id),
   );

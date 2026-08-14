@@ -110,6 +110,8 @@ export interface IcebergInstanceListItem {
   catalogPath?: string;
   localPath?: string;
   storageBucket?: string;
+  sqlAvailable: boolean;
+  sqlUnavailableReason?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -213,9 +215,21 @@ export interface IcebergSqlExecutionResult {
   executionId: string;
   statementClass: IcebergSqlStatementClass;
   columns: string[];
-  rows: unknown[][];
+  rows: Array<Record<string, unknown>>;
   rowsChanged: number;
   truncated: boolean;
+}
+
+export interface IcebergSqlSchemaInfo {
+  catalogName: string;
+  namespaces: Array<{
+    name: string;
+    tables: Array<{
+      name: string;
+      type: string;
+      columns: Array<{ name: string; type: string; position: number }>;
+    }>;
+  }>;
 }
 
 export interface IcebergListStorageBucketsParams {

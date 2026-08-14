@@ -42,6 +42,7 @@ import type {
   IcebergSqlCapability,
   IcebergSqlExecutionParams,
   IcebergSqlExecutionResult,
+  IcebergSqlSchemaInfo,
   IcebergSqlStatementClass,
 } from '../../types/iceberg';
 import type { CloudConnection, CloudStorageConfig } from '../../types/frontend';
@@ -902,13 +903,7 @@ export class IcebergDatalakeService {
     const configuredEndpoint = instance.endpoint?.trim();
     if (!configuredEndpoint)
       throw new Error('ICEBERG_REQUIRED_FIELD: endpoint');
-    const endpoint =
-      instance.catalogType === 'nessie'
-        ? IcebergDatalakeService.buildNessieRestUri({
-            ...instance,
-            nessieWarehouse: undefined,
-          })
-        : configuredEndpoint;
+    const endpoint = configuredEndpoint.replace(/\/+$/, '');
     const warehouse =
       instance.catalogType === 'nessie'
         ? instance.nessieWarehouse?.trim()
@@ -955,6 +950,8 @@ export class IcebergDatalakeService {
   static async listInstances(): Promise<IcebergInstanceListItem[]> {
     try {
       const instances = await IcebergDatalakeService.readInstances();
+      const runtimeFingerprint =
+        IcebergDatalakeService.getSqlRuntimeFingerprint();
       return instances.map(
         ({
           id,
@@ -965,20 +962,39 @@ export class IcebergDatalakeService {
           catalogPath,
           localPath,
           storageBucket,
+          sqlEnabled,
+          sqlAccessVerifiedAt,
+          sqlRuntimeFingerprint,
           createdAt,
           updatedAt,
-        }) => ({
-          id,
-          name,
-          description,
-          catalogType,
-          storageType,
-          catalogPath,
-          localPath,
-          storageBucket,
-          createdAt,
-          updatedAt,
-        }),
+        }) => {
+          let sqlUnavailableReason: string | undefined;
+          if (!sqlEnabled) {
+            sqlUnavailableReason = 'ICEBERG_SQL_DISABLED';
+          } else if (
+            !sqlAccessVerifiedAt ||
+            sqlRuntimeFingerprint !== runtimeFingerprint
+          ) {
+            sqlUnavailableReason = 'ICEBERG_SQL_UNVERIFIED';
+          }
+          return {
+            id,
+            name,
+            description,
+            catalogType,
+            storageType,
+            catalogPath,
+            localPath,
+            storageBucket,
+            sqlAvailable:
+              !!sqlEnabled &&
+              !!sqlAccessVerifiedAt &&
+              sqlRuntimeFingerprint === runtimeFingerprint,
+            sqlUnavailableReason,
+            createdAt,
+            updatedAt,
+          };
+        },
       );
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -1579,7 +1595,7 @@ export class IcebergDatalakeService {
     const instance = await IcebergDatalakeService.getInstance(instanceId);
     const suffix = uuidv4().replace(/-/g, '');
     const names = {
-      alias: `iceberg_${suffix}`,
+      alias: 'iceberg',
       catalogSecret: `iceberg_catalog_${suffix}`,
       storageSecret: `iceberg_storage_${suffix}`,
     };
@@ -1613,6 +1629,18 @@ export class IcebergDatalakeService {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.startsWith('ICEBERG_')) throw error;
+      if (stage === 'execute') {
+        const safeReason = message
+          .split('\n')
+          .map((line) => line.trim())
+          .filter(
+            (line) => line && !/^LINE \d+:/i.test(line) && !/^\^+$/.test(line),
+          )
+          .slice(0, 4)
+          .join(' ')
+          .slice(0, 500);
+        throw new Error(`ICEBERG_SQL_EXECUTION_FAILED: ${safeReason}`);
+      }
       throw new Error(`ICEBERG_SQL_RUNTIME_FAILED: ${stage}`);
     } finally {
       IcebergDatalakeService.activeSqlExecutions.delete(executionId);
@@ -1697,17 +1725,73 @@ export class IcebergDatalakeService {
           params.sql,
           maxRows + 1,
         );
-        const rows = reader.getRowsJson();
+        const rows = reader.getRowObjectsJson() as Array<
+          Record<string, unknown>
+        >;
         return {
           executionId: params.executionId,
           statementClass,
           columns: reader.columnNames(),
-          rows: rows.slice(0, maxRows) as unknown[][],
+          rows: rows.slice(0, maxRows),
           rowsChanged: Number(reader.rowsChanged ?? 0),
           truncated: rows.length > maxRows || !reader.done,
         };
       },
     );
+  }
+
+  static async getSqlSchema(id: string): Promise<IcebergSqlSchemaInfo> {
+    const capability = await IcebergDatalakeService.getSqlCapability(id);
+    if (!capability.available) {
+      throw new Error(capability.reason ?? 'ICEBERG_SQL_UNAVAILABLE');
+    }
+
+    const namespaceQueue = await IcebergDatalakeService.listNamespaces(id);
+    const namespaces: IcebergSqlSchemaInfo['namespaces'] = [];
+
+    for (let index = 0; index < namespaceQueue.length; index += 1) {
+      const namespace = namespaceQueue[index];
+      if (namespaceQueue.length > 1_000) {
+        throw new Error('ICEBERG_SQL_SCHEMA_LIMIT_EXCEEDED');
+      }
+      // Catalog traversal is intentionally sequential to keep bridge work bounded.
+      // eslint-disable-next-line no-await-in-loop
+      const children = await IcebergDatalakeService.listNamespaces(
+        id,
+        namespace,
+      );
+      children.forEach((child) => {
+        if (
+          !namespaceQueue.some((item) => item.join('.') === child.join('.'))
+        ) {
+          namespaceQueue.push(child);
+        }
+      });
+      // eslint-disable-next-line no-await-in-loop
+      const tableNames = await IcebergDatalakeService.listTables(id, namespace);
+      // eslint-disable-next-line no-await-in-loop
+      const tables = await Promise.all(
+        tableNames.map(async (table) => {
+          const schema = await IcebergDatalakeService.getTableSchema(
+            id,
+            namespace,
+            table,
+          );
+          return {
+            name: table,
+            type: 'TABLE',
+            columns: schema.fields.map((field, fieldIndex) => ({
+              name: field.name,
+              type: field.type,
+              position: fieldIndex + 1,
+            })),
+          };
+        }),
+      );
+      namespaces.push({ name: namespace.join('.'), tables });
+    }
+
+    return { catalogName: 'iceberg', namespaces };
   }
 
   static cancelSql(executionId: string): boolean {

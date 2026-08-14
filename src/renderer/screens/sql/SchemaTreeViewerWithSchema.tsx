@@ -22,6 +22,7 @@ type Props = {
   isLoading: boolean;
   filter?: string;
   hideSchemaLevel?: boolean;
+  databaseIcon?: string;
 };
 
 /**
@@ -38,6 +39,7 @@ export const SchemaTreeViewerWithSchema: React.FC<Props> = React.memo(
     isLoading,
     filter = '',
     hideSchemaLevel = false,
+    databaseIcon,
   }) => {
     const [expandedItems, setExpandedItems] = React.useState<string[]>([
       databaseName,
@@ -119,7 +121,9 @@ export const SchemaTreeViewerWithSchema: React.FC<Props> = React.memo(
               label={
                 <TreeItems.Database
                   label={databaseName || 'Database'}
-                  icon={connectionIcons.images[type] || defaultIcon}
+                  icon={
+                    databaseIcon || connectionIcons.images[type] || defaultIcon
+                  }
                 />
               }
             >
