@@ -46,6 +46,22 @@ export const registerIcebergDatalakeHandlers = () => {
     IcebergDatalakeService.testInstanceConnection(id),
   );
 
+  ipcMain.handle('iceberg:sqlCapability', (_e, id: string) =>
+    IcebergDatalakeService.getSqlCapability(id),
+  );
+
+  ipcMain.handle('iceberg:verifySqlAccess', (_e, id: string) =>
+    IcebergDatalakeService.verifySqlAccess(id),
+  );
+
+  ipcMain.handle('iceberg:executeSql', (_e, params) =>
+    IcebergDatalakeService.executeSql(params),
+  );
+
+  ipcMain.handle('iceberg:cancelSql', (_e, executionId: string) =>
+    IcebergDatalakeService.cancelSql(executionId),
+  );
+
   ipcMain.handle('iceberg:listNamespaces', (_e, id: string, parent?) =>
     IcebergDatalakeService.listNamespaces(id, parent),
   );

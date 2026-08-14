@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@databricks/sql": "^1.11.0",
-    "@duckdb/node-api": "^1.5.2-r.1",
+    "@duckdb/node-api": "1.5.5-r.1",
     "better-sqlite3": "^12.2.0",
     "drizzle-orm": "^0.44.4",
     "fs-extra": "^11.4.0",

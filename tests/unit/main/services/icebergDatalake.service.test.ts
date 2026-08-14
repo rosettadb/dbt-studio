@@ -151,6 +151,92 @@ describe('IcebergDatalakeService compatibility and secret persistence', () => {
     );
   });
 
+  it('persists a non-secret DuckDB storage binding for a REST catalog', async () => {
+    mockedLoadDatabase.mockResolvedValue({
+      icebergInstances: [],
+      sources: [
+        {
+          id: 'minio-connection',
+          name: 'Warehouse MinIO',
+          provider: 'minio',
+          config: { endpoint: 'http://localhost:9000', accessKeyId: 'test' },
+        },
+      ],
+    });
+
+    await IcebergDatalakeService.createInstance({
+      name: 'lakekeeper-sql',
+      catalogType: 'lakekeeper',
+      endpoint: 'http://localhost:8181/catalog',
+      catalogName: 'warehouse',
+      catalogAuthMode: 'none',
+      storageType: 'server-managed',
+      sqlEnabled: true,
+      sqlStorageConnectionId: 'minio-connection',
+      sqlStorageProvider: 'minio',
+      sqlStorageBucket: 'warehouse',
+      sqlStoragePrefix: 'iceberg',
+      sqlWarehouseMatchAcknowledged: true,
+    });
+
+    expect(mockedUpdateDatabase.mock.calls[0][1][0]).toMatchObject({
+      sqlEnabled: true,
+      sqlStorageConnectionId: 'minio-connection',
+      sqlStorageProvider: 'minio',
+      sqlStorageBucket: 'warehouse',
+      sqlStoragePrefix: 'iceberg',
+      sqlWarehouseMatchAcknowledged: true,
+    });
+  });
+
+  it('rejects unsupported DuckDB storage providers for REST SQL access', async () => {
+    mockedLoadDatabase.mockResolvedValue({
+      icebergInstances: [],
+      sources: [
+        {
+          id: 'azure-connection',
+          name: 'Azure Warehouse',
+          provider: 'azure',
+          config: { accountName: 'test' },
+        },
+      ],
+    });
+
+    await expect(
+      IcebergDatalakeService.createInstance({
+        name: 'rest-azure',
+        catalogType: 'rest',
+        endpoint: 'http://localhost:8181/catalog',
+        catalogName: 'warehouse',
+        catalogAuthMode: 'none',
+        storageType: 'server-managed',
+        sqlEnabled: true,
+        sqlStorageConnectionId: 'azure-connection',
+        sqlStorageProvider: 'azure',
+        sqlStorageBucket: 'warehouse',
+        sqlWarehouseMatchAcknowledged: true,
+      }),
+    ).rejects.toThrow('ICEBERG_SQL_STORAGE_PROVIDER_NOT_SUPPORTED');
+  });
+
+  it('requires explicit confirmation that SQL storage matches the REST warehouse', async () => {
+    await expect(
+      IcebergDatalakeService.createInstance({
+        name: 'rest-unconfirmed',
+        catalogType: 'rest',
+        endpoint: 'http://localhost:8181/catalog',
+        catalogName: 'warehouse',
+        catalogAuthMode: 'none',
+        storageType: 'server-managed',
+        sqlEnabled: true,
+        sqlStorageConnectionId: 'connection',
+        sqlStorageProvider: 'aws',
+        sqlStorageBucket: 'warehouse',
+        sqlWarehouseMatchAcknowledged: false,
+      }),
+    ).rejects.toThrow('ICEBERG_SQL_WAREHOUSE_MATCH_REQUIRED');
+  });
+
   it('redacts OAuth and database secrets from bridge errors', () => {
     const redact = (IcebergDatalakeService as any).redactBridgeSecrets as (
       message: string,

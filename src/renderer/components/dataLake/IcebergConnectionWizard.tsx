@@ -28,6 +28,8 @@ import {
   List,
   ListItem,
   ListItemText,
+  Checkbox,
+  FormControlLabel,
 } from '@mui/material';
 import {
   ArrowForward,
@@ -52,6 +54,7 @@ import {
   useListIcebergStorageBuckets,
   useTestIcebergCatalog,
   useTestIcebergStorage,
+  useVerifyIcebergSqlAccess,
 } from '../../controllers/icebergDatalake.controller';
 import { DataLakeConnectionSelector } from './DataLakeConnectionSelector';
 import { secureStorageService } from '../../services/secureStorage.service';
@@ -92,6 +95,16 @@ export interface IcebergWizardData {
     bucket?: string;
     prefix?: string;
   };
+  sql: {
+    enabled: boolean;
+    connectionId?: string;
+    provider?: IcebergCloudProvider;
+    bucket?: string;
+    prefix?: string;
+    warehouseMatchAcknowledged: boolean;
+    accessVerifiedAt?: string;
+    runtimeFingerprint?: string;
+  };
 }
 
 export interface IcebergConnectionWizardProps {
@@ -113,6 +126,7 @@ const emptyData = (): IcebergWizardData => ({
   basics: { name: '', description: '' },
   catalog: { catalogType: 'sqlite' },
   storage: { storageType: 'local' },
+  sql: { enabled: false, warehouseMatchAcknowledged: false },
 });
 
 function buildInitialData(initial?: IcebergInstanceConfig): IcebergWizardData {
@@ -156,6 +170,17 @@ function buildInitialData(initial?: IcebergInstanceConfig): IcebergWizardData {
       connectionId: initial.storageConnectionId,
       bucket: initial.storageBucket,
       prefix: initial.storagePrefix,
+    },
+    sql: {
+      enabled: initial.sqlEnabled ?? false,
+      connectionId: initial.sqlStorageConnectionId,
+      provider: initial.sqlStorageProvider,
+      bucket: initial.sqlStorageBucket,
+      prefix: initial.sqlStoragePrefix,
+      warehouseMatchAcknowledged:
+        initial.sqlWarehouseMatchAcknowledged ?? false,
+      accessVerifiedAt: initial.sqlAccessVerifiedAt,
+      runtimeFingerprint: initial.sqlRuntimeFingerprint,
     },
   };
 }
@@ -211,6 +236,13 @@ function validateStep(
         return 'Nessie reference is required.';
       }
       if (
+        data.catalog.catalogType === 'nessie' &&
+        data.sql.enabled &&
+        !data.catalog.nessieWarehouse?.trim()
+      ) {
+        return 'Nessie warehouse is required for DuckDB SQL access.';
+      }
+      if (
         data.catalog.authMode === 'oauth-client-credentials' &&
         !data.catalog.oauthClientId
       ) {
@@ -238,7 +270,14 @@ function validateStep(
       data.catalog.catalogType === 'lakekeeper' ||
       data.catalog.catalogType === 'nessie'
     ) {
-      // REST catalogs manage warehouse storage server-side; vended creds optional
+      if (!data.sql.enabled) return null;
+      if (!data.sql.connectionId)
+        return 'A Cloud Explorer connection is required for DuckDB SQL access.';
+      if (!data.sql.bucket)
+        return 'The matching warehouse bucket is required for DuckDB SQL access.';
+      if (!data.sql.warehouseMatchAcknowledged) {
+        return 'Confirm that the Cloud connection points to the catalog warehouse.';
+      }
       return null;
     }
     if (data.storage.storageType === 'local' && !data.storage.localPath) {
@@ -276,6 +315,10 @@ export const IcebergConnectionWizard: React.FC<
     message: string;
   } | null>(null);
   const [storageTestResult, setStorageTestResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
+  const [sqlTestResult, setSqlTestResult] = useState<{
     success: boolean;
     message: string;
   } | null>(null);
@@ -357,6 +400,7 @@ export const IcebergConnectionWizard: React.FC<
   // Catalog test
   const testCatalogMutation = useTestIcebergCatalog();
   const testStorageMutation = useTestIcebergStorage();
+  const verifySqlMutation = useVerifyIcebergSqlAccess();
   const listStorageBucketsMutation = useListIcebergStorageBuckets();
   const loadStorageBuckets = useCallback(
     (connectionId: string) =>
@@ -437,20 +481,16 @@ export const IcebergConnectionWizard: React.FC<
   const patchStorage = (patch: Partial<IcebergWizardData['storage']>) =>
     setData((d) => ({ ...d, storage: { ...d.storage, ...patch } }));
 
-  const handleSelectVendedStorage = useCallback(
-    (connectionId: string, bucket: string, prefix?: string) => {
-      setData((current) => ({
-        ...current,
-        catalog: {
-          ...current.catalog,
-          polarisConnectionId: connectionId,
-          polarisBucket: bucket,
-          polarisPrefix: prefix,
-        },
-      }));
-    },
-    [],
-  );
+  const patchSql = (patch: Partial<IcebergWizardData['sql']>) =>
+    setData((d) => ({
+      ...d,
+      sql: {
+        ...d.sql,
+        ...patch,
+        accessVerifiedAt: undefined,
+        runtimeFingerprint: undefined,
+      },
+    }));
 
   const handleSelectCloudStorage = useCallback(
     (
@@ -468,6 +508,31 @@ export const IcebergConnectionWizard: React.FC<
           bucket,
           prefix,
           cloudProvider: provider,
+        },
+      }));
+    },
+    [],
+  );
+
+  const handleSelectSqlStorage = useCallback(
+    (
+      connectionId: string,
+      bucket: string,
+      prefix?: string,
+      provider?: IcebergCloudProvider,
+    ) => {
+      setStorageTestResult(null);
+      setData((current) => ({
+        ...current,
+        sql: {
+          ...current.sql,
+          connectionId,
+          bucket,
+          prefix,
+          provider,
+          warehouseMatchAcknowledged: false,
+          accessVerifiedAt: undefined,
+          runtimeFingerprint: undefined,
         },
       }));
     },
@@ -527,11 +592,20 @@ export const IcebergConnectionWizard: React.FC<
         databaseConnectionId: data.catalog.databaseConnectionId,
         storageType: data.storage.storageType,
       });
+      const missingNessieSqlWarehouse =
+        result.success &&
+        data.catalog.catalogType === 'nessie' &&
+        data.sql.enabled &&
+        !data.catalog.nessieWarehouse?.trim();
+      let message = result.error ?? 'Catalog test failed.';
+      if (result.success) message = 'Catalog connection successful.';
+      if (missingNessieSqlWarehouse) {
+        message =
+          'Catalog connected, but a Nessie warehouse name is required for DuckDB SQL access.';
+      }
       setCatalogTestResult({
-        success: result.success,
-        message: result.success
-          ? 'Catalog connection successful.'
-          : (result.error ?? 'Catalog test failed.'),
+        success: result.success && !missingNessieSqlWarehouse,
+        message,
       });
     } catch (err: any) {
       // eslint-disable-next-line no-console
@@ -570,6 +644,47 @@ export const IcebergConnectionWizard: React.FC<
         message: error?.message ?? 'Cloud storage test failed.',
       });
     }
+  };
+
+  const handleTestSqlStorage = async () => {
+    setStorageTestResult(null);
+    const validationError = validateStep(2, data);
+    if (validationError) {
+      setStorageTestResult({ success: false, message: validationError });
+      return;
+    }
+    try {
+      const result = await testStorageMutation.mutateAsync({
+        connectionId: data.sql.connectionId!,
+        bucket: data.sql.bucket!,
+        prefix: data.sql.prefix,
+      });
+      setStorageTestResult({
+        success: result.success,
+        message: result.success
+          ? 'The matching object-store location is accessible. DuckDB attachment verification is completed in Phase 3.'
+          : (result.error ?? 'Object-store access test failed.'),
+      });
+    } catch (error: any) {
+      // eslint-disable-next-line no-console
+      console.error(error);
+      setStorageTestResult({
+        success: false,
+        message: error?.message ?? 'Object-store access test failed.',
+      });
+    }
+  };
+
+  const handleVerifySqlAccess = async () => {
+    if (!initialData?.id) return;
+    setSqlTestResult(null);
+    const result = await verifySqlMutation.mutateAsync(initialData.id);
+    setSqlTestResult({
+      success: result.success,
+      message: result.success
+        ? 'DuckDB attached to the catalog and cleaned up successfully.'
+        : (result.error ?? 'DuckDB SQL access test failed.'),
+    });
   };
 
   // ── Step content renderers ──────────────────────────────────────────────
@@ -666,6 +781,14 @@ export const IcebergConnectionWizard: React.FC<
               connectionId: undefined,
               bucket: undefined,
               prefix: undefined,
+            });
+            patchSql({
+              enabled: false,
+              connectionId: undefined,
+              provider: undefined,
+              bucket: undefined,
+              prefix: undefined,
+              warehouseMatchAcknowledged: false,
             });
           }}
         >
@@ -848,14 +971,23 @@ export const IcebergConnectionWizard: React.FC<
                 helperText="Branch or tag to read and write through Iceberg REST"
               />
               <TextField
-                label="Nessie Warehouse (Optional)"
+                label={
+                  data.sql.enabled
+                    ? 'Nessie Warehouse'
+                    : 'Nessie Warehouse (Optional)'
+                }
                 placeholder="warehouse"
                 value={data.catalog.nessieWarehouse ?? ''}
                 onChange={(event) =>
                   patchCatalog({ nessieWarehouse: event.target.value })
                 }
                 fullWidth
-                helperText="Leave blank to use the Nessie server's default warehouse"
+                required={data.sql.enabled}
+                helperText={
+                  data.sql.enabled
+                    ? 'Required for DuckDB SQL access; enter the Nessie warehouse name.'
+                    : "Leave blank to use the Nessie server's default warehouse"
+                }
               />
             </>
           ) : (
@@ -1032,55 +1164,109 @@ export const IcebergConnectionWizard: React.FC<
           <Typography variant="subtitle1" fontWeight={600}>
             Storage Configuration
           </Typography>
-          {data.catalog.catalogType === 'polaris' && (
-            <Alert severity="info">
-              Storage is managed by Polaris for this catalog. Polaris provides
-              the authoritative warehouse location and object-store access, so
-              no Cloud Explorer connection is required.
-            </Alert>
-          )}
-          {data.catalog.catalogType === 'nessie' && (
-            <Alert severity="info">
-              Nessie manages the warehouse and sends the required FileIO and
-              object-store configuration to PyIceberg. DBT Studio uses remote
-              request signing, so no Cloud Explorer credentials are required.
-            </Alert>
-          )}
-          {data.catalog.catalogType === 'lakekeeper' && (
-            <Alert severity="info">
-              Storage is managed by the selected Lakekeeper warehouse. Configure
-              its bucket, prefix, endpoint, and credentials in the Lakekeeper
-              UI. DBT Studio uses remote request signing, so no Cloud Explorer
-              connection is required.
-            </Alert>
-          )}
-          {data.catalog.catalogType !== 'polaris' &&
-            data.catalog.catalogType !== 'lakekeeper' &&
-            data.catalog.catalogType !== 'nessie' && (
+          <Paper variant="outlined" sx={{ p: 2, bgcolor: 'transparent' }}>
+            <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+              Catalog-managed warehouse
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {data.catalog.catalogType === 'polaris' &&
+                'Polaris remains the authoritative warehouse owner.'}
+              {data.catalog.catalogType === 'lakekeeper' &&
+                'Lakekeeper remains the authoritative warehouse owner.'}
+              {data.catalog.catalogType === 'nessie' &&
+                'Nessie remains the authoritative catalog and warehouse owner.'}
+              {data.catalog.catalogType === 'rest' &&
+                'The REST catalog remains the authoritative warehouse owner.'}{' '}
+              Existing PyIceberg DataLake operations continue to use the
+              server-managed warehouse configuration.
+            </Typography>
+          </Paper>
+
+          <Paper variant="outlined" sx={{ p: 2, bgcolor: 'transparent' }}>
+            <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+              DuckDB object-store access
+            </Typography>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={data.sql.enabled}
+                  onChange={(event) => {
+                    const enabled = event.target.checked;
+                    patchSql(
+                      enabled
+                        ? { enabled }
+                        : {
+                            enabled,
+                            connectionId: undefined,
+                            provider: undefined,
+                            bucket: undefined,
+                            prefix: undefined,
+                            warehouseMatchAcknowledged: false,
+                          },
+                    );
+                    setStorageTestResult(null);
+                  }}
+                />
+              }
+              label="Enable SQL Editor and Notebooks"
+            />
+            {data.sql.enabled && (
               <>
-                <Alert severity="info">
-                  REST catalogs manage table storage on the server. Configure a
-                  cloud connection below only if your catalog uses{' '}
-                  <strong>vended credentials</strong> to delegate access to
-                  object storage.
-                </Alert>
-                <Typography variant="subtitle2" fontWeight={600}>
-                  Vended credentials (optional)
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Select a Cloud Explorer connection and bucket the catalog can
-                  use when delegating storage access. Leave blank if credentials
-                  are handled another way.
-                </Typography>
                 <DataLakeConnectionSelector
                   selectedProvider="all"
-                  onSelectExisting={handleSelectVendedStorage}
-                  initialConnectionId={data.catalog.polarisConnectionId}
-                  initialBucket={data.catalog.polarisBucket}
-                  initialPrefix={data.catalog.polarisPrefix}
+                  onSelectExisting={handleSelectSqlStorage}
+                  initialConnectionId={data.sql.connectionId}
+                  initialBucket={data.sql.bucket}
+                  initialPrefix={data.sql.prefix}
+                  loadBuckets={loadStorageBuckets}
                 />
+                <FormControlLabel
+                  sx={{ mt: 1, alignItems: 'flex-start' }}
+                  control={
+                    <Checkbox
+                      checked={data.sql.warehouseMatchAcknowledged}
+                      onChange={(event) =>
+                        patchSql({
+                          warehouseMatchAcknowledged: event.target.checked,
+                        })
+                      }
+                    />
+                  }
+                  label="I confirm this Cloud connection, bucket, and prefix point to the warehouse configured in the Iceberg catalog service."
+                />
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Button
+                    variant="outlined"
+                    startIcon={
+                      testStorageMutation.isLoading ? (
+                        <CircularProgress size={16} />
+                      ) : (
+                        <Speed />
+                      )
+                    }
+                    onClick={handleTestSqlStorage}
+                    disabled={testStorageMutation.isLoading}
+                    size="small"
+                  >
+                    {testStorageMutation.isLoading
+                      ? 'Testing…'
+                      : 'Test Object Storage'}
+                  </Button>
+                  {storageTestResult && (
+                    <Alert
+                      severity={storageTestResult.success ? 'success' : 'error'}
+                      sx={{ py: 0, flex: 1 }}
+                      icon={
+                        storageTestResult.success ? <CheckCircle /> : undefined
+                      }
+                    >
+                      {storageTestResult.message}
+                    </Alert>
+                  )}
+                </Box>
               </>
             )}
+          </Paper>
         </Box>
       );
     }
@@ -1204,6 +1390,34 @@ export const IcebergConnectionWizard: React.FC<
     const hasToken =
       !!data.catalog.accessToken ||
       (mode === 'edit' && !!initialData?.catalogAccessTokenKey);
+    const normalizeDraftValue = (value: unknown) =>
+      typeof value === 'string' ? value.trim() : value;
+    const hasUnsavedSqlAttachmentChanges =
+      mode === 'edit' &&
+      !!initialData &&
+      [
+        [data.catalog.catalogType, initialData.catalogType],
+        [data.catalog.endpoint, initialData.endpoint],
+        [data.catalog.catalogName, initialData.catalogName],
+        [data.catalog.authMode, initialData.catalogAuthMode ?? 'none'],
+        [data.catalog.oauthClientId, initialData.oauthClientId],
+        [data.catalog.oauthServerUri, initialData.oauthServerUri],
+        [data.catalog.oauthScope, initialData.oauthScope],
+        [data.catalog.nessieReference, initialData.nessieReference],
+        [data.catalog.nessieWarehouse, initialData.nessieWarehouse],
+        [data.sql.enabled, initialData.sqlEnabled ?? false],
+        [data.sql.connectionId, initialData.sqlStorageConnectionId],
+        [data.sql.provider, initialData.sqlStorageProvider],
+        [data.sql.bucket, initialData.sqlStorageBucket],
+        [data.sql.prefix, initialData.sqlStoragePrefix],
+        [
+          data.sql.warehouseMatchAcknowledged,
+          initialData.sqlWarehouseMatchAcknowledged ?? false,
+        ],
+      ].some(
+        ([draftValue, savedValue]) =>
+          normalizeDraftValue(draftValue) !== normalizeDraftValue(savedValue),
+      );
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <Typography variant="subtitle1" fontWeight={600}>
@@ -1337,31 +1551,45 @@ export const IcebergConnectionWizard: React.FC<
                     secondary="Server-managed (REST catalog)"
                   />
                 </ListItem>
-                {data.catalog.polarisConnectionId && (
+                {data.sql.enabled && (
                   <>
                     <ListItem disableGutters>
                       <ListItemText
-                        primary="Vended Credentials Connection"
-                        secondary={data.catalog.polarisConnectionId}
+                        primary="SQL Editor & Notebooks"
+                        secondary="Enabled — DuckDB attachment unverified"
                       />
                     </ListItem>
-                    {data.catalog.polarisBucket && (
+                    <ListItem disableGutters>
+                      <ListItemText
+                        primary="Cloud Connection"
+                        secondary={data.sql.connectionId}
+                      />
+                    </ListItem>
+                    {data.sql.bucket && (
                       <ListItem disableGutters>
                         <ListItemText
-                          primary="Vended Credentials Bucket"
-                          secondary={data.catalog.polarisBucket}
+                          primary="Warehouse Bucket"
+                          secondary={data.sql.bucket}
                         />
                       </ListItem>
                     )}
-                    {data.catalog.polarisPrefix && (
+                    {data.sql.prefix && (
                       <ListItem disableGutters>
                         <ListItemText
-                          primary="Vended Credentials Prefix"
-                          secondary={data.catalog.polarisPrefix}
+                          primary="Warehouse Prefix"
+                          secondary={data.sql.prefix}
                         />
                       </ListItem>
                     )}
                   </>
+                )}
+                {!data.sql.enabled && (
+                  <ListItem disableGutters>
+                    <ListItemText
+                      primary="SQL Editor & Notebooks"
+                      secondary="Disabled"
+                    />
+                  </ListItem>
                 )}
               </>
             ) : (
@@ -1414,6 +1642,42 @@ export const IcebergConnectionWizard: React.FC<
             )}
           </List>
         </Paper>
+        {data.sql.enabled && mode === 'edit' && initialData?.id && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Button
+              variant="outlined"
+              startIcon={
+                verifySqlMutation.isLoading ? (
+                  <CircularProgress size={16} />
+                ) : (
+                  <Speed />
+                )
+              }
+              onClick={handleVerifySqlAccess}
+              disabled={
+                verifySqlMutation.isLoading || hasUnsavedSqlAttachmentChanges
+              }
+              size="small"
+            >
+              {verifySqlMutation.isLoading ? 'Testing…' : 'Test SQL Access'}
+            </Button>
+            {sqlTestResult && (
+              <Alert
+                severity={sqlTestResult.success ? 'success' : 'error'}
+                sx={{ py: 0, flex: 1 }}
+                icon={sqlTestResult.success ? <CheckCircle /> : undefined}
+              >
+                {sqlTestResult.message}
+              </Alert>
+            )}
+            {hasUnsavedSqlAttachmentChanges && (
+              <Alert severity="warning" sx={{ py: 0, flex: 1 }}>
+                Save these attachment changes, reopen the instance, then test
+                SQL access.
+              </Alert>
+            )}
+          </Box>
+        )}
         <Alert severity="info" icon={<IcebergIcon size={20} />}>
           {mode === 'create'
             ? 'Clicking "Create Instance" will save these settings and register the Iceberg catalog. No data files will be modified.'

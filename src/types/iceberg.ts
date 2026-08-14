@@ -86,6 +86,16 @@ export interface IcebergInstanceConfig {
   storageConnectionId?: string; // Cloud Explorer connectionId for data files
   storageBucket?: string;
   storagePrefix?: string;
+  // DuckDB Iceberg SQL access for REST catalogs. Secrets remain owned by the
+  // referenced Cloud Explorer connection and are never copied here.
+  sqlEnabled?: boolean;
+  sqlStorageConnectionId?: string;
+  sqlStorageProvider?: IcebergCloudProvider;
+  sqlStorageBucket?: string;
+  sqlStoragePrefix?: string;
+  sqlWarehouseMatchAcknowledged?: boolean;
+  sqlAccessVerifiedAt?: string;
+  sqlRuntimeFingerprint?: string;
   // Metadata
   createdAt: string;
   updatedAt: string;
@@ -173,6 +183,39 @@ export interface IcebergTestStorageParams {
   connectionId: string;
   bucket: string;
   prefix?: string;
+}
+
+export type IcebergSqlStatementClass =
+  | 'select'
+  | 'create'
+  | 'drop'
+  | 'insert'
+  | 'update'
+  | 'delete';
+
+export interface IcebergSqlCapability {
+  available: boolean;
+  reason?: string;
+  runtimeFingerprint?: string;
+  canRead: boolean;
+  canWrite: boolean;
+  supportedStatements: IcebergSqlStatementClass[];
+}
+
+export interface IcebergSqlExecutionParams {
+  instanceId: string;
+  executionId: string;
+  sql: string;
+  maxRows?: number;
+}
+
+export interface IcebergSqlExecutionResult {
+  executionId: string;
+  statementClass: IcebergSqlStatementClass;
+  columns: string[];
+  rows: unknown[][];
+  rowsChanged: number;
+  truncated: boolean;
 }
 
 export interface IcebergListStorageBucketsParams {

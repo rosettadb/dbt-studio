@@ -21,6 +21,9 @@ import type {
   IcebergImportFileFormat,
   IcebergTableOperationResult,
   IcebergNamespaceOperationResult,
+  IcebergSqlCapability,
+  IcebergSqlExecutionParams,
+  IcebergSqlExecutionResult,
 } from '../../types/iceberg';
 
 export const getIcebergCapabilities = (): Promise<IcebergCapabilities> =>
@@ -65,6 +68,24 @@ export const listIcebergStorageBuckets = (
 
 export const testIcebergInstance = (id: string): Promise<IcebergTestResult> =>
   window.electron.ipcRenderer.invoke('iceberg:testInstance', id);
+
+export const getIcebergSqlCapability = (
+  id: string,
+): Promise<IcebergSqlCapability> =>
+  window.electron.ipcRenderer.invoke('iceberg:sqlCapability', id);
+
+export const verifyIcebergSqlAccess = (
+  id: string,
+): Promise<IcebergTestResult> =>
+  window.electron.ipcRenderer.invoke('iceberg:verifySqlAccess', id);
+
+export const executeIcebergSql = (
+  params: IcebergSqlExecutionParams,
+): Promise<IcebergSqlExecutionResult> =>
+  window.electron.ipcRenderer.invoke('iceberg:executeSql', params);
+
+export const cancelIcebergSql = (executionId: string): Promise<boolean> =>
+  window.electron.ipcRenderer.invoke('iceberg:cancelSql', executionId);
 
 export const listIcebergNamespaces = (
   id: string,

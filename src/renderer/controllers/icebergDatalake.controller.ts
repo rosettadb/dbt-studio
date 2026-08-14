@@ -14,6 +14,7 @@ import type {
   IcebergTestCatalogParams,
   IcebergTestStorageParams,
   IcebergListStorageBucketsParams,
+  IcebergSqlExecutionParams,
 } from '../../types/iceberg';
 import * as icebergService from '../services/iceberg.service';
 
@@ -150,6 +151,31 @@ export const useListIcebergStorageBuckets = () =>
 
 export const useTestIcebergInstance = () =>
   useMutation((id: string) => icebergService.testIcebergInstance(id));
+
+export const useIcebergSqlCapability = (id: string) =>
+  useQuery(
+    ['iceberg', 'sql-capability', id],
+    () => icebergService.getIcebergSqlCapability(id),
+    { enabled: !!id },
+  );
+
+export const useVerifyIcebergSqlAccess = () => {
+  const qc = useQueryClient();
+  return useMutation(
+    (id: string) => icebergService.verifyIcebergSqlAccess(id),
+    {
+      onSuccess: (_result, id) => {
+        qc.invalidateQueries(['iceberg', 'instance', id]);
+        qc.invalidateQueries(['iceberg', 'sql-capability', id]);
+      },
+    },
+  );
+};
+
+export const useExecuteIcebergSql = () =>
+  useMutation((params: IcebergSqlExecutionParams) =>
+    icebergService.executeIcebergSql(params),
+  );
 
 export const useCreateIcebergMetadataFile = () =>
   useMutation((warehousePath: string) =>
