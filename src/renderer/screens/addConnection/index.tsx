@@ -78,6 +78,12 @@ const baseItems: ItemType[] = [
     disabled: false,
   },
   {
+    id: 'sqlite',
+    name: 'SQLite',
+    img: 'sqlite',
+    disabled: false,
+  },
+  {
     id: 'kinetica',
     name: 'Kinetica',
     img: 'kinetica',
@@ -169,6 +175,15 @@ const AddConnection: React.FC = () => {
           />
         );
       }
+      case 'sqlite': {
+        return (
+          <Connections.SQLite
+            onCancel={() => setSelectedItem(undefined)}
+            duplicateFrom={duplicateData}
+            suggestedName={suggestedName}
+          />
+        );
+      }
       case 'kinetica': {
         return (
           <Connections.Kinetica
@@ -219,13 +234,15 @@ const AddConnection: React.FC = () => {
             </Typography>
 
             <ConnectionCardsContainer>
-              {baseItems.map((item, index) => (
-                <ConnectionCard
-                  itemDetails={item}
-                  onClick={() => setSelectedItem(item)}
-                  key={index}
-                />
-              ))}
+              {baseItems
+                .filter((item) => !projectId || item.id !== 'sqlite')
+                .map((item, index) => (
+                  <ConnectionCard
+                    itemDetails={item}
+                    onClick={() => setSelectedItem(item)}
+                    key={index}
+                  />
+                ))}
             </ConnectionCardsContainer>
           </Box>
         </ConnectionContainer>

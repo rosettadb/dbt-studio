@@ -13,7 +13,11 @@ import {
   Typography,
 } from '@mui/material';
 import { toast } from 'react-toastify';
-import { Project, ConnectionModel } from '../../../../types/backend';
+import {
+  Project,
+  ConnectionModel,
+  canUseAsDbtConnection,
+} from '../../../../types/backend';
 
 interface AddConnectionModalProps {
   isOpen: boolean;
@@ -78,21 +82,25 @@ export const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
             label="Connection"
             onChange={(e) => setSelectedConnectionId(e.target.value)}
           >
-            {connections.map((connection) => (
-              <MenuItem key={connection.id} value={connection.id}>
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <Typography variant="body2">
-                    {connection.connection.name}
-                  </Typography>
-                  <Typography
-                    variant="caption"
-                    sx={{ ml: 1, color: 'text.secondary' }}
-                  >
-                    ({connection.connection.type})
-                  </Typography>
-                </Box>
-              </MenuItem>
-            ))}
+            {connections
+              .filter((connection) =>
+                canUseAsDbtConnection(connection.connection.type),
+              )
+              .map((connection) => (
+                <MenuItem key={connection.id} value={connection.id}>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Typography variant="body2">
+                      {connection.connection.name}
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      sx={{ ml: 1, color: 'text.secondary' }}
+                    >
+                      ({connection.connection.type})
+                    </Typography>
+                  </Box>
+                </MenuItem>
+              ))}
           </Select>
         </FormControl>
       </DialogContent>
