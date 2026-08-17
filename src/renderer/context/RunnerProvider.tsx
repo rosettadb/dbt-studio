@@ -219,12 +219,19 @@ export const RunnerProvider: React.FC<RunnerProviderProps> = ({ children }) => {
       // Clear out the previous run's log lines so the log viewer starts
       // fresh - otherwise old and new output run together in the same view.
       setState((prev) => ({ ...prev, output: [], error: [] }));
-      await setupConnectionEnv(params.connectionName, params.connType);
-      return window.electron.ipcRenderer.invoke('runner:run', {
-        workspaceDir: params.workspaceDir,
-        pipelineFile: params.pipelineFile,
-        runTeardown: params.runTeardown,
-      });
+      try {
+        await setupConnectionEnv(params.connectionName, params.connType);
+        return await window.electron.ipcRenderer.invoke('runner:run', {
+          workspaceDir: params.workspaceDir,
+          pipelineFile: params.pipelineFile,
+          runTeardown: params.runTeardown,
+        });
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
     },
     [setupConnectionEnv],
   );
