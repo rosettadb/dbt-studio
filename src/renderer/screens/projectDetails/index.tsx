@@ -305,11 +305,9 @@ const ProjectDetails: React.FC = () => {
   const {
     run: runPipelineLocally,
     isRunning: isRunnerRunning,
-    output: runnerOutput,
-    error: runnerError,
+    logs: runnerLogs,
   } = useRunner();
-  const showRunnerLogsTab =
-    isRunnerRunning || runnerOutput.length > 0 || runnerError.length > 0;
+  const showRunnerLogsTab = isRunnerRunning || runnerLogs.length > 0;
 
   const handleRunPipelineLocally = React.useCallback(async () => {
     if (!activePipelineFilePath || !project?.path || !settings?.runnerPath) {

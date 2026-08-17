@@ -9,9 +9,16 @@ import React, {
 import { useSecureStorage } from '../hooks';
 import { useSetConnectionEnvVariable } from '../controllers';
 
+export interface RunnerLogEntry {
+  message: string;
+  isError: boolean;
+}
+
 interface RunnerState {
-  output: string[];
-  error: string[];
+  // stdout and stderr are stored in a single array, in arrival order - kept
+  // separate they'd have to be re-merged for display, which loses the actual
+  // interleaving between output and error lines.
+  logs: RunnerLogEntry[];
   isRunning: boolean;
   pid: number | null;
   startTime: number | null;
@@ -54,8 +61,7 @@ export const RunnerProvider: React.FC<RunnerProviderProps> = ({ children }) => {
   const setEnvVariables = useSetConnectionEnvVariable();
 
   const [state, setState] = useState<RunnerState>({
-    output: [],
-    error: [],
+    logs: [],
     isRunning: false,
     pid: null,
     startTime: null,
@@ -68,11 +74,17 @@ export const RunnerProvider: React.FC<RunnerProviderProps> = ({ children }) => {
 
   useEffect(() => {
     const handleOutput = (msg: any) => {
-      setState((prev) => ({ ...prev, output: [...prev.output, msg] }));
+      setState((prev) => ({
+        ...prev,
+        logs: [...prev.logs, { message: msg, isError: false }],
+      }));
     };
 
     const handleError = (msg: any) => {
-      setState((prev) => ({ ...prev, error: [...prev.error, msg] }));
+      setState((prev) => ({
+        ...prev,
+        logs: [...prev.logs, { message: msg, isError: true }],
+      }));
     };
 
     const handleStarted = (info: any) => {
@@ -218,7 +230,7 @@ export const RunnerProvider: React.FC<RunnerProviderProps> = ({ children }) => {
     async (params: RunPipelineLocallyParams) => {
       // Clear out the previous run's log lines so the log viewer starts
       // fresh - otherwise old and new output run together in the same view.
-      setState((prev) => ({ ...prev, output: [], error: [] }));
+      setState((prev) => ({ ...prev, logs: [] }));
       try {
         await setupConnectionEnv(params.connectionName, params.connType);
         return await window.electron.ipcRenderer.invoke('runner:run', {
@@ -250,7 +262,7 @@ export const RunnerProvider: React.FC<RunnerProviderProps> = ({ children }) => {
   }, []);
 
   const clearOutput = useCallback(() => {
-    setState((prev) => ({ ...prev, output: [], error: [] }));
+    setState((prev) => ({ ...prev, logs: [] }));
   }, []);
 
   // eslint-disable-next-line react/jsx-no-constructed-context-values

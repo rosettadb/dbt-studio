@@ -52,7 +52,7 @@ export const RunnerLogViewer: React.FC<Props> = ({
 }) => {
   const theme = useTheme();
   const { mode } = useColorScheme();
-  const { output, error, isRunning, status } = useRunner();
+  const { logs: lines, isRunning, status } = useRunner();
   const outputRef = React.useRef<HTMLDivElement>(null);
 
   const [paused, setPaused] = React.useState(false);
@@ -76,13 +76,14 @@ export const RunnerLogViewer: React.FC<Props> = ({
     [fg, bg],
   );
 
-  const lines = React.useMemo(
-    () => [
-      ...output.map((message) => ({ message, isError: false })),
-      ...error.map((message) => ({ message, isError: true })),
-    ],
-    [output, error],
-  );
+  // A new run resets `lines` back to empty (see RunnerProvider.run) - if
+  // localClearedAt were left pointing at the old (now much larger) index,
+  // the new run's output would stay hidden until it grew past that index.
+  React.useEffect(() => {
+    if (lines.length === 0 && localClearedAt !== 0) {
+      setLocalClearedAt(0);
+    }
+  }, [lines.length, localClearedAt]);
 
   const visibleLines = React.useMemo(
     () => lines.slice(localClearedAt),
