@@ -284,6 +284,15 @@ export const TerminalLayout = React.forwardRef<TerminalLayoutRef, Props>(
       }
     }, [isRunnerRunning, showRunnerLogsTab]);
 
+    // If runner logs tab is hidden but selected (e.g. a new run just cleared
+    // logs and hasn't started yet), switch back to terminal so the panel
+    // isn't left blank.
+    React.useEffect(() => {
+      if (!showRunnerLogsTab && selectedTab === 'runnerLogs') {
+        setSelectedTab('terminal');
+      }
+    }, [showRunnerLogsTab, selectedTab]);
+
     // // Reset stopping state when process stops
     // React.useEffect(() => {
     //   if (!isRunning) {
