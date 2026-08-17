@@ -49,8 +49,8 @@ const registerAppLifecycleListeners = () => {
     isQuitting = true;
     runnerProcessAdapter
       .stop(true)
-      .catch(() => {})
-      .finally(() => app.quit());
+      .then(() => app.quit())
+      .catch(() => app.quit());
   });
 
   app.on('window-all-closed', () => {

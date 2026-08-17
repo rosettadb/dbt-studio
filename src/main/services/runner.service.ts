@@ -238,7 +238,10 @@ export default class RunnerService {
       settings.runnerPath = binaryPath;
       await SettingsService.saveSettings(settings);
 
-      if (previousRunnerPath && path.dirname(previousRunnerPath) !== installDir) {
+      if (
+        previousRunnerPath &&
+        path.dirname(previousRunnerPath) !== installDir
+      ) {
         await removeRunnerInstallDir(previousRunnerPath);
       }
 
