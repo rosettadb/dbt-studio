@@ -199,10 +199,11 @@ export default class RunnerService {
       const downloadUrl = `https://github.com/rosettadb/dbt-studio/releases/download/${version}/${assetName}`;
 
       const settings = await SettingsService.loadSettings();
-      if (settings.runnerPath) {
-        await removeRunnerInstallDir(settings.runnerPath);
-      }
+      const previousRunnerPath = settings.runnerPath;
 
+      // Download and stage the new version into its own directory before
+      // touching the currently installed one, so a failed download or write
+      // never leaves settings pointing at a binary that was already deleted.
       const installDir = path.join(getRunnerRoot(), version);
       const binaryPath = path.join(installDir, getRunnerBinaryFileName());
 
@@ -215,9 +216,6 @@ export default class RunnerService {
       if (process.platform !== 'win32') {
         await fs.chmod(binaryPath, 0o755);
       }
-
-      settings.runnerVersion = version;
-      settings.runnerPath = binaryPath;
 
       const warnings: string[] = [];
       try {
@@ -236,7 +234,13 @@ export default class RunnerService {
         );
       }
 
+      settings.runnerVersion = version;
+      settings.runnerPath = binaryPath;
       await SettingsService.saveSettings(settings);
+
+      if (previousRunnerPath && path.dirname(previousRunnerPath) !== installDir) {
+        await removeRunnerInstallDir(previousRunnerPath);
+      }
 
       return {
         success: true,
