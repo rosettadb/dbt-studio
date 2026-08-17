@@ -50,7 +50,7 @@ export const SQLite: React.FC<Props> = ({
   const [connectionTested, setConnectionTested] = React.useState(false);
   const [formState, setFormState] = React.useState<SQLiteConnection>({
     type: 'sqlite',
-    name: existingConnection?.name ?? suggestedName ?? 'SQLite Connection',
+    name: existingConnection?.name ?? suggestedName ?? '',
     database_path:
       existingConnection?.database_path ??
       duplicateConnection?.database_path ??
