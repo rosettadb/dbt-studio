@@ -319,9 +319,12 @@ const ProjectDetails: React.FC = () => {
       activePipelineFilePath,
       project.path,
     );
+    const ext = activePipelineFilePath.slice(
+      activePipelineFilePath.lastIndexOf('.'),
+    );
     const result = await runPipelineLocally({
       workspaceDir: project.path,
-      pipelineFile: `${pipelineName}.yml`,
+      pipelineFile: `${pipelineName}${ext}`,
       connectionName: connection?.connection?.name,
     });
     if (result.success) {
@@ -346,9 +349,10 @@ const ProjectDetails: React.FC = () => {
     async (filePath: string) => {
       if (!project?.path || !settings?.runnerPath) return;
       const pipelineName = getPipelineRelativeName(filePath, project.path);
+      const ext = filePath.slice(filePath.lastIndexOf('.'));
       const result = await runPipelineLocally({
         workspaceDir: project.path,
-        pipelineFile: `${pipelineName}.yml`,
+        pipelineFile: `${pipelineName}${ext}`,
         connectionName: connection?.connection?.name,
       });
       if (result.success) {
@@ -1875,9 +1879,9 @@ const ProjectDetails: React.FC = () => {
                   isOpen={pipelineModalOpen}
                   onClose={() => setPipelineModalOpen(false)}
                   project={project}
-                  onSelect={(pipelineName) => {
+                  onSelect={(pipeline) => {
                     setPipelineModalOpen(false);
-                    setPipelineRunArgs(`--pipeline_name ${pipelineName}`);
+                    setPipelineRunArgs(`--pipeline_name ${pipeline.name}`);
                     setPipelineCloudModal(true);
                   }}
                 />

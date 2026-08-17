@@ -520,9 +520,9 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           isOpen={pipelineModal}
           onClose={() => setPipelineModal(false)}
           project={project}
-          onSelect={(pipelineName) => {
+          onSelect={(pipeline) => {
             setPipelineModal(false);
-            setPipelineArgs(`--pipeline_name ${pipelineName}`);
+            setPipelineArgs(`--pipeline_name ${pipeline.name}`);
             setRunInCloudModal('pipeline');
           }}
         />
@@ -532,15 +532,16 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           isOpen={localPipelineModal}
           onClose={() => setLocalPipelineModal(false)}
           project={project}
-          onSelect={async (pipelineName) => {
+          onSelect={async (pipeline) => {
             setLocalPipelineModal(false);
             if (!settings?.runnerPath) {
               toast.error('Local runner is not installed.');
               return;
             }
+            const ext = pipeline.path.slice(pipeline.path.lastIndexOf('.'));
             const result = await runPipelineLocally({
               workspaceDir: project.path,
-              pipelineFile: `${pipelineName}.yml`,
+              pipelineFile: `${pipeline.name}${ext}`,
               connectionName: connection?.connection?.name,
             });
             if (result.success) {
