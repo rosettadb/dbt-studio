@@ -345,7 +345,7 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
                           size="small"
                           onClick={() =>
                             window.open(
-                              `https://github.com/rosettadb/dbt-studio/releases/tag/v${version.version}`,
+                              `https://github.com/rosettadb/dbt-studio/releases/tag/${version.version}`,
                               '_blank',
                             )
                           }

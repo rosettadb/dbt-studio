@@ -171,7 +171,7 @@ export default class RunnerService {
   static async installRunnerVersion(version: string): Promise<InstallResult> {
     try {
       const assetName = getRunnerAssetName();
-      const downloadUrl = `https://github.com/rosettadb/dbt-studio/releases/download/v${version}/${assetName}`;
+      const downloadUrl = `https://github.com/rosettadb/dbt-studio/releases/download/${version}/${assetName}`;
 
       const settings = await SettingsService.loadSettings();
       if (settings.runnerPath && fs.existsSync(settings.runnerPath)) {
@@ -240,7 +240,7 @@ export default class RunnerService {
     version: string,
     installDir: string,
   ): Promise<string> {
-    const pluginsZipUrl = `https://github.com/rosettadb/dbt-studio/releases/download/v${version}/${RUNNER_PLUGINS_ASSET_NAME}`;
+    const pluginsZipUrl = `https://github.com/rosettadb/dbt-studio/releases/download/${version}/${RUNNER_PLUGINS_ASSET_NAME}`;
     const pluginsHomeDir = path.join(installDir, 'plugins-home');
     const pluginsZipPath = path.join(installDir, RUNNER_PLUGINS_ASSET_NAME);
 
