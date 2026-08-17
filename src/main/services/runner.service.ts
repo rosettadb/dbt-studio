@@ -67,6 +67,35 @@ function getRunnerBinaryFileName(): string {
 
 const RUNNER_PLUGINS_ASSET_NAME = 'rosetta-runner-plugins.zip';
 
+// Versions come from GitHub release tag names and are also accepted as-is
+// over IPC, so this guards against path traversal (e.g. "../../etc") before
+// the value is ever used to build a filesystem path or download URL.
+const RUNNER_VERSION_PATTERN = /^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/;
+
+function assertValidRunnerVersion(version: string): void {
+  if (!RUNNER_VERSION_PATTERN.test(version)) {
+    throw new Error(`Invalid runner version: ${version}`);
+  }
+}
+
+function getRunnerRoot(): string {
+  return path.join(app.getPath('userData'), 'runner');
+}
+
+// Only remove a previous install directory if it actually lives under the
+// runner root - settings.runnerPath is persisted/loaded as plain JSON, so a
+// corrupted or tampered value must never drive an arbitrary fs.remove.
+async function removeRunnerInstallDir(runnerPath: string): Promise<void> {
+  const runnerRoot = getRunnerRoot();
+  const dir = path.resolve(path.dirname(runnerPath));
+  const relative = path.relative(runnerRoot, dir);
+  const isInsideRoot =
+    relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
+  if (isInsideRoot && fs.existsSync(runnerPath)) {
+    await fs.remove(dir);
+  }
+}
+
 // Plugins the runner binary executes, and the external tool (if any) they
 // shell out to. dbt/rosetta are already managed elsewhere in Studio, so
 // their status is read from existing settings rather than re-detected here.
@@ -165,15 +194,16 @@ export default class RunnerService {
 
   static async installRunnerVersion(version: string): Promise<InstallResult> {
     try {
+      assertValidRunnerVersion(version);
       const assetName = getRunnerAssetName();
       const downloadUrl = `https://github.com/rosettadb/dbt-studio/releases/download/${version}/${assetName}`;
 
       const settings = await SettingsService.loadSettings();
-      if (settings.runnerPath && fs.existsSync(settings.runnerPath)) {
-        await fs.remove(path.dirname(settings.runnerPath));
+      if (settings.runnerPath) {
+        await removeRunnerInstallDir(settings.runnerPath);
       }
 
-      const installDir = path.join(app.getPath('userData'), 'runner', version);
+      const installDir = path.join(getRunnerRoot(), version);
       const binaryPath = path.join(installDir, getRunnerBinaryFileName());
 
       await fs.mkdirp(installDir);
@@ -280,8 +310,8 @@ export default class RunnerService {
 
   static async uninstallRunnerVersion(): Promise<void> {
     const settings = await SettingsService.loadSettings();
-    if (settings.runnerPath && fs.existsSync(settings.runnerPath)) {
-      await fs.remove(path.dirname(settings.runnerPath));
+    if (settings.runnerPath) {
+      await removeRunnerInstallDir(settings.runnerPath);
     }
     settings.runnerVersion = '';
     settings.runnerPath = '';
