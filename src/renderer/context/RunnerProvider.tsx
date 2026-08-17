@@ -238,7 +238,15 @@ export const RunnerProvider: React.FC<RunnerProviderProps> = ({ children }) => {
 
   const stop = useCallback(async () => {
     setState((prev) => ({ ...prev, status: 'stopping' }));
-    return window.electron.ipcRenderer.invoke('runner:stop');
+    try {
+      return await window.electron.ipcRenderer.invoke('runner:stop');
+    } catch (error) {
+      setState((prev) => ({ ...prev, status: 'stopped' }));
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : String(error),
+      };
+    }
   }, []);
 
   const clearOutput = useCallback(() => {
