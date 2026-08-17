@@ -106,12 +106,13 @@ class ProcessAdapter {
         this.handleProcessEnd(-1, null, 'error', err.message);
       });
 
+      // 'close' (not 'exit') is the finalization trigger: 'exit' can fire
+      // before stdout/stderr have finished delivering buffered 'data' events,
+      // and handleProcessEnd() nulls out mainWindow via cleanup() - so
+      // finalizing on 'exit' can silently drop trailing output that arrives
+      // after cleanup but before the streams actually close.
       currentProcess.on('close', (code, signal) => {
         this.handleProcessEnd(code, signal, 'close');
-      });
-
-      currentProcess.on('exit', (code, signal) => {
-        this.handleProcessEnd(code, signal, 'exit');
       });
 
       currentProcess.stdout.on('data', (data) => {
