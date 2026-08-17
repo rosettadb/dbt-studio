@@ -459,21 +459,23 @@ export default class RunnerService {
 
       const installDir = path.join(app.getPath('userData'), 'kisql');
       const binaryPath = path.join(installDir, assetName);
+      const tempPath = path.join(installDir, `${assetName}.download`);
 
-      // Remove previous installation
-      if (fs.existsSync(installDir)) {
-        await fs.remove(installDir);
-      }
       await fs.mkdirp(installDir);
 
       const response = await axios.get(downloadUrl, {
         responseType: 'arraybuffer',
       });
-      await fs.writeFile(binaryPath, response.data);
+      await fs.writeFile(tempPath, response.data);
 
       if (process.platform !== 'win32') {
-        await fs.chmod(binaryPath, 0o755);
+        await fs.chmod(tempPath, 0o755);
       }
+
+      // Only replace the active binary once the download has fully
+      // succeeded, so a failed download never leaves kisqlPath pointing at
+      // a binary that was already deleted.
+      await fs.move(tempPath, binaryPath, { overwrite: true });
 
       const settings = await SettingsService.loadSettings();
       settings.kisqlPath = binaryPath;
