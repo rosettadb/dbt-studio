@@ -20,7 +20,6 @@ interface RunnerState {
 }
 
 export interface RunPipelineLocallyParams {
-  binaryPath: string;
   workspaceDir: string;
   pipelineFile: string;
   runTeardown?: boolean;
@@ -222,7 +221,6 @@ export const RunnerProvider: React.FC<RunnerProviderProps> = ({ children }) => {
       setState((prev) => ({ ...prev, output: [], error: [] }));
       await setupConnectionEnv(params.connectionName, params.connType);
       return window.electron.ipcRenderer.invoke('runner:run', {
-        binaryPath: params.binaryPath,
         workspaceDir: params.workspaceDir,
         pipelineFile: params.pipelineFile,
         runTeardown: params.runTeardown,

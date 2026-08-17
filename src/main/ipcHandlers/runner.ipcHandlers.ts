@@ -28,7 +28,6 @@ const removeRunnerIpcHandlers = () => {
 };
 
 interface RunPipelineRequest {
-  binaryPath: string;
   workspaceDir: string;
   pipelineFile: string;
   runTeardown?: boolean;
@@ -41,13 +40,11 @@ const registerRunnerHandlers = (mainWindow: BrowserWindow) => {
     'runner:run',
     async (
       _event,
-      {
-        binaryPath,
-        workspaceDir,
-        pipelineFile,
-        runTeardown = false,
-      }: RunPipelineRequest,
+      { workspaceDir, pipelineFile, runTeardown = false }: RunPipelineRequest,
     ) => {
+      const settings = await SettingsService.loadSettings();
+      const binaryPath = settings.runnerPath;
+
       if (!binaryPath || !(await fs.pathExists(binaryPath))) {
         return {
           success: false,
@@ -65,8 +62,6 @@ const registerRunnerHandlers = (mainWindow: BrowserWindow) => {
       const logDir = path.join(app.getPath('userData'), 'runner-logs');
       await fs.mkdirp(logDir);
       const logFile = path.join(logDir, `${taskId}.log`);
-
-      const settings = await SettingsService.loadSettings();
 
       const env: Record<string, string> = {
         RUN_MODE: 'studio',

@@ -320,7 +320,6 @@ const ProjectDetails: React.FC = () => {
       project.path,
     );
     const result = await runPipelineLocally({
-      binaryPath: settings.runnerPath,
       workspaceDir: project.path,
       pipelineFile: `${pipelineName}.yml`,
       connectionName: connection?.connection?.name,
@@ -348,7 +347,6 @@ const ProjectDetails: React.FC = () => {
       if (!project?.path || !settings?.runnerPath) return;
       const pipelineName = getPipelineRelativeName(filePath, project.path);
       const result = await runPipelineLocally({
-        binaryPath: settings.runnerPath,
         workspaceDir: project.path,
         pipelineFile: `${pipelineName}.yml`,
         connectionName: connection?.connection?.name,

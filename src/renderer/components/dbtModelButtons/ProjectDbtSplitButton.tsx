@@ -539,7 +539,6 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
               return;
             }
             const result = await runPipelineLocally({
-              binaryPath: settings.runnerPath,
               workspaceDir: project.path,
               pipelineFile: `${pipelineName}.yml`,
               connectionName: connection?.connection?.name,
