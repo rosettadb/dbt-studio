@@ -28,6 +28,7 @@ const removeRunnerIpcHandlers = () => {
 };
 
 interface RunPipelineRequest {
+  taskId: string;
   workspaceDir: string;
   pipelineFile: string;
   runTeardown?: boolean;
@@ -68,7 +69,12 @@ const registerRunnerHandlers = (mainWindow: BrowserWindow) => {
     'runner:run',
     async (
       _event,
-      { workspaceDir, pipelineFile, runTeardown = false }: RunPipelineRequest,
+      {
+        taskId,
+        workspaceDir,
+        pipelineFile,
+        runTeardown = false,
+      }: RunPipelineRequest,
     ) => {
       const settings = await SettingsService.loadSettings();
       const binaryPath = settings.runnerPath;
@@ -79,17 +85,19 @@ const registerRunnerHandlers = (mainWindow: BrowserWindow) => {
           error: 'Local runner binary is not installed.',
         };
       }
-      if (!workspaceDir || !pipelineFile) {
+      if (!taskId || !workspaceDir || !pipelineFile) {
         return {
           success: false,
-          error: 'workspaceDir and pipelineFile are required.',
+          error: 'taskId, workspaceDir and pipelineFile are required.',
         };
       }
 
-      const taskId = `runner-${Date.now()}`;
       const logDir = path.join(app.getPath('userData'), 'runner-logs');
       await fs.mkdirp(logDir);
-      const logFile = path.join(logDir, `${taskId}.log`);
+      // taskId is a deterministic id built from a filesystem path and may
+      // contain '/', '\' or ':' - strip those before using it as a filename.
+      const safeLogName = taskId.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const logFile = path.join(logDir, `${safeLogName}.log`);
 
       const env: Record<string, string> = {
         RUN_MODE: 'studio',

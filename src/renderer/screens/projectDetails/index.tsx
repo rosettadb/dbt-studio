@@ -81,7 +81,10 @@ import {
   useRosettaDBT,
   useRunner,
   useTabManager,
+  useTaskChannel,
 } from '../../hooks';
+import { useTaskManager } from '../../context';
+import { buildRunnerTaskId } from '../../context/RunnerProvider';
 import { Project, SupportedConnectionTypes } from '../../../types/backend';
 import { AI_PROMPTS } from '../../config/constants';
 import { utils } from '../../helpers';
@@ -309,10 +312,12 @@ const ProjectDetails: React.FC = () => {
   } = useRunner();
   const showRunnerLogsTab = isRunnerRunning || runnerLogs.length > 0;
 
-  const handleRunPipelineLocally = React.useCallback(async () => {
-    if (!activePipelineFilePath || !project?.path || !settings?.runnerPath) {
-      return;
-    }
+  // Relative path (with its real extension) of the pipeline currently open
+  // in the tab - this is what gets sent as PIPELINE_FILE, and what a Run
+  // button needs to compute the same deterministic task id a local run for
+  // this exact file was registered under.
+  const activeLocalPipelineFile = React.useMemo(() => {
+    if (!activePipelineFilePath || !project?.path) return null;
     const pipelineName = getPipelineRelativeName(
       activePipelineFilePath,
       project.path,
@@ -320,9 +325,26 @@ const ProjectDetails: React.FC = () => {
     const ext = activePipelineFilePath.slice(
       activePipelineFilePath.lastIndexOf('.'),
     );
+    return `${pipelineName}${ext}`;
+  }, [activePipelineFilePath, project?.path]);
+
+  const activeRunnerTaskId =
+    project?.path && activeLocalPipelineFile
+      ? buildRunnerTaskId(project.path, activeLocalPipelineFile)
+      : undefined;
+  const activeRunnerTask = useTaskChannel(activeRunnerTaskId);
+  const { cancel: cancelTask } = useTaskManager();
+  const isLocalPipelineRunning =
+    activeRunnerTask?.status === 'running' ||
+    activeRunnerTask?.status === 'pending';
+
+  const handleRunPipelineLocally = React.useCallback(async () => {
+    if (!activeLocalPipelineFile || !project?.path || !settings?.runnerPath) {
+      return;
+    }
     const result = await runPipelineLocally({
       workspaceDir: project.path,
-      pipelineFile: `${pipelineName}${ext}`,
+      pipelineFile: activeLocalPipelineFile,
       connectionName: connection?.connection?.name,
     });
     if (result.success) {
@@ -332,7 +354,7 @@ const ProjectDetails: React.FC = () => {
       toast.error(result.error || 'Failed to start the pipeline run');
     }
   }, [
-    activePipelineFilePath,
+    activeLocalPipelineFile,
     project?.path,
     settings?.runnerPath,
     runPipelineLocally,
@@ -1724,6 +1746,15 @@ const ProjectDetails: React.FC = () => {
                               }
                               onRun={pipelineRunHandler}
                               runDisabledReason={pipelineRunDisabledReason}
+                              isRunning={
+                                settings?.env !== 'cloud' &&
+                                isLocalPipelineRunning
+                              }
+                              onStop={
+                                settings?.env !== 'cloud' && activeRunnerTask
+                                  ? () => cancelTask(activeRunnerTask.id)
+                                  : undefined
+                              }
                             />
                           )}
                         </Box>

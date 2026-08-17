@@ -34,6 +34,15 @@ export interface RunPipelineLocallyParams {
   connType?: string;
 }
 
+// Deterministic id derived purely from what's being run (mirrors
+// buildDownloadTaskId in ExplorerBucketContent) - any component that knows
+// which pipeline file it's looking at can compute the same id and observe
+// its task via useTaskChannel, without needing to track "did I start this."
+export const buildRunnerTaskId = (
+  workspaceDir: string,
+  pipelineFile: string,
+): string => `runner-pipeline:${workspaceDir}::${pipelineFile}`;
+
 export interface RunnerContextValue extends RunnerState {
   run: (
     params: RunPipelineLocallyParams,
@@ -234,6 +243,7 @@ export const RunnerProvider: React.FC<RunnerProviderProps> = ({ children }) => {
       try {
         await setupConnectionEnv(params.connectionName, params.connType);
         return await window.electron.ipcRenderer.invoke('runner:run', {
+          taskId: buildRunnerTaskId(params.workspaceDir, params.pipelineFile),
           workspaceDir: params.workspaceDir,
           pipelineFile: params.pipelineFile,
           runTeardown: params.runTeardown,
