@@ -33,8 +33,36 @@ interface RunPipelineRequest {
   runTeardown?: boolean;
 }
 
+let appListenersRegistered = false;
+let isQuitting = false;
+
+// registerRunnerHandlers runs once per window (main window, setup window),
+// but these app-level listeners must only ever be attached once - otherwise
+// they accumulate and stop() gets called multiple times on every quit.
+const registerAppLifecycleListeners = () => {
+  if (appListenersRegistered) return;
+  appListenersRegistered = true;
+
+  app.on('before-quit', (event) => {
+    if (isQuitting || !runnerProcessAdapter.isRunning()) return;
+    event.preventDefault();
+    isQuitting = true;
+    runnerProcessAdapter
+      .stop(true)
+      .catch(() => {})
+      .finally(() => app.quit());
+  });
+
+  app.on('window-all-closed', () => {
+    if (runnerProcessAdapter.isRunning()) {
+      runnerProcessAdapter.stop(true).catch(() => {});
+    }
+  });
+};
+
 const registerRunnerHandlers = (mainWindow: BrowserWindow) => {
   removeRunnerIpcHandlers();
+  registerAppLifecycleListeners();
 
   ipcMain.handle(
     'runner:run',
@@ -134,18 +162,6 @@ const registerRunnerHandlers = (mainWindow: BrowserWindow) => {
 
   ipcMain.handle('runner:status', () => {
     return runnerProcessAdapter.getStatus();
-  });
-
-  app.on('before-quit', async () => {
-    if (runnerProcessAdapter.isRunning()) {
-      await runnerProcessAdapter.stop(true);
-    }
-  });
-
-  app.on('window-all-closed', async () => {
-    if (runnerProcessAdapter.isRunning()) {
-      await runnerProcessAdapter.stop(true);
-    }
   });
 };
 
