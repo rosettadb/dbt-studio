@@ -14,6 +14,7 @@ export type SupportedConnectionTypes =
   | 'kinetica'
   | 'googlecloud'
   | 'duckdb'
+  | 'sqlite'
   | 'ducklake';
 
 export type ConnectionBase = {
@@ -87,6 +88,12 @@ export type DuckDBConnection = Omit<ConnectionBase, 'username' | 'password'> & {
   // No username/password needed for DuckDB
 };
 
+export type SQLiteConnection = Omit<ConnectionBase, 'username' | 'password'> & {
+  type: 'sqlite';
+  database_path: string;
+  short_database_path: string;
+};
+
 export type KineticaConnection = ConnectionBase & {
   type: 'kinetica';
   host: string;
@@ -115,8 +122,13 @@ export type ConnectionInput =
   | RedshiftConnection
   | DatabricksConnection
   | DuckDBConnection
+  | SQLiteConnection
   | KineticaConnection
   | DuckLakeConnectionConfig;
+
+export const canUseAsDbtConnection = (
+  type: SupportedConnectionTypes,
+): boolean => type !== 'sqlite';
 
 export type ConnectionModel = {
   id: string;

@@ -22,6 +22,7 @@ import {
   RedshiftConnection,
   RosettaConnection,
   SnowflakeConnection,
+  SQLiteConnection,
 } from '../../types/backend';
 import { loadDatabaseFile, updateDatabase } from '../utils/fileHelper';
 import { ProjectsService } from './index';
@@ -41,7 +42,10 @@ import {
   testRedshiftConnection,
   testSnowflakeConnection,
   testKineticaConnection,
+  testSQLiteConnection,
   executeKineticaQuery,
+  executeSQLiteQuery,
+  extractSQLiteSchema,
 } from '../utils/connectors';
 import SecureStorageService from './secureStorage.service';
 import { CloudConnection, RecentItem } from '../../types/frontend';
@@ -181,6 +185,11 @@ export default class ConnectorsService {
           conn1.schema === (conn2 as DuckDBConnection).schema
         );
 
+      case 'sqlite':
+        return (
+          conn1.database_path === (conn2 as SQLiteConnection).database_path
+        );
+
       case 'ducklake':
         return (
           conn1.instanceId === (conn2 as DuckLakeConnectionConfig).instanceId
@@ -295,6 +304,15 @@ export default class ConnectorsService {
         // Extract filename from path if available
         const fileName = path.basename(duckConn.database_path, '.duckdb');
         baseName = fileName || duckConn.name;
+        break;
+      }
+      case 'sqlite': {
+        const sqliteConnection = connection as SQLiteConnection;
+        baseName =
+          path.basename(
+            sqliteConnection.database_path,
+            path.extname(sqliteConnection.database_path),
+          ) || sqliteConnection.name;
         break;
       }
       case 'postgres':
@@ -532,6 +550,10 @@ export default class ConnectorsService {
       throw new Error('Connection not found!');
     }
 
+    if (projectIndex !== -1 && connection.type === 'sqlite') {
+      throw new Error('SQLite connections cannot be used by dbt projects');
+    }
+
     await this.validateConnection(connection);
 
     if (!connectionId) {
@@ -622,6 +644,8 @@ export default class ConnectorsService {
 
     connections[connectionIndex] = connection;
     await updateDatabase<'connections'>('connections', connections);
+
+    if (connection.connection.type === 'sqlite') return;
 
     // Find all projects using this connection and update their config files
     const projects = await ProjectsService.loadProjects();
@@ -757,6 +781,8 @@ export default class ConnectorsService {
         return testDatabricksConnection(connection);
       case 'duckdb':
         return testDuckDBConnection(connection);
+      case 'sqlite':
+        return testSQLiteConnection(connection);
       case 'ducklake':
         // DuckLake connection test - validate instance exists
         try {
@@ -873,6 +899,9 @@ export default class ConnectorsService {
             query,
             registerCancel,
           );
+          break;
+        case 'sqlite':
+          response = executeSQLiteQuery(connection, query);
           break;
         case 'redshift':
           response = await executeRedshiftQuery(
@@ -1032,6 +1061,9 @@ export default class ConnectorsService {
         break;
       case 'duckdb':
         // DuckDB specific validations
+        if (!conn.database_path) throw new Error('Database path is required');
+        break;
+      case 'sqlite':
         if (!conn.database_path) throw new Error('Database path is required');
         break;
       case 'ducklake':
@@ -2038,6 +2070,9 @@ export default class ConnectorsService {
         });
         const schema = await extractor.extractSchema();
         return schema;
+      }
+      case 'sqlite': {
+        return { tables: extractSQLiteSchema(connection) };
       }
       case 'ducklake': {
         return { tables: [] };

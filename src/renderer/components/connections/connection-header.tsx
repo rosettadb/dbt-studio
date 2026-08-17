@@ -38,6 +38,8 @@ const ConnectionHeader = ({
           alignItems: 'center',
           width: '100%',
           mb: 2,
+          gap: 2,
+          flexWrap: 'wrap',
         }}
       >
         <Typography variant="h6" component="h5">

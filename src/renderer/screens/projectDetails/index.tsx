@@ -1437,6 +1437,10 @@ const ProjectDetails: React.FC = () => {
               }}
               onRenameFile={(oldPath, newPath) => {
                 renameTab(oldPath, newPath);
+                renameTab(
+                  toPipelineTabPath(oldPath),
+                  toPipelineTabPath(newPath),
+                );
                 if (
                   activeTab?.path === oldPath ||
                   selectedFilePath === oldPath
