@@ -158,13 +158,8 @@ export default class RunnerService {
         latestPrerelease,
       };
     } catch (error) {
-      return {
-        currentVersion,
-        currentPath,
-        availableVersions: [],
-        latestStable: '',
-        latestPrerelease: undefined,
-      };
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to check runner versions: ${message}`);
     }
   }
 
