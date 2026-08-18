@@ -32,7 +32,7 @@ interface PipelineSelectorModalProps {
   isOpen: boolean;
   onClose: () => void;
   project: Project;
-  onSelect: (pipelineName: string) => void;
+  onSelect: (pipeline: { name: string; path: string }) => void;
 }
 
 const PIPELINE_TEMPLATE = `name: "CI"
@@ -182,8 +182,10 @@ export const PipelineSelectorModal: React.FC<PipelineSelectorModalProps> = ({
   };
 
   const handleConfirm = () => {
-    if (selected && !hasBlockingChanges) {
-      onSelect(selected);
+    if (!selected || hasBlockingChanges) return;
+    const pipeline = pipelines.find((p) => p.name === selected);
+    if (pipeline) {
+      onSelect(pipeline);
     }
   };
 

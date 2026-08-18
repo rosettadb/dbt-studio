@@ -67,6 +67,7 @@ import { usePipelineActionId } from '../../controllers/rosettaCloud.controller';
 import {
   PipelineView,
   CloudLogViewer,
+  RunnerLogViewer,
   isPipelineFile,
   parsePipelineConfig,
 } from '../../components/pipelineView';
@@ -79,8 +80,12 @@ import {
   useProjectQueryResultsPanel,
   useProjectSqlExecution,
   useRosettaDBT,
+  useRunner,
   useTabManager,
+  useTaskChannel,
 } from '../../hooks';
+import { useTaskManager } from '../../context';
+import { buildRunnerTaskId } from '../../context/RunnerProvider';
 import { Project, SupportedConnectionTypes } from '../../../types/backend';
 import { AI_PROMPTS } from '../../config/constants';
 import { utils } from '../../helpers';
@@ -326,6 +331,115 @@ const ProjectDetails: React.FC = () => {
     activePipelineFile,
     recordedPipelineActionId,
   );
+
+  const {
+    run: runPipelineLocally,
+    isRunning: isRunnerRunning,
+    logs: runnerLogs,
+  } = useRunner();
+  const showRunnerLogsTab = isRunnerRunning || runnerLogs.length > 0;
+
+  // Relative path (with its real extension) of the pipeline currently open
+  // in the tab - this is what gets sent as PIPELINE_FILE, and what a Run
+  // button needs to compute the same deterministic task id a local run for
+  // this exact file was registered under.
+  const activeLocalPipelineFile = React.useMemo(() => {
+    if (!activePipelineFilePath || !project?.path) return null;
+    const pipelineName = getPipelineRelativeName(
+      activePipelineFilePath,
+      project.path,
+    );
+    const ext = activePipelineFilePath.slice(
+      activePipelineFilePath.lastIndexOf('.'),
+    );
+    return `${pipelineName}${ext}`;
+  }, [activePipelineFilePath, project?.path]);
+
+  const activeRunnerTaskId =
+    project?.path && activeLocalPipelineFile
+      ? buildRunnerTaskId(project.path, activeLocalPipelineFile)
+      : undefined;
+  const activeRunnerTask = useTaskChannel(activeRunnerTaskId);
+  const { cancel: cancelTask } = useTaskManager();
+  const isLocalPipelineRunning =
+    activeRunnerTask?.status === 'running' ||
+    activeRunnerTask?.status === 'pending';
+
+  const handleRunPipelineLocally = React.useCallback(async () => {
+    if (!activeLocalPipelineFile || !project?.path || !settings?.runnerPath) {
+      return;
+    }
+    const result = await runPipelineLocally({
+      workspaceDir: project.path,
+      pipelineFile: activeLocalPipelineFile,
+      connectionName: connection?.connection?.name,
+    });
+    if (result.success) {
+      handleTerminalTabSwitch('runnerLogs');
+      toast.success('Pipeline run started. Track progress in Task Manager.');
+    } else {
+      toast.error(result.error || 'Failed to start the pipeline run');
+    }
+  }, [
+    activeLocalPipelineFile,
+    project?.path,
+    settings?.runnerPath,
+    runPipelineLocally,
+    connection,
+    handleTerminalTabSwitch,
+  ]);
+
+  // Same as handleRunPipelineLocally, but for the file-tree's per-pipeline
+  // "Run Pipeline (Local Runner)" button, which passes an explicit filePath
+  // instead of relying on the currently open pipeline tab.
+  const handleRunPipelineFileLocally = React.useCallback(
+    async (filePath: string) => {
+      if (!project?.path || !settings?.runnerPath) return;
+      const pipelineName = getPipelineRelativeName(filePath, project.path);
+      const ext = filePath.slice(filePath.lastIndexOf('.'));
+      const result = await runPipelineLocally({
+        workspaceDir: project.path,
+        pipelineFile: `${pipelineName}${ext}`,
+        connectionName: connection?.connection?.name,
+      });
+      if (result.success) {
+        handleTerminalTabSwitch('runnerLogs');
+        toast.success('Pipeline run started. Track progress in Task Manager.');
+      } else {
+        toast.error(result.error || 'Failed to start the pipeline run');
+      }
+    },
+    [
+      project?.path,
+      settings?.runnerPath,
+      runPipelineLocally,
+      connection,
+      handleTerminalTabSwitch,
+    ],
+  );
+
+  const pipelineRunHandler = React.useMemo(() => {
+    if (!activePipelineFilePath) return undefined;
+    if (settings?.env === 'cloud') {
+      return () => handleRunPipelineFile(activePipelineFilePath);
+    }
+    return handleRunPipelineLocally;
+  }, [
+    activePipelineFilePath,
+    settings?.env,
+    handleRunPipelineFile,
+    handleRunPipelineLocally,
+  ]);
+
+  const pipelineRunDisabledReason = React.useMemo(() => {
+    if (isDbtV2) {
+      return 'dbt Core v2 is in alpha and not yet supported for pipeline runs. Support will be added after the first official v2 release.';
+    }
+    if (settings?.env !== 'cloud' && !settings?.runnerPath) {
+      return 'Install the local runner first (Settings > Local Runner)';
+    }
+    return undefined;
+  }, [isDbtV2, settings?.env, settings?.runnerPath]);
 
   // Code/visual toggle for the pipeline tab — the raw YAML is edited inline
   // via a one-off Editor instance instead of opening a second tab.
@@ -1206,6 +1320,7 @@ const ProjectDetails: React.FC = () => {
               handleTerminalTabSwitch('terminal');
             }
           }}
+          onLocalRunStarted={() => handleTerminalTabSwitch('runnerLogs')}
         />
       }
       panelTitle="DBT Studio"
@@ -1425,6 +1540,7 @@ const ProjectDetails: React.FC = () => {
                 }
               }}
               onRunPipeline={handleRunPipelineFile}
+              onRunPipelineLocal={handleRunPipelineFileLocally}
             />
           </Box>
         </Box>
@@ -1512,6 +1628,10 @@ const ProjectDetails: React.FC = () => {
                   activePipelineActionId ? (
                     <CloudLogViewer actionId={activePipelineActionId} />
                   ) : undefined
+                }
+                showRunnerLogsTab={showRunnerLogsTab}
+                runnerLogsPanel={
+                  showRunnerLogsTab ? <RunnerLogViewer /> : undefined
                 }
               >
                 <Content>
@@ -1668,18 +1788,15 @@ const ProjectDetails: React.FC = () => {
                                     }
                                   : undefined
                               }
-                              onRun={
-                                settings?.env === 'cloud' &&
-                                activePipelineFilePath
-                                  ? () =>
-                                      handleRunPipelineFile(
-                                        activePipelineFilePath,
-                                      )
-                                  : undefined
+                              onRun={pipelineRunHandler}
+                              runDisabledReason={pipelineRunDisabledReason}
+                              isRunning={
+                                settings?.env !== 'cloud' &&
+                                isLocalPipelineRunning
                               }
-                              runDisabledReason={
-                                isDbtV2
-                                  ? 'dbt Core v2 is in alpha and not yet supported for cloud runs. Support will be added after the first official v2 release.'
+                              onStop={
+                                settings?.env !== 'cloud' && activeRunnerTask
+                                  ? () => cancelTask(activeRunnerTask.id)
                                   : undefined
                               }
                             />
@@ -1837,9 +1954,9 @@ const ProjectDetails: React.FC = () => {
                   isOpen={pipelineModalOpen}
                   onClose={() => setPipelineModalOpen(false)}
                   project={project}
-                  onSelect={(pipelineName) => {
+                  onSelect={(pipeline) => {
                     setPipelineModalOpen(false);
-                    setPipelineRunArgs(`--pipeline_name ${pipelineName}`);
+                    setPipelineRunArgs(`--pipeline_name ${pipeline.name}`);
                     setPipelineCloudModal(true);
                   }}
                 />

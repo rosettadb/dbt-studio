@@ -27,6 +27,7 @@ type Props = {
   selectedPath?: string;
   onRenameCallback?: (oldPath: string, newPath: string) => void;
   onRunPipeline?: (filePath: string) => void;
+  onRunPipelineLocal?: (filePath: string) => void;
 };
 
 const filterTreeAndCollectExpanded = (
@@ -75,6 +76,7 @@ const FileTreeViewer: React.FC<Props> = ({
   selectedPath,
   onRenameCallback,
   onRunPipeline,
+  onRunPipelineLocal,
 }) => {
   const { data: project } = useGetSelectedProject();
   const { data: settings } = useGetSettings();
@@ -177,6 +179,13 @@ const FileTreeViewer: React.FC<Props> = ({
         onRunPipeline={
           settings?.env === 'cloud' && !settings?.dbtVersion?.startsWith('2.')
             ? onRunPipeline
+            : undefined
+        }
+        onRunPipelineLocal={
+          settings?.env !== 'cloud' &&
+          !settings?.dbtVersion?.startsWith('2.') &&
+          settings?.runnerPath
+            ? onRunPipelineLocal
             : undefined
         }
       />
