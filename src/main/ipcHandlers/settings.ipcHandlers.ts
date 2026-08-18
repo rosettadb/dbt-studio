@@ -1,7 +1,7 @@
 import { BrowserWindow, dialog, ipcMain, app } from 'electron';
 import { initializeDataStorage } from '../utils/setupHelpers';
 import { FileDialogProperties, SettingsType } from '../../types/backend';
-import { SettingsService } from '../services';
+import { SettingsService, RunnerService } from '../services';
 import { SettingsChannels } from '../../types/ipc';
 import { DbtCoreVersionService } from '../services/dbtCoreVersion.service';
 
@@ -15,6 +15,10 @@ const handlerChannels: SettingsChannels[] = [
   'version:rosetta:check',
   'version:rosetta:install',
   'version:rosetta:uninstall',
+  'version:runner:check',
+  'version:runner:install',
+  'version:runner:uninstall',
+  'runner:plugins:check',
   'settings:reset-factory',
   'settings:restart',
   'settings:getBasename',
@@ -31,6 +35,9 @@ const handlerChannels: SettingsChannels[] = [
   'dbt:package:uninstall',
   'dbt:packageVersions:list',
   'dbt:packageVersion:install',
+  'kisql:install',
+  'kisql:uninstall',
+  'kisql:check',
 ];
 
 const removeSettingsIpcHandlers = () => {
@@ -101,6 +108,23 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
 
   ipcMain.handle('version:rosetta:uninstall', async () => {
     return SettingsService.uninstallRosetta();
+  });
+
+  // Local runner binary version management handlers
+  ipcMain.handle('version:runner:check', async () => {
+    return RunnerService.checkRunnerVersions();
+  });
+
+  ipcMain.handle('version:runner:install', async (_event, version: string) => {
+    return RunnerService.installRunnerVersion(version);
+  });
+
+  ipcMain.handle('version:runner:uninstall', async () => {
+    return RunnerService.uninstallRunnerVersion();
+  });
+
+  ipcMain.handle('runner:plugins:check', async () => {
+    return RunnerService.checkPluginDependencies();
   });
 
   ipcMain.handle('settings:reset-factory', async (event) => {
@@ -195,6 +219,19 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
 
   ipcMain.handle('dbt:packageVersion:install', async (_event, req) => {
     return DbtCoreVersionService.installPackageVersion(req);
+  });
+
+  // KiSQL (Kinetica CLI) handlers
+  ipcMain.handle('kisql:check', async () => {
+    return RunnerService.checkKisqlVersion();
+  });
+
+  ipcMain.handle('kisql:install', async () => {
+    return RunnerService.installKisql();
+  });
+
+  ipcMain.handle('kisql:uninstall', async () => {
+    return RunnerService.uninstallKisql();
   });
 };
 

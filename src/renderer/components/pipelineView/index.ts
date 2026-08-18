@@ -1,5 +1,6 @@
 export { PipelineView } from './PipelineView';
 export { CloudLogViewer } from './CloudLogViewer';
+export { RunnerLogViewer } from './RunnerLogViewer';
 export {
   isPipelineFile,
   parsePipelineConfig,

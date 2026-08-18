@@ -7,6 +7,7 @@ import {
   registerGitHandlers,
   registerUtilsHandlers,
   registerProcessHandlers,
+  registerRunnerHandlers,
   registerSecureStorageHandlers,
   registerUpdateHandlers,
   registerCloudExplorerHandlers,
@@ -38,6 +39,7 @@ const registerHandlers = (mainWindow: BrowserWindow) => {
   registerGitHandlers();
   registerUtilsHandlers();
   registerProcessHandlers(mainWindow);
+  registerRunnerHandlers(mainWindow);
   registerSecureStorageHandlers();
   registerUpdateHandlers();
   registerCloudExplorerHandlers();
