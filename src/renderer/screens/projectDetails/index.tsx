@@ -9,6 +9,7 @@ import {
   Cable,
   Delete,
   Edit,
+  Search as SearchIcon,
 } from '@mui/icons-material';
 import {
   Badge,
@@ -244,6 +245,12 @@ const ProjectDetails: React.FC = () => {
     React.useState<string>();
   const [isSynchronizing, setIsSynchronizing] = React.useState(false);
   const [sidebarTab, setSidebarTab] = React.useState<SidebarTab>('explorer');
+  const [revealPosition, setRevealPosition] = React.useState<{
+    path: string;
+    line: number;
+    column: number;
+    length: number;
+  } | null>(null);
   const [pipelineModalOpen, setPipelineModalOpen] = React.useState(false);
   const [pipelineRunArgs, setPipelineRunArgs] = React.useState('');
   const [pipelineCloudModal, setPipelineCloudModal] = React.useState(false);
@@ -258,6 +265,26 @@ const ProjectDetails: React.FC = () => {
       setPipelineCloudModal(true);
     },
     [project?.path],
+  );
+
+  // Opens a "find in files" match as a plain editor tab (bypassing the
+  // structured pipeline-yaml view) so the matched line can be revealed.
+  const handleSearchResultSelect = React.useCallback(
+    async (selection: {
+      path: string;
+      line: number;
+      column: number;
+      length: number;
+    }) => {
+      setSelectedFilePath(selection.path);
+      if (!utils.isEditableFile(selection.path)) {
+        await openTab(selection.path, { isReadOnly: true });
+        return;
+      }
+      await openTab(selection.path);
+      setRevealPosition(selection);
+    },
+    [openTab, setSelectedFilePath],
   );
 
   // Pipeline tab support — derive state from the currently active tab
@@ -1234,6 +1261,22 @@ const ProjectDetails: React.FC = () => {
                 label="Explorer"
               />
               <Tab
+                value="search"
+                icon={
+                  <SearchIcon
+                    sx={{
+                      fontSize: 15,
+                      color:
+                        sidebarTab === 'search'
+                          ? theme.palette.primary.main
+                          : theme.palette.text.secondary,
+                    }}
+                  />
+                }
+                iconPosition="start"
+                label="Search"
+              />
+              <Tab
                 value="scm"
                 icon={
                   <Badge
@@ -1367,6 +1410,7 @@ const ProjectDetails: React.FC = () => {
               // Synchronization
               onSourceControlSynchronize={handleSynchronizeAll}
               isSourceControlSynchronizing={isSynchronizing}
+              onSearchResultSelect={handleSearchResultSelect}
               // Connections
               connection={connection}
               onAddConnection={() => setIsAddConnectionModalOpen(true)}
@@ -1676,6 +1720,8 @@ const ProjectDetails: React.FC = () => {
                             onTogglePreviewTab={handleTogglePreviewTab}
                             onExecuteQuery={handleExecuteEditorQuery}
                             onExecuteCte={handleExecuteEditorCte}
+                            revealPosition={revealPosition}
+                            onRevealHandled={() => setRevealPosition(null)}
                             extraActions={
                               <>
                                 {menuItems.length > 0 && (

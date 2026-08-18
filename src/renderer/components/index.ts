@@ -2,6 +2,7 @@ export * from './sidebar';
 export * from './splash';
 export * from './menu';
 export * from './fileTreeViewer';
+export * from './searchInFiles';
 export * from './editor';
 export * from './modals';
 export * from './loader';
