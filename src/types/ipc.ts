@@ -59,6 +59,7 @@ export type ProjectChannels =
   | 'project:getPath'
   | 'project:getDirectory'
   | 'project:readFile'
+  | 'project:searchInFiles'
   | 'project:updateFile'
   | 'project:configureConnection'
   | 'project:postRosettaDBTCopy'

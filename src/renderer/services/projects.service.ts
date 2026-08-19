@@ -3,6 +3,7 @@ import {
   GenerateDashboardResponseType,
   ConnectionInput,
   FileNode,
+  FileSearchResponse,
   Project,
   Table,
   EnhanceModelResponseType,
@@ -112,6 +113,24 @@ export const getFileContent = async (body: {
     'project:readFile',
     body,
   );
+  return data;
+};
+
+export const searchInFiles = async (body: {
+  path: string;
+  query: string;
+  caseSensitive?: boolean;
+  useRegex?: boolean;
+}): Promise<FileSearchResponse> => {
+  const { data } = await client.post<
+    {
+      path: string;
+      query: string;
+      caseSensitive?: boolean;
+      useRegex?: boolean;
+    },
+    FileSearchResponse
+  >('project:searchInFiles', body);
   return data;
 };
 

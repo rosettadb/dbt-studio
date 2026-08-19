@@ -29,6 +29,7 @@ import {
   loadDatabaseFile,
   readFileContent,
   saveFileContent,
+  searchInFiles,
   updateDatabase,
 } from '../utils/fileHelper';
 import SettingsService from './settings.service';
@@ -745,6 +746,18 @@ export default class ProjectsService {
 
   static readFileContent(filePath: string) {
     return readFileContent(filePath);
+  }
+
+  static searchInFiles(body: {
+    path: string;
+    query: string;
+    caseSensitive?: boolean;
+    useRegex?: boolean;
+  }) {
+    return searchInFiles(body.path, body.query, {
+      caseSensitive: body.caseSensitive,
+      useRegex: body.useRegex,
+    });
   }
 
   static async saveFileContent(filePath: string, content: string) {

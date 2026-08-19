@@ -606,6 +606,23 @@ export type FileNode = {
 
 export type FileNodeWithContent = FileNode & { content: string };
 
+export type FileSearchMatch = {
+  line: number;
+  column: number;
+  length: number;
+  lineText: string;
+};
+
+export type FileSearchResult = {
+  path: string;
+  matches: FileSearchMatch[];
+};
+
+export type FileSearchResponse = {
+  results: FileSearchResult[];
+  truncated: boolean;
+};
+
 export type CustomError = {
   message?: string;
 };
