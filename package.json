@@ -326,6 +326,11 @@
       "description": "A studio for managing dbt projects"
     },
     "flatpak": {
+      "runtime": "org.freedesktop.Platform",
+      "runtimeVersion": "24.08",
+      "sdk": "org.freedesktop.Sdk",
+      "base": "org.electronjs.Electron2.BaseApp",
+      "baseVersion": "24.08",
       "finishArgs": [
         "--socket=wayland",
         "--socket=x11",
