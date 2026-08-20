@@ -697,13 +697,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y flatpak flatpak-builder
           flatpak remote-add --if-not-exists --user flathub https://flathub.org/repo/flathub.flatpakrepo
+          # Install required runtimes for building
+          flatpak install -y --user flathub org.freedesktop.Platform//24.08
+          flatpak install -y --user flathub org.freedesktop.Sdk//24.08
+          # Install Electron BaseApp
+          flatpak install -y --user flathub org.electronjs.Electron2.BaseApp//24.08
 
       - name: Build project
         run: npm run build
 
       - name: Build for Linux (no publish yet)
+        env:
+          DEBUG: "@malept/flatpak-bundler"
         run: |
-          npm exec electron-builder -- --publish never --linux deb rpm flatpak
+          npm exec electron-builder -- --publish never --linux deb rpm flatpak --verbose
 
       - name: Recalculate hashes for latest-linux.yml
         run: |
