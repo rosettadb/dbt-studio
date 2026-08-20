@@ -80,6 +80,15 @@ const EditConnection: React.FC = () => {
           />
         );
       }
+      case 'sqlite': {
+        return (
+          <Connections.SQLite
+            key={connId}
+            onCancel={handleCancel}
+            connection={conn}
+          />
+        );
+      }
       case 'kinetica': {
         return (
           <Connections.Kinetica

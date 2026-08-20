@@ -6,6 +6,7 @@ export * from './MCPServersTab';
 export * from './SkillsTab';
 export * from './DbtSettings';
 export * from './RosettaSettings';
+export * from './RunnerSettings';
 export * from './AboutSettings';
 export * from './InstallationSettings';
 export * from './DuckDBWorkspaceCard';

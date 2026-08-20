@@ -72,6 +72,7 @@ const obj: { images: Image } = {
     databricks,
     duckdb,
     ducklake,
+    sqlite,
     mysql,
     oracle,
     db2,

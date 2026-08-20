@@ -39,6 +39,7 @@ import CodeIcon from '@mui/icons-material/Code';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import SaveIcon from '@mui/icons-material/Save';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import StopIcon from '@mui/icons-material/Stop';
 import type { PipelineJob } from './types';
 import { PipelineNode, type PipelineNodeData } from './PipelineNode';
 import { NodePalette } from './NodePalette';
@@ -63,6 +64,10 @@ type PipelineGraphProps = {
   onRun?: () => void;
   /** When set, the Run button is shown but disabled with this text as its tooltip. */
   runDisabledReason?: string;
+  /** When true, the Run button is replaced with a Stop button. */
+  isRunning?: boolean;
+  /** Called when the Stop button is clicked (only rendered while isRunning). */
+  onStop?: () => void;
   onEditingChange?: (isEditing: boolean) => void;
   /** Fired once when the pipeline view first mounts (e.g. tab opened). */
   onEnterView?: () => void;
@@ -181,6 +186,8 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
   onSave,
   onRun,
   runDisabledReason,
+  isRunning,
+  onStop,
   onEditingChange,
   onEnterView,
 }) => {
@@ -594,7 +601,18 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
             Edit
           </Button>
         )}
-        {onRun && (
+        {onRun && isRunning && onStop && (
+          <Button
+            size="small"
+            variant="outlined"
+            color="error"
+            onClick={onStop}
+            startIcon={<StopIcon sx={{ fontSize: 14 }} />}
+          >
+            Stop
+          </Button>
+        )}
+        {onRun && !(isRunning && onStop) && (
           <Tooltip title={runDisabledReason || ''}>
             <span>
               <Button
@@ -753,6 +771,8 @@ export const PipelineGraph: React.FC<PipelineGraphProps> = ({
   onSave,
   onRun,
   runDisabledReason,
+  isRunning,
+  onStop,
   onEditingChange,
   onEnterView,
 }) => (
@@ -764,6 +784,8 @@ export const PipelineGraph: React.FC<PipelineGraphProps> = ({
       onSave={onSave}
       onRun={onRun}
       runDisabledReason={runDisabledReason}
+      isRunning={isRunning}
+      onStop={onStop}
       onEditingChange={onEditingChange}
       onEnterView={onEnterView}
     />

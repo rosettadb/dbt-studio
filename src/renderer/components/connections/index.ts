@@ -4,6 +4,7 @@ import { BigQuery } from './bigquery';
 import { Redshift } from './redshift';
 import { Databricks } from './databricks';
 import { DuckDB } from './duckdb';
+import { SQLite } from './sqlite';
 import { Kinetica } from './kinetica';
 
 export const Connections = {
@@ -13,5 +14,6 @@ export const Connections = {
   Redshift,
   Databricks,
   DuckDB,
+  SQLite,
   Kinetica,
 };

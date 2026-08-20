@@ -9,6 +9,7 @@ import useRosettaDBT from './useRosettaDBT';
 import useDbt from './useDbt';
 import useConnectionInput from './useConnectionInput';
 import useProcess from './useProcessContext';
+import useRunner from './useRunnerContext';
 import useSecureStorage from './useSecureStorage';
 import useTabManager from './useTabManager';
 import useDuckLakeConnection from './useDuckLakeConnection';
@@ -35,6 +36,7 @@ export {
   useDbt,
   useConnectionInput,
   useProcess,
+  useRunner,
   useSecureStorage,
   useTabManager,
   useDuckLakeConnection,

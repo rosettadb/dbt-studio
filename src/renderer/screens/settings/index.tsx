@@ -26,6 +26,7 @@ import {
   ProfileSettings,
   DbtSettings,
   RosettaSettings,
+  RunnerSettings,
   AboutSettings,
   AIProvidersSettings,
   DuckDBSettings,
@@ -102,6 +103,7 @@ const Settings: React.FC = () => {
     if (section === 'profile') return 'Rosetta Cloud';
     if (section === 'duckdb') return 'DuckDB';
     if (section === 'flowfile') return 'Flowfile';
+    if (section === 'runner') return 'Local Runner';
     if (section === 'keystore') return 'Keystore';
     if (section === 'task-manager') return 'Task Manager';
     return section.charAt(0).toUpperCase() + section.slice(1).replace('-', ' ');
@@ -139,6 +141,8 @@ const Settings: React.FC = () => {
         );
       case 'rosetta':
         return <RosettaSettings settings={localSettings} />;
+      case 'runner':
+        return <RunnerSettings settings={localSettings} />;
       case 'flowfile':
         return (
           <FlowfileSettings

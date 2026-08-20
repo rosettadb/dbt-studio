@@ -13,6 +13,8 @@ import {
   FileDialogProperties,
   SettingsType,
   RosettaVersionInfo,
+  RunnerVersionInfo,
+  RunnerPluginStatus,
   InstallResult,
 } from '../../types/backend';
 import { QUERY_KEYS } from '../config/constants';
@@ -222,6 +224,82 @@ export const useUninstallRosetta = (
   });
 };
 
+export const useCheckRunnerVersions = (
+  customOptions?: UseMutationOptions<RunnerVersionInfo, CustomError, void>,
+): UseMutationResult<RunnerVersionInfo, CustomError, void> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  return useMutation({
+    mutationFn: async () => {
+      return settingsServices.checkRunnerVersions();
+    },
+    onSuccess: (...args) => {
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useInstallRunnerVersion = (
+  customOptions?: UseMutationOptions<InstallResult, CustomError, string>,
+): UseMutationResult<InstallResult, CustomError, string> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (version: string) => {
+      return settingsServices.installRunnerVersion(version);
+    },
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useUninstallRunnerVersion = (
+  customOptions?: UseMutationOptions<void, CustomError, void>,
+): UseMutationResult<void, CustomError, void> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      return settingsServices.uninstallRunnerVersion();
+    },
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useCheckRunnerPluginDependencies = (
+  customOptions?: UseMutationOptions<RunnerPluginStatus[], CustomError, void>,
+): UseMutationResult<RunnerPluginStatus[], CustomError, void> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  return useMutation({
+    mutationFn: async () => {
+      return settingsServices.checkRunnerPluginDependencies();
+    },
+    onSuccess: (...args) => {
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
 // DuckDB hooks
 export const useGetDuckDbMetadata = (
   customOptions?: UseQueryOptions<any, CustomError, any>,
@@ -297,5 +375,78 @@ export const useDiagnoseDuckDb = (
     },
     ...customOptions,
     refetchInterval: 5000, // Auto-refresh every 5s when open
+  });
+};
+
+// KiSQL (Kinetica CLI) controllers
+export const useCheckKisqlVersion = (
+  customOptions?: UseMutationOptions<
+    {
+      installed: boolean;
+      version?: string;
+      path?: string;
+      latestSha?: string;
+      updateAvailable?: boolean;
+    },
+    CustomError,
+    void
+  >,
+): UseMutationResult<
+  {
+    installed: boolean;
+    version?: string;
+    path?: string;
+    latestSha?: string;
+    updateAvailable?: boolean;
+  },
+  CustomError,
+  void
+> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  return useMutation({
+    mutationFn: async () => settingsServices.checkKisqlVersion(),
+    onSuccess: (...args) => onCustomSuccess?.(...args),
+    onError: (...args) => onCustomError?.(...args),
+  });
+};
+
+export const useInstallKisql = (
+  customOptions?: UseMutationOptions<
+    { success: boolean; version: string; path: string; error?: string },
+    CustomError,
+    void
+  >,
+): UseMutationResult<
+  { success: boolean; version: string; path: string; error?: string },
+  CustomError,
+  void
+> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => settingsServices.installKisql(),
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => onCustomError?.(...args),
+  });
+};
+
+export const useUninstallKisql = (
+  customOptions?: UseMutationOptions<void, CustomError, void>,
+): UseMutationResult<void, CustomError, void> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => settingsServices.uninstallKisql(),
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => onCustomError?.(...args),
   });
 };

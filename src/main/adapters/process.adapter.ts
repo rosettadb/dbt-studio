@@ -13,6 +13,27 @@ interface ProcessInfo {
   platform: string;
 }
 
+interface ProcessDoneResult {
+  code: number | null;
+  signal: string | null;
+  duration: number;
+  success: boolean;
+  errorMessage?: string;
+}
+
+interface ProcessStartOptions {
+  // When provided, the binary is spawned directly with these args (no shell
+  // string interpolation) - needed for callers that must pass structured env
+  // vars / paths safely (e.g. the local runner binary).
+  args?: string[];
+  cwd?: string;
+  env?: Record<string, string>;
+  // Called in the main process when the process exits, in addition to the
+  // 'done' IPC event sent to the renderer - lets a caller (e.g. the runner
+  // IPC handler) react to completion without a renderer round-trip.
+  onDone?: (result: ProcessDoneResult) => void;
+}
+
 class ProcessAdapter {
   private process: ChildProcessWithoutNullStreams | null = null;
 
@@ -23,12 +44,28 @@ class ProcessAdapter {
 
   private mainWindow: BrowserWindow | null = null;
 
-  start(command: string, mainWindow: BrowserWindow) {
+  private onDoneCallback: ProcessStartOptions['onDone'] | null = null;
+
+  // Channel names are prefixed so multiple ProcessAdapter instances (e.g. the
+  // shared "docs serve" process vs. the local runner) can broadcast on
+  // distinct IPC channels instead of colliding on 'process:*'.
+  private channelPrefix: string;
+
+  constructor(channelPrefix: string = 'process') {
+    this.channelPrefix = channelPrefix;
+  }
+
+  start(
+    command: string,
+    mainWindow: BrowserWindow,
+    options?: ProcessStartOptions,
+  ) {
     if (this.process) {
       throw new Error('A process is already running.');
     }
 
     this.mainWindow = mainWindow;
+    this.onDoneCallback = options?.onDone ?? null;
 
     try {
       // Platform-specific command handling
@@ -36,7 +73,10 @@ class ProcessAdapter {
       let spawnCommand: string;
       let spawnArgs: string[];
 
-      if (platform === 'win32') {
+      if (options?.args) {
+        spawnCommand = command;
+        spawnArgs = options.args;
+      } else if (platform === 'win32') {
         spawnCommand = 'cmd';
         spawnArgs = ['/c', command];
       } else {
@@ -50,12 +90,51 @@ class ProcessAdapter {
         detached: platform !== 'win32',
         // Set up proper signal handling
         windowsHide: platform === 'win32',
+        cwd: options?.cwd,
+        env: options?.env ? { ...process.env, ...options.env } : undefined,
       });
 
-      const { pid } = this.process;
+      // Attach listeners (especially 'error') before doing anything else that
+      // could throw. spawn() failures (e.g. EACCES/ENOENT) are reported
+      // asynchronously via the 'error' event on the next tick - if that event
+      // has no listener by the time it fires, Node treats it as an uncaught
+      // exception and crashes the whole process, instead of just this call.
+      const currentProcess = this.process;
+
+      currentProcess.on('error', (err) => {
+        this.sendError(`Process error: ${err.message || err.toString()}`);
+        this.handleProcessEnd(-1, null, 'error', err.message);
+      });
+
+      // 'close' (not 'exit') is the finalization trigger: 'exit' can fire
+      // before stdout/stderr have finished delivering buffered 'data' events,
+      // and handleProcessEnd() nulls out mainWindow via cleanup() - so
+      // finalizing on 'exit' can silently drop trailing output that arrives
+      // after cleanup but before the streams actually close.
+      currentProcess.on('close', (code, signal) => {
+        this.handleProcessEnd(code, signal, 'close');
+      });
+
+      currentProcess.stdout.on('data', (data) => {
+        if (this.processInfo) {
+          this.processInfo.status = 'running';
+        }
+        this.sendOutput(String(data));
+      });
+
+      currentProcess.stderr.on('data', (data) => {
+        if (this.processInfo) {
+          this.processInfo.status = 'running';
+        }
+        this.sendError(String(data));
+      });
+
+      const { pid } = currentProcess;
 
       if (!pid) {
-        throw new Error('Failed to get process PID');
+        // spawn() already failed synchronously; the 'error'/'exit' listeners
+        // above will handle reporting and cleanup once Node emits them.
+        return;
       }
 
       this.processInfo = {
@@ -66,7 +145,7 @@ class ProcessAdapter {
         platform,
       };
 
-      this.sendEvent('process:started', {
+      this.sendEvent('started', {
         pid,
         command,
         startTime: this.processInfo.startTime,
@@ -76,38 +155,6 @@ class ProcessAdapter {
       this.sendOutput(
         `Started process (PID: ${pid}) on ${platform}: ${command}`,
       );
-
-      // Handle stdout
-      this.process.stdout.on('data', (data) => {
-        if (this.processInfo) {
-          this.processInfo.status = 'running';
-        }
-        this.sendOutput(String(data));
-      });
-
-      // Handle stderr
-      this.process.stderr.on('data', (data) => {
-        if (this.processInfo) {
-          this.processInfo.status = 'running';
-        }
-        this.sendError(String(data));
-      });
-
-      // Handle process close
-      this.process.on('close', (code, signal) => {
-        this.handleProcessEnd(code, signal, 'close');
-      });
-
-      // Handle process exit
-      this.process.on('exit', (code, signal) => {
-        this.handleProcessEnd(code, signal, 'exit');
-      });
-
-      // Handle process errors
-      this.process.on('error', (err) => {
-        this.sendError(`Process error: ${err.message || err.toString()}`);
-        this.handleProcessEnd(-1, null, 'error', err.message);
-      });
 
       // Mark as running after successful setup
       if (this.processInfo) {
@@ -125,16 +172,22 @@ class ProcessAdapter {
     eventType: string,
     errorMessage?: string,
   ) {
-    if (!this.processInfo) return;
+    // this.process (not processInfo) is the idempotency guard: 'close' and
+    // 'exit' can both fire for one process, and processInfo may never have
+    // been set at all if spawn() itself failed (e.g. EACCES) before a pid
+    // was assigned - that case must still be reported and cleaned up, not
+    // silently dropped, or the adapter gets stuck "running" forever.
+    if (!this.process) return;
 
+    const startTime = this.processInfo?.startTime ?? Date.now();
     const endTime = Date.now();
-    const duration = endTime - this.processInfo.startTime;
+    const duration = endTime - startTime;
 
-    this.sendEvent('process:exit', {
+    this.sendEvent('exit', {
       code,
       signal,
       duration,
-      pid: this.processInfo.pid,
+      pid: this.processInfo?.pid ?? null,
       eventType,
     });
 
@@ -142,13 +195,15 @@ class ProcessAdapter {
       `Process ended (${eventType}) with code ${code}${signal ? `, signal ${signal}` : ''} after ${Math.round(duration / 1000)}s`,
     );
 
-    this.sendEvent('process:done', {
+    const doneResult: ProcessDoneResult = {
       code,
       signal,
       duration,
       success: code === 0,
       errorMessage,
-    });
+    };
+    this.sendEvent('done', doneResult);
+    this.onDoneCallback?.(doneResult);
 
     this.cleanup();
   }
@@ -304,23 +359,24 @@ class ProcessAdapter {
     this.process = null;
     this.processInfo = null;
     this.mainWindow = null;
+    this.onDoneCallback = null;
   }
 
   private sendEvent(event: string, data: any) {
     if (this.mainWindow) {
-      this.mainWindow.webContents.send(event, data);
+      this.mainWindow.webContents.send(`${this.channelPrefix}:${event}`, data);
     }
   }
 
   private sendOutput(message: string) {
     if (this.mainWindow) {
-      this.mainWindow.webContents.send('process:output', message);
+      this.mainWindow.webContents.send(`${this.channelPrefix}:output`, message);
     }
   }
 
   private sendError(message: string) {
     if (this.mainWindow) {
-      this.mainWindow.webContents.send('process:error', message);
+      this.mainWindow.webContents.send(`${this.channelPrefix}:error`, message);
     }
   }
 
