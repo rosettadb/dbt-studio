@@ -692,12 +692,18 @@ jobs:
           npm install
           npm run postinstall
 
+      - name: Install flatpak-builder
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder
+          flatpak remote-add --if-not-exists --user flathub https://flathub.org/repo/flathub.flatpakrepo
+
       - name: Build project
         run: npm run build
 
       - name: Build for Linux (no publish yet)
         run: |
-          npm exec electron-builder -- --publish never --linux deb rpm
+          npm exec electron-builder -- --publish never --linux deb rpm flatpak
 
       - name: Recalculate hashes for latest-linux.yml
         run: |
@@ -787,7 +793,7 @@ jobs:
             echo "Current directory contents:"
             ls -la
             echo "Searching for build artifacts..."
-            find . -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage" | head -10
+            find . -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage" -o -name "*.flatpak" | head -10
             exit 1
           fi
 
@@ -806,7 +812,7 @@ jobs:
 
           # Upload Linux files to the draft release
           uploaded=false
-          for file in *.deb *.rpm *.AppImage *.tar.gz latest-linux.yml; do
+          for file in *.deb *.rpm *.AppImage *.flatpak *.tar.gz latest-linux.yml; do
             if [[ -f "$file" ]]; then
               echo "Uploading Linux file: $file to release $RELEASE_TAG"
               gh release upload "$RELEASE_TAG" "$file" --clobber

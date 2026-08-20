@@ -317,12 +317,25 @@
     },
     "linux": {
       "target": [
-        "deb"
+        "deb",
+        "flatpak"
       ],
       "category": "Development",
       "maintainer": "RosettaDB",
       "synopsis": "Rosetta DBT Studio",
       "description": "A studio for managing dbt projects"
+    },
+    "flatpak": {
+      "finishArgs": [
+        "--socket=wayland",
+        "--socket=x11",
+        "--share=ipc",
+        "--device=dri",
+        "--socket=pulseaudio",
+        "--filesystem=host",
+        "--share=network",
+        "--talk-name=org.freedesktop.Notifications"
+      ]
     },
     "directories": {
       "app": "release/app",
