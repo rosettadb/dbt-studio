@@ -710,7 +710,7 @@ jobs:
         env:
           DEBUG: "@malept/flatpak-bundler"
         run: |
-          npm exec electron-builder -- --publish never --linux deb rpm flatpak --verbose
+          npm exec electron-builder -- --publish never --linux deb rpm flatpak
 
       - name: Recalculate hashes for latest-linux.yml
         run: |
