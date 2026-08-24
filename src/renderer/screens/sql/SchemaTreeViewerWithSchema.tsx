@@ -44,13 +44,24 @@ export const SchemaTreeViewerWithSchema: React.FC<Props> = React.memo(
     ]);
 
     const filteredTables = React.useMemo(() => {
-      if (!filter) return tables;
       const lowerFilter = filter.toLowerCase();
-      return tables.filter(
-        (table) =>
-          table.name.toLowerCase().includes(lowerFilter) ||
-          table.schema.toLowerCase().includes(lowerFilter),
-      );
+      const seen = new Set<string>();
+
+      // Tree items are keyed by "schema.name", and the tree view throws if two
+      // items share an id, which would blank the whole screen. Drop repeats.
+      return tables.filter((table) => {
+        if (
+          filter &&
+          !table.name.toLowerCase().includes(lowerFilter) &&
+          !table.schema.toLowerCase().includes(lowerFilter)
+        ) {
+          return false;
+        }
+        const id = `${table.schema}.${table.name}`;
+        if (seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
     }, [tables, filter]);
 
     const schemaMap = React.useMemo(() => {
