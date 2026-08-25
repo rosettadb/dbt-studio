@@ -17,6 +17,7 @@ import {
   RunnerPluginStatus,
   InstallResult,
   PythonInstallInfo,
+  PythonVersionInfo,
 } from '../../types/backend';
 import { QUERY_KEYS } from '../config/constants';
 import { useApiKey } from './rosettaCloud.controller';
@@ -273,6 +274,44 @@ export const useUninstallPython = (
   return useMutation({
     mutationFn: async () => {
       return settingsServices.uninstallPython();
+    },
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useCheckPythonVersions = (
+  customOptions?: UseMutationOptions<PythonVersionInfo, CustomError, void>,
+): UseMutationResult<PythonVersionInfo, CustomError, void> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  return useMutation({
+    mutationFn: async () => {
+      return settingsServices.checkPythonVersions();
+    },
+    onSuccess: (...args) => {
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useInstallPythonVersion = (
+  customOptions?: UseMutationOptions<InstallResult, CustomError, string>,
+): UseMutationResult<InstallResult, CustomError, string> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (version: string) => {
+      return settingsServices.installPythonVersion(version);
     },
     onSuccess: async (...args) => {
       await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);

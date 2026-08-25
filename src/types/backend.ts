@@ -603,6 +603,18 @@ export type PythonInstallInfo = {
   path: string | null;
 };
 
+export type PythonVersionInfo = {
+  currentVersion: string | null;
+  currentPath: string | null;
+  recommendedVersion: string;
+  availableVersions: {
+    version: string;
+    isRecommended: boolean;
+    isNewer: boolean;
+    isOlder: boolean;
+  }[];
+};
+
 export type FileNode = {
   id: string;
   name: string;

@@ -22,6 +22,8 @@ export type SettingsChannels =
   | 'version:python:check'
   | 'version:python:install'
   | 'version:python:uninstall'
+  | 'version:python:versions:check'
+  | 'version:python:versions:install'
   | 'version:runner:check'
   | 'version:runner:install'
   | 'version:runner:uninstall'

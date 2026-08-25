@@ -1,37 +1,70 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Button,
   Box,
+  Chip,
   Typography,
   Alert,
   CircularProgress,
   Backdrop,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemSecondaryAction,
+  Divider,
 } from '@mui/material';
-import { CheckCircle, Delete, Download, Warning } from '@mui/icons-material';
+import {
+  CheckCircle,
+  Delete,
+  Download,
+  Refresh,
+  Warning,
+} from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import { SettingsType } from '../../../types/backend';
+import { SettingsType, PythonVersionInfo } from '../../../types/backend';
 import { ConfirmationModal } from '../modals';
-import { useInstallPython, useUninstallPython } from '../../controllers';
+import {
+  useCheckPythonVersions,
+  useInstallPythonVersion,
+  useUninstallPython,
+} from '../../controllers';
 
 interface PythonSettingsProps {
   settings: SettingsType;
 }
 
 export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
+  const [versionInfo, setVersionInfo] = useState<PythonVersionInfo | null>(
+    null,
+  );
+  const [pendingVersion, setPendingVersion] = useState<string | null>(null);
+  const [installingVersion, setInstallingVersion] = useState<string | null>(
+    null,
+  );
   const [showUninstallConfirmation, setShowUninstallConfirmation] =
     useState(false);
   const [isBlocking, setIsBlocking] = useState(false);
 
-  const installPython = useInstallPython({
+  const checkVersions = useCheckPythonVersions({
+    onSuccess: (data) => setVersionInfo(data),
+    onError: (error) => {
+      toast.error(`Failed to check Python versions: ${error.message}`);
+    },
+  });
+
+  const installVersion = useInstallPythonVersion({
     onSuccess: (result) => {
+      setInstallingVersion(null);
       setIsBlocking(false);
       if (result.success) {
         toast.success(`Python ${result.version} installed successfully`);
+        checkVersions.mutate();
       } else {
         toast.error(`Installation failed: ${result.error}`);
       }
     },
     onError: (error) => {
+      setInstallingVersion(null);
       setIsBlocking(false);
       toast.error(`Installation failed: ${error.message}`);
     },
@@ -41,6 +74,8 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
     onSuccess: () => {
       setIsBlocking(false);
       toast.success('Python uninstalled successfully');
+      setVersionInfo(null);
+      checkVersions.mutate();
     },
     onError: (error) => {
       setIsBlocking(false);
@@ -48,9 +83,34 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
     },
   });
 
-  const handleInstall = () => {
+  useEffect(() => {
+    checkVersions.mutate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const isInstalled = Boolean(settings.pythonPath);
+
+  const requestInstallVersion = (version: string) => {
+    if (isInstalled && version !== settings.pythonVersion) {
+      setPendingVersion(version);
+      return;
+    }
+    setInstallingVersion(version);
     setIsBlocking(true);
-    installPython.mutate();
+    installVersion.mutate(version);
+  };
+
+  const confirmVersionSwitch = () => {
+    if (!pendingVersion) return;
+    const version = pendingVersion;
+    setPendingVersion(null);
+    setInstallingVersion(version);
+    setIsBlocking(true);
+    installVersion.mutate(version);
+  };
+
+  const cancelVersionSwitch = () => {
+    setPendingVersion(null);
   };
 
   const handleUninstall = () => {
@@ -67,9 +127,18 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
     setShowUninstallConfirmation(false);
   };
 
-  const isInstalled = Boolean(settings.pythonPath);
-  let installButtonLabel = isInstalled ? 'Reinstall Python' : 'Install Python';
-  if (installPython.isLoading) installButtonLabel = 'Installing...';
+  const getButtonLabel = (version: string) => {
+    if (version === settings.pythonVersion) return 'Installed';
+    if (installingVersion === version) return 'Installing...';
+    const currentVersion = settings.pythonVersion;
+    if (!currentVersion) return 'Install';
+    const entry = versionInfo?.availableVersions.find(
+      (v) => v.version === version,
+    );
+    if (entry?.isNewer) return 'Upgrade';
+    if (entry?.isOlder) return 'Downgrade';
+    return 'Install';
+  };
 
   return (
     <Box sx={{ maxWidth: 800 }}>
@@ -104,27 +173,107 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
           <Typography variant="body1">
             Python is not installed. It will be installed automatically when
             needed (for example, when installing dbt Core v1), or you can
-            install it now.
+            install the recommended version below.
           </Typography>
         </Alert>
       )}
 
-      <Box sx={{ mb: 3 }}>
+      <Box sx={{ mb: 2 }}>
         <Button
-          variant="contained"
-          onClick={handleInstall}
-          disabled={installPython.isLoading}
+          variant="outlined"
+          onClick={() => checkVersions.mutate()}
+          disabled={checkVersions.isLoading}
           startIcon={
-            installPython.isLoading ? (
+            checkVersions.isLoading ? (
               <CircularProgress size={16} />
             ) : (
-              <Download />
+              <Refresh />
             )
           }
         >
-          {installButtonLabel}
+          {checkVersions.isLoading ? 'Refreshing...' : 'Refresh Versions'}
         </Button>
       </Box>
+
+      {versionInfo && (
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            Available Versions
+          </Typography>
+          <List
+            sx={{
+              border: 1,
+              borderColor: 'divider',
+              borderRadius: 1,
+            }}
+          >
+            {versionInfo.availableVersions.map((entry, index) => (
+              <React.Fragment key={entry.version}>
+                <ListItem>
+                  <ListItemText
+                    primary={
+                      <Box
+                        sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
+                      >
+                        <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                          {entry.version}
+                        </Typography>
+                        {entry.isRecommended && (
+                          <Chip
+                            label="Recommended"
+                            size="small"
+                            color="primary"
+                          />
+                        )}
+                        {entry.version === settings.pythonVersion && (
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 0.5,
+                            }}
+                          >
+                            <CheckCircle color="success" fontSize="small" />
+                            <Chip
+                              label="Installed"
+                              size="small"
+                              color="success"
+                            />
+                          </Box>
+                        )}
+                      </Box>
+                    }
+                  />
+                  <ListItemSecondaryAction>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      onClick={() => requestInstallVersion(entry.version)}
+                      disabled={
+                        entry.version === settings.pythonVersion ||
+                        installingVersion === entry.version ||
+                        installVersion.isLoading
+                      }
+                      startIcon={
+                        installingVersion === entry.version ? (
+                          <CircularProgress size={16} />
+                        ) : (
+                          <Download />
+                        )
+                      }
+                    >
+                      {getButtonLabel(entry.version)}
+                    </Button>
+                  </ListItemSecondaryAction>
+                </ListItem>
+                {index < versionInfo.availableVersions.length - 1 && (
+                  <Divider />
+                )}
+              </React.Fragment>
+            ))}
+          </List>
+        </Box>
+      )}
 
       {isInstalled && (
         <Box sx={{ pt: 2, borderTop: 1, borderColor: 'divider' }}>
@@ -156,6 +305,14 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
           </Button>
         </Box>
       )}
+
+      <ConfirmationModal
+        isOpen={Boolean(pendingVersion)}
+        onClose={cancelVersionSwitch}
+        onConfirm={confirmVersionSwitch}
+        title="Switch Python Version"
+        question={`Are you sure you want to switch to Python ${pendingVersion}? This replaces the managed environment and removes dbt Core, Flowfile, and sqlglot, since they all live inside it. You'll need to reinstall them afterward.`}
+      />
 
       <ConfirmationModal
         isOpen={showUninstallConfirmation}

@@ -20,6 +20,7 @@ import {
   DuckDBMetadataPayload,
   DuckDBDiagnostics,
   PythonInstallInfo,
+  PythonVersionInfo,
 } from '../../types/backend';
 import { CliAdapter } from '../adapters';
 import { DB_FILE } from '../utils/setupHelpers';
@@ -27,6 +28,18 @@ import DuckDBBootstrap from './duckdb.service';
 import SecureStorageService from './secureStorage.service';
 
 const FACTORY_RESET_SHUTDOWN_TIMEOUT_MS = 10_000;
+
+// All built from the same python-build-standalone release tag; verified to
+// exist for macOS (arm64/x64), Linux (x64), and Windows (x64) at that tag.
+const PYTHON_BUILD_TAG = '20250409';
+const RECOMMENDED_PYTHON_VERSION = '3.10.17';
+const SUPPORTED_PYTHON_VERSIONS = [
+  '3.9.22',
+  '3.10.17',
+  '3.11.12',
+  '3.12.10',
+  '3.13.3',
+] as const;
 
 const cliConfig: Record<
   keyof CliUpdateResponseType,
@@ -331,7 +344,7 @@ export default class SettingsService {
     };
   }
 
-  static async updatePython() {
+  private static async performPythonInstall(version: string) {
     if (process.env.E2E_TESTING === 'true') {
       const settings = await this.loadSettings();
 
@@ -350,21 +363,20 @@ export default class SettingsService {
       await fs.ensureFile(dummyBinaryPath);
       await fs.chmod(dummyBinaryPath, 0o755);
 
-      settings.pythonVersion = '0.0.0-test';
+      settings.pythonVersion = version;
       settings.pythonPath = dummyBinaryPath;
       settings.pythonBinary = dummyBinaryPath;
       await this.saveSettings(settings);
 
       return {
         binaryPath: dummyBinaryPath,
-        version: '0.0.0-test',
+        version,
         status: 'installed',
       };
     }
     const settings = await this.loadSettings();
 
-    const version = '3.10.17';
-    const buildTag = '20250409';
+    const buildTag = PYTHON_BUILD_TAG;
     const { platform, arch } = process;
 
     const platformMap: Record<string, Record<string, string>> = {
@@ -400,6 +412,7 @@ export default class SettingsService {
       extractDir,
       platform === 'win32' ? 'python.exe' : 'bin/python3',
     );
+    const venvDir = path.join(userDataPath, 'venv');
 
     if (fs.existsSync(binaryPath) && settings.pythonVersion === version) {
       return {
@@ -410,11 +423,11 @@ export default class SettingsService {
     }
 
     if (settings.pythonPath && fs.existsSync(settings.pythonPath)) {
-      const oldRoot = path.resolve(
-        settings.pythonPath,
-        platform === 'win32' ? '..' : '../../',
-      );
-      await fs.remove(oldRoot);
+      // Switching (or repairing) the managed Python install wipes the venv,
+      // which also removes anything pip-installed into it (dbt-core,
+      // Flowfile, sqlglot), so clear their settings to avoid stale state.
+      await this.clearManagedVenvDependents(settings);
+      await fs.remove(venvDir);
     }
 
     await fs.mkdirp(installBase);
@@ -444,8 +457,7 @@ export default class SettingsService {
       `cd "${userDataPath}" && "${binaryPath}" -m venv venv`,
     );
     settings.pythonPath = path.join(
-      userDataPath,
-      'venv',
+      venvDir,
       platform === 'win32' ? 'Scripts/python.exe' : 'bin/python3',
     );
     await this.saveSettings(settings);
@@ -456,6 +468,10 @@ export default class SettingsService {
       version,
       status: 'installed',
     };
+  }
+
+  static async updatePython() {
+    return this.performPythonInstall(RECOMMENDED_PYTHON_VERSION);
   }
 
   // Managed Python installation status/lifecycle (separate from dbt install)
@@ -471,9 +487,46 @@ export default class SettingsService {
     };
   }
 
+  static async checkPythonVersions(): Promise<PythonVersionInfo> {
+    const settings = await this.loadSettings();
+    const currentVersion = settings.pythonVersion || null;
+    const currentPath = settings.pythonPath || null;
+
+    return {
+      currentVersion,
+      currentPath,
+      recommendedVersion: RECOMMENDED_PYTHON_VERSION,
+      availableVersions: [...SUPPORTED_PYTHON_VERSIONS]
+        .sort((a, b) => this.compareVersions(b, a))
+        .map((version) => ({
+          version,
+          isRecommended: version === RECOMMENDED_PYTHON_VERSION,
+          isNewer: currentVersion
+            ? this.compareVersions(version, currentVersion) > 0
+            : false,
+          isOlder: currentVersion
+            ? this.compareVersions(version, currentVersion) < 0
+            : false,
+        })),
+    };
+  }
+
   static async installPython(): Promise<InstallResult> {
+    return this.installPythonVersion(RECOMMENDED_PYTHON_VERSION);
+  }
+
+  static async installPythonVersion(version: string): Promise<InstallResult> {
+    if (!(SUPPORTED_PYTHON_VERSIONS as readonly string[]).includes(version)) {
+      return {
+        success: false,
+        version,
+        path: '',
+        error: `Unsupported Python version: ${version}`,
+      };
+    }
+
     try {
-      const result = await this.updatePython();
+      const result = await this.performPythonInstall(version);
       return {
         success: true,
         version: result.version,
@@ -490,17 +543,31 @@ export default class SettingsService {
     }
   }
 
-  static async uninstallPython(): Promise<void> {
-    const settings = await this.loadSettings();
-    const userDataPath = app.getPath('userData');
-
+  private static async clearManagedVenvDependents(
+    settings: SettingsType,
+  ): Promise<void> {
     try {
       const { FlowfileService } = await import('./flowfile.service');
       await FlowfileService.stop();
     } catch {
-      // Best effort; continue removing the venv even if Flowfile could not
-      // be stopped cleanly.
+      // Best effort; continue even if Flowfile could not be stopped cleanly.
     }
+
+    // dbt-core (v1 and v2), Flowfile, and sqlglot are all pip-installed into
+    // the same managed venv, so removing it also removes their executables.
+    // eslint-disable-next-line no-param-reassign
+    settings.dbtPath = '';
+    // eslint-disable-next-line no-param-reassign
+    settings.dbtVersion = '';
+    // eslint-disable-next-line no-param-reassign
+    settings.flowfileVersion = '';
+  }
+
+  static async uninstallPython(): Promise<void> {
+    const settings = await this.loadSettings();
+    const userDataPath = app.getPath('userData');
+
+    await this.clearManagedVenvDependents(settings);
 
     await fs.remove(path.join(userDataPath, 'python'));
     await fs.remove(path.join(userDataPath, 'venv'));
@@ -508,11 +575,6 @@ export default class SettingsService {
     settings.pythonVersion = '';
     settings.pythonPath = '';
     settings.pythonBinary = '';
-    // dbt-core (v1 and v2), Flowfile, and sqlglot are all pip-installed into
-    // the same managed venv, so removing it also removes their executables.
-    settings.dbtPath = '';
-    settings.dbtVersion = '';
-    settings.flowfileVersion = '';
     await this.saveSettings(settings);
   }
 

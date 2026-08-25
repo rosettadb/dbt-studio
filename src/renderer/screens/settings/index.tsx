@@ -74,8 +74,18 @@ const Settings: React.FC = () => {
     }));
   };
 
+  // Mirrors localSettings synchronously so back-to-back handleChangeV2 calls
+  // (e.g. saving dbtPath then dbtVersion right after an install) each build
+  // on the other's update instead of racing against stale React state.
+  const localSettingsRef = React.useRef<SettingsType>(localSettings);
+
+  React.useEffect(() => {
+    localSettingsRef.current = localSettings;
+  }, [localSettings]);
+
   const handleChangeV2 = (name: string, value: string) => {
-    const newSettings = { ...localSettings, [name]: value };
+    const newSettings = { ...localSettingsRef.current, [name]: value };
+    localSettingsRef.current = newSettings;
     setLocalSettings(newSettings);
     updateSettings(newSettings);
   };

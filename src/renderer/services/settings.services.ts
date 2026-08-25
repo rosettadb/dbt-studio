@@ -7,6 +7,7 @@ import {
   RunnerPluginStatus,
   InstallResult,
   PythonInstallInfo,
+  PythonVersionInfo,
 } from '../../types/backend';
 import { client } from '../config/client';
 import { SecureStorageAccount } from '../../types/frontend';
@@ -206,6 +207,23 @@ export const installPython = async (): Promise<InstallResult> => {
 
 export const uninstallPython = async (): Promise<void> => {
   await client.get<void>('version:python:uninstall');
+};
+
+export const checkPythonVersions = async (): Promise<PythonVersionInfo> => {
+  const { data } = await client.get<PythonVersionInfo>(
+    'version:python:versions:check',
+  );
+  return data;
+};
+
+export const installPythonVersion = async (
+  version: string,
+): Promise<InstallResult> => {
+  const { data } = await client.post<string, InstallResult>(
+    'version:python:versions:install',
+    version,
+  );
+  return data;
 };
 
 export const checkRunnerVersions = async (): Promise<RunnerVersionInfo> => {
