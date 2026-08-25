@@ -25,6 +25,7 @@ import {
   GeneralSettings,
   ProfileSettings,
   DbtSettings,
+  PythonSettings,
   RosettaSettings,
   RunnerSettings,
   AboutSettings,
@@ -99,6 +100,7 @@ const Settings: React.FC = () => {
 
   const getSectionTitle = (section: string) => {
     if (section === 'dbt') return 'dbt™ Core';
+    if (section === 'python') return 'Python';
     if (section === 'ai-providers') return 'AI Settings';
     if (section === 'profile') return 'Rosetta Cloud';
     if (section === 'duckdb') return 'DuckDB';
@@ -139,6 +141,8 @@ const Settings: React.FC = () => {
             onInstallDbtSave={handleChangeV2}
           />
         );
+      case 'python':
+        return <PythonSettings settings={localSettings} />;
       case 'rosetta':
         return <RosettaSettings settings={localSettings} />;
       case 'runner':

@@ -2,7 +2,7 @@ import React from 'react';
 import { Box, Button } from '@mui/material';
 import { toast } from 'react-toastify';
 import { useGetSettings, useUpdateSettings } from '../../controllers';
-import { Loader, FinishSetup, DbtSetup } from '../../components';
+import { Loader, FinishSetup, DbtSetup, PythonSetup } from '../../components';
 import { client } from '../../config/client';
 
 const ADAPTERS = [
@@ -44,9 +44,9 @@ const Setup: React.FC = () => {
     if (settings && !isInitialized) {
       if (settings.pythonPath && settings.pythonPath !== '') {
         if (settings.dbtPath && settings.dbtPath !== '') {
-          setCurrentStep(1);
+          setCurrentStep(2);
         } else {
-          setCurrentStep(0);
+          setCurrentStep(1);
         }
       }
       setIsInitialized(true);
@@ -72,6 +72,16 @@ const Setup: React.FC = () => {
         Rosetta dbt™ Studio - Setup
       </h2>
       {currentStep === 0 && (
+        <div data-testid="setup-step-python" style={{ width: '100%' }}>
+          <PythonSetup
+            settings={settings}
+            onInstallComplete={() => {
+              setCurrentStep(currentStep + 1);
+            }}
+          />
+        </div>
+      )}
+      {currentStep === 1 && (
         <div data-testid="setup-step-cli" style={{ width: '100%' }}>
           <DbtSetup
             settings={settings}
@@ -86,7 +96,7 @@ const Setup: React.FC = () => {
           />
         </div>
       )}
-      {currentStep === 1 && (
+      {currentStep === 2 && (
         <div data-testid="setup-step-complete" style={{ width: '100%' }}>
           <FinishSetup settings={settings} />
         </div>
@@ -101,20 +111,23 @@ const Setup: React.FC = () => {
         </Button>
         <Button
           variant="contained"
-          disabled={currentStep === 0 && !settings.dbtPath}
+          disabled={
+            (currentStep === 0 && !settings.pythonPath) ||
+            (currentStep === 1 && !settings.dbtPath)
+          }
           style={{ marginLeft: 'auto' }}
           data-testid={
-            currentStep === 1 ? 'setup-finish-btn' : 'setup-next-btn'
+            currentStep === 2 ? 'setup-finish-btn' : 'setup-next-btn'
           }
           onClick={() => {
-            if (currentStep === 1) {
+            if (currentStep === 2) {
               handleSkip();
               return;
             }
             setCurrentStep(currentStep + 1);
           }}
         >
-          {currentStep === 1 ? 'Finish' : 'Next'}
+          {currentStep === 2 ? 'Finish' : 'Next'}
         </Button>
       </div>
     </Box>

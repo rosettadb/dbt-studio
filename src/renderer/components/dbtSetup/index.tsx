@@ -8,9 +8,11 @@ import {
   Button,
   Alert,
 } from '@mui/material';
+import { toast } from 'react-toastify';
 import { useCli } from '../../hooks';
 import { settingsServices } from '../../services';
 import { SettingsType } from '../../../types/backend';
+import { useInstallPython } from '../../controllers';
 
 type AdapterSelectionProps = {
   adapters: Array<{ name: string; description: string }>;
@@ -94,6 +96,7 @@ export const DbtSetup: React.FC<Props> = ({
   setSelectedAdapters,
 }) => {
   const { runCommand } = useCli();
+  const installPython = useInstallPython();
   const [loading, setLoading] = React.useState(false);
   const [currentPkg, setCurrentPkg] = React.useState('');
   const [progress, setProgress] = React.useState(0);
@@ -101,7 +104,22 @@ export const DbtSetup: React.FC<Props> = ({
   const handleInstall = async () => {
     setLoading(true);
     setProgress(0);
-    const python = settings.pythonPath ? `"${settings.pythonPath}"` : 'python';
+
+    let { pythonPath } = settings;
+    if (!pythonPath) {
+      toast.info(
+        'Python is required for dbt Core v1 and will be installed automatically.',
+      );
+      setCurrentPkg('Installing Python...');
+      const pythonResult = await installPython.mutateAsync();
+      if (!pythonResult.success) {
+        toast.error(`Failed to install Python: ${pythonResult.error}`);
+        setLoading(false);
+        return;
+      }
+      pythonPath = pythonResult.path;
+    }
+    const python = pythonPath ? `"${pythonPath}"` : 'python';
 
     // eslint-disable-next-line no-plusplus
     for (let i = 0; i < selectedAdapters.length; i++) {

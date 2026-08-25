@@ -7,6 +7,7 @@ import InfoIcon from '@mui/icons-material/Info';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import ChecklistIcon from '@mui/icons-material/Checklist';
 import TerminalIcon from '@mui/icons-material/Terminal';
+import CodeIcon from '@mui/icons-material/Code';
 import { SvgIconComponent } from '@mui/icons-material';
 import React from 'react';
 import { Icon } from '../../components/icon';
@@ -87,6 +88,11 @@ export const settingsSidebarCategories: SettingsSidebarCategory[] = [
         icon: DbtBlackIcon as any,
         text: 'dbt™ Core',
         path: '/app/settings/dbt',
+      },
+      {
+        icon: CodeIcon,
+        text: 'Python',
+        path: '/app/settings/python',
       },
       {
         icon: FolderIcon,

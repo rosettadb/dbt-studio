@@ -6,6 +6,7 @@ import {
   RunnerVersionInfo,
   RunnerPluginStatus,
   InstallResult,
+  PythonInstallInfo,
 } from '../../types/backend';
 import { client } from '../config/client';
 import { SecureStorageAccount } from '../../types/frontend';
@@ -187,6 +188,24 @@ export const installRosettaVersion = async (
 
 export const uninstallRosetta = async (): Promise<void> => {
   await client.get<void>('version:rosetta:uninstall');
+};
+
+// Managed Python version management services
+export const checkPythonInstall = async (): Promise<PythonInstallInfo> => {
+  const { data } = await client.get<PythonInstallInfo>('version:python:check');
+  return data;
+};
+
+export const installPython = async (): Promise<InstallResult> => {
+  const { data } = await client.post<void, InstallResult>(
+    'version:python:install',
+    undefined,
+  );
+  return data;
+};
+
+export const uninstallPython = async (): Promise<void> => {
+  await client.get<void>('version:python:uninstall');
 };
 
 export const checkRunnerVersions = async (): Promise<RunnerVersionInfo> => {

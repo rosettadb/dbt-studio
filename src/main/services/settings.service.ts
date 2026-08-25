@@ -19,6 +19,7 @@ import {
   InstallResult,
   DuckDBMetadataPayload,
   DuckDBDiagnostics,
+  PythonInstallInfo,
 } from '../../types/backend';
 import { CliAdapter } from '../adapters';
 import { DB_FILE } from '../utils/setupHelpers';
@@ -455,6 +456,64 @@ export default class SettingsService {
       version,
       status: 'installed',
     };
+  }
+
+  // Managed Python installation status/lifecycle (separate from dbt install)
+  static async checkPythonInstall(): Promise<PythonInstallInfo> {
+    const settings = await this.loadSettings();
+    const installed = Boolean(
+      settings.pythonPath && fs.existsSync(settings.pythonPath),
+    );
+    return {
+      installed,
+      version: installed ? settings.pythonVersion : null,
+      path: installed ? settings.pythonPath : null,
+    };
+  }
+
+  static async installPython(): Promise<InstallResult> {
+    try {
+      const result = await this.updatePython();
+      return {
+        success: true,
+        version: result.version,
+        path: result.binaryPath,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        version: '',
+        path: '',
+        error:
+          error instanceof Error ? error.message : 'Unknown error occurred',
+      };
+    }
+  }
+
+  static async uninstallPython(): Promise<void> {
+    const settings = await this.loadSettings();
+    const userDataPath = app.getPath('userData');
+
+    try {
+      const { FlowfileService } = await import('./flowfile.service');
+      await FlowfileService.stop();
+    } catch {
+      // Best effort; continue removing the venv even if Flowfile could not
+      // be stopped cleanly.
+    }
+
+    await fs.remove(path.join(userDataPath, 'python'));
+    await fs.remove(path.join(userDataPath, 'venv'));
+
+    settings.pythonVersion = '';
+    settings.pythonPath = '';
+    settings.pythonBinary = '';
+    // dbt-core (v1 and v2), Flowfile, and sqlglot are all pip-installed into
+    // the same managed venv, so removing it also removes their executables.
+    settings.dbtPath = '';
+    settings.dbtVersion = '';
+    settings.flowfileVersion = '';
+    await this.saveSettings(settings);
   }
 
   static async resetFactorySettings(session: Session): Promise<void> {
@@ -1006,7 +1065,7 @@ export default class SettingsService {
   }
 
   static async installPackage(packageName: string): Promise<void> {
-    const settings = await this.loadSettings();
+    let settings = await this.loadSettings();
 
     const safeName = packageName.trim();
     const allowedPackages = new Set(['sqlglot']);
@@ -1023,9 +1082,11 @@ export default class SettingsService {
     }
 
     if (!settings.pythonPath || !fs.existsSync(settings.pythonPath)) {
-      throw new Error(
-        'Python environment not found. Please install Python first.',
-      );
+      const pythonResult = await this.installPython();
+      if (!pythonResult.success) {
+        throw new Error(`Failed to install Python: ${pythonResult.error}`);
+      }
+      settings = await this.loadSettings();
     }
 
     // Derive pip path from pythonPath (which points to venv python binary)

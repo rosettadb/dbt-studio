@@ -596,6 +596,13 @@ export type InstallResult = {
   installLog?: string[];
 };
 
+// Managed Python Installation Types
+export type PythonInstallInfo = {
+  installed: boolean;
+  version: string | null;
+  path: string | null;
+};
+
 export type FileNode = {
   id: string;
   name: string;

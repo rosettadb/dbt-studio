@@ -65,6 +65,7 @@ const App: React.FC = () => {
           <Route path="settings/profile" element={<Settings />} />
           <Route path="settings/ai-providers" element={<Settings />} />
           <Route path="settings/dbt" element={<Settings />} />
+          <Route path="settings/python" element={<Settings />} />
           <Route path="settings/rosetta" element={<Settings />} />
           <Route path="settings/installation" element={<Settings />} />
           <Route path="settings/about" element={<Settings />} />

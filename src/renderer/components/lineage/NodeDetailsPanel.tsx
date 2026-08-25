@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { toast } from 'react-toastify';
 import {
   Box,
   Typography,
@@ -80,6 +81,9 @@ export const NodeDetailsPanel: React.FC<NodeDetailsPanelProps> = ({
   const handleInstallSqlglot = async () => {
     setIsInstallingSqlglot(true);
     try {
+      toast.info(
+        'Installing sqlglot (this also installs the managed Python environment if needed)...',
+      );
       await settingsServices.installSqlGlot();
       if (projectId && node && node.uniqueId) {
         fetchColumnLineage(
@@ -276,7 +280,9 @@ export const NodeDetailsPanel: React.FC<NodeDetailsPanelProps> = ({
               ) ? (
                 <Stack alignItems="flex-start" spacing={1}>
                   <Typography variant="caption">
-                    Column lineage requires <b>sqlglot</b>.
+                    Column lineage requires <b>sqlglot</b>. If the managed
+                    Python environment isn&apos;t installed yet, it will be
+                    installed automatically first.
                   </Typography>
                   <Button
                     size="small"

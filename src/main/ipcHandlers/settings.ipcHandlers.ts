@@ -15,6 +15,9 @@ const handlerChannels: SettingsChannels[] = [
   'version:rosetta:check',
   'version:rosetta:install',
   'version:rosetta:uninstall',
+  'version:python:check',
+  'version:python:install',
+  'version:python:uninstall',
   'version:runner:check',
   'version:runner:install',
   'version:runner:uninstall',
@@ -108,6 +111,19 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
 
   ipcMain.handle('version:rosetta:uninstall', async () => {
     return SettingsService.uninstallRosetta();
+  });
+
+  // Managed Python version management handlers
+  ipcMain.handle('version:python:check', async () => {
+    return SettingsService.checkPythonInstall();
+  });
+
+  ipcMain.handle('version:python:install', async () => {
+    return SettingsService.installPython();
+  });
+
+  ipcMain.handle('version:python:uninstall', async () => {
+    return SettingsService.uninstallPython();
   });
 
   // Local runner binary version management handlers
