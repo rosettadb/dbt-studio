@@ -208,10 +208,16 @@ export default class DuckDBSchemaExtractor {
   }
 
   async extractSchema(): Promise<{ tables: Table[] }> {
-    const [tableNames, viewNames] = await Promise.all([
+    const [tableNamesRaw, viewNamesRaw] = await Promise.all([
       this.getTables(),
       this.getViews(),
     ]);
+
+    // Deduplicate defensively: concurrent connections against the same
+    // database file (opened separately for the tables and views queries)
+    // have been observed to yield repeated rows on Windows.
+    const tableNames = Array.from(new Set(tableNamesRaw));
+    const viewNames = Array.from(new Set(viewNamesRaw));
 
     const allTables: Table[] = [];
 

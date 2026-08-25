@@ -7,6 +7,7 @@ import { RenderTree } from './RenderTree';
 import { Container, Header, NoDataMessage, StyledTreeView } from './styles';
 import { SupportedConnectionTypes, Table } from '../../../types/backend';
 import { TreeItems } from './TreeItems';
+import { dedupeTables } from './dedupeTables';
 import { useAppContext } from '../../hooks';
 import connectionIcons from '../../../../assets/connectionIcons';
 
@@ -27,13 +28,16 @@ const SchemaTreeViewer: React.FC<Props> = React.memo(
     ]);
 
     const schemaMap = React.useMemo(() => {
-      return tables.reduce<Record<string, Table[]>>((acc, table) => {
-        if (!acc[table.schema]) {
-          acc[table.schema] = [];
-        }
-        acc[table.schema].push(table);
-        return acc;
-      }, {});
+      return dedupeTables(tables).reduce<Record<string, Table[]>>(
+        (acc, table) => {
+          if (!acc[table.schema]) {
+            acc[table.schema] = [];
+          }
+          acc[table.schema].push(table);
+          return acc;
+        },
+        {},
+      );
     }, [tables]);
 
     const handleExpandedItemsChange = React.useCallback(

@@ -3,6 +3,7 @@ import React from 'react';
 import { TreeItem } from '@mui/x-tree-view';
 import { Box, CircularProgress } from '@mui/material';
 import { RenderTree } from '../../components/schemaTreeViewer/RenderTree';
+import { dedupeTables } from '../../components/schemaTreeViewer/dedupeTables';
 import {
   Container,
   NoDataMessage,
@@ -43,15 +44,17 @@ export const SchemaTreeViewerWithSchema: React.FC<Props> = React.memo(
       databaseName,
     ]);
 
+    const dedupedTables = React.useMemo(() => dedupeTables(tables), [tables]);
+
     const filteredTables = React.useMemo(() => {
-      if (!filter) return tables;
+      if (!filter) return dedupedTables;
       const lowerFilter = filter.toLowerCase();
-      return tables.filter(
+      return dedupedTables.filter(
         (table) =>
           table.name.toLowerCase().includes(lowerFilter) ||
           table.schema.toLowerCase().includes(lowerFilter),
       );
-    }, [tables, filter]);
+    }, [dedupedTables, filter]);
 
     const schemaMap = React.useMemo(() => {
       const map = filteredTables.reduce<Record<string, Table[]>>(
