@@ -80,10 +80,12 @@ export const createWindowStateKeeper = (storeName: string) => {
     const MIN_HEIGHT = 768;
 
     const windowWidth = Math.min(
+      primaryWidth,
       MAX_WIDTH,
       Math.max(MIN_WIDTH, Math.round(primaryWidth * 0.8)),
     );
     const windowHeight = Math.min(
+      primaryHeight,
       MAX_HEIGHT,
       Math.max(MIN_HEIGHT, Math.round(primaryHeight * 0.8)),
     );
