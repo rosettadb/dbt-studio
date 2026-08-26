@@ -37,6 +37,7 @@ import {
   CheckCircle,
   ExpandMore,
 } from '@mui/icons-material';
+import { toast } from 'react-toastify';
 import {
   DbtAdapterCapabilityResponse,
   DbtProjectCompatibilityResult,
@@ -54,6 +55,7 @@ import {
   useInstallDbtVersionChange,
   useInstallLatestPackage,
   useInstallPackageVersion,
+  useInstallPython,
   useListDbtCoreVersions,
   useListPackageVersions,
   usePlanDbtVersionChange,
@@ -62,7 +64,7 @@ import {
 
 interface DbtSettingsProps {
   settings: SettingsType;
-  onInstallDbtSave: (key: string, value: string) => void;
+  onInstallDbtSave: (key: string, value: string) => Promise<void>;
 }
 
 const RuntimeLanguageIcon = ({ language }: { language: 'python' | 'rust' }) => (
@@ -108,6 +110,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
   const listPackageVersions = useListPackageVersions();
   const planDbtVersionChange = usePlanDbtVersionChange();
   const installDbtVersionChange = useInstallDbtVersionChange();
+  const installPython = useInstallPython();
   const checkCurrentProjectCompatibility =
     useCheckCurrentProjectCompatibility();
   const getActiveAdapterCapabilities = useGetActiveAdapterCapabilities();
@@ -246,10 +249,19 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     setVersionChangeResult(null);
 
     try {
-      if (!settings.pythonPath) {
-        throw new Error(
-          'Managed Python environment not found. Install Python first.',
+      let { pythonPath } = settings;
+      if (!pythonPath) {
+        toast.info(
+          'Python is required for dbt Core v1 and will be installed automatically.',
         );
+        setLoadingMessage('Installing Python...');
+        const pythonResult = await installPython.mutateAsync();
+        if (!pythonResult.success) {
+          throw new Error(`Failed to install Python: ${pythonResult.error}`);
+        }
+        pythonPath = pythonResult.path;
+        await onInstallDbtSave('pythonPath', pythonResult.path);
+        await onInstallDbtSave('pythonVersion', pythonResult.version);
       }
 
       const availableDbtVersions =
@@ -267,7 +279,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
 
         if (pkg === 'dbt-core') {
           const result = await installPackageVersion({
-            pythonPath: settings.pythonPath,
+            pythonPath,
             packageName: pkg,
             version: targetDbtVersion,
           });
@@ -283,7 +295,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
           }
         } else {
           const result = await installLatestPackage({
-            pythonPath: settings.pythonPath,
+            pythonPath,
             packageName: pkg,
           });
           if (!result.ok) {
@@ -361,7 +373,44 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     }
   };
 
+  const ensurePythonForVersion = async (version: string): Promise<boolean> => {
+    const isPythonRuntime = Number.parseInt(version, 10) === 1;
+    if (!isPythonRuntime || settings.pythonPath) return true;
+
+    toast.info(
+      'Python is required for dbt Core v1 and will be installed automatically.',
+    );
+    setIsLoadingDialog(true);
+    setLoadingMessage('Installing Python...');
+    try {
+      const result = await installPython.mutateAsync();
+      if (!result.success) {
+        setVersionChangeResult({
+          ok: false,
+          error: `Failed to install Python: ${result.error}`,
+        });
+        return false;
+      }
+      await onInstallDbtSave('pythonPath', result.path);
+      await onInstallDbtSave('pythonVersion', result.version);
+      return true;
+    } catch (error) {
+      setVersionChangeResult({
+        ok: false,
+        error:
+          error instanceof Error ? error.message : 'Failed to install Python.',
+      });
+      return false;
+    } finally {
+      setIsLoadingDialog(false);
+      setLoadingMessage('');
+    }
+  };
+
   const prepareDbtVersionChange = async (version: string) => {
+    const pythonReady = await ensurePythonForVersion(version);
+    if (!pythonReady) return;
+
     setIsLoadingDialog(true);
     setLoadingMessage(`Planning dbt-core ${version} change...`);
     setVersionChangeResult(null);
@@ -922,6 +971,12 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
               Recommended for production projects and broad adapter
               compatibility.
             </Typography>
+            {!settings.pythonPath && (
+              <Alert severity="info" sx={{ mt: 1.5 }}>
+                Python is not installed yet. Installing a dbt Core v1 version
+                below will install it automatically.
+              </Alert>
+            )}
             <Box sx={{ mt: 1.5 }}>
               {renderVersionList(
                 pythonDbtVersions,

@@ -16,6 +16,8 @@ import {
   RunnerVersionInfo,
   RunnerPluginStatus,
   InstallResult,
+  PythonInstallInfo,
+  PythonVersionInfo,
 } from '../../types/backend';
 import { QUERY_KEYS } from '../config/constants';
 import { useApiKey } from './rosettaCloud.controller';
@@ -213,6 +215,103 @@ export const useUninstallRosetta = (
   return useMutation({
     mutationFn: async () => {
       return settingsServices.uninstallRosetta();
+    },
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+// Managed Python version management controllers
+export const useCheckPythonInstall = (
+  customOptions?: UseMutationOptions<PythonInstallInfo, CustomError, void>,
+): UseMutationResult<PythonInstallInfo, CustomError, void> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  return useMutation({
+    mutationFn: async () => {
+      return settingsServices.checkPythonInstall();
+    },
+    onSuccess: (...args) => {
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useInstallPython = (
+  customOptions?: UseMutationOptions<InstallResult, CustomError, void>,
+): UseMutationResult<InstallResult, CustomError, void> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      return settingsServices.installPython();
+    },
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useUninstallPython = (
+  customOptions?: UseMutationOptions<void, CustomError, void>,
+): UseMutationResult<void, CustomError, void> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      return settingsServices.uninstallPython();
+    },
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useCheckPythonVersions = (
+  customOptions?: UseMutationOptions<PythonVersionInfo, CustomError, void>,
+): UseMutationResult<PythonVersionInfo, CustomError, void> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  return useMutation({
+    mutationFn: async () => {
+      return settingsServices.checkPythonVersions();
+    },
+    onSuccess: (...args) => {
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useInstallPythonVersion = (
+  customOptions?: UseMutationOptions<InstallResult, CustomError, string>,
+): UseMutationResult<InstallResult, CustomError, string> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (version: string) => {
+      return settingsServices.installPythonVersion(version);
     },
     onSuccess: async (...args) => {
       await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);

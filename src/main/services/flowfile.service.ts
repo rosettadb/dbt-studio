@@ -88,13 +88,16 @@ export class FlowfileService {
   }
 
   static async install(): Promise<FlowfileResult> {
-    const settings = await SettingsService.loadSettings();
+    let settings = await SettingsService.loadSettings();
     if (!settings.pythonPath) {
-      return {
-        ok: false,
-        error:
-          'Python path not configured. Set it in Settings > General first.',
-      };
+      const pythonResult = await SettingsService.installPython();
+      if (!pythonResult.success) {
+        return {
+          ok: false,
+          error: `Failed to install Python: ${pythonResult.error}`,
+        };
+      }
+      settings = await SettingsService.loadSettings();
     }
 
     try {

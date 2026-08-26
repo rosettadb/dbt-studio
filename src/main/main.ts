@@ -178,11 +178,17 @@ if (!gotTheLock) {
             );
           }
 
-          await updateMessage('Embedding Python...');
-          try {
-            await SettingsService.updatePython();
-          } catch (e) {
-            console.error('Failed to install Python:', e);
+          // Only auto-install Python when it isn't present. Users can pick a
+          // different version in Settings > Python; unconditionally calling
+          // updatePython() here would silently revert that choice (and wipe
+          // dbt/Flowfile installed inside the managed venv) on every launch.
+          if (!settings.pythonPath || !fs.existsSync(settings.pythonPath)) {
+            await updateMessage('Embedding Python...');
+            try {
+              await SettingsService.updatePython();
+            } catch (e) {
+              console.error('Failed to install Python:', e);
+            }
           }
 
           const fakeStages = [
