@@ -42,11 +42,12 @@ const Settings: React.FC = () => {
   const { mode, setMode } = useColorScheme();
   const theme = useTheme();
   const { data: settings } = useGetSettings();
-  const { mutate: updateSettings } = useUpdateSettings({
-    onSuccess: () => {
-      toast.success('Settings successfully updated!');
-    },
-  });
+  const { mutate: updateSettings, mutateAsync: updateSettingsAsync } =
+    useUpdateSettings({
+      onSuccess: () => {
+        toast.success('Settings successfully updated!');
+      },
+    });
   const { mutate: getFiles } = useFilePicker();
   const location = useLocation();
   const currentSection = location.pathname.split('/').pop() || 'general';
@@ -83,11 +84,11 @@ const Settings: React.FC = () => {
     localSettingsRef.current = localSettings;
   }, [localSettings]);
 
-  const handleChangeV2 = (name: string, value: string) => {
+  const handleChangeV2 = async (name: string, value: string) => {
     const newSettings = { ...localSettingsRef.current, [name]: value };
     localSettingsRef.current = newSettings;
     setLocalSettings(newSettings);
-    updateSettings(newSettings);
+    await updateSettingsAsync(newSettings);
   };
 
   const handleFilePicker = async (

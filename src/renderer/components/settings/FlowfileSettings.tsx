@@ -30,7 +30,7 @@ import { useInstallPython } from '../../controllers';
 
 interface FlowfileSettingsProps {
   settings: SettingsType;
-  onSettingsChange: (name: string, value: string) => void;
+  onSettingsChange: (name: string, value: string) => Promise<void>;
 }
 
 export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
@@ -100,8 +100,8 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
           setInstallError(`Failed to install Python: ${pythonResult.error}`);
           return;
         }
-        onSettingsChange('pythonPath', pythonResult.path);
-        onSettingsChange('pythonVersion', pythonResult.version);
+        await onSettingsChange('pythonPath', pythonResult.path);
+        await onSettingsChange('pythonVersion', pythonResult.version);
         setLoadingMessage('Installing Flowfile...');
       }
 

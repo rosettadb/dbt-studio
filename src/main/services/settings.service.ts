@@ -413,21 +413,21 @@ export default class SettingsService {
       platform === 'win32' ? 'python.exe' : 'bin/python3',
     );
     const venvDir = path.join(userDataPath, 'venv');
+    const venvPythonPath = path.join(
+      venvDir,
+      platform === 'win32' ? 'Scripts/python.exe' : 'bin/python3',
+    );
 
-    if (fs.existsSync(binaryPath) && settings.pythonVersion === version) {
+    if (
+      fs.existsSync(binaryPath) &&
+      fs.existsSync(venvPythonPath) &&
+      settings.pythonVersion === version
+    ) {
       return {
-        binaryPath,
+        binaryPath: venvPythonPath,
         version,
         status: 'up-to-date',
       };
-    }
-
-    if (settings.pythonPath && fs.existsSync(settings.pythonPath)) {
-      // Switching (or repairing) the managed Python install wipes the venv,
-      // which also removes anything pip-installed into it (dbt-core,
-      // Flowfile, sqlglot), so clear their settings to avoid stale state.
-      await this.clearManagedVenvDependents(settings);
-      await fs.remove(venvDir);
     }
 
     await fs.mkdirp(installBase);
@@ -449,22 +449,28 @@ export default class SettingsService {
       await fs.chmod(binaryPath, 0o755);
     }
 
+    // Switching (or repairing) the managed Python install wipes the venv,
+    // which also removes anything pip-installed into it (dbt-core,
+    // Flowfile, sqlglot). Clear and persist their settings immediately so
+    // a later failure (e.g. venv creation) doesn't leave stale settings
+    // pointing at executables that no longer exist.
+    await this.clearManagedVenvDependents(settings);
+    await fs.remove(venvDir);
     settings.pythonVersion = version;
     settings.pythonPath = binaryPath;
     settings.pythonBinary = binaryPath;
+    await this.saveSettings(settings);
+
     const cliAdapter = new CliAdapter();
     await cliAdapter.runCommandWithoutStreaming(
       `cd "${userDataPath}" && "${binaryPath}" -m venv venv`,
     );
-    settings.pythonPath = path.join(
-      venvDir,
-      platform === 'win32' ? 'Scripts/python.exe' : 'bin/python3',
-    );
+    settings.pythonPath = venvPythonPath;
     await this.saveSettings(settings);
     await fs.remove(archivePath);
 
     return {
-      binaryPath,
+      binaryPath: venvPythonPath,
       version,
       status: 'installed',
     };

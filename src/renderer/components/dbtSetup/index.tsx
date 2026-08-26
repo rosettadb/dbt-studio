@@ -105,40 +105,46 @@ export const DbtSetup: React.FC<Props> = ({
     setLoading(true);
     setProgress(0);
 
-    let { pythonPath } = settings;
-    if (!pythonPath) {
-      toast.info(
-        'Python is required for dbt Core v1 and will be installed automatically.',
+    try {
+      let { pythonPath } = settings;
+      if (!pythonPath) {
+        toast.info(
+          'Python is required for dbt Core v1 and will be installed automatically.',
+        );
+        setCurrentPkg('Installing Python...');
+        const pythonResult = await installPython.mutateAsync();
+        if (!pythonResult.success) {
+          toast.error(`Failed to install Python: ${pythonResult.error}`);
+          return;
+        }
+        pythonPath = pythonResult.path;
+      }
+      const python = pythonPath ? `"${pythonPath}"` : 'python';
+
+      // eslint-disable-next-line no-plusplus
+      for (let i = 0; i < selectedAdapters.length; i++) {
+        const pkg = selectedAdapters[i];
+        setCurrentPkg(pkg);
+        setProgress((i / selectedAdapters.length) * 100);
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          await runCommand(`${python} -m pip install ${pkg}`);
+        } catch {
+          // continue
+        }
+      }
+
+      setCurrentPkg('Locating dbt path...');
+      setProgress(100);
+      const dbtPath = await settingsServices.getDbtPath();
+      onInstallComplete(dbtPath);
+    } catch (error) {
+      toast.error(
+        `Installation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
-      setCurrentPkg('Installing Python...');
-      const pythonResult = await installPython.mutateAsync();
-      if (!pythonResult.success) {
-        toast.error(`Failed to install Python: ${pythonResult.error}`);
-        setLoading(false);
-        return;
-      }
-      pythonPath = pythonResult.path;
+    } finally {
+      setLoading(false);
     }
-    const python = pythonPath ? `"${pythonPath}"` : 'python';
-
-    // eslint-disable-next-line no-plusplus
-    for (let i = 0; i < selectedAdapters.length; i++) {
-      const pkg = selectedAdapters[i];
-      setCurrentPkg(pkg);
-      setProgress((i / selectedAdapters.length) * 100);
-      try {
-        // eslint-disable-next-line no-await-in-loop
-        await runCommand(`${python} -m pip install ${pkg}`);
-      } catch {
-        // continue
-      }
-    }
-
-    setCurrentPkg('Locating dbt path...');
-    setProgress(100);
-    const dbtPath = await settingsServices.getDbtPath();
-    onInstallComplete(dbtPath);
-    setLoading(false);
   };
 
   return (

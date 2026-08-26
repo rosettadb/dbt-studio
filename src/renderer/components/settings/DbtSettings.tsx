@@ -64,7 +64,7 @@ import {
 
 interface DbtSettingsProps {
   settings: SettingsType;
-  onInstallDbtSave: (key: string, value: string) => void;
+  onInstallDbtSave: (key: string, value: string) => Promise<void>;
 }
 
 const RuntimeLanguageIcon = ({ language }: { language: 'python' | 'rust' }) => (
@@ -260,8 +260,8 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
           throw new Error(`Failed to install Python: ${pythonResult.error}`);
         }
         pythonPath = pythonResult.path;
-        onInstallDbtSave('pythonPath', pythonResult.path);
-        onInstallDbtSave('pythonVersion', pythonResult.version);
+        await onInstallDbtSave('pythonPath', pythonResult.path);
+        await onInstallDbtSave('pythonVersion', pythonResult.version);
       }
 
       const availableDbtVersions =
@@ -391,8 +391,8 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
         });
         return false;
       }
-      onInstallDbtSave('pythonPath', result.path);
-      onInstallDbtSave('pythonVersion', result.version);
+      await onInstallDbtSave('pythonPath', result.path);
+      await onInstallDbtSave('pythonVersion', result.version);
       return true;
     } catch (error) {
       setVersionChangeResult({
