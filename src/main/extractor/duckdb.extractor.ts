@@ -216,8 +216,14 @@ export default class DuckDBSchemaExtractor {
     // Deduplicate defensively: concurrent connections against the same
     // database file (opened separately for the tables and views queries)
     // have been observed to yield repeated rows on Windows.
-    const tableNames = Array.from(new Set(tableNamesRaw));
-    const viewNames = Array.from(new Set(viewNamesRaw));
+    const tableNameSet = new Set(tableNamesRaw);
+    const tableNames = Array.from(tableNameSet);
+    // Tables and views are read as two separate snapshots, so a name that
+    // was replaced (table -> view or vice versa) mid-refresh could show up
+    // in both lists. Prefer the table entry on a collision.
+    const viewNames = Array.from(new Set(viewNamesRaw)).filter(
+      (name) => !tableNameSet.has(name),
+    );
 
     const allTables: Table[] = [];
 
