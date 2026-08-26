@@ -85,10 +85,20 @@ const Settings: React.FC = () => {
   }, [localSettings]);
 
   const handleChangeV2 = async (name: string, value: string) => {
-    const newSettings = { ...localSettingsRef.current, [name]: value };
+    const previousSettings = localSettingsRef.current;
+    const newSettings = { ...previousSettings, [name]: value };
     localSettingsRef.current = newSettings;
     setLocalSettings(newSettings);
-    await updateSettingsAsync(newSettings);
+    try {
+      await updateSettingsAsync(newSettings);
+    } catch (error) {
+      localSettingsRef.current = previousSettings;
+      setLocalSettings(previousSettings);
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to save settings',
+      );
+      throw error;
+    }
   };
 
   const handleFilePicker = async (

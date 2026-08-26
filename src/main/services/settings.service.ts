@@ -451,21 +451,28 @@ export default class SettingsService {
 
     // Switching (or repairing) the managed Python install wipes the venv,
     // which also removes anything pip-installed into it (dbt-core,
-    // Flowfile, sqlglot). Clear and persist their settings immediately so
-    // a later failure (e.g. venv creation) doesn't leave stale settings
-    // pointing at executables that no longer exist.
+    // Flowfile, sqlglot). Clear their settings and mark Python itself as
+    // not-configured *before* attempting venv creation, and persist only
+    // once the venv actually exists. That way, if venv creation fails, the
+    // settings correctly show "not installed" instead of the base
+    // interpreter path — which is truthy and exists, and would otherwise
+    // fool every "is Python configured" check elsewhere into skipping
+    // auto-install/repair and silently falling back to the unmanaged,
+    // non-isolated base interpreter.
     await this.clearManagedVenvDependents(settings);
     await fs.remove(venvDir);
-    settings.pythonVersion = version;
-    settings.pythonPath = binaryPath;
-    settings.pythonBinary = binaryPath;
+    settings.pythonVersion = '';
+    settings.pythonPath = '';
+    settings.pythonBinary = '';
     await this.saveSettings(settings);
 
     const cliAdapter = new CliAdapter();
     await cliAdapter.runCommandWithoutStreaming(
       `cd "${userDataPath}" && "${binaryPath}" -m venv venv`,
     );
+    settings.pythonVersion = version;
     settings.pythonPath = venvPythonPath;
+    settings.pythonBinary = binaryPath;
     await this.saveSettings(settings);
     await fs.remove(archivePath);
 
