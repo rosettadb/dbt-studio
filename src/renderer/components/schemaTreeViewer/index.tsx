@@ -8,6 +8,7 @@ import { Container, Header, NoDataMessage, StyledTreeView } from './styles';
 import { SupportedConnectionTypes, Table } from '../../../types/backend';
 import { TreeItems } from './TreeItems';
 import { dedupeTables } from './dedupeTables';
+import { schemaTreeKey, tableTreeKey } from './treeIds';
 import { useAppContext } from '../../hooks';
 import connectionIcons from '../../../../assets/connectionIcons';
 
@@ -95,12 +96,12 @@ const SchemaTreeViewer: React.FC<Props> = React.memo(
             >
               {Object.entries(schemaMap).map(([schemaName, schemaTables]) => (
                 <TreeItem
-                  key={`${databaseName}.${schemaName}`}
-                  itemId={`${databaseName}.${schemaName}`}
+                  key={schemaTreeKey(databaseName, schemaName)}
+                  itemId={schemaTreeKey(databaseName, schemaName)}
                   label={<TreeItems.Schema label={schemaName} />}
                 >
                   {schemaTables.map((table) => (
-                    <RenderTree key={table.name} table={table} />
+                    <RenderTree key={tableTreeKey(table)} table={table} />
                   ))}
                 </TreeItem>
               ))}

@@ -5,6 +5,10 @@ import { Box, CircularProgress } from '@mui/material';
 import { RenderTree } from '../../components/schemaTreeViewer/RenderTree';
 import { dedupeTables } from '../../components/schemaTreeViewer/dedupeTables';
 import {
+  schemaTreeKey,
+  tableTreeKey,
+} from '../../components/schemaTreeViewer/treeIds';
+import {
   Container,
   NoDataMessage,
   StyledTreeView,
@@ -128,23 +132,17 @@ export const SchemaTreeViewerWithSchema: React.FC<Props> = React.memo(
             >
               {hideSchemaLevel &&
                 filteredTables.map((table) => (
-                  <RenderTree
-                    key={`${table.schema}.${table.name}`}
-                    table={table}
-                  />
+                  <RenderTree key={tableTreeKey(table)} table={table} />
                 ))}
               {!hideSchemaLevel &&
                 Object.entries(schemaMap).map(([schemaName, schemaTables]) => (
                   <TreeItem
-                    key={`${databaseName}.${schemaName}`}
-                    itemId={`${databaseName}.${schemaName}`}
+                    key={schemaTreeKey(databaseName, schemaName)}
+                    itemId={schemaTreeKey(databaseName, schemaName)}
                     label={<TreeItems.Schema label={schemaName} />}
                   >
                     {schemaTables.map((table) => (
-                      <RenderTree
-                        key={`${schemaName}.${table.name}`}
-                        table={table}
-                      />
+                      <RenderTree key={tableTreeKey(table)} table={table} />
                     ))}
                   </TreeItem>
                 ))}
