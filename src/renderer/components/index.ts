@@ -22,6 +22,7 @@ export * from './sqlEditor';
 export * from './errorMessage';
 export * from './settings';
 export * from './dbtSetup';
+export * from './pythonSetup';
 export * from './finishSetup';
 export * from './GetStartedModal';
 export * from './sidebarConnections';

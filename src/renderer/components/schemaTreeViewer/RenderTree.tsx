@@ -3,6 +3,7 @@ import React from 'react';
 import { TreeItem } from '@mui/x-tree-view';
 import { TreeItems } from './TreeItems';
 import { Table } from '../../../types/backend';
+import { tableTreeKey, columnTreeKey } from './treeIds';
 
 type Props = {
   table: Table;
@@ -18,14 +19,14 @@ const RenderTree: React.FC<Props> = ({ table }) => {
 
   return (
     <TreeItem
-      key={table.name}
-      itemId={`${table.schema}.${table.name}`}
+      key={tableTreeKey(table)}
+      itemId={tableTreeKey(table)}
       label={label}
     >
       {table.columns.map((col) => (
         <TreeItem
-          key={col.name}
-          itemId={`${table.schema}.${table.name}.${col.name}`}
+          key={columnTreeKey(table, col.name)}
+          itemId={columnTreeKey(table, col.name)}
           label={
             <TreeItems.Column
               label={col.name}
