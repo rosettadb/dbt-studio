@@ -71,9 +71,34 @@ export const createWindowStateKeeper = (storeName: string) => {
       return { width, height, x, y, isMaximized };
     }
 
+    // Cap to 80% of the work area, with hard limits so the window isn't
+    // enormous on large/4K displays. Center it on the primary screen.
+    // 1920x1080 is the suggested sweet spot for large monitors.
+    const MAX_WIDTH = 1920;
+    const MAX_HEIGHT = 1080;
+    const MIN_WIDTH = 1024;
+    const MIN_HEIGHT = 768;
+
+    const windowWidth = Math.min(
+      primaryWidth,
+      MAX_WIDTH,
+      Math.max(MIN_WIDTH, Math.round(primaryWidth * 0.8)),
+    );
+    const windowHeight = Math.min(
+      primaryHeight,
+      MAX_HEIGHT,
+      Math.max(MIN_HEIGHT, Math.round(primaryHeight * 0.8)),
+    );
+
+    const { x: displayX, y: displayY } = screen.getPrimaryDisplay().workArea;
+    const centeredX = displayX + Math.round((primaryWidth - windowWidth) / 2);
+    const centeredY = displayY + Math.round((primaryHeight - windowHeight) / 2);
+
     return {
-      width: primaryWidth,
-      height: primaryHeight,
+      width: windowWidth,
+      height: windowHeight,
+      x: centeredX,
+      y: centeredY,
       isMaximized,
     };
   };
