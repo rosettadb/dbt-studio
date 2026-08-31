@@ -516,7 +516,14 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
       commitHistory();
       setNodes((nds) => [...nds, newNode]);
     },
-    [project, nodes, setNodes, openEditForNode, handleNodeDelete, commitHistory],
+    [
+      project,
+      nodes,
+      setNodes,
+      openEditForNode,
+      handleNodeDelete,
+      commitHistory,
+    ],
   );
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -762,28 +769,6 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
         )}
         {isEditing && (
           <>
-            <Tooltip title="Undo (Ctrl/Cmd+Z)">
-              <span>
-                <IconButton
-                  size="small"
-                  onClick={handleUndo}
-                  disabled={!canUndo || isSaving}
-                >
-                  <UndoIcon fontSize="small" />
-                </IconButton>
-              </span>
-            </Tooltip>
-            <Tooltip title="Redo (Ctrl/Cmd+Shift+Z)">
-              <span>
-                <IconButton
-                  size="small"
-                  onClick={handleRedo}
-                  disabled={!canRedo || isSaving}
-                >
-                  <RedoIcon fontSize="small" />
-                </IconButton>
-              </span>
-            </Tooltip>
             <Button
               size="small"
               variant="outlined"
@@ -830,16 +815,40 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
             nodesDraggable={isEditing}
             nodesConnectable={isEditing}
             fitView
-            fitViewOptions={{ padding: 0.15 }}
+            fitViewOptions={{ padding: 0.15, maxZoom: 0.95 }}
             proOptions={{ hideAttribution: true }}
           >
-            <Controls>
+            <Controls position="top-right">
               {!isEditing && onSave && (
-                <Tooltip title="Visual edit pipeline" placement="right">
+                <Tooltip title="Visual edit pipeline" placement="left">
                   <ControlButton onClick={handleEnterEdit}>
                     <AutoFixHighIcon style={{ maxWidth: 14, maxHeight: 14 }} />
                   </ControlButton>
                 </Tooltip>
+              )}
+              {isEditing && (
+                <>
+                  <Tooltip title="Undo (Ctrl/Cmd+Z)" placement="left">
+                    <span>
+                      <ControlButton
+                        onClick={handleUndo}
+                        disabled={!canUndo || isSaving}
+                      >
+                        <UndoIcon style={{ maxWidth: 14, maxHeight: 14 }} />
+                      </ControlButton>
+                    </span>
+                  </Tooltip>
+                  <Tooltip title="Redo (Ctrl/Cmd+Shift+Z)" placement="left">
+                    <span>
+                      <ControlButton
+                        onClick={handleRedo}
+                        disabled={!canRedo || isSaving}
+                      >
+                        <RedoIcon style={{ maxWidth: 14, maxHeight: 14 }} />
+                      </ControlButton>
+                    </span>
+                  </Tooltip>
+                </>
               )}
             </Controls>
             <Background color={theme.palette.text.disabled} gap={16} />
