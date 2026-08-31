@@ -25,7 +25,9 @@ import {
   GeneralSettings,
   ProfileSettings,
   DbtSettings,
+  PythonSettings,
   RosettaSettings,
+  RunnerSettings,
   AboutSettings,
   AIProvidersSettings,
   DuckDBSettings,
@@ -40,11 +42,12 @@ const Settings: React.FC = () => {
   const { mode, setMode } = useColorScheme();
   const theme = useTheme();
   const { data: settings } = useGetSettings();
-  const { mutate: updateSettings } = useUpdateSettings({
-    onSuccess: () => {
-      toast.success('Settings successfully updated!');
-    },
-  });
+  const { mutate: updateSettings, mutateAsync: updateSettingsAsync } =
+    useUpdateSettings({
+      onSuccess: () => {
+        toast.success('Settings successfully updated!');
+      },
+    });
   const { mutate: getFiles } = useFilePicker();
   const location = useLocation();
   const currentSection = location.pathname.split('/').pop() || 'general';
@@ -72,10 +75,30 @@ const Settings: React.FC = () => {
     }));
   };
 
-  const handleChangeV2 = (name: string, value: string) => {
-    const newSettings = { ...localSettings, [name]: value };
+  // Mirrors localSettings synchronously so back-to-back handleChangeV2 calls
+  // (e.g. saving dbtPath then dbtVersion right after an install) each build
+  // on the other's update instead of racing against stale React state.
+  const localSettingsRef = React.useRef<SettingsType>(localSettings);
+
+  React.useEffect(() => {
+    localSettingsRef.current = localSettings;
+  }, [localSettings]);
+
+  const handleChangeV2 = async (name: string, value: string) => {
+    const previousSettings = localSettingsRef.current;
+    const newSettings = { ...previousSettings, [name]: value };
+    localSettingsRef.current = newSettings;
     setLocalSettings(newSettings);
-    updateSettings(newSettings);
+    try {
+      await updateSettingsAsync(newSettings);
+    } catch (error) {
+      localSettingsRef.current = previousSettings;
+      setLocalSettings(previousSettings);
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to save settings',
+      );
+      throw error;
+    }
   };
 
   const handleFilePicker = async (
@@ -98,10 +121,12 @@ const Settings: React.FC = () => {
 
   const getSectionTitle = (section: string) => {
     if (section === 'dbt') return 'dbt™ Core';
+    if (section === 'python') return 'Python';
     if (section === 'ai-providers') return 'AI Settings';
     if (section === 'profile') return 'Rosetta Cloud';
     if (section === 'duckdb') return 'DuckDB';
     if (section === 'flowfile') return 'Flowfile';
+    if (section === 'runner') return 'Local Runner';
     if (section === 'keystore') return 'Keystore';
     if (section === 'task-manager') return 'Task Manager';
     return section.charAt(0).toUpperCase() + section.slice(1).replace('-', ' ');
@@ -137,8 +162,12 @@ const Settings: React.FC = () => {
             onInstallDbtSave={handleChangeV2}
           />
         );
+      case 'python':
+        return <PythonSettings settings={localSettings} />;
       case 'rosetta':
         return <RosettaSettings settings={localSettings} />;
+      case 'runner':
+        return <RunnerSettings settings={localSettings} />;
       case 'flowfile':
         return (
           <FlowfileSettings

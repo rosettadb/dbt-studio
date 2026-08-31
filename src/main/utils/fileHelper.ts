@@ -3,7 +3,13 @@ import fs, { promises } from 'fs';
 import { app, dialog } from 'electron';
 import archiver from 'archiver';
 import os from 'os';
-import { DataBase, FileNode, SettingsType } from '../../types/backend';
+import {
+  DataBase,
+  FileNode,
+  FileSearchMatch,
+  FileSearchResult,
+  SettingsType,
+} from '../../types/backend';
 import { DATA_DIR, DB_FILE } from './setupHelpers';
 
 export const getDirectoryStructure = (dirPath: string): FileNode => {
@@ -27,6 +33,170 @@ export const getDirectoryStructure = (dirPath: string): FileNode => {
     return { id: filePath, name: file, path: filePath, type: 'file' };
   });
   return result;
+};
+
+const SEARCH_IGNORED_DIRS = new Set([
+  'node_modules',
+  '.git',
+  'dbt_packages',
+  'target',
+  'logs',
+  '.venv',
+  'venv',
+  '__pycache__',
+]);
+
+const SEARCH_BINARY_EXTENSIONS = new Set([
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.bmp',
+  '.ico',
+  '.pdf',
+  '.zip',
+  '.tar',
+  '.gz',
+  '.tgz',
+  '.7z',
+  '.rar',
+  '.exe',
+  '.dll',
+  '.so',
+  '.dylib',
+  '.bin',
+  '.class',
+  '.jar',
+  '.parquet',
+  '.db',
+  '.sqlite',
+  '.duckdb',
+  '.woff',
+  '.woff2',
+  '.ttf',
+  '.eot',
+  '.mp3',
+  '.mp4',
+  '.mov',
+  '.avi',
+  '.wasm',
+]);
+
+const SEARCH_MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
+const SEARCH_MAX_TOTAL_MATCHES = 500;
+const SEARCH_MAX_MATCHES_PER_FILE = 50;
+const SEARCH_MAX_LINE_TEXT_LENGTH = 300;
+
+/**
+ * Recursively greps file contents under `dirPath` for `query`, skipping
+ * dependency/build/vcs directories and binary files. Stops walking once
+ * SEARCH_MAX_TOTAL_MATCHES is hit (`truncated: true` tells the caller more
+ * results exist).
+ */
+export const searchInFiles = (
+  dirPath: string,
+  query: string,
+  options: { caseSensitive?: boolean; useRegex?: boolean } = {},
+): { results: FileSearchResult[]; truncated: boolean } => {
+  const results: FileSearchResult[] = [];
+  let totalMatches = 0;
+  let truncated = false;
+
+  if (!query) {
+    return { results, truncated };
+  }
+
+  let pattern: RegExp;
+  try {
+    const source = options.useRegex
+      ? query
+      : query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    pattern = new RegExp(source, options.caseSensitive ? 'g' : 'gi');
+  } catch {
+    // Invalid regex from the user — treat as no matches rather than throwing.
+    return { results, truncated };
+  }
+
+  const collectFileMatches = (filePath: string): FileSearchMatch[] => {
+    if (SEARCH_BINARY_EXTENSIONS.has(path.extname(filePath).toLowerCase())) {
+      return [];
+    }
+
+    let stats: fs.Stats;
+    try {
+      stats = fs.statSync(filePath);
+    } catch {
+      return [];
+    }
+    if (stats.size === 0 || stats.size > SEARCH_MAX_FILE_SIZE) return [];
+
+    let buffer: Buffer;
+    try {
+      buffer = fs.readFileSync(filePath);
+    } catch {
+      return [];
+    }
+    // Cheap binary sniff: a null byte in the first chunk means "not text".
+    if (buffer.subarray(0, 8000).includes(0)) return [];
+
+    const lines = buffer.toString('utf8').split('\n');
+    const fileMatches: FileSearchMatch[] = [];
+
+    for (let i = 0; i < lines.length; i += 1) {
+      if (fileMatches.length >= SEARCH_MAX_MATCHES_PER_FILE) break;
+      const line = lines[i];
+      pattern.lastIndex = 0;
+      let match = pattern.exec(line);
+      while (match) {
+        fileMatches.push({
+          line: i + 1,
+          column: match.index + 1,
+          length: match[0].length,
+          lineText: line.slice(0, SEARCH_MAX_LINE_TEXT_LENGTH),
+        });
+        if (fileMatches.length >= SEARCH_MAX_MATCHES_PER_FILE) break;
+        // Avoid an infinite loop on zero-length matches (e.g. empty regex groups).
+        if (match[0].length === 0) pattern.lastIndex += 1;
+        match = pattern.exec(line);
+      }
+    }
+
+    return fileMatches;
+  };
+
+  const visit = (dir: string) => {
+    if (truncated) return;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    entries.forEach((entry) => {
+      if (truncated) return;
+      const entryPath = path.join(dir, entry.name);
+
+      if (entry.isDirectory()) {
+        if (!SEARCH_IGNORED_DIRS.has(entry.name)) visit(entryPath);
+        return;
+      }
+
+      if (!entry.isFile()) return;
+
+      const fileMatches = collectFileMatches(entryPath);
+      if (fileMatches.length === 0) return;
+
+      const remaining = SEARCH_MAX_TOTAL_MATCHES - totalMatches;
+      const cappedMatches = fileMatches.slice(0, remaining);
+      totalMatches += cappedMatches.length;
+      results.push({ path: entryPath, matches: cappedMatches });
+      if (totalMatches >= SEARCH_MAX_TOTAL_MATCHES) truncated = true;
+    });
+  };
+
+  visit(dirPath);
+  return { results, truncated };
 };
 
 export const readFileContent = (filePath: string): string | null => {

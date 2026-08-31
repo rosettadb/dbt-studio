@@ -309,6 +309,7 @@ const Connections: React.FC = () => {
           </Typography>
         );
       case 'duckdb':
+      case 'sqlite':
         return (
           <Typography variant="body2" color="text.secondary">
             Path: {connection.short_database_path || connection.database_path}

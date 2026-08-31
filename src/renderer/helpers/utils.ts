@@ -10,6 +10,7 @@ import {
   PostgresConnection,
   Project,
   RedshiftConnection,
+  SQLiteConnection,
   SnowflakeConnection,
   Table,
 } from '../../types/backend';
@@ -261,6 +262,15 @@ export const getConnectionInput = (conn: ConnectionModel) => {
         database_path: duck.database_path,
         database: duck.database,
         schema: duck.schema || 'main',
+        name: connection.name,
+      };
+    case 'sqlite':
+      const sqlite = connection as SQLiteConnection;
+      return {
+        type,
+        database_path: sqlite.database_path,
+        database: sqlite.database_path,
+        schema: 'main',
         name: connection.name,
       };
     case 'kinetica':

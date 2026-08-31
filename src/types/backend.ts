@@ -15,6 +15,7 @@ export type SupportedConnectionTypes =
   | 'kinetica'
   | 'googlecloud'
   | 'duckdb'
+  | 'sqlite'
   | 'ducklake';
 
 export type ConnectionBase = {
@@ -88,6 +89,12 @@ export type DuckDBConnection = Omit<ConnectionBase, 'username' | 'password'> & {
   // No username/password needed for DuckDB
 };
 
+export type SQLiteConnection = Omit<ConnectionBase, 'username' | 'password'> & {
+  type: 'sqlite';
+  database_path: string;
+  short_database_path: string;
+};
+
 export type KineticaConnection = ConnectionBase & {
   type: 'kinetica';
   host: string;
@@ -116,8 +123,13 @@ export type ConnectionInput =
   | RedshiftConnection
   | DatabricksConnection
   | DuckDBConnection
+  | SQLiteConnection
   | KineticaConnection
   | DuckLakeConnectionConfig;
+
+export const canUseAsDbtConnection = (
+  type: SupportedConnectionTypes,
+): boolean => type !== 'sqlite';
 
 export type ConnectionModel = {
   id: string;
@@ -311,6 +323,9 @@ export type DuckDBDiagnostics = {
 export type SettingsType = {
   rosettaPath: string;
   rosettaVersion: string;
+  runnerPath?: string;
+  runnerVersion?: string;
+  runnerHome?: string;
   projectsDirectory: string;
   dbtSampleDirectory: string;
   sampleRosettaMainConf: string;
@@ -342,6 +357,8 @@ export type SettingsType = {
   flowfileVersion?: string;
   flowfilePort?: string;
   flowfileAutoStart?: string;
+  kisqlPath?: string;
+  kisqlVersion?: string;
   icebergInstalled?: boolean;
   icebergVersion?: string;
 };
@@ -384,6 +401,42 @@ export type RosettaVersionInfo = {
   }[];
   latestStable: string;
   latestPrerelease?: string;
+};
+
+export type RunnerVersionInfo = {
+  currentVersion: string | null;
+  currentPath: string | null;
+  availableVersions: {
+    version: string;
+    releaseDate: string;
+    isPrerelease: boolean;
+    downloadUrl: string;
+    isNewer: boolean;
+    isOlder: boolean;
+    releaseNotes?: string;
+  }[];
+  latestStable: string;
+  latestPrerelease?: string;
+};
+
+export type RunnerPluginId =
+  | 'dbt'
+  | 'rosetta'
+  | 'git'
+  | 'terraform'
+  | 's3'
+  | 'kinetica_cli'
+  | 'command';
+
+export type RunnerPluginStatus = {
+  id: RunnerPluginId;
+  label: string;
+  plugin: string;
+  available: boolean;
+  version?: string;
+  path?: string;
+  managedInStudio?: boolean;
+  downloadUrl?: string;
 };
 
 export type DbtCoreVersionListItem = {
@@ -547,6 +600,25 @@ export type InstallResult = {
   installLog?: string[];
 };
 
+// Managed Python Installation Types
+export type PythonInstallInfo = {
+  installed: boolean;
+  version: string | null;
+  path: string | null;
+};
+
+export type PythonVersionInfo = {
+  currentVersion: string | null;
+  currentPath: string | null;
+  recommendedVersion: string;
+  availableVersions: {
+    version: string;
+    isRecommended: boolean;
+    isNewer: boolean;
+    isOlder: boolean;
+  }[];
+};
+
 export type FileNode = {
   id: string;
   name: string;
@@ -556,6 +628,23 @@ export type FileNode = {
 };
 
 export type FileNodeWithContent = FileNode & { content: string };
+
+export type FileSearchMatch = {
+  line: number;
+  column: number;
+  length: number;
+  lineText: string;
+};
+
+export type FileSearchResult = {
+  path: string;
+  matches: FileSearchMatch[];
+};
+
+export type FileSearchResponse = {
+  results: FileSearchResult[];
+  truncated: boolean;
+};
 
 export type CustomError = {
   message?: string;

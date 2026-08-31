@@ -13,7 +13,11 @@ import {
   FileDialogProperties,
   SettingsType,
   RosettaVersionInfo,
+  RunnerVersionInfo,
+  RunnerPluginStatus,
   InstallResult,
+  PythonInstallInfo,
+  PythonVersionInfo,
 } from '../../types/backend';
 import { QUERY_KEYS } from '../config/constants';
 import { useApiKey } from './rosettaCloud.controller';
@@ -222,6 +226,179 @@ export const useUninstallRosetta = (
   });
 };
 
+// Managed Python version management controllers
+export const useCheckPythonInstall = (
+  customOptions?: UseMutationOptions<PythonInstallInfo, CustomError, void>,
+): UseMutationResult<PythonInstallInfo, CustomError, void> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  return useMutation({
+    mutationFn: async () => {
+      return settingsServices.checkPythonInstall();
+    },
+    onSuccess: (...args) => {
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useInstallPython = (
+  customOptions?: UseMutationOptions<InstallResult, CustomError, void>,
+): UseMutationResult<InstallResult, CustomError, void> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      return settingsServices.installPython();
+    },
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useUninstallPython = (
+  customOptions?: UseMutationOptions<void, CustomError, void>,
+): UseMutationResult<void, CustomError, void> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      return settingsServices.uninstallPython();
+    },
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useCheckPythonVersions = (
+  customOptions?: UseMutationOptions<PythonVersionInfo, CustomError, void>,
+): UseMutationResult<PythonVersionInfo, CustomError, void> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  return useMutation({
+    mutationFn: async () => {
+      return settingsServices.checkPythonVersions();
+    },
+    onSuccess: (...args) => {
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useInstallPythonVersion = (
+  customOptions?: UseMutationOptions<InstallResult, CustomError, string>,
+): UseMutationResult<InstallResult, CustomError, string> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (version: string) => {
+      return settingsServices.installPythonVersion(version);
+    },
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useCheckRunnerVersions = (
+  customOptions?: UseMutationOptions<RunnerVersionInfo, CustomError, void>,
+): UseMutationResult<RunnerVersionInfo, CustomError, void> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  return useMutation({
+    mutationFn: async () => {
+      return settingsServices.checkRunnerVersions();
+    },
+    onSuccess: (...args) => {
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useInstallRunnerVersion = (
+  customOptions?: UseMutationOptions<InstallResult, CustomError, string>,
+): UseMutationResult<InstallResult, CustomError, string> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (version: string) => {
+      return settingsServices.installRunnerVersion(version);
+    },
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useUninstallRunnerVersion = (
+  customOptions?: UseMutationOptions<void, CustomError, void>,
+): UseMutationResult<void, CustomError, void> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      return settingsServices.uninstallRunnerVersion();
+    },
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+export const useCheckRunnerPluginDependencies = (
+  customOptions?: UseMutationOptions<RunnerPluginStatus[], CustomError, void>,
+): UseMutationResult<RunnerPluginStatus[], CustomError, void> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  return useMutation({
+    mutationFn: async () => {
+      return settingsServices.checkRunnerPluginDependencies();
+    },
+    onSuccess: (...args) => {
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
 // DuckDB hooks
 export const useGetDuckDbMetadata = (
   customOptions?: UseQueryOptions<any, CustomError, any>,
@@ -297,5 +474,78 @@ export const useDiagnoseDuckDb = (
     },
     ...customOptions,
     refetchInterval: 5000, // Auto-refresh every 5s when open
+  });
+};
+
+// KiSQL (Kinetica CLI) controllers
+export const useCheckKisqlVersion = (
+  customOptions?: UseMutationOptions<
+    {
+      installed: boolean;
+      version?: string;
+      path?: string;
+      latestSha?: string;
+      updateAvailable?: boolean;
+    },
+    CustomError,
+    void
+  >,
+): UseMutationResult<
+  {
+    installed: boolean;
+    version?: string;
+    path?: string;
+    latestSha?: string;
+    updateAvailable?: boolean;
+  },
+  CustomError,
+  void
+> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  return useMutation({
+    mutationFn: async () => settingsServices.checkKisqlVersion(),
+    onSuccess: (...args) => onCustomSuccess?.(...args),
+    onError: (...args) => onCustomError?.(...args),
+  });
+};
+
+export const useInstallKisql = (
+  customOptions?: UseMutationOptions<
+    { success: boolean; version: string; path: string; error?: string },
+    CustomError,
+    void
+  >,
+): UseMutationResult<
+  { success: boolean; version: string; path: string; error?: string },
+  CustomError,
+  void
+> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => settingsServices.installKisql(),
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => onCustomError?.(...args),
+  });
+};
+
+export const useUninstallKisql = (
+  customOptions?: UseMutationOptions<void, CustomError, void>,
+): UseMutationResult<void, CustomError, void> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => settingsServices.uninstallKisql(),
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => onCustomError?.(...args),
   });
 };

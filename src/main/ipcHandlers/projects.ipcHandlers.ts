@@ -116,6 +116,21 @@ const registerProjectHandlers = () => {
   });
 
   ipcMain.handle(
+    'project:searchInFiles',
+    async (
+      _event,
+      body: {
+        path: string;
+        query: string;
+        caseSensitive?: boolean;
+        useRegex?: boolean;
+      },
+    ) => {
+      return ProjectsService.searchInFiles(body);
+    },
+  );
+
+  ipcMain.handle(
     'project:updateFile',
     async (_event, body: { path: string; content: string }) => {
       return ProjectsService.saveFileContent(body.path, body.content);

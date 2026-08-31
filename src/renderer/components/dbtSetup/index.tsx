@@ -8,9 +8,11 @@ import {
   Button,
   Alert,
 } from '@mui/material';
+import { toast } from 'react-toastify';
 import { useCli } from '../../hooks';
 import { settingsServices } from '../../services';
 import { SettingsType } from '../../../types/backend';
+import { useInstallPython } from '../../controllers';
 
 type AdapterSelectionProps = {
   adapters: Array<{ name: string; description: string }>;
@@ -94,6 +96,7 @@ export const DbtSetup: React.FC<Props> = ({
   setSelectedAdapters,
 }) => {
   const { runCommand } = useCli();
+  const installPython = useInstallPython();
   const [loading, setLoading] = React.useState(false);
   const [currentPkg, setCurrentPkg] = React.useState('');
   const [progress, setProgress] = React.useState(0);
@@ -101,26 +104,47 @@ export const DbtSetup: React.FC<Props> = ({
   const handleInstall = async () => {
     setLoading(true);
     setProgress(0);
-    const python = settings.pythonPath ? `"${settings.pythonPath}"` : 'python';
 
-    // eslint-disable-next-line no-plusplus
-    for (let i = 0; i < selectedAdapters.length; i++) {
-      const pkg = selectedAdapters[i];
-      setCurrentPkg(pkg);
-      setProgress((i / selectedAdapters.length) * 100);
-      try {
-        // eslint-disable-next-line no-await-in-loop
-        await runCommand(`${python} -m pip install ${pkg}`);
-      } catch {
-        // continue
+    try {
+      let { pythonPath } = settings;
+      if (!pythonPath) {
+        toast.info(
+          'Python is required for dbt Core v1 and will be installed automatically.',
+        );
+        setCurrentPkg('Installing Python...');
+        const pythonResult = await installPython.mutateAsync();
+        if (!pythonResult.success) {
+          toast.error(`Failed to install Python: ${pythonResult.error}`);
+          return;
+        }
+        pythonPath = pythonResult.path;
       }
-    }
+      const python = pythonPath ? `"${pythonPath}"` : 'python';
 
-    setCurrentPkg('Locating dbt path...');
-    setProgress(100);
-    const dbtPath = await settingsServices.getDbtPath();
-    onInstallComplete(dbtPath);
-    setLoading(false);
+      // eslint-disable-next-line no-plusplus
+      for (let i = 0; i < selectedAdapters.length; i++) {
+        const pkg = selectedAdapters[i];
+        setCurrentPkg(pkg);
+        setProgress((i / selectedAdapters.length) * 100);
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          await runCommand(`${python} -m pip install ${pkg}`);
+        } catch {
+          // continue
+        }
+      }
+
+      setCurrentPkg('Locating dbt path...');
+      setProgress(100);
+      const dbtPath = await settingsServices.getDbtPath();
+      onInstallComplete(dbtPath);
+    } catch (error) {
+      toast.error(
+        `Installation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

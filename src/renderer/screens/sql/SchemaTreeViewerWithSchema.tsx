@@ -3,6 +3,11 @@ import React from 'react';
 import { TreeItem } from '@mui/x-tree-view';
 import { Box, CircularProgress } from '@mui/material';
 import { RenderTree } from '../../components/schemaTreeViewer/RenderTree';
+import { dedupeTables } from '../../components/schemaTreeViewer/dedupeTables';
+import {
+  schemaTreeKey,
+  tableTreeKey,
+} from '../../components/schemaTreeViewer/treeIds';
 import {
   Container,
   NoDataMessage,
@@ -45,15 +50,17 @@ export const SchemaTreeViewerWithSchema: React.FC<Props> = React.memo(
       databaseName,
     ]);
 
+    const dedupedTables = React.useMemo(() => dedupeTables(tables), [tables]);
+
     const filteredTables = React.useMemo(() => {
-      if (!filter) return tables;
+      if (!filter) return dedupedTables;
       const lowerFilter = filter.toLowerCase();
-      return tables.filter(
+      return dedupedTables.filter(
         (table) =>
           table.name.toLowerCase().includes(lowerFilter) ||
           table.schema.toLowerCase().includes(lowerFilter),
       );
-    }, [tables, filter]);
+    }, [dedupedTables, filter]);
 
     const schemaMap = React.useMemo(() => {
       const map = filteredTables.reduce<Record<string, Table[]>>(
@@ -129,23 +136,17 @@ export const SchemaTreeViewerWithSchema: React.FC<Props> = React.memo(
             >
               {hideSchemaLevel &&
                 filteredTables.map((table) => (
-                  <RenderTree
-                    key={`${table.schema}.${table.name}`}
-                    table={table}
-                  />
+                  <RenderTree key={tableTreeKey(table)} table={table} />
                 ))}
               {!hideSchemaLevel &&
                 Object.entries(schemaMap).map(([schemaName, schemaTables]) => (
                   <TreeItem
-                    key={`${databaseName}.${schemaName}`}
-                    itemId={`${databaseName}.${schemaName}`}
+                    key={schemaTreeKey(databaseName, schemaName)}
+                    itemId={schemaTreeKey(databaseName, schemaName)}
                     label={<TreeItems.Schema label={schemaName} />}
                   >
                     {schemaTables.map((table) => (
-                      <RenderTree
-                        key={`${schemaName}.${table.name}`}
-                        table={table}
-                      />
+                      <RenderTree key={tableTreeKey(table)} table={table} />
                     ))}
                   </TreeItem>
                 ))}

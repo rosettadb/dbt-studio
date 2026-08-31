@@ -598,7 +598,9 @@ const SelectProject: React.FC = () => {
             connectionType={connectionType}
             setConnectionType={setConnectionType}
             isLoadingConnections={isLoadingConnections}
-            connections={connections}
+            connections={connections.filter(
+              (connection) => connection.connection.type !== 'sqlite',
+            )}
             datalakeInstances={datalakeInstances}
             isLoadingDatalakes={isLoadingDatalakes}
             navigate={navigate}

@@ -14,7 +14,7 @@ import {
   DbtCommandType,
   Project,
 } from '../../../types/backend';
-import { useDbt, useProcess } from '../../hooks';
+import { useDbt, useProcess, useRunner } from '../../hooks';
 import { useGetSettings } from '../../controllers';
 import {
   StagingModal,
@@ -35,6 +35,10 @@ interface ProjectDbtSplitButtonProps {
   connection?: any;
   environment?: 'local' | 'cloud';
   onBeforeExecute?: () => void;
+  // Called once a local pipeline run has successfully started (distinct
+  // from onBeforeExecute, which switches to the plain terminal tab) so the
+  // terminal panel can expand to the runner logs tab instead.
+  onLocalRunStarted?: () => void;
   // Function handlers that are used elsewhere in ProjectDetails
   rosettaDbt: (project: Project, command: Command) => Promise<void>;
 }
@@ -49,6 +53,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
   connection,
   environment = 'local',
   onBeforeExecute,
+  onLocalRunStarted,
   rosettaDbt,
 }) => {
   // Functions that are only used in this component - moved inside
@@ -69,6 +74,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
     setRunInCloudModal(command);
   });
   const { start, stop, isRunning } = useProcess();
+  const { run: runPipelineLocally } = useRunner();
   const { data: settings } = useGetSettings();
   const isDbtV2 = !!settings?.dbtVersion?.startsWith('2.');
   const cloudV2Blocked = environment === 'cloud' && isDbtV2;
@@ -80,6 +86,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
   const [incrementalModal, setIncrementalModal] = React.useState(false);
   const [pipelineModal, setPipelineModal] = React.useState(false);
   const [pipelineArgs, setPipelineArgs] = React.useState('');
+  const [localPipelineModal, setLocalPipelineModal] = React.useState(false);
 
   React.useEffect(() => {
     const loadDefaults = async () => {
@@ -357,6 +364,22 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
       cloudOnly: true,
       dividerBefore: true,
     },
+    {
+      name: 'Run Pipeline (Local Runner)',
+      onClick: () => {
+        if (!settings?.runnerPath) {
+          toast.info(
+            'Install the local runner first (Settings > Local Runner)',
+          );
+          return;
+        }
+        setLocalPipelineModal(true);
+      },
+      leftIcon: <AccountTree sx={{ fontSize: 16 }} />,
+      subTitle: 'Run a pipeline on this machine',
+      localOnly: true,
+      dividerBefore: true,
+    },
   ];
 
   // Filter menu items based on environment
@@ -497,10 +520,38 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           isOpen={pipelineModal}
           onClose={() => setPipelineModal(false)}
           project={project}
-          onSelect={(pipelineName) => {
+          onSelect={(pipeline) => {
             setPipelineModal(false);
-            setPipelineArgs(`--pipeline_name ${pipelineName}`);
+            setPipelineArgs(`--pipeline_name ${pipeline.name}`);
             setRunInCloudModal('pipeline');
+          }}
+        />
+      )}
+      {localPipelineModal && (
+        <PipelineSelectorModal
+          isOpen={localPipelineModal}
+          onClose={() => setLocalPipelineModal(false)}
+          project={project}
+          onSelect={async (pipeline) => {
+            setLocalPipelineModal(false);
+            if (!settings?.runnerPath) {
+              toast.error('Local runner is not installed.');
+              return;
+            }
+            const ext = pipeline.path.slice(pipeline.path.lastIndexOf('.'));
+            const result = await runPipelineLocally({
+              workspaceDir: project.path,
+              pipelineFile: `${pipeline.name}${ext}`,
+              connectionName: connection?.connection?.name,
+            });
+            if (result.success) {
+              onLocalRunStarted?.();
+              toast.success(
+                'Pipeline run started. Track progress in Task Manager.',
+              );
+            } else {
+              toast.error(result.error || 'Failed to start the pipeline run');
+            }
           }}
         />
       )}

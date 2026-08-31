@@ -1,7 +1,10 @@
-import { BrowserWindow, shell, app, screen, Menu } from 'electron';
+import { BrowserWindow, shell, app, Menu } from 'electron';
 import path from 'path';
 import { resolveHtmlPath } from '../../utils/setupHelpers';
+import { createWindowStateKeeper } from '../../utils/windowState';
 import MenuBuilder from './menu';
+
+const mainWindowState = createWindowStateKeeper('main-window-state');
 
 export const createMainWindow = (
   onCloseCallback: () => void,
@@ -14,11 +17,13 @@ export const createMainWindow = (
     return path.join(RESOURCES_PATH, ...paths);
   };
 
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+  const initialBounds = mainWindowState.getInitialBounds();
 
   const mainWindow = new BrowserWindow({
-    width,
-    height,
+    width: initialBounds.width,
+    height: initialBounds.height,
+    x: initialBounds.x,
+    y: initialBounds.y,
     show: false,
     icon: getAssetPath('icon.png'),
     webPreferences: {
@@ -30,6 +35,8 @@ export const createMainWindow = (
       webviewTag: true,
     },
   });
+
+  mainWindowState.track(mainWindow);
 
   // Windows/Linux: no application menu at all. macOS always shows a native
   // menu bar regardless — Electron falls back to its own default (mostly
@@ -47,6 +54,9 @@ export const createMainWindow = (
       if (process.env.START_MINIMIZED) {
         mainWindow.minimize();
       } else {
+        if (initialBounds.isMaximized) {
+          mainWindow.maximize();
+        }
         mainWindow.show();
       }
     }

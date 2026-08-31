@@ -152,6 +152,7 @@ const CustomTable = <T,>({
                 customPagination?.setPerPage(value);
                 return;
               }
+              setPage(0);
               setPerPage(String(value));
             }}
             total={customPagination?.count ?? rows.length}
