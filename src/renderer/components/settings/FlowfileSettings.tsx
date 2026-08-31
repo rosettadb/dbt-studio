@@ -26,10 +26,11 @@ import {
   FlowfileStatus,
 } from '../../services/flowfile.service';
 import { ConfirmationModal } from '../modals';
+import { useInstallPython } from '../../controllers';
 
 interface FlowfileSettingsProps {
   settings: SettingsType;
-  onSettingsChange: (name: string, value: string) => void;
+  onSettingsChange: (name: string, value: string) => Promise<void>;
 }
 
 export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
@@ -81,18 +82,29 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
     onSettingsChange('flowfileAutoStart', checked ? 'true' : 'false');
   };
 
+  const installPython = useInstallPython();
+
   const handleInstall = async () => {
-    if (!settings.pythonPath) {
-      setInstallError(
-        'Python path not configured. Set it in Settings > General first.',
-      );
-      return;
-    }
     setIsInstalling(true);
     setInstallError(null);
     setIsLoadingDialog(true);
     setLoadingMessage('Installing Flowfile...');
     try {
+      if (!settings.pythonPath) {
+        toast.info(
+          'Python is required for Flowfile and will be installed automatically.',
+        );
+        setLoadingMessage('Installing Python...');
+        const pythonResult = await installPython.mutateAsync();
+        if (!pythonResult.success) {
+          setInstallError(`Failed to install Python: ${pythonResult.error}`);
+          return;
+        }
+        await onSettingsChange('pythonPath', pythonResult.path);
+        await onSettingsChange('pythonVersion', pythonResult.version);
+        setLoadingMessage('Installing Flowfile...');
+      }
+
       const result = await flowfileInstall();
       if (result.ok) {
         toast.success('Flowfile installed successfully');
@@ -169,10 +181,10 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
         </Box>
 
         {!isPythonConfigured && (
-          <Alert severity="warning" sx={{ mb: 2 }}>
-            Python path not configured. Go to{' '}
-            <strong>Settings &gt; General</strong> and set the Python path
-            first.
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Python is not installed yet. Installing Flowfile below will install
+            it automatically, or you can install it first from{' '}
+            <strong>Settings &gt; Python</strong>.
           </Alert>
         )}
 
@@ -215,8 +227,10 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
           {installedVersion ? 'Upgrade Flowfile' : 'Install Flowfile'}
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Installs <code>Flowfile</code> via <code>pip</code> into the
-          configured Python environment. Requires Python path to be set.
+          Installs <code>Flowfile</code> via <code>pip</code> into the managed
+          Python environment.
+          {!isPythonConfigured &&
+            ' Python will be installed automatically first.'}
         </Typography>
 
         {installError && (
@@ -235,7 +249,7 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
             )
           }
           onClick={handleInstall}
-          disabled={isInstalling || !isPythonConfigured}
+          disabled={isInstalling}
         >
           {isInstalling && 'Installing…'}
           {!isInstalling && installedVersion && 'Upgrade Flowfile'}

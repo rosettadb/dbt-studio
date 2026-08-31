@@ -27,6 +27,10 @@ type PipelineViewProps = {
   onRun?: () => void;
   /** When set, the Run button is shown but disabled with this text as its tooltip. */
   runDisabledReason?: string;
+  /** When true, the Run button is replaced with a Stop button. */
+  isRunning?: boolean;
+  /** Called when the Stop button is clicked (only rendered while isRunning). */
+  onStop?: () => void;
   /** Notifies parent when the visual graph enters/exits edit mode. */
   onEditingChange?: (isEditing: boolean) => void;
   /** Fired once when the pipeline view first mounts (e.g. tab opened). */
@@ -84,6 +88,8 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
   onSave,
   onRun,
   runDisabledReason,
+  isRunning,
+  onStop,
   onEditingChange,
   onEnterView,
 }) => {
@@ -201,6 +207,8 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
         onSave={onSave}
         onRun={onRun}
         runDisabledReason={runDisabledReason}
+        isRunning={isRunning}
+        onStop={onStop}
         onEditingChange={onEditingChange}
         onEnterView={onEnterView}
       />

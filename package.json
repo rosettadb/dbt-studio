@@ -1,5 +1,5 @@
 {
-  "version": "1.6.3",
+  "version": "1.6.6",
   "name": "rosetta-dbt-studio",
   "description": "Turn Raw Data into Business Insights—Faster with RosettaDB",
   "keywords": [
@@ -317,12 +317,30 @@
     },
     "linux": {
       "target": [
-        "deb"
+        "deb",
+        "flatpak"
       ],
       "category": "Development",
       "maintainer": "RosettaDB",
       "synopsis": "Rosetta DBT Studio",
       "description": "A studio for managing dbt projects"
+    },
+    "flatpak": {
+      "runtime": "org.freedesktop.Platform",
+      "runtimeVersion": "24.08",
+      "sdk": "org.freedesktop.Sdk",
+      "base": "org.electronjs.Electron2.BaseApp",
+      "baseVersion": "24.08",
+      "finishArgs": [
+        "--socket=wayland",
+        "--socket=x11",
+        "--share=ipc",
+        "--device=dri",
+        "--socket=pulseaudio",
+        "--filesystem=host",
+        "--share=network",
+        "--talk-name=org.freedesktop.Notifications"
+      ]
     },
     "directories": {
       "app": "release/app",

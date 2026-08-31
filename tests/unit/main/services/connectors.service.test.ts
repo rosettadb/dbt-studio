@@ -1,7 +1,10 @@
 import fs from 'fs';
 import ConnectorsService from '../../../../src/main/services/connectors.service';
+import { ProjectsService } from '../../../../src/main/services';
 
 const testPostgresConnection = jest.fn();
+const testSQLiteConnection = jest.fn();
+const executeSQLiteQuery = jest.fn();
 const getCredential = jest.fn();
 
 jest.mock('openai', () => ({
@@ -38,12 +41,15 @@ jest.mock('../../../../src/main/utils/connectors', () => ({
   executePostgresQuery: jest.fn(),
   executeRedshiftQuery: jest.fn(),
   executeSnowflakeQuery: jest.fn(),
+  executeSQLiteQuery: (...args: any[]) => executeSQLiteQuery(...args),
+  extractSQLiteSchema: jest.fn(),
   testBigQueryConnection: jest.fn(),
   testDatabricksConnection: jest.fn(),
   testDuckDBConnection: jest.fn(),
   testPostgresConnection: (...args: any[]) => testPostgresConnection(...args),
   testRedshiftConnection: jest.fn(),
   testSnowflakeConnection: jest.fn(),
+  testSQLiteConnection: (...args: any[]) => testSQLiteConnection(...args),
 }));
 
 describe('ConnectorsService (main)', () => {
@@ -57,6 +63,50 @@ describe('ConnectorsService (main)', () => {
       await expect(
         ConnectorsService.validateConnection({} as any),
       ).rejects.toThrow('Connection type is required');
+    });
+
+    it('accepts a standalone SQLite file connection shape', async () => {
+      await expect(
+        ConnectorsService.validateConnection({
+          type: 'sqlite',
+          name: 'Local analytics',
+          database_path: '/tmp/analytics.sqlite',
+          short_database_path: 'analytics.sqlite',
+          database: '/tmp/analytics.sqlite',
+          schema: 'main',
+        } as any),
+      ).resolves.toBeUndefined();
+    });
+
+    it('rejects SQLite without a database path', async () => {
+      await expect(
+        ConnectorsService.validateConnection({
+          type: 'sqlite',
+          name: 'Local analytics',
+        } as any),
+      ).rejects.toThrow('Database path is required');
+    });
+  });
+
+  describe('SQLite dbt project boundary', () => {
+    it('rejects configuring SQLite for an existing dbt project', async () => {
+      (ProjectsService.loadProjects as jest.Mock).mockResolvedValueOnce([
+        { id: 'project-1', name: 'Project', path: '/tmp/project' },
+      ]);
+
+      await expect(
+        ConnectorsService.configureConnection({
+          projectId: 'project-1',
+          connection: {
+            type: 'sqlite',
+            name: 'Local analytics',
+            database_path: '/tmp/analytics.sqlite',
+            short_database_path: 'analytics.sqlite',
+            database: '/tmp/analytics.sqlite',
+            schema: 'main',
+          } as any,
+        }),
+      ).rejects.toThrow('SQLite connections cannot be used by dbt projects');
     });
   });
 
@@ -80,11 +130,57 @@ describe('ConnectorsService (main)', () => {
       expect(testPostgresConnection).toHaveBeenCalledWith(connection);
     });
 
+    it('calls testSQLiteConnection for SQLite connections', async () => {
+      testSQLiteConnection.mockReturnValue(true);
+      const connection = {
+        type: 'sqlite',
+        name: 'Local analytics',
+        database_path: '/tmp/analytics.sqlite',
+        short_database_path: 'analytics.sqlite',
+        database: '/tmp/analytics.sqlite',
+        schema: 'main',
+      } as any;
+
+      await expect(ConnectorsService.testConnection(connection)).resolves.toBe(
+        true,
+      );
+      expect(testSQLiteConnection).toHaveBeenCalledWith(connection);
+    });
+
     it('validates before testing (missing type fails)', async () => {
       await expect(ConnectorsService.testConnection({} as any)).rejects.toThrow(
         'Connection type is required',
       );
       expect(testPostgresConnection).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('SQLite query execution', () => {
+    it('routes SQLite through the existing execute statement flow', async () => {
+      const connection = {
+        type: 'sqlite',
+        name: 'Local analytics',
+        database_path: '/tmp/analytics.sqlite',
+        database: '/tmp/analytics.sqlite',
+        schema: 'main',
+      } as any;
+      executeSQLiteQuery.mockReturnValue({
+        success: true,
+        data: [{ value: 42 }],
+        fields: [{ name: 'value', type: -1 }],
+      });
+
+      await expect(
+        ConnectorsService.executeSelectStatement({
+          connection,
+          query: 'SELECT value FROM metrics',
+          projectName: connection.name,
+        }),
+      ).resolves.toMatchObject({ success: true, data: [{ value: 42 }] });
+      expect(executeSQLiteQuery).toHaveBeenCalledWith(
+        connection,
+        'SELECT value FROM metrics',
+      );
     });
   });
 

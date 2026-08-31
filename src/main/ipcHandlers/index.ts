@@ -5,6 +5,7 @@ import registerConnectorsHandlers from './connectors.ipcHandlers';
 import registerGitHandlers from './git.ipcHandlers';
 import registerUtilsHandlers from './utils.ipcHandlers';
 import registerProcessHandlers from './process.ipcHandlers';
+import registerRunnerHandlers from './runner.ipcHandlers';
 import registerSecureStorageHandlers from './secureStorage.ipcHandlers';
 import registerUpdateHandlers from './updates.ipcHandlers';
 import registerCloudExplorerHandlers from './cloudExplorer.ipcHandlers';
@@ -34,6 +35,7 @@ export {
   registerGitHandlers,
   registerUtilsHandlers,
   registerProcessHandlers,
+  registerRunnerHandlers,
   registerSecureStorageHandlers,
   registerUpdateHandlers,
   registerCloudExplorerHandlers,

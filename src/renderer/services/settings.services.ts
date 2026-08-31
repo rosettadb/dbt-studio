@@ -3,7 +3,11 @@ import {
   FileDialogProperties,
   SettingsType,
   RosettaVersionInfo,
+  RunnerVersionInfo,
+  RunnerPluginStatus,
   InstallResult,
+  PythonInstallInfo,
+  PythonVersionInfo,
 } from '../../types/backend';
 import { client } from '../config/client';
 import { SecureStorageAccount } from '../../types/frontend';
@@ -126,6 +130,41 @@ export const resetFactorySettings = async (): Promise<void> => {
   await client.post<void, void>('settings:reset-factory', undefined);
 };
 
+// KiSQL (Kinetica CLI) services
+export const checkKisqlVersion = async (): Promise<{
+  installed: boolean;
+  version?: string;
+  path?: string;
+  latestSha?: string;
+  updateAvailable?: boolean;
+}> => {
+  const { data } = await client.get<{
+    installed: boolean;
+    version?: string;
+    path?: string;
+    latestSha?: string;
+    updateAvailable?: boolean;
+  }>('kisql:check');
+  return data;
+};
+
+export const installKisql = async (): Promise<{
+  success: boolean;
+  version: string;
+  path: string;
+  error?: string;
+}> => {
+  const { data } = await client.post<
+    undefined,
+    { success: boolean; version: string; path: string; error?: string }
+  >('kisql:install', undefined);
+  return data;
+};
+
+export const uninstallKisql = async (): Promise<void> => {
+  await client.get('kisql:uninstall');
+};
+
 export const restartApp = async (): Promise<void> => {
   await client.post<void, void>('settings:restart', undefined);
 };
@@ -150,6 +189,69 @@ export const installRosettaVersion = async (
 
 export const uninstallRosetta = async (): Promise<void> => {
   await client.get<void>('version:rosetta:uninstall');
+};
+
+// Managed Python version management services
+export const checkPythonInstall = async (): Promise<PythonInstallInfo> => {
+  const { data } = await client.get<PythonInstallInfo>('version:python:check');
+  return data;
+};
+
+export const installPython = async (): Promise<InstallResult> => {
+  const { data } = await client.post<void, InstallResult>(
+    'version:python:install',
+    undefined,
+  );
+  return data;
+};
+
+export const uninstallPython = async (): Promise<void> => {
+  await client.get<void>('version:python:uninstall');
+};
+
+export const checkPythonVersions = async (): Promise<PythonVersionInfo> => {
+  const { data } = await client.get<PythonVersionInfo>(
+    'version:python:versions:check',
+  );
+  return data;
+};
+
+export const installPythonVersion = async (
+  version: string,
+): Promise<InstallResult> => {
+  const { data } = await client.post<string, InstallResult>(
+    'version:python:versions:install',
+    version,
+  );
+  return data;
+};
+
+export const checkRunnerVersions = async (): Promise<RunnerVersionInfo> => {
+  const { data } = await client.get<RunnerVersionInfo>('version:runner:check');
+  return data;
+};
+
+export const installRunnerVersion = async (
+  version: string,
+): Promise<InstallResult> => {
+  const { data } = await client.post<string, InstallResult>(
+    'version:runner:install',
+    version,
+  );
+  return data;
+};
+
+export const uninstallRunnerVersion = async (): Promise<void> => {
+  await client.get<void>('version:runner:uninstall');
+};
+
+export const checkRunnerPluginDependencies = async (): Promise<
+  RunnerPluginStatus[]
+> => {
+  const { data } = await client.get<RunnerPluginStatus[]>(
+    'runner:plugins:check',
+  );
+  return data;
 };
 
 // DuckDB management services

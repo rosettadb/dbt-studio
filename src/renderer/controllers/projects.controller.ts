@@ -50,6 +50,7 @@ export const useSelectProject = (
     },
     onSuccess: async (...args) => {
       await queryClient.invalidateQueries([QUERY_KEYS.GET_SELECTED_PROJECT]);
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_PROJECTS]);
       onCustomSuccess?.(...args);
     },
     onError: (...args) => {

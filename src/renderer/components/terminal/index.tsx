@@ -33,7 +33,7 @@ import {
   TaskbarItem,
 } from './styles';
 import { ProcessTerminal } from './processTerminal';
-import { useProcess } from '../../hooks';
+import { useProcess, useRunner } from '../../hooks';
 import { useSelectedFileContext } from '../../hooks/useSelectedFileContext';
 import { Project } from '../../../types/backend';
 import { useCurrentModelId } from '../../controllers';
@@ -59,7 +59,8 @@ export type TerminalPanelTab =
   | 'lineage'
   | 'queryResults'
   | 'runHistory'
-  | 'cloudLogs';
+  | 'cloudLogs'
+  | 'runnerLogs';
 
 export interface TerminalLayoutRef {
   switchTab: (tab: TerminalPanelTab) => void;
@@ -75,6 +76,8 @@ type Props = {
   showRunHistoryTab?: boolean;
   cloudLogsPanel?: React.ReactNode;
   showCloudLogsTab?: boolean;
+  runnerLogsPanel?: React.ReactNode;
+  showRunnerLogsTab?: boolean;
 };
 
 export const TerminalLayout = React.forwardRef<TerminalLayoutRef, Props>(
@@ -89,6 +92,8 @@ export const TerminalLayout = React.forwardRef<TerminalLayoutRef, Props>(
       showRunHistoryTab = false,
       cloudLogsPanel,
       showCloudLogsTab = false,
+      runnerLogsPanel,
+      showRunnerLogsTab = false,
     },
     ref,
   ) => {
@@ -96,6 +101,7 @@ export const TerminalLayout = React.forwardRef<TerminalLayoutRef, Props>(
     const theme = useTheme();
     const { isRunning, stop, forceStop, pid, duration, status, command } =
       useProcess();
+    const { isRunning: isRunnerRunning } = useRunner();
 
     const { selectedFilePath } = useSelectedFileContext();
 
@@ -266,6 +272,26 @@ export const TerminalLayout = React.forwardRef<TerminalLayoutRef, Props>(
         setSelectedTab('process');
       }
     }, [isRunning]);
+
+    // Auto-switch to runner logs tab when a local pipeline run starts
+    React.useEffect(() => {
+      if (
+        isRunnerRunning &&
+        showRunnerLogsTab &&
+        selectedTab !== 'runnerLogs'
+      ) {
+        setSelectedTab('runnerLogs');
+      }
+    }, [isRunnerRunning, showRunnerLogsTab]);
+
+    // If runner logs tab is hidden but selected (e.g. a new run just cleared
+    // logs and hasn't started yet), switch back to terminal so the panel
+    // isn't left blank.
+    React.useEffect(() => {
+      if (!showRunnerLogsTab && selectedTab === 'runnerLogs') {
+        setSelectedTab('terminal');
+      }
+    }, [showRunnerLogsTab, selectedTab]);
 
     // // Reset stopping state when process stops
     // React.useEffect(() => {
@@ -592,6 +618,21 @@ export const TerminalLayout = React.forwardRef<TerminalLayoutRef, Props>(
                       </Typography>
                     </Button>
                   )}
+                  {/* Runner Logs Tab */}
+                  {showRunnerLogsTab && (
+                    <Button
+                      size="small"
+                      disableRipple
+                      sx={tabButtonSx(selectedTab === 'runnerLogs')}
+                      onClick={() => setSelectedTab('runnerLogs')}
+                    >
+                      <Typography
+                        sx={{ fontWeight: 500, fontSize: 10.5, lineHeight: 1 }}
+                      >
+                        RUNNER LOGS
+                      </Typography>
+                    </Button>
+                  )}
                   {/* Minimize Button */}
                   <IconButton
                     onClick={handleMinimize}
@@ -665,6 +706,17 @@ export const TerminalLayout = React.forwardRef<TerminalLayoutRef, Props>(
                     }}
                   >
                     {cloudLogsPanel}
+                  </Box>
+                )}
+                {selectedTab === 'runnerLogs' && showRunnerLogsTab && (
+                  <Box
+                    sx={{
+                      height: '100%',
+                      bgcolor: 'background.default',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {runnerLogsPanel}
                   </Box>
                 )}
               </>

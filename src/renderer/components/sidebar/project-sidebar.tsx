@@ -19,7 +19,8 @@ import {
 } from '@mui/icons-material';
 import { useTheme } from '@mui/material/styles';
 import { ReactComponent as RouteIcon } from '../../assets/icons/lucide/route.svg';
-import { FileTreeViewer } from '../index';
+import { FileTreeViewer, SearchInFilesPanel } from '../index';
+import type { SearchResultSelection } from '../searchInFiles';
 import { FileTreeContainer } from '../../screens/projectDetails/styles';
 import {
   FileStatus,
@@ -32,7 +33,7 @@ import connectionIcons from '../../../../assets/connectionIcons';
 import { useListPipelines } from '../../controllers';
 import { CreatePipelineModal } from '../modals';
 
-export type SidebarTab = 'explorer' | 'scm' | 'connections';
+export type SidebarTab = 'explorer' | 'search' | 'scm' | 'connections';
 
 // Helper function to get connection type name
 const getConnectionTypeName = (connectionType?: string) => {
@@ -264,6 +265,7 @@ interface ExplorerTabProps {
   onNewFile: (filePath?: string) => void;
   onRenameFile?: (oldPath: string, newPath: string) => void;
   onRunPipeline?: (filePath: string) => void;
+  onRunPipelineLocal?: (filePath: string) => void;
 }
 
 const ExplorerTab: React.FC<ExplorerTabProps> = ({
@@ -279,6 +281,7 @@ const ExplorerTab: React.FC<ExplorerTabProps> = ({
   onNewFile,
   onRenameFile,
   onRunPipeline,
+  onRunPipelineLocal,
 }) => {
   const theme = useTheme();
   const [createPipelineOpen, setCreatePipelineOpen] = React.useState(false);
@@ -318,6 +321,7 @@ const ExplorerTab: React.FC<ExplorerTabProps> = ({
             selectedPath={selectedFilePath}
             onRenameCallback={onRenameFile}
             onRunPipeline={onRunPipeline}
+            onRunPipelineLocal={onRunPipelineLocal}
           />
         )}
       </Box>
@@ -364,6 +368,25 @@ const ExplorerTab: React.FC<ExplorerTabProps> = ({
         />
       )}
     </FileTreeContainer>
+  );
+};
+
+// Search Tab Component - Global "find in files" panel
+interface SearchTabProps {
+  projectPath?: string;
+  onSearchResultSelect: (selection: SearchResultSelection) => void;
+}
+
+const SearchTab: React.FC<SearchTabProps> = ({
+  projectPath,
+  onSearchResultSelect,
+}) => {
+  if (!projectPath) return null;
+  return (
+    <SearchInFilesPanel
+      projectPath={projectPath}
+      onResultSelect={onSearchResultSelect}
+    />
   );
 };
 
@@ -433,6 +456,10 @@ interface ProjectSidebarProps {
 
   // Pipeline
   onRunPipeline?: (filePath: string) => void;
+
+  // Search (find in files)
+  onSearchResultSelect: (selection: SearchResultSelection) => void;
+  onRunPipelineLocal?: (filePath: string) => void;
 }
 
 export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
@@ -458,6 +485,8 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   onEditConnection,
   onRemoveConnection,
   onRunPipeline,
+  onSearchResultSelect,
+  onRunPipelineLocal,
 }) => {
   return (
     <Box
@@ -485,6 +514,15 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
             onNewFile={onNewFile}
             onRenameFile={onRenameFile}
             onRunPipeline={onRunPipeline}
+            onRunPipelineLocal={onRunPipelineLocal}
+          />
+        )}
+
+        {/* Search Tab - Find in Files */}
+        {activeTab === 'search' && (
+          <SearchTab
+            projectPath={project?.path}
+            onSearchResultSelect={onSearchResultSelect}
           />
         )}
 

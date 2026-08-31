@@ -19,6 +19,15 @@ export type SettingsChannels =
   | 'version:rosetta:check'
   | 'version:rosetta:install'
   | 'version:rosetta:uninstall'
+  | 'version:python:check'
+  | 'version:python:install'
+  | 'version:python:uninstall'
+  | 'version:python:versions:check'
+  | 'version:python:versions:install'
+  | 'version:runner:check'
+  | 'version:runner:install'
+  | 'version:runner:uninstall'
+  | 'runner:plugins:check'
   | 'settings:reset-factory'
   | 'settings:restart'
   | 'settings:getFileName'
@@ -40,7 +49,10 @@ export type SettingsChannels =
   | 'dbt:package:installLatest'
   | 'dbt:package:uninstall'
   | 'dbt:packageVersions:list'
-  | 'dbt:packageVersion:install';
+  | 'dbt:packageVersion:install'
+  | 'kisql:install'
+  | 'kisql:uninstall'
+  | 'kisql:check';
 
 export type ProjectChannels =
   | 'project:get'
@@ -52,6 +64,7 @@ export type ProjectChannels =
   | 'project:getPath'
   | 'project:getDirectory'
   | 'project:readFile'
+  | 'project:searchInFiles'
   | 'project:updateFile'
   | 'project:configureConnection'
   | 'project:postRosettaDBTCopy'
@@ -239,6 +252,16 @@ export type ProcessChannels =
   | 'process:started'
   | 'process:exit'
   | 'process:done';
+
+export type RunnerChannels =
+  | 'runner:run'
+  | 'runner:status'
+  | 'runner:stop'
+  | 'runner:output'
+  | 'runner:error'
+  | 'runner:started'
+  | 'runner:exit'
+  | 'runner:done';
 
 export type SecureStorageChannels =
   | 'secure-storage:set'
@@ -536,6 +559,7 @@ export type Channels =
   | GitChannels
   | UtilChannels
   | ProcessChannels
+  | RunnerChannels
   | SecureStorageChannels
   | UpdateChannels
   | CloudExplorerChannels

@@ -73,6 +73,15 @@ type EditorProps = {
     compileModel?: boolean;
   }) => void | Promise<void>;
   extraActions?: React.ReactNode;
+  /** Pending cursor position (e.g. from a "find in files" result) to reveal once its tab is active. */
+  revealPosition?: {
+    path: string;
+    line: number;
+    column: number;
+    length: number;
+  } | null;
+  /** Called once `revealPosition` has been applied, so the parent can clear it. */
+  onRevealHandled?: () => void;
 };
 
 type DecorationMode = 'untracked' | 'modified' | 'clean';
@@ -109,6 +118,8 @@ export const Editor: React.FC<EditorProps> = ({
   onExecuteQuery,
   onExecuteCte,
   extraActions,
+  revealPosition,
+  onRevealHandled,
 }) => {
   const theme = useTheme();
   const monacoTheme = theme.palette.mode === 'dark' ? 'vs-dark' : 'light';
@@ -299,6 +310,19 @@ export const Editor: React.FC<EditorProps> = ({
     },
     [],
   );
+
+  // Applies a pending "find in files" jump once its tab is active and the
+  // editor has swapped to that tab's model (activeContent sync runs first).
+  React.useEffect(() => {
+    if (!editorInstance || !revealPosition) return;
+    if (activeTab?.path !== revealPosition.path) return;
+    const { line, column, length } = revealPosition;
+    const range = new monaco.Range(line, column, line, column + length);
+    editorInstance.revealRangeInCenter(range);
+    editorInstance.setSelection(range);
+    editorInstance.focus();
+    onRevealHandled?.();
+  }, [editorInstance, revealPosition, activeTab?.path, onRevealHandled]);
 
   React.useEffect(() => {
     if (!onExecuteQuery && !onExecuteCte) {
