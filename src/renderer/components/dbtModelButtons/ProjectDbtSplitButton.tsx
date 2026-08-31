@@ -519,6 +519,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
         <PipelineSelectorModal
           isOpen={pipelineModal}
           onClose={() => setPipelineModal(false)}
+          mode="cloud"
           project={project}
           onSelect={(pipeline) => {
             setPipelineModal(false);
@@ -531,6 +532,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
         <PipelineSelectorModal
           isOpen={localPipelineModal}
           onClose={() => setLocalPipelineModal(false)}
+          mode="local"
           project={project}
           onSelect={async (pipeline) => {
             setLocalPipelineModal(false);
