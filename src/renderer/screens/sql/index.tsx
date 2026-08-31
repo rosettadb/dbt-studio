@@ -1270,6 +1270,7 @@ const Sql = () => {
                     actions={
                       activeTab && (
                         <SqlEditorActions
+                          key={activeTab.id}
                           connectionId={activeTab.connectionId}
                           query={activeTab.query}
                           queryHistory={queryHistory}
