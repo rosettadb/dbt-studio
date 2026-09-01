@@ -49,6 +49,7 @@ import { serializePipelineConfig } from './serializePipeline';
 import { validatePipelineGraph } from './validatePipeline';
 import { useTerminalMinimize } from '../terminal';
 import { UnsavedChangesDialog } from '../editor/unsavedChangesDialog';
+import { SplitButton } from '../splitButton';
 
 export const nodeTypes = { pipelineNode: PipelineNode };
 
@@ -68,6 +69,11 @@ type PipelineGraphProps = {
   isRunning?: boolean;
   /** Called when the Stop button is clicked (only rendered while isRunning). */
   onStop?: () => void;
+  /**
+   * When provided (local mode only), the Run button becomes a split button
+   * with a "Run with env…" menu item that calls this instead of onRun.
+   */
+  onRunWithEnv?: () => void;
   onEditingChange?: (isEditing: boolean) => void;
   /** Fired once when the pipeline view first mounts (e.g. tab opened). */
   onEnterView?: () => void;
@@ -188,6 +194,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
   runDisabledReason,
   isRunning,
   onStop,
+  onRunWithEnv,
   onEditingChange,
   onEnterView,
 }) => {
@@ -205,6 +212,9 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
   const [validationError, setValidationError] = React.useState('');
   const [isSaving, setIsSaving] = React.useState(false);
   const [showRunSaveConfirm, setShowRunSaveConfirm] = React.useState(false);
+  const [pendingRunKind, setPendingRunKind] = React.useState<
+    'run' | 'runWithEnv'
+  >('run');
   const [showUnsavedDialog, setShowUnsavedDialog] = React.useState(false);
 
   const reactFlowWrapper = React.useRef<HTMLDivElement>(null);
@@ -320,28 +330,40 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
     }
   }, [nodes, edges, pipelineName, onSave]);
 
-  const handleRunClick = useCallback(() => {
-    if (isEditing) {
-      const currentSnapshot = serializePipelineConfig(
-        pipelineName,
-        nodes,
-        edges,
-      );
-      if (currentSnapshot !== editSnapshotRef.current) {
-        setShowRunSaveConfirm(true);
-        return;
+  const handleRunClick = useCallback(
+    (kind: 'run' | 'runWithEnv' = 'run') => {
+      if (isEditing) {
+        const currentSnapshot = serializePipelineConfig(
+          pipelineName,
+          nodes,
+          edges,
+        );
+        if (currentSnapshot !== editSnapshotRef.current) {
+          setPendingRunKind(kind);
+          setShowRunSaveConfirm(true);
+          return;
+        }
       }
-    }
-    onRun?.();
-  }, [isEditing, onRun, pipelineName, nodes, edges]);
+      if (kind === 'runWithEnv') {
+        onRunWithEnv?.();
+      } else {
+        onRun?.();
+      }
+    },
+    [isEditing, onRun, onRunWithEnv, pipelineName, nodes, edges],
+  );
 
   const handleConfirmSaveAndRun = useCallback(async () => {
     const saved = await handleSave();
     if (saved) {
       setShowRunSaveConfirm(false);
-      onRun?.();
+      if (pendingRunKind === 'runWithEnv') {
+        onRunWithEnv?.();
+      } else {
+        onRun?.();
+      }
     }
-  }, [handleSave, onRun]);
+  }, [handleSave, onRun, onRunWithEnv, pendingRunKind]);
 
   const handleRequestCodeView = useCallback(() => {
     if (!onEdit) return;
@@ -615,15 +637,31 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
         {onRun && !(isRunning && onStop) && (
           <Tooltip title={runDisabledReason || ''}>
             <span>
-              <Button
-                size="small"
-                variant="outlined"
-                onClick={handleRunClick}
-                disabled={isSaving || Boolean(runDisabledReason)}
-                startIcon={<PlayArrowIcon sx={{ fontSize: 14 }} />}
-              >
-                Run
-              </Button>
+              {onRunWithEnv ? (
+                <SplitButton
+                  title="Run"
+                  leftIcon={<PlayArrowIcon />}
+                  disabled={isSaving || Boolean(runDisabledReason)}
+                  onClick={() => handleRunClick('run')}
+                  menuItems={[
+                    {
+                      name: 'Run with env…',
+                      subTitle: 'Set custom env vars before running',
+                      onClick: () => handleRunClick('runWithEnv'),
+                    },
+                  ]}
+                />
+              ) : (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => handleRunClick('run')}
+                  disabled={isSaving || Boolean(runDisabledReason)}
+                  startIcon={<PlayArrowIcon sx={{ fontSize: 14 }} />}
+                >
+                  Run
+                </Button>
+              )}
             </span>
           </Tooltip>
         )}
@@ -773,6 +811,7 @@ export const PipelineGraph: React.FC<PipelineGraphProps> = ({
   runDisabledReason,
   isRunning,
   onStop,
+  onRunWithEnv,
   onEditingChange,
   onEnterView,
 }) => (
@@ -786,6 +825,7 @@ export const PipelineGraph: React.FC<PipelineGraphProps> = ({
       runDisabledReason={runDisabledReason}
       isRunning={isRunning}
       onStop={onStop}
+      onRunWithEnv={onRunWithEnv}
       onEditingChange={onEditingChange}
       onEnterView={onEnterView}
     />

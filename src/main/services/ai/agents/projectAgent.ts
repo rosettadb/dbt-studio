@@ -11,6 +11,7 @@ import {
 import { composeAgentRuntime } from './composeAgentRuntime';
 import { PROJECT_AGENT_CONTEXT_FILE } from '../../../../shared/agentMemoryConstants';
 import { createStudioPipelineTools } from '../tools/studio/pipeline.tools';
+import { createStudioKeystoreTools } from '../tools/studio/keystore.tools';
 
 export interface ProjectAgentOptions {
   projectPath?: string;
@@ -231,11 +232,16 @@ If the failure appears to be caused by invalid credentials, unreachable host, wr
 - studio_pipeline_read: Read and validate a pipeline and return its content hash
 - studio_pipeline_generate: Generate a new validated pipeline under rosetta/pipelines without overwriting
 - studio_pipeline_update: Update an existing validated pipeline using the hash returned by studio_pipeline_read
+- studio_keystore_register_placeholder: Register a placeholder keystore entry (never a real secret) for an env var a pipeline step needs, so it appears in the local "Run with env" dialog for the user to fill in
 
 Always list before selecting a pipeline. Read before every update. Use generate
 only for a new canonical path. If update reports stale content, read again and
 reconcile the requested change. These tools do not run, stage, commit, push, or
-monitor pipelines.
+monitor pipelines. When a step you add or update needs an env var that isn't
+already referenced elsewhere in the project (e.g. a new TF_VAR_* for a
+terraform@v1 step), register it with studio_keystore_register_placeholder so
+the user can find and fill it in later - never ask the user for or store a
+real secret value yourself.
 ${mcpToolsList}
 
 ### Database Tools
@@ -256,6 +262,7 @@ Always confirm before making destructive changes.`;
         }),
         ...createFilesystemTools(projectPath),
         ...createStudioPipelineTools(projectPath),
+        ...createStudioKeystoreTools(),
       }
     : { ...dbtTools, ...filesystemTools };
 
