@@ -124,6 +124,43 @@ Unless overridden by \`${PROJECT_AGENT_CONTEXT_FILE}\`, always follow standard d
 - **Intermediate (\`models/intermediate/\`)**: Joins and complex transformations between staging models. Name models \`int_{name}.sql\`.
 - **Marts (\`models/marts/\`)**: Clean, business-level aggregates for BI tools. Name models \`dim_{name}.sql\` (dimensions) or \`fct_{name}.sql\` (facts).
 
+## Rosetta Schema Files (rosetta/<connection-type>/model.yaml)
+
+These files are consumed by an external Java CLI (not part of this repo) and are strict about field names: unknown fields fail deserialization at runtime (Jackson \`UnrecognizedPropertyException\`). Only use the fields listed below — do not invent or guess field names (e.g. \`schemaType\` does not exist and will fail).
+
+This shape mirrors this repo's own \`Column\`/\`Table\` types (\`src/types/backend.ts\`) and is the same shape every extractor under \`src/main/extractor/*.ts\` (e.g. \`bigquery.extractor.ts\`) produces via \`extractSchema()\`.
+
+Top-level \`Database\` object (exactly these 7 fields):
+- \`safeMode\` (boolean)
+- \`tables\` (array)
+- \`name\` (string)
+- \`operationLevel\` (string, e.g. \`"schema"\`)
+- \`views\` (array — include as \`[]\` even when empty)
+- \`databaseProductName\` (string, e.g. \`"Google BigQuery"\` for bigquery)
+- \`databaseType\` (string, e.g. \`"bigquery"\`)
+
+\`Table\`:
+- \`name\` (string)
+- \`type\` (\`"TABLE"\` | \`"VIEW"\`)
+- \`schema\` (string)
+- \`columns\` (array of \`Column\`)
+
+\`Column\`:
+- \`name\` (string)
+- \`typeName\` (string)
+- \`ordinalPosition\` (number, 1-based)
+- \`primaryKeySequenceId\` (number)
+- \`columnDisplaySize\` (number)
+- \`scale\` (number)
+- \`precision\` (number)
+- \`columnProperties\` (array — \`[]\` if none)
+- \`autoincrement\` (boolean)
+- \`primaryKey\` (boolean)
+- \`nullable\` (boolean)
+- \`foreignKeys\` is optional — omit the field entirely when there are none; do not add \`[]\` for it.
+
+If a \`model.yaml\` already exists elsewhere in the project, \`readFile\` it first and mirror its exact field set instead of re-deriving the schema from memory.
+
 ## Guidelines
 
 1. **Always read before writing**: Use readDbtModel or readFile to understand existing code before making changes
@@ -147,6 +184,7 @@ Unless overridden by \`${PROJECT_AGENT_CONTEXT_FILE}\`, always follow standard d
 - Do not add speculative improvements, abstractions, or refactors that were not requested.
 - Prefer diagnosis, explanation, or targeted edits over broad rewrites.
 - Prefer DBT Studio product workflows and native tools over manual file repair when they solve the same problem more safely.
+- \`writeFile\` replaces the entire file, so fixing one field or value in an existing file is not "targeted" by default: \`readFile\` the file's current on-disk content immediately before writing (not a version recalled earlier in the conversation, not what you originally generated), change only what's needed, and carry every other value forward exactly as read, including anything the user edited by hand since your last write.
 
 ## Stay In Scope
 
