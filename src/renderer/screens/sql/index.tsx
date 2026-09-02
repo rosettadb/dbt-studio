@@ -65,6 +65,7 @@ import {
 } from '../../controllers';
 import { SchemaTreeViewerWithSchema } from './SchemaTreeViewerWithSchema';
 import { SavedQueriesList } from '../../components/sqlEditor/SavedQueriesList';
+import { SqlEditorActions } from '../../components/sqlEditor/SqlEditorActions';
 import connectionIcons, {
   defaultIcon,
 } from '../../../../assets/connectionIcons';
@@ -1266,6 +1267,26 @@ const Sql = () => {
                     onSelect={switchTab}
                     onClose={closeTab}
                     onReorder={reorderTabs}
+                    actions={
+                      activeTab && (
+                        <SqlEditorActions
+                          key={activeTab.id}
+                          connectionId={activeTab.connectionId}
+                          query={activeTab.query}
+                          queryHistory={queryHistory}
+                          onQuerySelect={(query) => {
+                            updateTabQuery(activeTab.id, query);
+                            connectorsServices
+                              .updateConnectionQuery(
+                                activeTab.connectionId,
+                                query,
+                              )
+                              .then(() => markTabSaved(activeTab.id))
+                              .catch(() => {});
+                          }}
+                        />
+                      )
+                    }
                   />
 
                   {/* Main Content */}

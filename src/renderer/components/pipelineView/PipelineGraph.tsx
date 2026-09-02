@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect } from 'react';
 import ReactFlow, {
   ReactFlowProvider,
   Controls,
@@ -40,6 +40,8 @@ import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import SaveIcon from '@mui/icons-material/Save';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import StopIcon from '@mui/icons-material/Stop';
+import UndoIcon from '@mui/icons-material/Undo';
+import RedoIcon from '@mui/icons-material/Redo';
 import type { PipelineJob } from './types';
 import { PipelineNode, type PipelineNodeData } from './PipelineNode';
 import { NodePalette } from './NodePalette';
@@ -78,6 +80,14 @@ type PipelineGraphProps = {
   /** Fired once when the pipeline view first mounts (e.g. tab opened). */
   onEnterView?: () => void;
 };
+
+type PipelineSnapshot = {
+  nodes: Node<PipelineNodeData>[];
+  edges: Edge[];
+  pipelineName: string;
+};
+
+const MAX_HISTORY = 50;
 
 export function getLayoutedElements(flowNodes: Node[], flowEdges: Edge[]) {
   const g = new dagre.graphlib.Graph();
@@ -219,11 +229,88 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
 
   const reactFlowWrapper = React.useRef<HTMLDivElement>(null);
   const nodesRef = React.useRef(nodes);
-  nodesRef.current = nodes;
+  const edgesRef = React.useRef(edges);
+  const pipelineNameRef = React.useRef(pipelineName);
+  useLayoutEffect(() => {
+    nodesRef.current = nodes;
+    edgesRef.current = edges;
+    pipelineNameRef.current = pipelineName;
+  }, [nodes, edges, pipelineName]);
   // Snapshot of the serialized graph at the moment edit mode was entered,
   // so we can tell whether anything actually changed before warning about
   // unsaved changes.
   const editSnapshotRef = React.useRef('');
+
+  // Undo/redo history for the current edit session. Snapshots are pushed
+  // just before a mutation is applied, so `past`'s top entry is always the
+  // state right before the most recent change.
+  const pastRef = React.useRef<PipelineSnapshot[]>([]);
+  const futureRef = React.useRef<PipelineSnapshot[]>([]);
+  const [canUndo, setCanUndo] = React.useState(false);
+  const [canRedo, setCanRedo] = React.useState(false);
+  const nameEditActiveRef = React.useRef(false);
+
+  const resetHistory = useCallback(() => {
+    pastRef.current = [];
+    futureRef.current = [];
+    setCanUndo(false);
+    setCanRedo(false);
+  }, []);
+
+  const commitHistory = useCallback(() => {
+    pastRef.current.push({
+      nodes: nodesRef.current,
+      edges: edgesRef.current,
+      pipelineName: pipelineNameRef.current,
+    });
+    if (pastRef.current.length > MAX_HISTORY) pastRef.current.shift();
+    futureRef.current = [];
+    setCanUndo(true);
+    setCanRedo(false);
+  }, []);
+
+  // React Flow's deleteElements fires onEdgesChange then onNodesChange
+  // synchronously for a node with connected edges; without this guard each
+  // call commits the same pre-deletion snapshot, duplicating the undo step.
+  const removalCommitPendingRef = React.useRef(false);
+  const commitHistoryForRemoval = useCallback(() => {
+    if (removalCommitPendingRef.current) return;
+    removalCommitPendingRef.current = true;
+    commitHistory();
+    queueMicrotask(() => {
+      removalCommitPendingRef.current = false;
+    });
+  }, [commitHistory]);
+
+  const handleUndo = useCallback(() => {
+    const prev = pastRef.current.pop();
+    if (!prev) return;
+    futureRef.current.push({
+      nodes: nodesRef.current,
+      edges: edgesRef.current,
+      pipelineName: pipelineNameRef.current,
+    });
+    setNodes(prev.nodes);
+    setEdges(prev.edges);
+    setPipelineName(prev.pipelineName);
+    setCanUndo(pastRef.current.length > 0);
+    setCanRedo(true);
+  }, [setNodes, setEdges]);
+
+  const handleRedo = useCallback(() => {
+    const next = futureRef.current.pop();
+    if (!next) return;
+    pastRef.current.push({
+      nodes: nodesRef.current,
+      edges: edgesRef.current,
+      pipelineName: pipelineNameRef.current,
+    });
+    setNodes(next.nodes);
+    setEdges(next.edges);
+    setPipelineName(next.pipelineName);
+    setCanRedo(futureRef.current.length > 0);
+    setCanUndo(true);
+  }, [setNodes, setEdges]);
 
   const openEditForNode = useCallback((id: string) => {
     const node = nodesRef.current.find((n) => n.id === id);
@@ -289,6 +376,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
     setPipelineName(initialPipelineName);
     setValidationError('');
     setIsEditing(true);
+    resetHistory();
     editSnapshotRef.current = serializePipelineConfig(
       initialPipelineName,
       laid,
@@ -302,12 +390,14 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
     setEdges,
     openEditForNode,
     handleNodeDelete,
+    resetHistory,
   ]);
 
   const handleCancelEdit = useCallback(() => {
     setIsEditing(false);
     setValidationError('');
-  }, []);
+    resetHistory();
+  }, [resetHistory]);
 
   const handleSave = useCallback(async (): Promise<string | null> => {
     const errors = validatePipelineGraph(nodes, edges);
@@ -321,6 +411,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
       const content = serializePipelineConfig(pipelineName, nodes, edges);
       await onSave?.(content);
       setIsEditing(false);
+      resetHistory();
       return content;
     } catch (err) {
       setValidationError(err instanceof Error ? err.message : 'Save failed');
@@ -328,7 +419,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
     } finally {
       setIsSaving(false);
     }
-  }, [nodes, edges, pipelineName, onSave]);
+  }, [nodes, edges, pipelineName, onSave, resetHistory]);
 
   const handleRunClick = useCallback(
     (kind: 'run' | 'runWithEnv' = 'run') => {
@@ -400,6 +491,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
   const onConnect = useCallback(
     (params: Connection) => {
       if (!isEditing) return;
+      commitHistory();
       setEdges((eds) =>
         addEdge(
           {
@@ -415,7 +507,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
         ),
       );
     },
-    [isEditing, setEdges, theme],
+    [isEditing, setEdges, theme, commitHistory],
   );
 
   const onDrop = useCallback(
@@ -458,9 +550,17 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
         } as PipelineNodeData,
       };
 
+      commitHistory();
       setNodes((nds) => [...nds, newNode]);
     },
-    [project, nodes, setNodes, openEditForNode, handleNodeDelete],
+    [
+      project,
+      nodes,
+      setNodes,
+      openEditForNode,
+      handleNodeDelete,
+      commitHistory,
+    ],
   );
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -479,6 +579,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
   const handleDialogSave = useCallback(
     (updated: Partial<PipelineNodeData>) => {
       if (!editNode) return;
+      commitHistory();
       setNodes((nds) =>
         nds.map((n) => {
           if (n.id !== editNode.id) return n;
@@ -496,7 +597,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
       );
       setEditNode(null);
     },
-    [editNode, setNodes],
+    [editNode, setNodes, commitHistory],
   );
 
   const existingJobNames = React.useMemo(
@@ -515,6 +616,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
       const firstCommandField = def?.fields.find((f) => f.key === 'command');
       const offset = nodes.length * 30;
       const newId = `node-${Date.now()}`;
+      commitHistory();
       setNodes((nds) => [
         ...nds,
         {
@@ -537,19 +639,71 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
         },
       ]);
     },
-    [nodes, setNodes, openEditForNode, handleNodeDelete],
+    [nodes, setNodes, openEditForNode, handleNodeDelete, commitHistory],
   );
 
   const onNodesChange = useCallback(
-    (changes: NodeChange[]) =>
-      setNodes((nds) => applyNodeChanges(changes, nds)),
-    [setNodes],
+    (changes: NodeChange[]) => {
+      if (isEditing && changes.some((c) => c.type === 'remove')) {
+        commitHistoryForRemoval();
+      }
+      setNodes((nds) => applyNodeChanges(changes, nds));
+    },
+    [setNodes, isEditing, commitHistoryForRemoval],
   );
   const onEdgesChange = useCallback(
-    (changes: EdgeChange[]) =>
-      setEdges((eds) => applyEdgeChanges(changes, eds)),
-    [setEdges],
+    (changes: EdgeChange[]) => {
+      if (isEditing && changes.some((c) => c.type === 'remove')) {
+        commitHistoryForRemoval();
+      }
+      setEdges((eds) => applyEdgeChanges(changes, eds));
+    },
+    [setEdges, isEditing, commitHistoryForRemoval],
   );
+
+  const onNodeDragStart = useCallback(() => {
+    if (isEditing) commitHistory();
+  }, [isEditing, commitHistory]);
+
+  const handlePipelineNameChange = useCallback(
+    (value: string) => {
+      if (!nameEditActiveRef.current) {
+        commitHistory();
+        nameEditActiveRef.current = true;
+      }
+      setPipelineName(value);
+    },
+    [commitHistory],
+  );
+
+  const handlePipelineNameBlur = useCallback(() => {
+    nameEditActiveRef.current = false;
+  }, []);
+
+  useEffect(() => {
+    if (!isEditing || isSaving) return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const isMod = event.metaKey || event.ctrlKey;
+      if (!isMod) return;
+      const key = event.key.toLowerCase();
+      if (key !== 'z' && key !== 'y') return;
+      const target = event.target as HTMLElement | null;
+      const isEditableTarget =
+        !!target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable);
+      if (isEditableTarget) return;
+      event.preventDefault();
+      if (key === 'y' || (key === 'z' && event.shiftKey)) {
+        handleRedo();
+      } else {
+        handleUndo();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isEditing, isSaving, handleUndo, handleRedo]);
 
   return (
     <Box
@@ -578,7 +732,8 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
           <TextField
             label="Pipeline Name"
             value={pipelineName}
-            onChange={(e) => setPipelineName(e.target.value)}
+            onChange={(e) => handlePipelineNameChange(e.target.value)}
+            onBlur={handlePipelineNameBlur}
             size="small"
             sx={{ width: 200 }}
             InputLabelProps={{ shrink: true }}
@@ -704,6 +859,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            onNodeDragStart={onNodeDragStart}
             onNodeDoubleClick={onNodeDoubleClick}
             onDrop={isEditing ? onDrop : undefined}
             onDragOver={isEditing ? onDragOver : undefined}
@@ -712,16 +868,40 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
             nodesDraggable={isEditing}
             nodesConnectable={isEditing}
             fitView
-            fitViewOptions={{ padding: 0.15 }}
+            fitViewOptions={{ padding: 0.15, maxZoom: 0.95 }}
             proOptions={{ hideAttribution: true }}
           >
-            <Controls>
+            <Controls position="top-right">
               {!isEditing && onSave && (
-                <Tooltip title="Visual edit pipeline" placement="right">
+                <Tooltip title="Visual edit pipeline" placement="left">
                   <ControlButton onClick={handleEnterEdit}>
                     <AutoFixHighIcon style={{ maxWidth: 14, maxHeight: 14 }} />
                   </ControlButton>
                 </Tooltip>
+              )}
+              {isEditing && (
+                <>
+                  <Tooltip title="Undo (Ctrl/Cmd+Z)" placement="left">
+                    <span>
+                      <ControlButton
+                        onClick={handleUndo}
+                        disabled={!canUndo || isSaving}
+                      >
+                        <UndoIcon style={{ maxWidth: 14, maxHeight: 14 }} />
+                      </ControlButton>
+                    </span>
+                  </Tooltip>
+                  <Tooltip title="Redo (Ctrl/Cmd+Shift+Z)" placement="left">
+                    <span>
+                      <ControlButton
+                        onClick={handleRedo}
+                        disabled={!canRedo || isSaving}
+                      >
+                        <RedoIcon style={{ maxWidth: 14, maxHeight: 14 }} />
+                      </ControlButton>
+                    </span>
+                  </Tooltip>
+                </>
               )}
             </Controls>
             <Background color={theme.palette.text.disabled} gap={16} />

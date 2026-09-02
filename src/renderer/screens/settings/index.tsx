@@ -10,7 +10,7 @@ import {
   ListItemIcon,
   ListItemText,
 } from '@mui/material';
-import { DarkMode, LightMode } from '@mui/icons-material';
+import { DarkMode, LightMode, OpenInNew } from '@mui/icons-material';
 import { useLocation } from 'react-router-dom';
 import { useColorScheme } from '@mui/material/styles';
 import AppsIcon from '@mui/icons-material/Apps';
@@ -265,12 +265,25 @@ const Settings: React.FC = () => {
                   {category.items.map((element) => (
                     <StyledSettingsNavLink key={element.text} to={element.path}>
                       <ListItem
+                        onClick={
+                          element.externalUrl
+                            ? (e) => {
+                                e.preventDefault();
+                                window.open(
+                                  element.externalUrl,
+                                  '_blank',
+                                  'noopener,noreferrer',
+                                );
+                              }
+                            : undefined
+                        }
                         sx={{
                           cursor: 'pointer',
                           borderRadius: 1,
                           mb: 0,
                           width: '100%',
                           backgroundColor:
+                            !element.externalUrl &&
                             location.pathname === element.path
                               ? theme.palette.divider
                               : 'transparent',
@@ -280,6 +293,7 @@ const Settings: React.FC = () => {
                           <element.icon
                             fontSize="small"
                             color={
+                              !element.externalUrl &&
                               location.pathname === element.path
                                 ? 'primary'
                                 : 'inherit'
@@ -287,6 +301,11 @@ const Settings: React.FC = () => {
                           />
                         </ListItemIcon>
                         <ListItemText primary={element.text} />
+                        {element.externalUrl && (
+                          <OpenInNew
+                            sx={{ fontSize: 13, opacity: 0.4, mr: 2 }}
+                          />
+                        )}
                       </ListItem>
                     </StyledSettingsNavLink>
                   ))}
