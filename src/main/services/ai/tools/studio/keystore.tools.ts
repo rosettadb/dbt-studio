@@ -34,22 +34,15 @@ export function createStudioKeystoreTools() {
       }),
       execute: async ({ name, environment }) => {
         const key = `${environment}.${name}`;
-        const existing = await SecureStorageService.getCredential(key);
-        if (existing !== null) {
-          return { success: true, key, created: false };
-        }
+        const { created } = await SecureStorageService.createCredentialIfAbsent(
+          key,
+          PLACEHOLDER_SENTINEL,
+        );
+        // Always reconcile, even when the credential already existed, so a
+        // retry after a prior partial failure still adds the environment.
+        await SecureStorageService.addEnvironment(environment);
 
-        await SecureStorageService.setCredential(key, PLACEHOLDER_SENTINEL);
-
-        const environments = await SecureStorageService.getEnvironments();
-        if (!environments.includes(environment)) {
-          await SecureStorageService.setEnvironments([
-            ...environments,
-            environment,
-          ]);
-        }
-
-        return { success: true, key, created: true };
+        return { success: true, key, created };
       },
     }),
   };

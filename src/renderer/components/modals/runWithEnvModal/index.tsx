@@ -66,7 +66,9 @@ export const RunWithEnvModal: React.FC<RunWithEnvModalProps> = ({
   );
   const [newKey, setNewKey] = React.useState('');
   const [newValue, setNewValue] = React.useState('');
+  const [showNewValue, setShowNewValue] = React.useState(false);
   const [isRunning, setIsRunning] = React.useState(false);
+  const [prefilling, setPrefilling] = React.useState(false);
   const [error, setError] = React.useState('');
   const [keystoreKeys, setKeystoreKeys] = React.useState<string[]>([]);
   const [keystoreLoading, setKeystoreLoading] = React.useState(false);
@@ -78,10 +80,12 @@ export const RunWithEnvModal: React.FC<RunWithEnvModalProps> = ({
   React.useEffect(() => {
     if (!isOpen) {
       initializedRef.current = false;
+      setPrefilling(false);
       return;
     }
     if (initializedRef.current || requiredLoading) return;
     initializedRef.current = true;
+    setPrefilling(true);
 
     let cancelled = false;
     (async () => {
@@ -122,7 +126,10 @@ export const RunWithEnvModal: React.FC<RunWithEnvModalProps> = ({
           return { id: v.name, key: v.name, value, isRequired: true };
         }),
       );
-      if (!cancelled) setRows(prefilled);
+      if (!cancelled) {
+        setRows(prefilled);
+        setPrefilling(false);
+      }
     })();
 
     // eslint-disable-next-line consistent-return
@@ -169,6 +176,7 @@ export const RunWithEnvModal: React.FC<RunWithEnvModalProps> = ({
     setError('');
     setNewKey('');
     setNewValue('');
+    setShowNewValue(false);
   };
 
   const removeRow = (id: string) => {
@@ -227,6 +235,19 @@ export const RunWithEnvModal: React.FC<RunWithEnvModalProps> = ({
 
   const handleRun = async () => {
     setError('');
+
+    const missingRequired = rows.filter(
+      (row) => row.isRequired && !row.value.trim(),
+    );
+    if (missingRequired.length > 0) {
+      setError(
+        `Missing required value${missingRequired.length > 1 ? 's' : ''} for: ${missingRequired
+          .map((row) => row.key)
+          .join(', ')}`,
+      );
+      return;
+    }
+
     const extraEnv = rows.reduce<Record<string, string>>((acc, row) => {
       if (row.value.trim()) acc[row.key] = row.value.trim();
       return acc;
@@ -376,9 +397,29 @@ export const RunWithEnvModal: React.FC<RunWithEnvModalProps> = ({
             <TextField
               label="Value"
               size="small"
+              type={showNewValue ? 'text' : 'password'}
               value={newValue}
               onChange={(e) => setNewValue(e.target.value)}
               sx={{ flex: 1 }}
+              slotProps={{
+                input: {
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        size="small"
+                        onClick={() => setShowNewValue((prev) => !prev)}
+                        aria-label={showNewValue ? 'Hide value' : 'Show value'}
+                      >
+                        {showNewValue ? (
+                          <VisibilityOff fontSize="small" />
+                        ) : (
+                          <Visibility fontSize="small" />
+                        )}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                },
+              }}
             />
             <Button onClick={addCustomRow} variant="outlined" size="small">
               Add
@@ -422,7 +463,7 @@ export const RunWithEnvModal: React.FC<RunWithEnvModalProps> = ({
               isRunning ? <CircularProgress size={16} /> : <PlayArrow />
             }
             onClick={handleRun}
-            disabled={isRunning}
+            disabled={isRunning || prefilling}
           >
             {isRunning ? 'Starting…' : 'Run'}
           </Button>
