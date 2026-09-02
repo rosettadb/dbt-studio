@@ -269,7 +269,11 @@ const Settings: React.FC = () => {
                           element.externalUrl
                             ? (e) => {
                                 e.preventDefault();
-                                window.open(element.externalUrl, '_blank');
+                                window.open(
+                                  element.externalUrl,
+                                  '_blank',
+                                  'noopener,noreferrer',
+                                );
                               }
                             : undefined
                         }
