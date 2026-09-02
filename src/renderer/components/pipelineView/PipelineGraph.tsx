@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect } from 'react';
 import ReactFlow, {
   ReactFlowProvider,
   Controls,
@@ -219,11 +219,13 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
 
   const reactFlowWrapper = React.useRef<HTMLDivElement>(null);
   const nodesRef = React.useRef(nodes);
-  nodesRef.current = nodes;
   const edgesRef = React.useRef(edges);
-  edgesRef.current = edges;
   const pipelineNameRef = React.useRef(pipelineName);
-  pipelineNameRef.current = pipelineName;
+  useLayoutEffect(() => {
+    nodesRef.current = nodes;
+    edgesRef.current = edges;
+    pipelineNameRef.current = pipelineName;
+  }, [nodes, edges, pipelineName]);
   // Snapshot of the serialized graph at the moment edit mode was entered,
   // so we can tell whether anything actually changed before warning about
   // unsaved changes.
@@ -256,6 +258,19 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
     setCanUndo(true);
     setCanRedo(false);
   }, []);
+
+  // React Flow's deleteElements fires onEdgesChange then onNodesChange
+  // synchronously for a node with connected edges; without this guard each
+  // call commits the same pre-deletion snapshot, duplicating the undo step.
+  const removalCommitPendingRef = React.useRef(false);
+  const commitHistoryForRemoval = useCallback(() => {
+    if (removalCommitPendingRef.current) return;
+    removalCommitPendingRef.current = true;
+    commitHistory();
+    queueMicrotask(() => {
+      removalCommitPendingRef.current = false;
+    });
+  }, [commitHistory]);
 
   const handleUndo = useCallback(() => {
     const prev = pastRef.current.pop();
@@ -608,20 +623,20 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
       if (isEditing && changes.some((c) => c.type === 'remove')) {
-        commitHistory();
+        commitHistoryForRemoval();
       }
       setNodes((nds) => applyNodeChanges(changes, nds));
     },
-    [setNodes, isEditing, commitHistory],
+    [setNodes, isEditing, commitHistoryForRemoval],
   );
   const onEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
       if (isEditing && changes.some((c) => c.type === 'remove')) {
-        commitHistory();
+        commitHistoryForRemoval();
       }
       setEdges((eds) => applyEdgeChanges(changes, eds));
     },
-    [setEdges, isEditing, commitHistory],
+    [setEdges, isEditing, commitHistoryForRemoval],
   );
 
   const onNodeDragStart = useCallback(() => {
@@ -644,7 +659,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
   }, []);
 
   useEffect(() => {
-    if (!isEditing) return undefined;
+    if (!isEditing || isSaving) return undefined;
     const handleKeyDown = (event: KeyboardEvent) => {
       const isMod = event.metaKey || event.ctrlKey;
       if (!isMod) return;
@@ -666,7 +681,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isEditing, handleUndo, handleRedo]);
+  }, [isEditing, isSaving, handleUndo, handleRedo]);
 
   return (
     <Box
