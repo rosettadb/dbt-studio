@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Box,
   Card,
@@ -17,59 +17,182 @@ import {
   CircularProgress,
   Alert,
 } from '@mui/material';
-import { Edit, Delete, Storage, Refresh } from '@mui/icons-material';
+import { Edit, Delete, Folder, Storage, Refresh } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import moment from 'moment';
 import {
   useDuckLakeInstances,
   useDeleteDuckLakeInstance,
 } from '../../controllers/duckLake.controller';
+import {
+  useListIcebergInstances,
+  useDeleteIcebergInstance,
+} from '../../controllers/icebergDatalake.controller';
 import { ConfirmationModal } from '../modals/confirmationModal';
+import type { IcebergInstanceListItem } from '../../../types/iceberg';
+import { IcebergIcon } from './iceberg/IcebergIcon';
+import {
+  cloudStorageImages,
+  databaseIcons,
+  genericCatalogImage,
+  icebergCatalogImages,
+} from '../../../../assets/connectionIcons';
+import { icons } from '../../../../assets/icons';
 
-interface DuckLakeInstancesProps {
+type DataLakeTableRow =
+  | {
+      id: string;
+      name: string;
+      description?: string;
+      lakeType: 'duck-lake';
+      catalogType: string;
+      dataPath: string;
+      createdAt: string;
+      updatedAt: string;
+    }
+  | {
+      id: string;
+      name: string;
+      description?: string;
+      lakeType: 'iceberg';
+      catalogType: string;
+      dataPath: string;
+      createdAt: string;
+      updatedAt: string;
+      icebergInstance: IcebergInstanceListItem;
+    };
+
+const getCatalogIcon = (row: DataLakeTableRow) => {
+  if (row.lakeType === 'duck-lake') return databaseIcons.duckdb;
+  return (
+    icebergCatalogImages[
+      row.catalogType.toLowerCase() as keyof typeof icebergCatalogImages
+    ] ?? genericCatalogImage
+  );
+};
+
+const getStorageIcon = (row: DataLakeTableRow) => {
+  const path = row.dataPath.toLowerCase();
+  let icon;
+  if (!icon && path.startsWith('s3://')) icon = cloudStorageImages.s3;
+  if (!icon && path.startsWith('gs://')) icon = cloudStorageImages.gcs;
+  if (!icon && path.startsWith('abfss://')) icon = cloudStorageImages.azure;
+
+  if (icon) {
+    return (
+      <Box
+        component="img"
+        src={icon}
+        alt=""
+        sx={{ width: 16, height: 16, objectFit: 'contain', flexShrink: 0 }}
+      />
+    );
+  }
+  if (path === 'server-managed') {
+    return <Storage sx={{ fontSize: 16, color: 'text.secondary' }} />;
+  }
+  return <Folder sx={{ fontSize: 16, color: 'text.secondary' }} />;
+};
+
+interface DataLakeInstancesProps {
   onInstanceSelect?: (instanceId: string) => void;
+  onEditIceberg?: (instanceId: string) => void;
 }
 
-export const DataLakeInstances: React.FC<DuckLakeInstancesProps> = ({
+export const DataLakeInstances: React.FC<DataLakeInstancesProps> = ({
   onInstanceSelect,
+  onEditIceberg,
 }) => {
   const navigate = useNavigate();
   const [deleteConfirmation, setDeleteConfirmation] = useState<{
     isOpen: boolean;
     instanceId: string | null;
     instanceName: string | null;
+    lakeType: 'duck-lake' | 'iceberg' | null;
   }>({
     isOpen: false,
     instanceId: null,
     instanceName: null,
+    lakeType: null,
   });
 
-  // React Query hooks
   const {
-    data: instances = [],
-    isLoading,
-    error,
-    refetch,
+    data: duckLakeInstances = [],
+    isLoading: duckLakeLoading,
+    error: duckLakeError,
+    refetch: refetchDuckLake,
   } = useDuckLakeInstances();
-  const deleteMutation = useDeleteDuckLakeInstance();
+  const {
+    data: icebergInstances = [],
+    isLoading: icebergLoading,
+    error: icebergError,
+    refetch: refetchIceberg,
+  } = useListIcebergInstances();
+  const deleteDuckLakeMutation = useDeleteDuckLakeInstance();
+  const deleteIcebergMutation = useDeleteIcebergInstance();
 
-  const handleDelete = (instanceId: string) => {
-    const instance = instances.find((inst) => inst.id === instanceId);
+  const isLoading = duckLakeLoading || icebergLoading;
+  const error = duckLakeError || icebergError;
+
+  const rows = useMemo<DataLakeTableRow[]>(() => {
+    const duckRows: DataLakeTableRow[] = duckLakeInstances.map((instance) => ({
+      id: instance.id,
+      name: instance.name,
+      description: instance.description,
+      lakeType: 'duck-lake',
+      catalogType: instance.catalog.type.toUpperCase(),
+      dataPath: instance.dataPath,
+      createdAt: new Date(instance.createdAt).toISOString(),
+      updatedAt: new Date(instance.updatedAt).toISOString(),
+    }));
+
+    const icebergRows: DataLakeTableRow[] = icebergInstances.map(
+      (instance) => ({
+        id: instance.id,
+        name: instance.name,
+        description: instance.description,
+        lakeType: 'iceberg',
+        catalogType: instance.catalogType.toUpperCase(),
+        dataPath:
+          instance.localPath ||
+          instance.catalogPath ||
+          instance.storageBucket ||
+          instance.storageType,
+        createdAt: instance.createdAt,
+        updatedAt: instance.updatedAt,
+        icebergInstance: instance,
+      }),
+    );
+
+    return [...duckRows, ...icebergRows].sort(
+      (a, b) =>
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+    );
+  }, [duckLakeInstances, icebergInstances]);
+
+  const handleDelete = (row: DataLakeTableRow) => {
     setDeleteConfirmation({
       isOpen: true,
-      instanceId,
-      instanceName: instance?.name || 'this instance',
+      instanceId: row.id,
+      instanceName: row.name,
+      lakeType: row.lakeType,
     });
   };
 
   const handleConfirmDelete = () => {
-    if (deleteConfirmation.instanceId) {
-      deleteMutation.mutate(deleteConfirmation.instanceId);
+    if (!deleteConfirmation.instanceId || !deleteConfirmation.lakeType) return;
+
+    if (deleteConfirmation.lakeType === 'duck-lake') {
+      deleteDuckLakeMutation.mutate(deleteConfirmation.instanceId);
+    } else {
+      deleteIcebergMutation.mutate(deleteConfirmation.instanceId);
     }
+
     setDeleteConfirmation({
       isOpen: false,
       instanceId: null,
       instanceName: null,
+      lakeType: null,
     });
   };
 
@@ -78,19 +201,33 @@ export const DataLakeInstances: React.FC<DuckLakeInstancesProps> = ({
       isOpen: false,
       instanceId: null,
       instanceName: null,
+      lakeType: null,
     });
   };
 
-  const handleEdit = (instanceId: string) => {
-    navigate(`/app/data-lake/duck-lake/instances/${instanceId}/edit`);
+  const handleEdit = (row: DataLakeTableRow) => {
+    if (row.lakeType === 'duck-lake') {
+      navigate(`/app/data-lake/duck-lake/instances/${row.id}/edit`);
+      return;
+    }
+    onEditIceberg?.(row.id);
   };
 
-  const handleInstanceClick = (instanceId: string) => {
-    if (onInstanceSelect) {
-      onInstanceSelect(instanceId);
-    } else {
-      navigate(`/app/data-lake/duck-lake/instances/${instanceId}`);
+  const handleInstanceClick = (row: DataLakeTableRow) => {
+    if (row.lakeType === 'duck-lake') {
+      if (onInstanceSelect) {
+        onInstanceSelect(row.id);
+      } else {
+        navigate(`/app/data-lake/duck-lake/instances/${row.id}`);
+      }
+      return;
     }
+    navigate(`/app/data-lake/iceberg/instances/${row.id}`);
+  };
+
+  const handleRefresh = () => {
+    refetchDuckLake();
+    refetchIceberg();
   };
 
   if (error) {
@@ -101,7 +238,7 @@ export const DataLakeInstances: React.FC<DuckLakeInstancesProps> = ({
         </Alert>
         <Button
           variant="contained"
-          onClick={() => refetch()}
+          onClick={handleRefresh}
           startIcon={<Refresh />}
         >
           Retry
@@ -112,7 +249,6 @@ export const DataLakeInstances: React.FC<DuckLakeInstancesProps> = ({
 
   return (
     <Box sx={{ p: 2 }}>
-      {/* Header */}
       <Box
         sx={{
           display: 'flex',
@@ -126,12 +262,12 @@ export const DataLakeInstances: React.FC<DuckLakeInstancesProps> = ({
             DataLake Instances
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Manage your DataLake instances
+            Manage your DuckLake and Apache Iceberg instances
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
           <IconButton
-            onClick={() => refetch()}
+            onClick={handleRefresh}
             disabled={isLoading}
             title="Refresh"
           >
@@ -140,15 +276,13 @@ export const DataLakeInstances: React.FC<DuckLakeInstancesProps> = ({
         </Box>
       </Box>
 
-      {/* Loading State */}
       {isLoading && (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
           <CircularProgress />
         </Box>
       )}
 
-      {/* Empty State */}
-      {!isLoading && instances.length === 0 && (
+      {!isLoading && rows.length === 0 && (
         <Card sx={{ textAlign: 'center', py: 4 }}>
           <CardContent>
             <Storage sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
@@ -163,8 +297,7 @@ export const DataLakeInstances: React.FC<DuckLakeInstancesProps> = ({
         </Card>
       )}
 
-      {/* Instances Table */}
-      {!isLoading && instances.length > 0 && (
+      {!isLoading && rows.length > 0 && (
         <TableContainer component={Paper}>
           <Table>
             <TableHead>
@@ -172,19 +305,19 @@ export const DataLakeInstances: React.FC<DuckLakeInstancesProps> = ({
                 <TableCell>Name</TableCell>
                 <TableCell>DataLake Type</TableCell>
                 <TableCell>Catalog Type</TableCell>
-                <TableCell>Data Path</TableCell>
+                <TableCell>Data Path / Storage</TableCell>
                 <TableCell>Created</TableCell>
                 <TableCell>Last Updated</TableCell>
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {instances.map((instance) => (
+              {rows.map((row) => (
                 <TableRow
-                  key={instance.id}
+                  key={`${row.lakeType}-${row.id}`}
                   hover
                   sx={{ cursor: 'pointer' }}
-                  onClick={() => handleInstanceClick(instance.id)}
+                  onClick={() => handleInstanceClick(row)}
                 >
                   <TableCell>
                     <Box>
@@ -192,26 +325,52 @@ export const DataLakeInstances: React.FC<DuckLakeInstancesProps> = ({
                         variant="subtitle2"
                         sx={{ fontWeight: 'bold' }}
                       >
-                        {instance.name}
+                        {row.name}
                       </Typography>
-                      {instance.description && (
+                      {row.description && (
                         <Typography variant="caption" color="text.secondary">
-                          {instance.description}
+                          {row.description}
                         </Typography>
                       )}
                     </Box>
                   </TableCell>
                   <TableCell>
-                    <Chip
-                      label="DuckLake"
-                      size="small"
-                      color="primary"
-                      variant="outlined"
-                    />
+                    {row.lakeType === 'duck-lake' ? (
+                      <Chip
+                        icon={
+                          <Box
+                            component="img"
+                            src={icons.duckLake}
+                            alt=""
+                            sx={{ width: 16, height: 16, objectFit: 'contain' }}
+                          />
+                        }
+                        label="DuckLake"
+                        size="small"
+                        color="primary"
+                        variant="outlined"
+                      />
+                    ) : (
+                      <Chip
+                        icon={<IcebergIcon size={16} />}
+                        label="Apache Iceberg"
+                        size="small"
+                        color="primary"
+                        variant="outlined"
+                      />
+                    )}
                   </TableCell>
                   <TableCell>
                     <Chip
-                      label={instance.catalog.type.toUpperCase()}
+                      icon={
+                        <Box
+                          component="img"
+                          src={getCatalogIcon(row)}
+                          alt=""
+                          sx={{ width: 16, height: 16, objectFit: 'contain' }}
+                        />
+                      }
+                      label={row.catalogType}
                       size="small"
                       variant="outlined"
                     />
@@ -219,42 +378,48 @@ export const DataLakeInstances: React.FC<DuckLakeInstancesProps> = ({
                   <TableCell
                     sx={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}
                   >
-                    <Typography
-                      variant="body2"
-                      sx={{ fontFamily: 'monospace' }}
-                    >
-                      {instance.dataPath}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      {getStorageIcon(row)}
+                      <Typography
+                        variant="body2"
+                        sx={{ fontFamily: 'monospace' }}
+                      >
+                        {row.dataPath}
+                      </Typography>
+                    </Box>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2">
+                      {moment(row.createdAt).format('MMM D, YYYY')}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {moment(row.createdAt).fromNow()}
                     </Typography>
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2">
-                      {moment(instance.createdAt).format('MMM D, YYYY')}
+                      {moment(row.updatedAt).format('MMM D, YYYY')}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
-                      {moment(instance.createdAt).fromNow()}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2">
-                      {moment(instance.updatedAt).format('MMM D, YYYY')}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {moment(instance.updatedAt).fromNow()}
+                      {moment(row.updatedAt).fromNow()}
                     </Typography>
                   </TableCell>
                   <TableCell align="right" onClick={(e) => e.stopPropagation()}>
                     <Box sx={{ display: 'flex', gap: 0.5 }}>
                       <IconButton
                         size="small"
-                        onClick={() => handleEdit(instance.id)}
+                        onClick={() => handleEdit(row)}
                         title="Edit"
                       >
                         <Edit />
                       </IconButton>
                       <IconButton
                         size="small"
-                        onClick={() => handleDelete(instance.id)}
-                        disabled={deleteMutation.isLoading}
+                        onClick={() => handleDelete(row)}
+                        disabled={
+                          deleteDuckLakeMutation.isLoading ||
+                          deleteIcebergMutation.isLoading
+                        }
                         title="Delete"
                         color="error"
                       >
@@ -269,7 +434,6 @@ export const DataLakeInstances: React.FC<DuckLakeInstancesProps> = ({
         </TableContainer>
       )}
 
-      {/* Delete Confirmation Modal */}
       <ConfirmationModal
         isOpen={deleteConfirmation.isOpen}
         onClose={handleCancelDelete}

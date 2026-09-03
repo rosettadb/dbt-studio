@@ -23,6 +23,7 @@ import {
   StyledNavLink,
 } from './styles';
 import { useAppContext } from '../../hooks';
+import { useLastDataLakeRoute } from '../../hooks/useLastDataLakeRoute';
 import { useGetSelectedProject } from '../../controllers';
 import { logo, rosettaIcon } from '../../../../assets';
 
@@ -43,6 +44,7 @@ export const Sidebar: React.FC<Props> = ({
   const location = useLocation();
 
   const [isBarExpanded, setIsBarExpanded] = React.useState(false);
+  const lastDataLakeRoute = useLastDataLakeRoute();
 
   const isProjectSelected = Boolean(selectedProject?.id);
 
@@ -71,6 +73,8 @@ export const Sidebar: React.FC<Props> = ({
 
   const renderItem = (element: (typeof mainElements)[0], isActive: boolean) => {
     const isDisabled = element.disabled;
+    const targetPath =
+      element.path === '/app/data-lake' ? lastDataLakeRoute : element.path;
 
     const listItem = (
       <ListItem
@@ -115,7 +119,7 @@ export const Sidebar: React.FC<Props> = ({
 
     const wrapped = (
       <StyledNavLink
-        to={element.path}
+        to={targetPath}
         data-testid={element.testId}
         data-tour={tourAttr}
         style={{

@@ -13,6 +13,7 @@ import { DuckLakeService } from './duckLake.service';
 import * as lineageService from './lineage.service';
 import * as languageIntelligenceService from './languageIntelligence.service';
 import * as agentService from './agent.service';
+import * as icebergService from './iceberg.service';
 
 export {
   settingsServices,
@@ -30,4 +31,5 @@ export {
   lineageService,
   languageIntelligenceService,
   agentService,
+  icebergService,
 };

@@ -1,5 +1,6 @@
 import { QueryResult } from 'pg';
 import { CloudConnection, RecentItem } from './frontend';
+import type { IcebergInstanceConfig } from './iceberg';
 
 export type SupportedConnectionTypes =
   | 'postgres'
@@ -358,6 +359,8 @@ export type SettingsType = {
   flowfileAutoStart?: string;
   kisqlPath?: string;
   kisqlVersion?: string;
+  icebergInstalled?: boolean;
+  icebergVersion?: string;
 };
 
 export type FileDialogProperties = 'openFile' | 'openDirectory';
@@ -380,6 +383,7 @@ export type DataBase = {
   connections: ConnectionModel[];
   sources: CloudConnection[];
   recentItems: RecentItem[];
+  icebergInstances?: IcebergInstanceConfig[];
 };
 
 // Rosetta Version Management Types
