@@ -76,6 +76,14 @@ export function registerNotebooksHandlers() {
     return NotebooksService.selectNotebookFile();
   });
 
+  // Peek at an import file (check for embedded connection details) before importing
+  ipcMain.handle(
+    'notebooks:peekImportFile',
+    async (_event, filePath: string) => {
+      return NotebooksService.peekImportFile(filePath);
+    },
+  );
+
   // Import notebook
   ipcMain.handle(
     'notebooks:import',

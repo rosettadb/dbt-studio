@@ -394,6 +394,7 @@ export type NotebookChannels =
   | 'notebooks:rename'
   | 'notebooks:duplicate'
   | 'notebooks:selectImportFile'
+  | 'notebooks:peekImportFile'
   | 'notebooks:import'
   | 'notebooks:importAll'
   | 'notebooks:delete'

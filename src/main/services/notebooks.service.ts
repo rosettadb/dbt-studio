@@ -8,7 +8,12 @@ import { app } from 'electron';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import { Notebook, NotebookCell, CellOutput } from '../../types/notebooks';
+import {
+  Notebook,
+  NotebookCell,
+  CellOutput,
+  NotebookImportPreview,
+} from '../../types/notebooks';
 import ConnectorsService from './connectors.service';
 import DuckLakeService from './duckLake.service';
 
@@ -485,6 +490,63 @@ export class NotebooksService {
       // eslint-disable-next-line no-console
       console.error(error);
       throw error;
+    }
+  }
+
+  /**
+   * Peek at a notebook export JSON file without importing it, so the
+   * renderer can ask the user whether to also import the embedded
+   * connection details (if any) before committing to the import.
+   */
+  static async peekImportFile(
+    filePath: string,
+  ): Promise<NotebookImportPreview> {
+    try {
+      const fileContent = await fs.readFile(filePath, 'utf-8');
+
+      const fileSizeInMB =
+        Buffer.byteLength(fileContent, 'utf-8') / (1024 * 1024);
+      if (fileSizeInMB > 100) {
+        throw new Error(
+          `File is too large (${fileSizeInMB.toFixed(1)}MB). Maximum size is 100MB.`,
+        );
+      }
+
+      let importedData: any;
+      try {
+        importedData = JSON.parse(fileContent);
+      } catch (parseError) {
+        throw new Error(
+          'Invalid JSON file - unable to parse. The file may be corrupted or too large.',
+        );
+      }
+
+      if (!importedData) {
+        throw new Error('Empty JSON file');
+      }
+
+      const isBulk =
+        Array.isArray(importedData.notebooks) &&
+        importedData.notebooks.length > 0;
+
+      const hasValidConnection =
+        importedData.connection &&
+        typeof importedData.connection === 'object' &&
+        typeof importedData.connection.type === 'string' &&
+        typeof importedData.connection.name === 'string';
+
+      return {
+        isBulk,
+        notebookCount: isBulk ? importedData.notebooks.length : 1,
+        connection: hasValidConnection ? importedData.connection : undefined,
+        connectionName: hasValidConnection
+          ? importedData.connection.name
+          : importedData.connectionName,
+      };
+    } catch (error) {
+      throw new Error(
+        `Failed to read import file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
   }
 

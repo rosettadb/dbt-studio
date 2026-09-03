@@ -32,13 +32,18 @@ import {
   Link as LinkIcon,
   Warning,
   InsertChart,
+  Upload,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   ChatBubbleOutline,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { AppLayout } from '../../layouts';
-import { useGetConnections, useDuckLakeInstances } from '../../controllers';
+import {
+  useGetConnections,
+  useDuckLakeInstances,
+  useImportConnectionFromNotebook,
+} from '../../controllers';
 import {
   useArchivedNotebooks,
   useRestoreNotebook,
@@ -47,7 +52,7 @@ import {
   useCreateNotebook,
   useNotebooks,
   useDeleteNotebook,
-  useImportAllNotebooks,
+  useImportAllNotebooksFromPath,
   useRenameNotebook,
   useDuplicateNotebook,
 } from '../../controllers/notebooks.controller';
@@ -56,13 +61,23 @@ import connectionIcons, {
 } from '../../../../assets/connectionIcons';
 import { AppContext } from '../../context';
 import { connectorsServices, DuckLakeService } from '../../services';
+import { notebooksService } from '../../services/notebooks.service';
 import { AnalyticsEditor } from '../../components/analytics';
 import { NotebooksSidebar } from '../../components/notebook/NotebooksSidebar';
 import { NotebookTabManager } from '../../components/notebook/NotebookTabManager';
 import { NotebookEditor } from '../../components/notebook';
+import { ExportNotebookDialog } from '../../components/notebook/ExportNotebookDialog';
+import { ImportConnectionDialog } from '../../components/notebook/ImportConnectionDialog';
 import { ChatWindow } from '../../components/chat';
-import { Table, SupportedConnectionTypes } from '../../../types/backend';
+import {
+  Table,
+  SupportedConnectionTypes,
+  ConnectionInput,
+} from '../../../types/backend';
+import { NotebookImportPreview } from '../../../types/notebooks';
 import useNotebookTabManager from '../../hooks/useNotebookTabManager';
+import useSecureStorage from '../../hooks/useSecureStorage';
+import { resolveConnectionCredentials } from '../../utils/notebookConnectionTransfer';
 import {
   useNotebookConnectionState,
   useNotebookSidebarState,
@@ -196,9 +211,11 @@ const Notebooks = () => {
   const { data: notebooks = [], isLoading: isLoadingNotebooks } =
     useNotebooks(activeConnectionId);
   const deleteNotebook = useDeleteNotebook();
-  const importAllNotebooks = useImportAllNotebooks();
+  const importAllNotebooksFromPath = useImportAllNotebooksFromPath();
+  const importConnectionFromNotebook = useImportConnectionFromNotebook();
   const renameNotebook = useRenameNotebook();
   const duplicateNotebook = useDuplicateNotebook();
+  const secureStorage = useSecureStorage();
 
   // Archived notebooks state
   const { data: archivedNotebooks = {} } = useArchivedNotebooks();
@@ -215,6 +232,13 @@ const Notebooks = () => {
     useState(false);
   const [renameNotebookOpen, setRenameNotebookOpen] = useState(false);
   const [duplicateNotebookOpen, setDuplicateNotebookOpen] = useState(false);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [importConnectionDialogOpen, setImportConnectionDialogOpen] =
+    useState(false);
+  const [pendingImport, setPendingImport] = useState<{
+    filePath: string;
+    preview: NotebookImportPreview;
+  } | null>(null);
   const [newNotebookName, setNewNotebookName] = useState('');
   const [newNotebookDescription, setNewNotebookDescription] = useState('');
   const [renameNotebookId, setRenameNotebookId] = useState<string | null>(null);
@@ -488,23 +512,104 @@ const Notebooks = () => {
     notebookTabManager,
   ]);
 
+  // Import notebooks (and optionally the connection they were exported from)
+  // into the given connection, opening the first imported notebook.
+  const runNotebookImport = useCallback(
+    async (filePath: string, connectionId: string) => {
+      try {
+        const imported = await importAllNotebooksFromPath.mutateAsync({
+          connectionId,
+          filePath,
+        });
+
+        if (imported.length > 0) {
+          if (connectionId !== activeConnectionId) {
+            setActiveConnectionId(connectionId);
+          }
+          notebookTabManager.openNotebook(imported[0], connectionId);
+        }
+      } catch (err) {
+        // Error handled by mutation
+      }
+    },
+    [
+      importAllNotebooksFromPath,
+      activeConnectionId,
+      setActiveConnectionId,
+      notebookTabManager,
+    ],
+  );
+
   // Handle import all notebooks
   const handleImportAllNotebooks = useCallback(async () => {
-    if (!activeConnectionId) return;
-
+    let filePath: string | null;
     try {
-      const imported = await importAllNotebooks.mutateAsync({
-        connectionId: activeConnectionId,
-      });
-
-      // Open the first imported notebook in a new tab
-      if (imported.length > 0) {
-        notebookTabManager.openNotebook(imported[0], activeConnectionId);
-      }
+      filePath = await notebooksService.selectImportFile();
     } catch (err) {
-      // Error handled by mutation
+      toast.error(`Failed to select import file: ${(err as Error).message}`);
+      return;
     }
-  }, [activeConnectionId, importAllNotebooks, notebookTabManager]);
+    if (!filePath) return;
+
+    let preview: NotebookImportPreview;
+    try {
+      preview = await notebooksService.peekImportFile(filePath);
+    } catch (err) {
+      toast.error((err as Error).message);
+      return;
+    }
+
+    if (preview.connection) {
+      setPendingImport({ filePath, preview });
+      setImportConnectionDialogOpen(true);
+      return;
+    }
+
+    if (!activeConnectionId) {
+      toast.error(
+        'This file has no connection details. Add or select a connection first, then import.',
+      );
+      return;
+    }
+
+    await runNotebookImport(filePath, activeConnectionId);
+  }, [activeConnectionId, runNotebookImport]);
+
+  // Handle confirming the import-connection dialog
+  const handleImportConnectionConfirm = useCallback(
+    async (shouldImportConnection: boolean) => {
+      if (!pendingImport) return;
+      const { filePath, preview } = pendingImport;
+      setImportConnectionDialogOpen(false);
+      setPendingImport(null);
+
+      let targetConnectionId = activeConnectionId;
+      if (shouldImportConnection && preview.connection) {
+        try {
+          const { id } = await importConnectionFromNotebook.mutateAsync(
+            preview.connection,
+          );
+          targetConnectionId = id;
+        } catch (err) {
+          toast.error(`Failed to import connection: ${(err as Error).message}`);
+          return;
+        }
+      }
+
+      if (!targetConnectionId) {
+        toast.error('No connection available to import notebooks into.');
+        return;
+      }
+
+      await runNotebookImport(filePath, targetConnectionId);
+    },
+    [
+      pendingImport,
+      activeConnectionId,
+      importConnectionFromNotebook,
+      runNotebookImport,
+    ],
+  );
 
   // Handle open notebook (placeholder - will navigate to notebook editor)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -632,53 +737,83 @@ const Notebooks = () => {
     notebookTabManager,
   ]);
 
-  const handleExportAllNotebooks = useCallback(() => {
+  const handleExportAllNotebooksClick = useCallback(() => {
     if (notebooks.length === 0) {
       return;
     }
-    const exportData = {
-      exportDate: new Date().toISOString(),
-      connectionId: activeConnectionId,
-      connectionName: activeConnection?.connection.name,
-      notebooks: notebooks.map((notebook) => ({
-        id: notebook.id,
-        name: notebook.name,
-        description: notebook.description,
-        cells: notebook.cells.map((cell) => ({
-          id: cell.id,
-          type: cell.type,
-          content: cell.content,
-          order: cell.order,
-          // Exclude output data to keep file size small
-          output: cell.output
-            ? {
-                type: cell.output.type,
-                columns: cell.output.columns,
-                rowCount: cell.output.rowCount,
-                totalRows: cell.output.totalRows,
-                executionTime: cell.output.executionTime,
-                // Explicitly exclude data array
-              }
-            : undefined,
-        })),
-        createdAt: notebook.createdAt,
-        updatedAt: notebook.updatedAt,
-      })),
-    };
+    setExportDialogOpen(true);
+  }, [notebooks.length]);
 
-    // Download as JSON file
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
-      type: 'application/json',
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `notebooks-${activeConnection?.connection.name || 'export'}-${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  }, [notebooks, activeConnectionId, activeConnection]);
+  const isDuckLakeActiveConnection = activeConnectionId.startsWith('ducklake-');
+
+  const handleExportAllNotebooksConfirm = useCallback(
+    async (includeConnection: boolean) => {
+      setExportDialogOpen(false);
+
+      let connectionDetails: ConnectionInput | undefined;
+      if (
+        includeConnection &&
+        activeConnection &&
+        !isDuckLakeActiveConnection
+      ) {
+        connectionDetails = await resolveConnectionCredentials(
+          activeConnection.connection as ConnectionInput,
+          secureStorage,
+        );
+      }
+
+      const exportData = {
+        exportDate: new Date().toISOString(),
+        connectionId: activeConnectionId,
+        connectionName: activeConnection?.connection.name,
+        connection: connectionDetails,
+        notebooks: notebooks.map((notebook) => ({
+          id: notebook.id,
+          name: notebook.name,
+          description: notebook.description,
+          cells: notebook.cells.map((cell) => ({
+            id: cell.id,
+            type: cell.type,
+            content: cell.content,
+            order: cell.order,
+            // Exclude output data to keep file size small
+            output: cell.output
+              ? {
+                  type: cell.output.type,
+                  columns: cell.output.columns,
+                  rowCount: cell.output.rowCount,
+                  totalRows: cell.output.totalRows,
+                  executionTime: cell.output.executionTime,
+                  // Explicitly exclude data array
+                }
+              : undefined,
+          })),
+          createdAt: notebook.createdAt,
+          updatedAt: notebook.updatedAt,
+        })),
+      };
+
+      // Download as JSON file
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+        type: 'application/json',
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `notebooks-${activeConnection?.connection.name || 'export'}-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    },
+    [
+      notebooks,
+      activeConnectionId,
+      activeConnection,
+      isDuckLakeActiveConnection,
+      secureStorage,
+    ],
+  );
 
   // Show loading state while hydrating
   if (!isFullyHydrated) {
@@ -1026,7 +1161,7 @@ const Notebooks = () => {
               }}
               onToggleArchived={setShowArchived}
               getConnectionName={getConnectionName}
-              onExportAllNotebooks={handleExportAllNotebooks}
+              onExportAllNotebooks={handleExportAllNotebooksClick}
               onImportAllNotebooks={handleImportAllNotebooks}
               onTabChange={setActiveSidebarTab}
               connectionId={activeConnectionId}
@@ -1097,6 +1232,7 @@ const Notebooks = () => {
                       variant="body2"
                       color="text.secondary"
                       sx={{
+                        mb: 2,
                         textAlign: 'center',
                         wordWrap: 'break-word',
                         overflowWrap: 'break-word',
@@ -1106,6 +1242,20 @@ const Notebooks = () => {
                       Select a connection from the sidebar to start working with
                       notebooks
                     </Typography>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ mb: 1 }}
+                    >
+                      or
+                    </Typography>
+                    <Button
+                      variant="outlined"
+                      startIcon={<Upload />}
+                      onClick={handleImportAllNotebooks}
+                    >
+                      Import Notebook (JSON)
+                    </Button>
                   </Box>
                 );
               }
@@ -1572,6 +1722,32 @@ const Notebooks = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Export All Notebooks Dialog */}
+      <ExportNotebookDialog
+        open={exportDialogOpen}
+        onClose={() => setExportDialogOpen(false)}
+        onConfirm={handleExportAllNotebooksConfirm}
+        subject={`${notebooks.length} notebook${notebooks.length > 1 ? 's' : ''}`}
+        connectionName={activeConnection?.connection.name}
+        connectionExportDisabled={
+          isDuckLakeActiveConnection || !activeConnection
+        }
+      />
+
+      {/* Import Connection Dialog */}
+      <ImportConnectionDialog
+        open={importConnectionDialogOpen}
+        connectionName={pendingImport?.preview.connectionName}
+        connectionType={pendingImport?.preview.connection?.type}
+        notebookCount={pendingImport?.preview.notebookCount ?? 1}
+        hasActiveConnection={!!activeConnectionId}
+        onClose={() => {
+          setImportConnectionDialogOpen(false);
+          setPendingImport(null);
+        }}
+        onConfirm={handleImportConnectionConfirm}
+      />
     </AppLayout>
   );
 };
