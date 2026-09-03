@@ -115,16 +115,16 @@ const Connections: React.FC = () => {
       const parsed = JSON.parse(text);
       const list = Array.isArray(parsed) ? parsed : [parsed];
 
-      let imported = 0;
-      let failed = 0;
-      for (const conn of list) {
-        try {
-          await saveConnection(conn);
-          imported++;
-        } catch {
-          failed++;
-        }
-      }
+      const results = await Promise.all(
+        list.map((conn) =>
+          saveConnection(conn)
+            .then(() => 'ok' as const)
+            .catch(() => 'err' as const),
+        ),
+      );
+
+      const imported = results.filter((r) => r === 'ok').length;
+      const failed = results.filter((r) => r === 'err').length;
 
       if (imported > 0) {
         toast.success(
