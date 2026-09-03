@@ -453,7 +453,20 @@ export const RunWithEnvModal: React.FC<RunWithEnvModalProps> = ({
           />
         </Stack>
 
-        <Box display="flex" justifyContent="flex-end" gap={1.5} pt={1}>
+        <Box
+          sx={{
+            position: 'sticky',
+            bottom: -20,
+            display: 'flex',
+            justifyContent: 'flex-end',
+            gap: 1.5,
+            pt: 2,
+            pb: 2.5, // match DialogContent padding so it looks flush
+            borderTop: (theme) => `1px solid ${theme.palette.divider}`,
+            backgroundColor: (theme) => theme.palette.background.paper,
+            zIndex: 1,
+          }}
+        >
           <Button onClick={onClose} disabled={isRunning}>
             Cancel
           </Button>

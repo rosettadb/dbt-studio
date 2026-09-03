@@ -51,7 +51,6 @@ import { serializePipelineConfig } from './serializePipeline';
 import { validatePipelineGraph } from './validatePipeline';
 import { useTerminalMinimize } from '../terminal';
 import { UnsavedChangesDialog } from '../editor/unsavedChangesDialog';
-import { SplitButton } from '../splitButton';
 
 export const nodeTypes = { pipelineNode: PipelineNode };
 
@@ -792,31 +791,17 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
         {onRun && !(isRunning && onStop) && (
           <Tooltip title={runDisabledReason || ''}>
             <span>
-              {onRunWithEnv ? (
-                <SplitButton
-                  title="Run"
-                  leftIcon={<PlayArrowIcon />}
-                  disabled={isSaving || Boolean(runDisabledReason)}
-                  onClick={() => handleRunClick('run')}
-                  menuItems={[
-                    {
-                      name: 'Run with env…',
-                      subTitle: 'Set custom env vars before running',
-                      onClick: () => handleRunClick('runWithEnv'),
-                    },
-                  ]}
-                />
-              ) : (
-                <Button
-                  size="small"
-                  variant="outlined"
-                  onClick={() => handleRunClick('run')}
-                  disabled={isSaving || Boolean(runDisabledReason)}
-                  startIcon={<PlayArrowIcon sx={{ fontSize: 14 }} />}
-                >
-                  Run
-                </Button>
-              )}
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() =>
+                  handleRunClick(onRunWithEnv ? 'runWithEnv' : 'run')
+                }
+                disabled={isSaving || Boolean(runDisabledReason)}
+                startIcon={<PlayArrowIcon sx={{ fontSize: 14 }} />}
+              >
+                Run
+              </Button>
             </span>
           </Tooltip>
         )}
