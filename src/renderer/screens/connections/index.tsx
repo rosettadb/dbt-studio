@@ -132,11 +132,15 @@ const Connections: React.FC = () => {
         );
       }
       if (failed > 0) {
-        toast.error(`${failed} connection${failed !== 1 ? 's' : ''} failed to import.`);
+        toast.error(
+          `${failed} connection${failed !== 1 ? 's' : ''} failed to import.`,
+        );
       }
       refetch();
     } catch {
-      toast.error('Invalid file. Please choose a valid connections JSON export.');
+      toast.error(
+        'Invalid file. Please choose a valid connections JSON export.',
+      );
     }
   };
 
