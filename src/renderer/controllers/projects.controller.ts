@@ -232,6 +232,22 @@ export const useExtractProfileEnvVars = (projectId?: string) => {
   });
 };
 
+export const useExtractRequiredEnvVars = (
+  projectId?: string,
+  pipelineRelativePath?: string,
+) => {
+  return useQuery({
+    queryKey: ['extractRequiredEnvVars', projectId, pipelineRelativePath],
+    enabled: !!projectId,
+    queryFn: async () => {
+      return projectsServices.extractRequiredEnvVars(
+        projectId!,
+        pipelineRelativePath,
+      );
+    },
+  });
+};
+
 export const useListPipelines = (projectId?: string) => {
   return useQuery({
     queryKey: ['listPipelines', projectId],

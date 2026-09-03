@@ -35,8 +35,26 @@ class SecureStorageService {
 
   private readonly ENVIRONMENTS_KEY = '__keystore_environments__';
 
+  // Per-key operation queue so check-then-write sequences (e.g.
+  // createCredentialIfAbsent, the environments read-modify-write) can't
+  // interleave with a concurrent call for the same key within this process.
+  private locks = new Map<string, Promise<unknown>>();
+
   constructor(serviceName: string) {
     this.serviceName = serviceName;
+  }
+
+  private withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    const previous = this.locks.get(key) ?? Promise.resolve();
+    const result = previous.then(fn, fn);
+    this.locks.set(
+      key,
+      result.then(
+        () => undefined,
+        () => undefined,
+      ),
+    );
+    return result;
   }
 
   async setCredential(account: string, password: string): Promise<void> {
@@ -141,6 +159,37 @@ class SecureStorageService {
       this.ENVIRONMENTS_KEY,
       JSON.stringify(environments),
     );
+  }
+
+  /**
+   * Atomically creates a credential only if no value is currently stored for
+   * `account` (check-then-write serialized per key, so a concurrent or
+   * retried call can't clobber a real value written in between).
+   */
+  async createCredentialIfAbsent(
+    account: string,
+    password: string,
+  ): Promise<{ created: boolean }> {
+    return this.withLock(account, async () => {
+      const existing = await this.getCredential(account);
+      if (existing !== null) return { created: false };
+      await this.setCredential(account, password);
+      return { created: true };
+    });
+  }
+
+  /**
+   * Atomically adds `environment` to the stored environment list if it's not
+   * already present (read-modify-write serialized per key, so concurrent
+   * calls can't lose an entry).
+   */
+  async addEnvironment(environment: string): Promise<void> {
+    await this.withLock(this.ENVIRONMENTS_KEY, async () => {
+      const environments = await this.getEnvironments();
+      if (!environments.includes(environment)) {
+        await this.setEnvironments([...environments, environment]);
+      }
+    });
   }
 
   /**

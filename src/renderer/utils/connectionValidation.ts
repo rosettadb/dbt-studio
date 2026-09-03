@@ -61,3 +61,32 @@ export const useConnectionNameValidation = (
 
   return { validateName };
 };
+
+/**
+ * Validates a BigQuery dataset name against BigQuery's own naming rules:
+ * letters, numbers, and underscores only, up to 1024 characters.
+ */
+export const validateBigQueryDatasetName = (
+  dataset: string,
+): { isValid: boolean; message?: string } => {
+  if (!dataset.trim()) {
+    return { isValid: false, message: 'Dataset cannot be empty' };
+  }
+
+  if (dataset.length > 1024) {
+    return {
+      isValid: false,
+      message: 'Dataset name must be 1024 characters or fewer',
+    };
+  }
+
+  if (!/^[A-Za-z0-9_]+$/.test(dataset)) {
+    return {
+      isValid: false,
+      message:
+        'Dataset name can only contain letters, numbers, and underscores',
+    };
+  }
+
+  return { isValid: true };
+};

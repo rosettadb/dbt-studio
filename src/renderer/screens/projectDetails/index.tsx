@@ -40,6 +40,7 @@ import {
   AiPromptModal,
   PipelineSelectorModal,
   PushToCloudModal,
+  RunWithEnvModal,
 } from '../../components';
 import { TerminalLayoutRef, TerminalPanelTab } from '../../components/terminal';
 import { ProjectQueryResultsPanel } from '../../components/projectQueryResults';
@@ -259,6 +260,7 @@ const ProjectDetails: React.FC = () => {
   const [pipelineModalOpen, setPipelineModalOpen] = React.useState(false);
   const [pipelineRunArgs, setPipelineRunArgs] = React.useState('');
   const [pipelineCloudModal, setPipelineCloudModal] = React.useState(false);
+  const [runWithEnvModalOpen, setRunWithEnvModalOpen] = React.useState(false);
   const theme = useTheme();
 
   const handleRunPipelineFile = React.useCallback(
@@ -1799,6 +1801,12 @@ const ProjectDetails: React.FC = () => {
                                   ? () => cancelTask(activeRunnerTask.id)
                                   : undefined
                               }
+                              onRunWithEnv={
+                                settings?.env !== 'cloud' &&
+                                activeLocalPipelineFile
+                                  ? () => setRunWithEnvModalOpen(true)
+                                  : undefined
+                              }
                             />
                           )}
                         </Box>
@@ -1972,6 +1980,16 @@ const ProjectDetails: React.FC = () => {
                   project={project}
                   command="pipeline"
                   initialDbtArguments={pipelineRunArgs}
+                />
+              )}
+              {runWithEnvModalOpen && project && activeLocalPipelineFile && (
+                <RunWithEnvModal
+                  isOpen={runWithEnvModalOpen}
+                  onClose={() => setRunWithEnvModalOpen(false)}
+                  onSuccess={() => handleTerminalTabSwitch('runnerLogs')}
+                  project={project}
+                  pipelineRelativePath={activeLocalPipelineFile}
+                  connectionName={connection?.connection?.name}
                 />
               )}
             </div>

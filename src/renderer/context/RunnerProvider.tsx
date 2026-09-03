@@ -32,6 +32,12 @@ export interface RunPipelineLocallyParams {
   runTeardown?: boolean;
   connectionName?: string;
   connType?: string;
+  /**
+   * Additional env vars to set (e.g. TF_VAR_* for a terraform@v1 step)
+   * before the runner is invoked, via the same process.env mechanism used
+   * for connection credentials below.
+   */
+  extraEnv?: Record<string, string>;
 }
 
 // Deterministic id derived purely from what's being run (mirrors
@@ -241,6 +247,13 @@ export const RunnerProvider: React.FC<RunnerProviderProps> = ({ children }) => {
       // fresh - otherwise old and new output run together in the same view.
       setState((prev) => ({ ...prev, logs: [] }));
       try {
+        if (params.extraEnv) {
+          await Promise.all(
+            Object.entries(params.extraEnv).map(([key, value]) =>
+              setEnvVariables.mutateAsync({ key, value }),
+            ),
+          );
+        }
         await setupConnectionEnv(params.connectionName, params.connType);
         return await window.electron.ipcRenderer.invoke('runner:run', {
           taskId: buildRunnerTaskId(params.workspaceDir, params.pipelineFile),
@@ -255,7 +268,7 @@ export const RunnerProvider: React.FC<RunnerProviderProps> = ({ children }) => {
         };
       }
     },
-    [setupConnectionEnv],
+    [setupConnectionEnv, setEnvVariables],
   );
 
   const stop = useCallback(async () => {
