@@ -2274,7 +2274,7 @@ export default class ConnectorsService {
 
     for (const entry of bundle.connections) {
       const conn = entry.connection as any;
-      const name: string = conn.name;
+      const { name } = conn;
 
       if (existingNames.has(name)) {
         skipped += 1;

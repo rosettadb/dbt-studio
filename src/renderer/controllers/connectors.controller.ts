@@ -21,6 +21,15 @@ import type {
 import { QUERY_KEYS } from '../config/constants';
 import { connectorsServices } from '../services';
 
+// ---------------------------------------------------------------------------
+// Backup / Restore hooks
+// ---------------------------------------------------------------------------
+
+import type {
+  BackupExportResult,
+  BackupImportResult,
+} from '../services/connectors.service';
+
 export const useGetConnections = (
   includeDataLake?: boolean,
   customOptions?: UseQueryOptions<
@@ -290,15 +299,6 @@ export const useUpdateConnectionQuery = (
     },
   });
 };
-
-// ---------------------------------------------------------------------------
-// Backup / Restore hooks
-// ---------------------------------------------------------------------------
-
-import type {
-  BackupExportResult,
-  BackupImportResult,
-} from '../services/connectors.service';
 
 export const useExportBackup = (
   customOptions?: UseMutationOptions<BackupExportResult, CustomError, void>,

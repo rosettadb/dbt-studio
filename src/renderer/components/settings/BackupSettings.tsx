@@ -32,7 +32,9 @@ export const BackupSettings: React.FC = () => {
         toast.error(`Export failed: ${result.error ?? 'Unknown error'}`);
       }
     },
-    onError: () => { toast.error('Export failed.'); },
+    onError: () => {
+      toast.error('Export failed.');
+    },
   });
 
   const { mutate: importBackup, isLoading: importing } = useImportBackup({
@@ -45,7 +47,9 @@ export const BackupSettings: React.FC = () => {
         toast.error(`Import failed: ${result.error ?? 'Unknown error'}`);
       }
     },
-    onError: () => { toast.error('Import failed.'); },
+    onError: () => {
+      toast.error('Import failed.');
+    },
   });
 
   const handleImport = () => {
@@ -111,7 +115,11 @@ export const BackupSettings: React.FC = () => {
           to handle conflicts with your existing connections.
         </Typography>
 
-        <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ mb: 0.5, display: 'block' }}
+        >
           Import mode
         </Typography>
         <ToggleButtonGroup
