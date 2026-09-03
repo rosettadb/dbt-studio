@@ -50,6 +50,7 @@ import {
   buildProjectPipelineContext,
   PROJECT_PIPELINE_TOOL_NAMES,
 } from './ai/tools/studio/pipeline.tools';
+import { STUDIO_KEYSTORE_TOOL_NAMES } from './ai/tools/studio/keystore.tools';
 
 // ─── AI Settings ─────────────────────────────────────────────────────────────
 
@@ -74,6 +75,7 @@ export const AI_SETTINGS_DEFAULTS: AISettingsConfig = {
     studio_pipeline_read: true,
     studio_pipeline_generate: true,
     studio_pipeline_update: true,
+    studio_keystore_register_placeholder: true,
   },
   configuration: {
     allowAIInBackground: true,
@@ -260,6 +262,7 @@ const TOOL_CATEGORIES = {
     'writeFile',
     'studio_pipeline_generate',
     'studio_pipeline_update',
+    'studio_keystore_register_placeholder',
   ],
 };
 
@@ -271,6 +274,7 @@ export function getToolsForMode(
     ...dbtTools,
     ...filesystemTools,
     ...PROJECT_PIPELINE_TOOL_NAMES,
+    ...STUDIO_KEYSTORE_TOOL_NAMES,
   };
 
   if (mode === 'chat') {
@@ -1469,6 +1473,7 @@ COMBINED SUMMARY:`,
         delete agentEnabledTools.studio_pipeline_read;
         delete agentEnabledTools.studio_pipeline_generate;
         delete agentEnabledTools.studio_pipeline_update;
+        delete agentEnabledTools.studio_keystore_register_placeholder;
       }
 
       switch (request.screenKey ?? 'project') {
@@ -2007,6 +2012,12 @@ COMBINED SUMMARY:`,
         {
           name: 'studio_pipeline_update',
           description: 'Update a pipeline using a read content hash',
+          category: 'dbt',
+        },
+        {
+          name: 'studio_keystore_register_placeholder',
+          description:
+            'Register a placeholder keystore entry for a required env var',
           category: 'dbt',
         },
       ];

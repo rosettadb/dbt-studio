@@ -59,6 +59,9 @@ interface ConnectionFormProps {
   connectionId?: string;
   duplicateFrom?: CloudConnection;
   suggestedName?: string;
+  initialProvider?: CloudProvider;
+  onSaved?: (connection: CloudConnection) => void | Promise<void>;
+  onCancel?: () => void;
 }
 
 interface FormData {
@@ -92,6 +95,9 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
   connectionId,
   duplicateFrom,
   suggestedName,
+  initialProvider,
+  onSaved,
+  onCancel,
 }) => {
   const navigate = useNavigate();
   const saveConnection = useSaveConnection();
@@ -125,7 +131,11 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState<FormData>({
     name: initialValues?.name || suggestedName || '',
-    provider: initialValues?.provider || duplicateFrom?.provider || 'gcs',
+    provider:
+      initialValues?.provider ||
+      duplicateFrom?.provider ||
+      initialProvider ||
+      'gcs',
     projectId: '',
     credentials: '',
     region: '',
@@ -545,7 +555,11 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         lastUsed: new Date(),
       };
       await saveConnection.mutateAsync(connection);
-      navigate('/app/cloud-explorer/connections');
+      if (onSaved) {
+        await onSaved(connection);
+      } else {
+        navigate('/app/cloud-explorer/connections');
+      }
     } catch (error) {
       setTestStatus('error');
       setErrorMessage(
@@ -1582,7 +1596,11 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
             <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
               <Button
                 variant="outlined"
-                onClick={() => navigate('/app/cloud-explorer/connections')}
+                onClick={() =>
+                  onCancel
+                    ? onCancel()
+                    : navigate('/app/cloud-explorer/connections')
+                }
               >
                 Cancel
               </Button>

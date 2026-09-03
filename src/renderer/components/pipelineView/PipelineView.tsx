@@ -31,6 +31,11 @@ type PipelineViewProps = {
   isRunning?: boolean;
   /** Called when the Stop button is clicked (only rendered while isRunning). */
   onStop?: () => void;
+  /**
+   * When provided (local mode only), the Run button becomes a split button
+   * with a "Run with env…" menu item that calls this instead of onRun.
+   */
+  onRunWithEnv?: () => void;
   /** Notifies parent when the visual graph enters/exits edit mode. */
   onEditingChange?: (isEditing: boolean) => void;
   /** Fired once when the pipeline view first mounts (e.g. tab opened). */
@@ -90,6 +95,7 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
   runDisabledReason,
   isRunning,
   onStop,
+  onRunWithEnv,
   onEditingChange,
   onEnterView,
 }) => {
@@ -209,6 +215,7 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
         runDisabledReason={runDisabledReason}
         isRunning={isRunning}
         onStop={onStop}
+        onRunWithEnv={onRunWithEnv}
         onEditingChange={onEditingChange}
         onEnterView={onEnterView}
       />

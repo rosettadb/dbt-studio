@@ -1,6 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Typography, Box, Button, styled } from '@mui/material';
+import {
+  Typography,
+  Box,
+  Button,
+  styled,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogActions,
+  DialogContentText,
+  Alert,
+  CircularProgress,
+} from '@mui/material';
 import { useLocation, useParams, useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import { AppLayout } from '../../layouts';
 import {
   DataLakeDashboard,
@@ -12,6 +25,11 @@ import {
   DataLakeInstanceEditForm,
   DataLakeTableDetails,
 } from '../../components/dataLake';
+import { IcebergConnectionWizard } from '../../components/dataLake/IcebergConnectionWizard';
+import {
+  IcebergDetail,
+  IcebergTableDetails,
+} from '../../components/dataLake/iceberg/IcebergDetail';
 import { DataLakeCard } from '../../components/dataLakeCards';
 import {
   useDuckLakeInstances,
@@ -19,7 +37,23 @@ import {
   useDuckLakeInstance,
   useDeleteDuckLakeInstance,
 } from '../../controllers';
+import {
+  useListIcebergInstances,
+  useCreateIcebergInstance,
+  useGetIcebergInstance,
+  useUpdateIcebergInstance,
+  useDeleteIcebergInstance,
+  useEnsureIcebergInstalledOnMount,
+} from '../../controllers/icebergDatalake.controller';
 import { DuckLakeService } from '../../services';
+import type {
+  CreateIcebergInstanceDTO,
+  IcebergCatalogType,
+  IcebergCloudProvider,
+  IcebergInstanceConfig,
+  IcebergStorageType,
+} from '../../../types/iceberg';
+import type { IcebergWizardData } from '../../components/dataLake/IcebergConnectionWizard';
 
 const DataLake: React.FC = () => {
   const location = useLocation();
@@ -35,29 +69,47 @@ const DataLake: React.FC = () => {
   // State for type selection in new-instance flow
   const [selectedType, setSelectedType] = useState<string>();
 
-  // React Query hooks
+  // ── Iceberg UI state ───────────────────────────────────────────────────
+  const [icebergEditId, setIcebergEditId] = useState<string | null>(null);
+  const [icebergDeleteTarget, setIcebergDeleteTarget] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+
+  // ── React Query — DuckLake ─────────────────────────────────────────────
   const instancesQuery = useDuckLakeInstances();
-  // Add type field to instances for routing
   const instances = (instancesQuery.data || []).map((i) => ({
     ...i,
-    type: 'duck-lake', // Hardcoded for now since only DuckLake exists
+    type: 'duck-lake',
   }));
   const createInstanceMutation = useCreateDuckLakeInstance();
-
-  // Mutations for instance actions
   const deleteMutation = useDeleteDuckLakeInstance();
 
-  // Parse the current section from the pathname
+  // ── React Query — Iceberg ──────────────────────────────────────────────
+  const { data: icebergInstances = [] } = useListIcebergInstances();
+  const createIcebergMutation = useCreateIcebergInstance();
+  const updateIcebergMutation = useUpdateIcebergInstance();
+  const deleteIcebergMutation = useDeleteIcebergInstance();
+  const {
+    data: editInstanceData,
+    isLoading: editInstanceLoading,
+    error: editInstanceError,
+  } = useGetIcebergInstance(icebergEditId ?? '');
+  const activeIcebergId = type === 'iceberg' ? (instanceId ?? '') : '';
+  const {
+    data: icebergInstance,
+    isLoading: icebergDetailLoading,
+    error: icebergDetailError,
+  } = useGetIcebergInstance(activeIcebergId);
+
+  // ── Install gate (FE-05 pattern) ───────────────────────────────────────
+  const { isInstalling } = useEnsureIcebergInstalledOnMount();
+
+  // ── Path parsing ───────────────────────────────────────────────────────
   const pathSegments = location.pathname.split('/');
   const currentSection = (() => {
-    if (pathSegments.includes('new-instance')) {
-      return 'new-instance';
-    }
-    // Check for edit route pattern: /app/duck-lake/instances/:id/edit
-    if (pathSegments.includes('edit')) {
-      return 'edit-instance';
-    }
-    // Check for table detail route pattern: /app/duck-lake/instances/:id/tables/:tableName
+    if (pathSegments.includes('new-instance')) return 'new-instance';
+    if (pathSegments.includes('edit')) return 'edit-instance';
     if (
       pathSegments.includes('instances') &&
       pathSegments.includes('tables') &&
@@ -65,30 +117,29 @@ const DataLake: React.FC = () => {
     ) {
       return 'table-detail';
     }
-    // Check for tables route pattern: /app/duck-lake/instances/:id/tables
     if (pathSegments.includes('instances') && pathSegments.includes('tables')) {
       return 'instance-tables';
     }
     if (pathSegments.includes('instances') && pathSegments.length > 4) {
       return 'instance-detail';
     }
-    if (pathSegments.includes('instances')) {
-      return 'instances';
-    }
-    if (pathSegments.includes('tables')) {
-      return 'tables';
-    }
-    if (pathSegments.includes('history')) {
-      return 'history';
-    }
-    if (pathSegments.includes('instance') && pathSegments.length > 4) {
+    if (pathSegments.includes('instances')) return 'instances';
+    if (pathSegments.includes('tables')) return 'tables';
+    if (pathSegments.includes('instance') && pathSegments.length > 4)
       return 'instance-detail';
-    }
-    if (pathSegments.includes('table') && pathSegments.length > 4) {
+    if (pathSegments.includes('table') && pathSegments.length > 4)
       return 'table-detail';
-    }
     return pathSegments.pop() || 'dashboard';
   })();
+
+  // Pre-select lake type when navigating e.g. /new-instance?type=iceberg
+  useEffect(() => {
+    if (currentSection !== 'new-instance') return;
+    const typeParam = new URLSearchParams(location.search).get('type');
+    if (typeParam === 'iceberg') {
+      setSelectedType('iceberg');
+    }
+  }, [currentSection, location.search]);
 
   // Define data lake types (UI only)
   const dataLakeTypes = [
@@ -104,7 +155,8 @@ const DataLake: React.FC = () => {
       name: 'Apache Iceberg',
       description: 'Multi-engine, cloud-agnostic open standard',
       img: 'apacheIcebergLake' as const,
-      disabled: true,
+      disabled: false, // now enabled
+      beta: true,
     },
     {
       id: 'delta',
@@ -122,7 +174,6 @@ const DataLake: React.FC = () => {
     },
   ];
 
-  // Styled container for cards (reuse from addConnection pattern)
   const ConnectionCardsContainer = styled(Box)`
     display: flex;
     justify-content: center;
@@ -133,24 +184,22 @@ const DataLake: React.FC = () => {
     margin: 0 auto;
   `;
 
-  // Get current instance ID from params or path
   const currentInstanceId =
     instanceId || pathSegments[pathSegments.indexOf('instance') + 1];
 
-  // Get instance details if viewing a specific instance
-  const instanceQuery = useDuckLakeInstance(
-    currentSection === 'instance-detail' ? currentInstanceId || '' : '',
-  );
+  const duckLakeInstanceId =
+    type !== 'iceberg' && currentSection === 'instance-detail'
+      ? currentInstanceId || ''
+      : '';
+
+  const instanceQuery = useDuckLakeInstance(duckLakeInstanceId);
   const currentInstance = instanceQuery.data;
 
-  // DuckLake connection lifecycle management
-  // Acquire connection when viewing instance details, tables, or table details
-  // Release connection when navigating away or component unmounts
+  // DuckLake connection lifecycle management (skip for Iceberg instances)
   useEffect(() => {
     let acquiredInstanceId: string | null = null;
 
     const acquireConnectionForInstance = async () => {
-      // Check if we're viewing any page that uses a DuckLake instance connection
       const instanceViewingSections = [
         'instance-detail',
         'instance-tables',
@@ -159,6 +208,7 @@ const DataLake: React.FC = () => {
       ];
 
       if (
+        type !== 'iceberg' &&
         instanceViewingSections.includes(currentSection) &&
         (instanceId || currentInstanceId)
       ) {
@@ -176,35 +226,150 @@ const DataLake: React.FC = () => {
 
     acquireConnectionForInstance();
 
-    // Cleanup: release connection when navigating away or component unmounts
     return () => {
       if (acquiredInstanceId) {
         DuckLakeService.releaseConnection(acquiredInstanceId);
       }
     };
-  }, [currentSection, instanceId, currentInstanceId]);
+  }, [currentSection, instanceId, currentInstanceId, type]);
 
-  // Tables are now handled by DuckLakeTablesView component
+  // ── Iceberg handlers ───────────────────────────────────────────────────
 
-  // Render content based on current section
+  const handleIcebergWizardComplete = async (wizardData: IcebergWizardData) => {
+    const dto: CreateIcebergInstanceDTO = {
+      name: wizardData.basics.name,
+      description: wizardData.basics.description,
+      catalogType: wizardData.catalog.catalogType as IcebergCatalogType,
+      catalogPath: wizardData.catalog.catalogPath,
+      endpoint: wizardData.catalog.endpoint,
+      catalogName: wizardData.catalog.catalogName,
+      databaseConnectionId: wizardData.catalog.databaseConnectionId,
+      catalogAuthMode: wizardData.catalog.authMode,
+      accessToken: wizardData.catalog.accessToken,
+      oauthClientId: wizardData.catalog.oauthClientId,
+      oauthClientSecret: wizardData.catalog.oauthClientSecret,
+      oauthServerUri: wizardData.catalog.oauthServerUri,
+      oauthScope: wizardData.catalog.oauthScope,
+      nessieReference: wizardData.catalog.nessieReference,
+      nessieWarehouse: wizardData.catalog.nessieWarehouse,
+      hiveUri: wizardData.catalog.hiveUri,
+      hiveUgi: wizardData.catalog.hiveUgi,
+      catalogConnectionId: wizardData.catalog.polarisConnectionId,
+      catalogBucket: wizardData.catalog.polarisBucket,
+      catalogPrefix: wizardData.catalog.polarisPrefix,
+      storageType: wizardData.storage.storageType as IcebergStorageType,
+      localPath: wizardData.storage.localPath,
+      cloudProvider: wizardData.storage.cloudProvider as IcebergCloudProvider,
+      storageConnectionId: wizardData.storage.connectionId,
+      storageBucket: wizardData.storage.bucket,
+      storagePrefix: wizardData.storage.prefix,
+    };
+    try {
+      const created = await createIcebergMutation.mutateAsync(dto);
+      setSelectedType(undefined);
+      toast.success('Iceberg instance created.');
+      navigate(`/app/data-lake/iceberg/instances/${created.id}`);
+    } catch (err: any) {
+      // eslint-disable-next-line no-console
+      console.error(err);
+      toast.error(err?.message ?? 'Failed to create Iceberg instance.');
+    }
+  };
+
+  const handleIcebergEditComplete = async (wizardData: IcebergWizardData) => {
+    if (!icebergEditId) return;
+    const dto: Partial<CreateIcebergInstanceDTO> = {
+      name: wizardData.basics.name,
+      description: wizardData.basics.description,
+      catalogType: wizardData.catalog.catalogType as IcebergCatalogType,
+      catalogPath: wizardData.catalog.catalogPath,
+      endpoint: wizardData.catalog.endpoint,
+      catalogName: wizardData.catalog.catalogName,
+      databaseConnectionId: wizardData.catalog.databaseConnectionId,
+      catalogAuthMode: wizardData.catalog.authMode,
+      // Only send token if the user typed a new one; empty = preserve existing
+      ...(wizardData.catalog.accessToken
+        ? { accessToken: wizardData.catalog.accessToken }
+        : {}),
+      ...(wizardData.catalog.oauthClientSecret
+        ? { oauthClientSecret: wizardData.catalog.oauthClientSecret }
+        : {}),
+      oauthClientId: wizardData.catalog.oauthClientId,
+      oauthServerUri: wizardData.catalog.oauthServerUri,
+      oauthScope: wizardData.catalog.oauthScope,
+      nessieReference: wizardData.catalog.nessieReference,
+      nessieWarehouse: wizardData.catalog.nessieWarehouse,
+      hiveUri: wizardData.catalog.hiveUri,
+      hiveUgi: wizardData.catalog.hiveUgi,
+      catalogConnectionId: wizardData.catalog.polarisConnectionId,
+      catalogBucket: wizardData.catalog.polarisBucket,
+      catalogPrefix: wizardData.catalog.polarisPrefix,
+      storageType: wizardData.storage.storageType as IcebergStorageType,
+      localPath: wizardData.storage.localPath,
+      cloudProvider: wizardData.storage.cloudProvider as IcebergCloudProvider,
+      storageConnectionId: wizardData.storage.connectionId,
+      storageBucket: wizardData.storage.bucket,
+      storagePrefix: wizardData.storage.prefix,
+    };
+    try {
+      await updateIcebergMutation.mutateAsync({ id: icebergEditId, data: dto });
+      setIcebergEditId(null);
+      toast.success('Iceberg instance updated.');
+    } catch (err: any) {
+      // eslint-disable-next-line no-console
+      console.error(err);
+      toast.error(err?.message ?? 'Failed to update Iceberg instance.');
+    }
+  };
+
+  const handleIcebergDeleteConfirm = async () => {
+    if (!icebergDeleteTarget) return;
+    try {
+      await deleteIcebergMutation.mutateAsync(icebergDeleteTarget.id);
+      if (activeIcebergId === icebergDeleteTarget.id) {
+        navigate('/app/data-lake/instances');
+      }
+      setIcebergDeleteTarget(null);
+      toast.success('Iceberg instance deleted.');
+    } catch (err: any) {
+      // eslint-disable-next-line no-console
+      console.error(err);
+      toast.error(err?.message ?? 'Failed to delete Iceberg instance.');
+    }
+  };
+
+  // ── Render helpers ─────────────────────────────────────────────────────
+
+  const renderIcebergInstanceDetail = (inst: IcebergInstanceConfig) => (
+    <IcebergDetail
+      instance={inst}
+      onEdit={() => setIcebergEditId(inst.id)}
+      onDelete={() => setIcebergDeleteTarget({ id: inst.id, name: inst.name })}
+    />
+  );
+
   const renderContent = () => {
     switch (currentSection) {
       case 'dashboard':
-        return <DataLakeDashboard instances={instances as any} />;
+        return (
+          <DataLakeDashboard
+            duckLakeInstances={instances as any}
+            icebergInstances={icebergInstances}
+          />
+        );
 
       case 'instances':
-        return <DataLakeInstances />;
+        return (
+          <DataLakeInstances onEditIceberg={(id) => setIcebergEditId(id)} />
+        );
 
       case 'instance-tables':
-        // Show tables for a specific instance from route: /instances/:id/tables
         return <DataLakeTablesView instanceId={currentInstanceId || ''} />;
 
       case 'tables':
-        // Show tables for a specific instance if instanceId is in URL
         if (instanceId) {
           return <DataLakeTablesView instanceId={instanceId} />;
         }
-        // Otherwise show message to select an instance
         return (
           <Box sx={{ p: 2 }}>
             <Typography
@@ -220,24 +385,8 @@ const DataLake: React.FC = () => {
           </Box>
         );
 
-      case 'history':
-        return (
-          <Box sx={{ p: 2 }}>
-            <Typography
-              variant="h4"
-              component="h1"
-              sx={{ fontWeight: 'bold', mb: 3 }}
-            >
-              Query History
-            </Typography>
-            <Typography variant="body1" color="text.secondary">
-              Query history functionality coming soon...
-            </Typography>
-          </Box>
-        );
-
       case 'new-instance':
-        // Step 1: Show type selection cards
+        // Step 1: type selection cards
         if (!selectedType) {
           return (
             <Box sx={{ p: 2 }}>
@@ -260,7 +409,7 @@ const DataLake: React.FC = () => {
           );
         }
 
-        // Step 2: Show wizard for selected type (only duck-lake is implemented)
+        // Step 2: DuckLake wizard
         if (selectedType === 'duck-lake') {
           return (
             <DataLakeConnectionWizard
@@ -281,7 +430,6 @@ const DataLake: React.FC = () => {
                 };
                 const newInstance =
                   await createInstanceMutation.mutateAsync(createRequest);
-                // Navigate to type-specific route
                 navigate(
                   `/app/data-lake/duck-lake/instances/${newInstance.id}`,
                 );
@@ -291,6 +439,21 @@ const DataLake: React.FC = () => {
                 navigate('/app/data-lake/instances');
               }}
               isLoading={createInstanceMutation.isLoading}
+            />
+          );
+        }
+
+        // Step 2: Iceberg wizard (inline, same pattern as DuckLake)
+        if (selectedType === 'iceberg') {
+          return (
+            <IcebergConnectionWizard
+              onComplete={handleIcebergWizardComplete}
+              onCancel={() => {
+                setSelectedType(undefined);
+                navigate('/app/data-lake/new-instance');
+              }}
+              isLoading={createIcebergMutation.isLoading}
+              mode="create"
             />
           );
         }
@@ -312,6 +475,42 @@ const DataLake: React.FC = () => {
         return <DataLakeInstanceEditForm key={instanceId} />;
 
       case 'instance-detail':
+        if (type === 'iceberg') {
+          if (icebergDetailLoading) {
+            return (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                <CircularProgress />
+              </Box>
+            );
+          }
+
+          if (icebergDetailError || !icebergInstance) {
+            return (
+              <Box sx={{ p: 2 }}>
+                <Typography
+                  variant="h4"
+                  component="h1"
+                  sx={{ fontWeight: 'bold', mb: 3 }}
+                >
+                  Iceberg Instance Not Found
+                </Typography>
+                <Typography variant="body1" color="text.secondary">
+                  The requested Iceberg instance could not be found.
+                </Typography>
+                <Button
+                  variant="contained"
+                  sx={{ mt: 2 }}
+                  onClick={() => navigate('/app/data-lake/instances')}
+                >
+                  Back to Instances
+                </Button>
+              </Box>
+            );
+          }
+
+          return renderIcebergInstanceDetail(icebergInstance);
+        }
+
         if (instanceQuery.isLoading) {
           return (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -362,8 +561,11 @@ const DataLake: React.FC = () => {
         );
 
       case 'table-detail':
-        // Phase 8b: Render comprehensive table detail view
-        return <DataLakeTableDetails />;
+        return type === 'iceberg' ? (
+          <IcebergTableDetails />
+        ) : (
+          <DataLakeTableDetails />
+        );
 
       default:
         return (
@@ -385,12 +587,104 @@ const DataLake: React.FC = () => {
 
   return (
     <AppLayout
-      sidebarContent={<DataLakeSidebar instances={instances} />}
+      sidebarContent={
+        <DataLakeSidebar
+          instances={instances}
+          icebergInstances={icebergInstances}
+        />
+      }
       panelTitle="DataLake"
     >
       <Box sx={{ p: 2 }}>
+        {/* pyiceberg install banner */}
+        {isInstalling && (
+          <Alert
+            severity="info"
+            icon={<CircularProgress size={18} />}
+            sx={{ mb: 2 }}
+          >
+            Installing pyiceberg into the managed Python environment… This may
+            take a moment.
+          </Alert>
+        )}
+
         <Box>{renderContent()}</Box>
       </Box>
+
+      {/* ── Iceberg Edit Wizard Dialog ────────────────────────────────── */}
+      <Dialog
+        open={!!icebergEditId}
+        onClose={() => setIcebergEditId(null)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogContent sx={{ pt: 3 }}>
+          {editInstanceLoading && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
+              <CircularProgress />
+            </Box>
+          )}
+          {!editInstanceLoading && (editInstanceError || !editInstanceData) && (
+            <Box sx={{ py: 2 }}>
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {editInstanceError instanceof Error
+                  ? editInstanceError.message
+                  : 'Failed to load the Iceberg instance.'}
+              </Alert>
+              <Button onClick={() => setIcebergEditId(null)}>Close</Button>
+            </Box>
+          )}
+          {!editInstanceLoading && !editInstanceError && editInstanceData && (
+            <IcebergConnectionWizard
+              key={icebergEditId}
+              onComplete={handleIcebergEditComplete}
+              onCancel={() => setIcebergEditId(null)}
+              isLoading={updateIcebergMutation.isLoading}
+              mode="edit"
+              initialData={editInstanceData}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Iceberg Delete Confirmation Dialog ───────────────────────── */}
+      <Dialog
+        open={!!icebergDeleteTarget}
+        onClose={() => setIcebergDeleteTarget(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Delete Iceberg Instance</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Delete Iceberg instance <strong>{icebergDeleteTarget?.name}</strong>
+            ? This cannot be undone. Keytar credentials for this instance will
+            also be removed.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setIcebergDeleteTarget(null)}
+            color="inherit"
+            disabled={deleteIcebergMutation.isLoading}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleIcebergDeleteConfirm}
+            color="error"
+            variant="contained"
+            disabled={deleteIcebergMutation.isLoading}
+            startIcon={
+              deleteIcebergMutation.isLoading ? (
+                <CircularProgress size={16} color="inherit" />
+              ) : undefined
+            }
+          >
+            {deleteIcebergMutation.isLoading ? 'Deleting…' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </AppLayout>
   );
 };

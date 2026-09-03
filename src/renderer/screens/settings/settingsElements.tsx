@@ -8,6 +8,7 @@ import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import ChecklistIcon from '@mui/icons-material/Checklist';
 import TerminalIcon from '@mui/icons-material/Terminal';
 import CodeIcon from '@mui/icons-material/Code';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
 import { SvgIconComponent } from '@mui/icons-material';
 import React from 'react';
 import { Icon } from '../../components/icon';
@@ -43,6 +44,7 @@ export interface SettingsSidebarElement {
   icon: SvgIconComponent;
   text: string;
   path: string;
+  externalUrl?: string;
 }
 
 export interface SettingsSidebarCategory {
@@ -119,6 +121,12 @@ export const settingsSidebarCategories: SettingsSidebarCategory[] = [
   {
     label: '',
     items: [
+      {
+        icon: MenuBookIcon,
+        text: 'Documentation',
+        path: '/app/settings/_external_docs',
+        externalUrl: 'https://docs.rosettalabs.ai/',
+      },
       {
         icon: InfoIcon,
         text: 'About',

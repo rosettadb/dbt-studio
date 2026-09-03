@@ -51,6 +51,7 @@ type Props = {
   queryHistory: QueryHistoryType[];
   projectId?: string;
   connectionId?: string;
+  size?: 'small' | 'medium';
 };
 
 type ToolbarProps = {
@@ -298,6 +299,7 @@ const QueryHistory: React.FC<Props> = ({
   onQuerySelect,
   projectId,
   connectionId,
+  size = 'medium',
 }) => {
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
   const [selectedQueryHistory, setSelectedQueryHistory] =
@@ -452,8 +454,8 @@ const QueryHistory: React.FC<Props> = ({
   return (
     <div>
       <Tooltip title="Query History">
-        <IconButton onClick={handleClick}>
-          <History />
+        <IconButton size={size} onClick={handleClick}>
+          <History fontSize={size === 'small' ? 'small' : 'medium'} />
         </IconButton>
       </Tooltip>
       <Menu

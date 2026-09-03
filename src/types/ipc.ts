@@ -87,6 +87,7 @@ export type ProjectChannels =
   | 'project:renamePath'
   | 'project:downloadSeed'
   | 'project:extractProfileEnvVars'
+  | 'project:extractRequiredEnvVars'
   | 'project:listPipelines';
 
 export type RosettaCloudChannels =
@@ -371,6 +372,30 @@ export type DuckLakeChannels =
   | 'ducklake:connection:acquire'
   | 'ducklake:connection:release';
 
+export type IcebergChannels =
+  | 'iceberg:getCapabilities'
+  | 'iceberg:list'
+  | 'iceberg:get'
+  | 'iceberg:create'
+  | 'iceberg:update'
+  | 'iceberg:delete'
+  | 'iceberg:testCatalog'
+  | 'iceberg:testStorage'
+  | 'iceberg:listStorageBuckets'
+  | 'iceberg:testInstance'
+  | 'iceberg:listNamespaces'
+  | 'iceberg:listTables'
+  | 'iceberg:getSchema'
+  | 'iceberg:getSnapshots'
+  | 'iceberg:previewTable'
+  | 'iceberg:importTable'
+  | 'iceberg:dropTable'
+  | 'iceberg:renameTable'
+  | 'iceberg:createNamespace'
+  | 'iceberg:dropNamespace'
+  | 'iceberg:createMetadataFile'
+  | 'iceberg:ensureInstalled';
+
 export type LineageChannels =
   | 'lineage:getUpstream'
   | 'lineage:getDownstream'
@@ -554,7 +579,8 @@ export type Channels =
   | StaticSiteChannels
   | FlowfileChannels
   | PipelineTemplatesChannels
-  | SecondBrainChannels;
+  | SecondBrainChannels
+  | IcebergChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;

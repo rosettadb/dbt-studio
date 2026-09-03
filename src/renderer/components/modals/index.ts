@@ -14,6 +14,7 @@ export * from './stagingModal';
 export * from './incrementalModal';
 export * from './aiPromptModal';
 export * from './pushToCloudModal';
+export * from './runWithEnvModal';
 export * from './rawLayerModal';
 export * from './removeConnectionModal';
 export * from './pipelineSelectorModal';

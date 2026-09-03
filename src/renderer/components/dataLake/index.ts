@@ -8,3 +8,5 @@ export * from './DataLakeInstanceDetails';
 export * from './DataLakeInstanceEditForm';
 export * from './DataLakeTableImportWizard';
 export * from './DataLakeTableDetails';
+export * from './IcebergConnectionWizard';
+export * from './IcebergInstanceListItem';
