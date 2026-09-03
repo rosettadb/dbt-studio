@@ -29,6 +29,8 @@ import {
   Visibility,
   Cloud,
   ContentCopy,
+  FileUpload,
+  FileDownload,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import {
@@ -36,6 +38,7 @@ import {
   useGetCloudConnections,
   useGetConnections,
   useGetProjects,
+  useSaveDbConnection,
 } from '../../controllers';
 import { useDeleteBucketConnection } from '../../controllers/cloudExplorer.controller';
 import { Loader, ConnectionsSidebar } from '../../components';
@@ -80,6 +83,62 @@ const Connections: React.FC = () => {
     },
   });
   const { mutate: deleteBucketConnection } = useDeleteBucketConnection();
+  const { mutateAsync: saveConnection } = useSaveDbConnection();
+
+  const importInputRef = React.useRef<HTMLInputElement>(null);
+
+  // ── Export all database connections ──────────────────────────────────────
+  const handleExportConnections = () => {
+    const exportData = connections.map((c) => c.connection);
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'connections-export.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // ── Import connections from a JSON file ───────────────────────────────────
+  const handleImportConnections = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // reset so the same file can be re-selected
+    e.target.value = '';
+
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const list = Array.isArray(parsed) ? parsed : [parsed];
+
+      let imported = 0;
+      let failed = 0;
+      for (const conn of list) {
+        try {
+          await saveConnection(conn);
+          imported++;
+        } catch {
+          failed++;
+        }
+      }
+
+      if (imported > 0) {
+        toast.success(
+          `Imported ${imported} connection${imported !== 1 ? 's' : ''} successfully.`,
+        );
+      }
+      if (failed > 0) {
+        toast.error(`${failed} connection${failed !== 1 ? 's' : ''} failed to import.`);
+      }
+      refetch();
+    } catch {
+      toast.error('Invalid file. Please choose a valid connections JSON export.');
+    }
+  };
 
   // Helper function to get projects using a connection
   const getProjectsUsingConnection = (connectionId: string) => {
@@ -383,6 +442,31 @@ const Connections: React.FC = () => {
             >
               <Refresh />
             </IconButton>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<FileDownload />}
+              onClick={handleExportConnections}
+              disabled={connections.length === 0}
+            >
+              Export
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<FileUpload />}
+              onClick={() => importInputRef.current?.click()}
+            >
+              Import
+            </Button>
+            {/* hidden file input for import */}
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".json"
+              style={{ display: 'none' }}
+              onChange={handleImportConnections}
+            />
           </Box>
         </Box>
 

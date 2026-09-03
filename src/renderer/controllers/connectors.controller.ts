@@ -252,6 +252,27 @@ export const useExecuteConnectionQuery = (
   });
 };
 
+export const useSaveDbConnection = (
+  customOptions?: UseMutationOptions<string, CustomError, ConnectionInput>,
+): UseMutationResult<string, CustomError, ConnectionInput> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: ConnectionInput) => {
+      return connectorsServices.saveConnection(data);
+    },
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_CONNECTIONS]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
 export const useUpdateConnectionQuery = (
   customOptions?: UseMutationOptions<
     void,
