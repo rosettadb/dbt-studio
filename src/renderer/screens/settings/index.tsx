@@ -34,6 +34,7 @@ import {
   FlowfileSettings,
   KeystoreSettings,
   TaskManagerSettings,
+  BackupSettings,
 } from '../../components';
 import { AppLayout } from '../../layouts';
 import { settingsSidebarCategories } from './settingsElements';
@@ -129,6 +130,7 @@ const Settings: React.FC = () => {
     if (section === 'runner') return 'Local Runner';
     if (section === 'keystore') return 'Keystore';
     if (section === 'task-manager') return 'Task Manager';
+    if (section === 'backup') return 'Backup & Restore';
     return section.charAt(0).toUpperCase() + section.slice(1).replace('-', ' ');
   };
 
@@ -179,6 +181,8 @@ const Settings: React.FC = () => {
         return <KeystoreSettings />;
       case 'task-manager':
         return <TaskManagerSettings />;
+      case 'backup':
+        return <BackupSettings />;
       case 'about':
         return <AboutSettings />;
       default:

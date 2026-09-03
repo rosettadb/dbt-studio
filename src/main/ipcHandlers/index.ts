@@ -25,6 +25,7 @@ import registerFlowfileHandlers from './flowfile.ipcHandlers';
 import { registerPipelineTemplatesHandlers } from './pipelineTemplates.ipcHandlers';
 import registerTaskManagerHandlers from './taskManager.ipcHandlers';
 import { registerSecondBrainHandlers } from './secondBrain.ipcHandlers';
+import registerBackupHandlers from './backup.ipcHandlers';
 
 export {
   registerCliHandlers,
@@ -54,4 +55,5 @@ export {
   registerPipelineTemplatesHandlers,
   registerTaskManagerHandlers,
   registerSecondBrainHandlers,
+  registerBackupHandlers,
 };

@@ -290,3 +290,50 @@ export const useUpdateConnectionQuery = (
     },
   });
 };
+
+// ---------------------------------------------------------------------------
+// Backup / Restore hooks
+// ---------------------------------------------------------------------------
+
+import type {
+  BackupExportResult,
+  BackupImportResult,
+} from '../services/connectors.service';
+
+export const useExportBackup = (
+  customOptions?: UseMutationOptions<BackupExportResult, CustomError, void>,
+): UseMutationResult<BackupExportResult, CustomError, void> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+
+  return useMutation({
+    mutationFn: async () => connectorsServices.exportBackup(),
+    onSuccess: onCustomSuccess,
+    onError: onCustomError,
+  });
+};
+
+export const useImportBackup = (
+  customOptions?: UseMutationOptions<
+    BackupImportResult,
+    CustomError,
+    'merge' | 'replace'
+  >,
+): UseMutationResult<BackupImportResult, CustomError, 'merge' | 'replace'> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (mode: 'merge' | 'replace') =>
+      connectorsServices.importBackup(mode),
+    onSuccess: async (...args) => {
+      // Refresh connections list after a successful import
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_CONNECTIONS]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};

@@ -9,6 +9,7 @@ import ChecklistIcon from '@mui/icons-material/Checklist';
 import TerminalIcon from '@mui/icons-material/Terminal';
 import CodeIcon from '@mui/icons-material/Code';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
+import BackupIcon from '@mui/icons-material/SettingsBackupRestore';
 import { SvgIconComponent } from '@mui/icons-material';
 import React from 'react';
 import { Icon } from '../../components/icon';
@@ -80,6 +81,11 @@ export const settingsSidebarCategories: SettingsSidebarCategory[] = [
         icon: ChecklistIcon,
         text: 'Task Manager',
         path: '/app/settings/task-manager',
+      },
+      {
+        icon: BackupIcon,
+        text: 'Backup & Restore',
+        path: '/app/settings/backup',
       },
     ],
   },

@@ -526,6 +526,8 @@ export type SecondBrainChannels =
   | 'second-brain:open-wiki-terminal'
   | 'second-brain:progress';
 
+export type BackupChannels = 'backup:export' | 'backup:import';
+
 export type Channels =
   | TestChannels
   | CliChannels
@@ -554,7 +556,8 @@ export type Channels =
   | StaticSiteChannels
   | FlowfileChannels
   | PipelineTemplatesChannels
-  | SecondBrainChannels;
+  | SecondBrainChannels
+  | BackupChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;

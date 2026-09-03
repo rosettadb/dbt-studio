@@ -2182,4 +2182,151 @@ export default class ConnectorsService {
       queryId,
     });
   }
+
+  // ---------------------------------------------------------------------------
+  // Backup / Restore
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Export all connections (with their secure credentials inlined) plus the
+   * app settings as a portable JSON bundle.  Passwords / tokens are included
+   * so the bundle can be imported on another machine.
+   *
+   * Returns the serialised JSON string so the IPC handler can write it to
+   * wherever the user chose via the save-dialog.
+   */
+  static async exportBackup(): Promise<string> {
+    const db = await loadDatabaseFile();
+    const connections = db.connections ?? [];
+
+    // Re-hydrate credentials from the keychain so the export is self-contained.
+    const hydratedConnections = await Promise.all(
+      connections.map(async (model) => {
+        const conn = { ...model.connection } as any;
+        const name = conn.name as string;
+
+        const user = await SecureStorageService.getCredential(
+          `db-user-${name}`,
+        );
+        const password = await SecureStorageService.getCredential(
+          `db-password-${name}`,
+        );
+        const token = await SecureStorageService.getCredential(
+          `db-token-${name}`,
+        );
+        const bigQueryKey = await SecureStorageService.getCredential(
+          `db-bigquery-${name}`,
+        );
+
+        if (user) conn.username = user;
+        if (password) conn.password = password;
+        if (token) conn.token = token;
+        if (bigQueryKey) conn.keyfile = bigQueryKey;
+
+        return { id: model.id, connection: conn };
+      }),
+    );
+
+    const bundle = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      settings: db.settings,
+      connections: hydratedConnections,
+    };
+
+    return JSON.stringify(bundle, null, 2);
+  }
+
+  /**
+   * Import a backup bundle produced by exportBackup().
+   *
+   * @param jsonString  Raw JSON from the file the user picked.
+   * @param mode        'merge'   – keep existing connections, add new ones
+   *                    'replace' – wipe existing connections first
+   */
+  static async importBackup(
+    jsonString: string,
+    mode: 'merge' | 'replace' = 'merge',
+  ): Promise<{ imported: number; skipped: number }> {
+    let bundle: any;
+    try {
+      bundle = JSON.parse(jsonString);
+    } catch {
+      throw new Error('Invalid backup file: could not parse JSON.');
+    }
+
+    if (bundle.version !== 1 || !Array.isArray(bundle.connections)) {
+      throw new Error(
+        'Invalid backup file: unrecognised format or missing connections array.',
+      );
+    }
+
+    const db = await loadDatabaseFile();
+    const existingConnections: ConnectionModel[] =
+      mode === 'replace' ? [] : (db.connections ?? []);
+
+    const existingNames = new Set(
+      existingConnections.map((c) => c.connection.name),
+    );
+
+    let imported = 0;
+    let skipped = 0;
+
+    for (const entry of bundle.connections) {
+      const conn = entry.connection as any;
+      const name: string = conn.name;
+
+      if (existingNames.has(name)) {
+        skipped += 1;
+        // eslint-disable-next-line no-continue
+        continue;
+      }
+
+      const newId = uuidV4();
+      const cleanConn = { ...conn };
+
+      // Persist credentials to keychain and strip from the in-memory record.
+      if (cleanConn.username) {
+        await SecureStorageService.setCredential(
+          `db-user-${name}`,
+          cleanConn.username,
+        );
+      }
+      if (cleanConn.password) {
+        await SecureStorageService.setCredential(
+          `db-password-${name}`,
+          cleanConn.password,
+        );
+        delete cleanConn.password;
+      }
+      if (cleanConn.token) {
+        await SecureStorageService.setCredential(
+          `db-token-${name}`,
+          cleanConn.token,
+        );
+        delete cleanConn.token;
+      }
+      if (cleanConn.keyfile) {
+        await SecureStorageService.setCredential(
+          `db-bigquery-${name}`,
+          cleanConn.keyfile,
+        );
+        delete cleanConn.keyfile;
+      }
+
+      existingConnections.push({ id: newId, connection: cleanConn });
+      existingNames.add(name);
+      imported += 1;
+    }
+
+    await updateDatabase<'connections'>('connections', existingConnections);
+
+    // Optionally restore settings (only when mode is replace to avoid
+    // overwriting user-local paths like pythonPath, rosettaPath, etc.)
+    if (mode === 'replace' && bundle.settings) {
+      await updateDatabase<'settings'>('settings', bundle.settings);
+    }
+
+    return { imported, skipped };
+  }
 }

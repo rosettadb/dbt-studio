@@ -165,3 +165,33 @@ export const executeQueryForConnection = async (body: {
   >('connector:executeQuery', body);
   return data;
 };
+
+// ---------------------------------------------------------------------------
+// Backup / Restore
+// ---------------------------------------------------------------------------
+
+export type BackupExportResult =
+  | { success: true; filePath: string }
+  | { success: false; canceled?: boolean; error?: string };
+
+export type BackupImportResult =
+  | { success: true; imported: number; skipped: number }
+  | { success: false; canceled?: boolean; error?: string };
+
+export const exportBackup = async (): Promise<BackupExportResult> => {
+  const { data } = await client.post<undefined, BackupExportResult>(
+    'backup:export',
+    undefined,
+  );
+  return data;
+};
+
+export const importBackup = async (
+  mode: 'merge' | 'replace',
+): Promise<BackupImportResult> => {
+  const { data } = await client.post<'merge' | 'replace', BackupImportResult>(
+    'backup:import',
+    mode,
+  );
+  return data;
+};
