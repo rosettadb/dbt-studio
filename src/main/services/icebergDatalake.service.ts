@@ -158,7 +158,12 @@ export class IcebergDatalakeService {
 
   private static getBridgePath(): string {
     if (app.isPackaged) {
-      return path.join(process.resourcesPath, 'python', 'iceberg_bridge.py');
+      return path.join(
+        process.resourcesPath,
+        'resources',
+        'python',
+        'iceberg_bridge.py',
+      );
     }
     return path.join(
       __dirname,
