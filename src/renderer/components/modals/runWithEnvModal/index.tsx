@@ -6,7 +6,6 @@ import {
   Typography,
   Alert,
   Stack,
-  Paper,
   Divider,
   IconButton,
   InputAdornment,
@@ -286,7 +285,28 @@ export const RunWithEnvModal: React.FC<RunWithEnvModalProps> = ({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Run with env">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Run with env"
+      actions={
+        <>
+          <Button onClick={onClose} disabled={isRunning}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={
+              isRunning ? <CircularProgress size={16} /> : <PlayArrow />
+            }
+            onClick={handleRun}
+            disabled={isRunning || prefilling}
+          >
+            {isRunning ? 'Starting…' : 'Run'}
+          </Button>
+        </>
+      }
+    >
       <Stack spacing={2.5}>
         <Typography variant="body2" color="text.secondary">
           Set the env vars this pipeline needs (e.g.{' '}
@@ -314,68 +334,73 @@ export const RunWithEnvModal: React.FC<RunWithEnvModalProps> = ({
               </Typography>
             )}
             {rows.map((row) => (
-              <Paper
-                key={row.id}
-                variant="outlined"
-                sx={{ p: 1.5, borderRadius: 1.5 }}
-              >
-                <Box display="flex" gap={1} alignItems="center">
-                  <TextField
-                    value={row.key}
+              <Box key={row.id} display="flex" gap={1} alignItems="center">
+                <TextField
+                  value={row.key}
+                  size="small"
+                  slotProps={{
+                    input: { readOnly: true },
+                    // Names too long for the column get an ellipsis; hovering
+                    // shows the full one.
+                    htmlInput: { title: row.key },
+                  }}
+                  sx={{
+                    flex: '0 0 40%',
+                    minWidth: 0,
+                    // Muted fill marks the field as fixed, so only the value
+                    // box reads as somewhere to type.
+                    '& .MuiOutlinedInput-root': { bgcolor: 'action.hover' },
+                    '& .MuiInputBase-input': {
+                      fontFamily: 'monospace',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      textOverflow: 'ellipsis',
+                      cursor: 'default',
+                    },
+                  }}
+                />
+                <TextField
+                  value={row.value}
+                  size="small"
+                  type={visibleIds.has(row.id) ? 'text' : 'password'}
+                  placeholder="Enter value"
+                  onChange={(e) => updateRowValue(row.id, e.target.value)}
+                  sx={{ flex: 1, minWidth: 0 }}
+                  slotProps={{
+                    input: {
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            size="small"
+                            onClick={() => toggleVisibility(row.id)}
+                            aria-label={
+                              visibleIds.has(row.id)
+                                ? `Hide ${row.key} value`
+                                : `Show ${row.key} value`
+                            }
+                          >
+                            {visibleIds.has(row.id) ? (
+                              <VisibilityOff fontSize="small" />
+                            ) : (
+                              <Visibility fontSize="small" />
+                            )}
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    },
+                  }}
+                />
+                {!row.isRequired && (
+                  <IconButton
                     size="small"
-                    slotProps={{ input: { readOnly: true } }}
-                    sx={{
-                      flex: '0 0 40%',
-                      minWidth: 0,
-                      '& .MuiInputBase-input': {
-                        fontFamily: 'monospace',
-                        fontWeight: 600,
-                      },
-                    }}
-                  />
-                  <TextField
-                    value={row.value}
-                    size="small"
-                    type={visibleIds.has(row.id) ? 'text' : 'password'}
-                    placeholder="Enter value"
-                    onChange={(e) => updateRowValue(row.id, e.target.value)}
-                    sx={{ flex: 1, minWidth: 0 }}
-                    slotProps={{
-                      input: {
-                        endAdornment: (
-                          <InputAdornment position="end">
-                            <IconButton
-                              size="small"
-                              onClick={() => toggleVisibility(row.id)}
-                              aria-label={
-                                visibleIds.has(row.id)
-                                  ? `Hide ${row.key} value`
-                                  : `Show ${row.key} value`
-                              }
-                            >
-                              {visibleIds.has(row.id) ? (
-                                <VisibilityOff fontSize="small" />
-                              ) : (
-                                <Visibility fontSize="small" />
-                              )}
-                            </IconButton>
-                          </InputAdornment>
-                        ),
-                      },
-                    }}
-                  />
-                  {!row.isRequired && (
-                    <IconButton
-                      size="small"
-                      color="error"
-                      onClick={() => removeRow(row.id)}
-                      aria-label={`Remove ${row.key}`}
-                    >
-                      <Delete fontSize="small" />
-                    </IconButton>
-                  )}
-                </Box>
-              </Paper>
+                    color="error"
+                    onClick={() => removeRow(row.id)}
+                    aria-label={`Remove ${row.key}`}
+                  >
+                    <Delete fontSize="small" />
+                  </IconButton>
+                )}
+              </Box>
             ))}
           </Stack>
         )}
@@ -452,35 +477,6 @@ export const RunWithEnvModal: React.FC<RunWithEnvModalProps> = ({
             )}
           />
         </Stack>
-
-        <Box
-          sx={{
-            position: 'sticky',
-            bottom: -20,
-            display: 'flex',
-            justifyContent: 'flex-end',
-            gap: 1.5,
-            pt: 2,
-            pb: 2.5, // match DialogContent padding so it looks flush
-            borderTop: (theme) => `1px solid ${theme.palette.divider}`,
-            backgroundColor: (theme) => theme.palette.background.paper,
-            zIndex: 1,
-          }}
-        >
-          <Button onClick={onClose} disabled={isRunning}>
-            Cancel
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={
-              isRunning ? <CircularProgress size={16} /> : <PlayArrow />
-            }
-            onClick={handleRun}
-            disabled={isRunning || prefilling}
-          >
-            {isRunning ? 'Starting…' : 'Run'}
-          </Button>
-        </Box>
       </Stack>
     </Modal>
   );
