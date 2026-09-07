@@ -868,6 +868,7 @@ const ProjectDetails: React.FC = () => {
       if (isPipelineFile(filePath)) {
         const pipelineTabPath = toPipelineTabPath(filePath);
         const alreadyOpen = !!getTabByPath(pipelineTabPath);
+        setSelectedFilePath(filePath);
         openTab(pipelineTabPath, {
           title: deriveTitleFromPath(filePath),
           content: '',
