@@ -40,6 +40,7 @@ import {
   useDuplicateNotebook,
 } from '../../controllers/notebooks.controller';
 import { useGetConnections } from '../../controllers';
+import { notebooksService } from '../../services/notebooks.service';
 import {
   NotebookCell as NotebookCellType,
   Notebook,
@@ -501,13 +502,20 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
         );
       }
 
+      // Fetch fresh from disk instead of the notebook detail cache, which is
+      // only refreshed on mount or after running a cell — not after simply
+      // adding/editing one — and can be stale by the time of export.
+      const freshNotebook =
+        (await notebooksService.getNotebook(connectionId, notebookId)) ??
+        notebook;
+
       // Create export data without cell output data (to keep file size small)
       const exportData = {
-        ...notebook,
+        ...freshNotebook,
         connectionId,
         connectionName: activeConnection?.connection.name,
         connection: connectionDetails,
-        cells: notebook.cells.map((cell) => ({
+        cells: freshNotebook.cells.map((cell) => ({
           ...cell,
           output: cell.output
             ? {
@@ -531,6 +539,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     [
       notebook,
       connectionId,
+      notebookId,
       activeConnection,
       isDuckLakeConnection,
       secureStorage,

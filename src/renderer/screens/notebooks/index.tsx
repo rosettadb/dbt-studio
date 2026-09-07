@@ -762,12 +762,18 @@ const Notebooks = () => {
         );
       }
 
+      // Fetch fresh from disk instead of the notebooks list cache, which is
+      // never invalidated when cells are added/edited (only on
+      // create/rename/delete), and can be stale by the time of export.
+      const freshNotebooks =
+        await notebooksService.listNotebooks(activeConnectionId);
+
       const exportData = {
         exportDate: new Date().toISOString(),
         connectionId: activeConnectionId,
         connectionName: activeConnection?.connection.name,
         connection: connectionDetails,
-        notebooks: notebooks.map((notebook) => ({
+        notebooks: freshNotebooks.map((notebook) => ({
           id: notebook.id,
           name: notebook.name,
           description: notebook.description,
@@ -807,7 +813,6 @@ const Notebooks = () => {
       URL.revokeObjectURL(url);
     },
     [
-      notebooks,
       activeConnectionId,
       activeConnection,
       isDuckLakeActiveConnection,
