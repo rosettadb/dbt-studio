@@ -209,6 +209,8 @@ export interface IcebergSqlExecutionParams {
   executionId: string;
   sql: string;
   maxRows?: number;
+  validateOnly?: boolean;
+  mutationConfirmed?: boolean;
 }
 
 export interface IcebergSqlExecutionResult {

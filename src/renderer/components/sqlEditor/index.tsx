@@ -131,14 +131,7 @@ export const SqlEditor: React.FC<Props> = ({
       return;
     }
 
-    const commandType = getCommandType(selectedQuery);
-    if (isIcebergConnection && commandType !== 'SELECT') {
-      // eslint-disable-next-line no-alert
-      const confirmed = window.confirm(
-        'This statement will modify the Iceberg catalog or its data. Continue?',
-      );
-      if (!confirmed) return;
-    }
+    let commandType = getCommandType(selectedQuery);
 
     // Generate semi-unique ID for query cancellation
     const queryId = `query-${Date.now()}-${Math.random()
@@ -156,15 +149,29 @@ export const SqlEditor: React.FC<Props> = ({
       let result;
 
       if (isIcebergConnection && icebergInstanceId) {
-        const icebergResult = await icebergService.executeIcebergSql({
-          instanceId: icebergInstanceId,
-          executionId: queryId,
-          sql: selectedQuery,
-          maxRows: 1000,
-        });
+        const icebergResult = await icebergService.executeConfirmedIcebergSql(
+          {
+            instanceId: icebergInstanceId,
+            executionId: queryId,
+            sql: selectedQuery,
+            maxRows: 1000,
+          },
+          (statementClass) => {
+            // eslint-disable-next-line no-alert
+            return window.confirm(
+              `Run ${statementClass.toUpperCase()} on Iceberg "${connectionInput?.name ?? icebergInstanceId}"? This will modify the catalog or its data.`,
+            );
+          },
+        );
+        if (!icebergResult) return;
+        if (icebergResult.statementClass === 'select') commandType = 'SELECT';
+        else if (['create', 'drop'].includes(icebergResult.statementClass))
+          commandType = 'DDL';
+        else commandType = 'DML';
         result = {
           success: true,
           data: icebergResult.rows,
+          truncated: icebergResult.truncated,
           fields: icebergResult.columns.map((name) => ({ name, type: 0 })),
           rowCount:
             icebergResult.statementClass === 'select'
@@ -222,7 +229,9 @@ export const SqlEditor: React.FC<Props> = ({
       }
 
       // Check if this was a DDL operation
-      const wasDDL = isDDLOperation(selectedQuery);
+      const wasDDL = isIcebergConnection
+        ? commandType === 'DDL'
+        : isDDLOperation(selectedQuery);
       const enrichedResult = {
         ...result,
         isCommand: commandType === 'DDL' || commandType === 'DML',

@@ -3,6 +3,7 @@ import { toast } from 'react-toastify';
 import { styled } from '@mui/material/styles';
 import {
   Box,
+  Alert,
   Backdrop,
   CircularProgress,
   Typography,
@@ -862,6 +863,12 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
         overflow: 'hidden',
       }}
     >
+      {results.truncated && (
+        <Alert severity="info" sx={{ mb: 1 }}>
+          Showing only the first {results.data?.length ?? 0} rows. Results and
+          exports are limited to these rows. Refine the query to see other rows.
+        </Alert>
+      )}
       {viewMode === 'chart' ? (
         <Box
           ref={chartContainerRef}

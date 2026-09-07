@@ -201,3 +201,26 @@ export const ensureIcebergInstalled = (): Promise<{
   installed: boolean;
   version?: string;
 }> => window.electron.ipcRenderer.invoke('iceberg:ensureInstalled');
+
+/** Preflight and execution use the same main-process policy. Capture SQL once
+ * so confirmation cannot accidentally authorize a subsequently edited query. */
+export const executeConfirmedIcebergSql = async (
+  params: IcebergSqlExecutionParams,
+  confirmMutation: (
+    statementClass: IcebergSqlExecutionResult['statementClass'],
+  ) => boolean,
+): Promise<IcebergSqlExecutionResult | undefined> => {
+  const request = { ...params };
+  const classification = await executeIcebergSql({
+    ...request,
+    validateOnly: true,
+  });
+  const mutating = classification.statementClass !== 'select';
+  if (mutating && !confirmMutation(classification.statementClass))
+    return undefined;
+  return executeIcebergSql({
+    ...request,
+    validateOnly: false,
+    mutationConfirmed: mutating,
+  });
+};

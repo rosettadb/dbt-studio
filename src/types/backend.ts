@@ -694,6 +694,7 @@ export type Table = {
 
 export type QueryResponseType = {
   success: boolean;
+  truncated?: boolean;
   data?: QueryResult[];
   fields?: { name: string; type: number }[];
   rowCount?: number; // Add rowCount for affected rows in INSERT/UPDATE/DELETE operations

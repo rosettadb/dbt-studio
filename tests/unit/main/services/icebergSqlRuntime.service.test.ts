@@ -7,6 +7,7 @@ import {
 
 const mockRun = jest.fn();
 const mockRunAndReadUntil = jest.fn();
+const mockRunAndReadAll = jest.fn();
 const mockExtractStatements = jest.fn();
 const mockCloseConnection = jest.fn();
 const mockCloseInstance = jest.fn();
@@ -18,6 +19,7 @@ jest.mock('@duckdb/node-api', () => ({
       connect: jest.fn(async () => ({
         run: mockRun,
         runAndReadUntil: mockRunAndReadUntil,
+        runAndReadAll: mockRunAndReadAll,
         extractStatements: mockExtractStatements,
         closeSync: mockCloseConnection,
         interrupt: mockInterrupt,
@@ -96,7 +98,21 @@ const database = {
 
 describe('IcebergDatalakeService DuckDB Iceberg lifecycle', () => {
   beforeEach(() => {
+    jest.restoreAllMocks();
     jest.clearAllMocks();
+    jest
+      .spyOn(IcebergDatalakeService as any, 'isSqlCombinationAccepted')
+      .mockReturnValue(true);
+    mockRunAndReadAll.mockResolvedValue({
+      getRowObjectsJson: () => [
+        {
+          ast: JSON.stringify({
+            error: false,
+            statements: [{ node: { type: 'SELECT_NODE' } }],
+          }),
+        },
+      ],
+    });
     mockedLoadDatabase.mockResolvedValue(database);
     mockedUpdateDatabase.mockResolvedValue(undefined);
     mockedSecureStorage.getCredential.mockImplementation(async (key) => {
@@ -117,7 +133,9 @@ describe('IcebergDatalakeService DuckDB Iceberg lifecycle', () => {
     mockRunAndReadUntil.mockResolvedValue({
       columnNames: () => ['table_schema', 'table_name'],
       getRowsJson: () => [],
-      getRowObjectsJson: () => [],
+      getRowObjectsJson: () => [
+        { table_schema: 'sales', table_name: 'orders' },
+      ],
       rowsChanged: 0,
       done: true,
     });
@@ -307,22 +325,16 @@ describe('IcebergDatalakeService DuckDB Iceberg lifecycle', () => {
   });
 
   it('rejects runtime-control SQL after parsing exactly one statement', async () => {
-    const destroySync = jest.fn();
     const classify = (IcebergDatalakeService as any).classifySqlStatement as (
       connection: unknown,
       sql: string,
     ) => Promise<string>;
-    const connection = {
-      extractStatements: jest.fn(async () => ({
-        count: 1,
-        prepare: jest.fn(async () => ({ statementType: 7, destroySync })),
-      })),
-    };
+    const connection = { runAndReadAll: mockRunAndReadAll };
 
     await expect(
       classify(connection, 'CREATE SECRET stolen (TYPE S3)'),
     ).rejects.toThrow('ICEBERG_SQL_STATEMENT_REJECTED');
-    expect(destroySync).toHaveBeenCalled();
+    expect(mockRunAndReadAll).not.toHaveBeenCalled();
   });
 
   it('interrupts only a registered active execution', () => {
@@ -336,5 +348,120 @@ describe('IcebergDatalakeService DuckDB Iceberg lifecycle', () => {
     expect(mockInterrupt).toHaveBeenCalled();
     active.delete('running-query');
     expect(IcebergDatalakeService.cancelSql('missing-query')).toBe(false);
+  });
+  it('requires a warehouse row read before persisting verification', async () => {
+    await IcebergDatalakeService.verifySqlAccess(instance.id);
+    expect(mockRunAndReadUntil).toHaveBeenCalledWith(
+      'SELECT * FROM "iceberg"."sales"."orders" LIMIT 1',
+      1,
+    );
+  });
+
+  it.each([
+    'empty catalog',
+    'empty table',
+    'unreadable table',
+    'cleanup failure',
+    'unaccepted pair',
+  ])('does not persist verification for %s', async (failure) => {
+    if (failure === 'empty catalog') {
+      mockRunAndReadUntil.mockResolvedValueOnce({
+        getRowObjectsJson: () => [],
+      });
+    } else if (failure === 'empty table') {
+      mockRunAndReadUntil
+        .mockResolvedValueOnce({
+          getRowObjectsJson: () => [
+            { table_schema: 'sales', table_name: 'orders' },
+          ],
+        })
+        .mockResolvedValueOnce({ getRowObjectsJson: () => [] });
+    } else if (failure === 'unreadable table') {
+      mockRunAndReadUntil
+        .mockResolvedValueOnce({
+          getRowObjectsJson: () => [
+            { table_schema: 'sales', table_name: 'orders' },
+          ],
+        })
+        .mockRejectedValueOnce(new Error('warehouse denied'));
+    } else if (failure === 'cleanup failure') {
+      mockRun.mockImplementation(async (sql: string) => {
+        if (sql.startsWith('DETACH')) throw new Error('detach failed');
+      });
+    } else {
+      (IcebergDatalakeService as any).isSqlCombinationAccepted.mockReturnValue(
+        false,
+      );
+    }
+    expect(
+      (await IcebergDatalakeService.verifySqlAccess(instance.id)).success,
+    ).toBe(false);
+    expect(mockedUpdateDatabase).not.toHaveBeenCalled();
+    expect(mockCloseConnection).toHaveBeenCalled();
+    expect(mockCloseInstance).toHaveBeenCalled();
+  });
+
+  it('does not advertise a verified but unaccepted combination', async () => {
+    mockedLoadDatabase.mockResolvedValue({
+      ...database,
+      icebergInstances: [
+        {
+          ...instance,
+          sqlAccessVerifiedAt: '2026-09-07',
+          sqlRuntimeFingerprint: (
+            IcebergDatalakeService as any
+          ).getSqlRuntimeFingerprint(),
+        },
+      ],
+    });
+    (IcebergDatalakeService as any).isSqlCombinationAccepted.mockReturnValue(
+      false,
+    );
+    expect(
+      await IcebergDatalakeService.getSqlCapability(instance.id),
+    ).toMatchObject({
+      available: false,
+      canWrite: false,
+      reason: 'ICEBERG_SQL_COMBINATION_NOT_ACCEPTED',
+    });
+    expect((await IcebergDatalakeService.listInstances())[0].sqlAvailable).toBe(
+      false,
+    );
+  });
+
+  it('requires explicit confirmation for parsed mutations before attaching', async () => {
+    mockedLoadDatabase.mockResolvedValue({
+      ...database,
+      icebergInstances: [
+        {
+          ...instance,
+          sqlAccessVerifiedAt: '2026-09-07',
+          sqlRuntimeFingerprint: (
+            IcebergDatalakeService as any
+          ).getSqlRuntimeFingerprint(),
+        },
+      ],
+    });
+    const params = {
+      instanceId: instance.id,
+      executionId: 'mutation',
+      sql: '/* comment */ DELETE FROM iceberg.sales.orders',
+    };
+    await expect(IcebergDatalakeService.executeSql(params)).rejects.toThrow(
+      'ICEBERG_SQL_CONFIRMATION_REQUIRED',
+    );
+    expect(mockRun).not.toHaveBeenCalled();
+    expect(
+      await IcebergDatalakeService.executeSql({
+        ...params,
+        validateOnly: true,
+      }),
+    ).toMatchObject({ statementClass: 'delete' });
+    expect(mockRun).not.toHaveBeenCalled();
+    await IcebergDatalakeService.executeSql({
+      ...params,
+      mutationConfirmed: true,
+    });
+    expect(mockRunAndReadUntil).toHaveBeenCalledWith(params.sql, 1001);
   });
 });
