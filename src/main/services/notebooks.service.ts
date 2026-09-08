@@ -11,6 +11,11 @@ import { v4 as uuidv4 } from 'uuid';
 import { Notebook, NotebookCell, CellOutput } from '../../types/notebooks';
 import ConnectorsService from './connectors.service';
 import DuckLakeService from './duckLake.service';
+import { IcebergDatalakeService } from './icebergDatalake.service';
+import type {
+  NotebookExecutionOptions,
+  NotebookRunAllCell,
+} from '../../types/notebooks';
 
 const NOTEBOOKS_DIR = path.join(app.getPath('userData'), 'notebooks');
 const ORPHANED_DIR = path.join(NOTEBOOKS_DIR, '_orphaned');
@@ -58,6 +63,11 @@ function limitCellOutputData(output: CellOutput): CellOutput {
     return {
       ...output,
       data: limitedRows,
+      ...(output.truncated !== undefined
+        ? {
+            truncated: output.truncated || output.data.length > MAX_STORED_ROWS,
+          }
+        : {}),
       rowCount: Math.min(
         output.rowCount ?? limitedRows.length,
         MAX_STORED_ROWS,
@@ -139,7 +149,7 @@ async function ensureDirectories() {
 // Validate and sanitize path segments to prevent path traversal attacks
 function assertSafeSegment(value: string, label: string): string {
   // Allow alphanumeric, colon, underscore, dash for connection keys
-  // connectionKey format: "db:uuid" or "ducklake:uuid"
+  // connectionKey format: "db:uuid", "ducklake:uuid", or "iceberg:uuid"
   if (!/^[A-Za-z0-9:_-]+$/.test(value)) {
     throw new Error(`Invalid ${label}: "${value}" contains unsafe characters`);
   }
@@ -237,6 +247,8 @@ function normalizeConnectionKey(connectionId: string): string {
     );
   }
 
+  if (connectionId.startsWith('iceberg-'))
+    return `iceberg:${connectionId.slice(8)}`;
   if (connectionId.startsWith('ducklake-')) {
     const instanceId = connectionId.replace('ducklake-', '');
     return `ducklake:${instanceId}`;
@@ -245,6 +257,86 @@ function normalizeConnectionKey(connectionId: string): string {
 }
 
 export class NotebooksService {
+  private static readonly icebergRuns = new Map<string, AbortController>();
+
+  static cancelIcebergCell(executionId: string): boolean {
+    const run = this.icebergRuns.get(executionId);
+    if (!run) return false;
+    run.abort();
+    IcebergDatalakeService.cancelSql(executionId);
+    return true;
+  }
+
+  private static async runIcebergCell(
+    connectionId: string,
+    notebookId: string,
+    cellId: string,
+    sql: string,
+    options?: NotebookExecutionOptions,
+  ): Promise<CellOutput> {
+    const executionId = options?.executionId ?? `notebook-${uuidv4()}`;
+    if (
+      !executionId.trim() ||
+      executionId.length > 120 ||
+      this.icebergRuns.has(executionId)
+    ) {
+      throw new Error('ICEBERG_SQL_EXECUTION_ID_INVALID');
+    }
+    const run = new AbortController();
+    this.icebergRuns.set(executionId, run);
+    const started = Date.now();
+    let output: CellOutput;
+    try {
+      const notebook = await this.getNotebook(connectionId, notebookId);
+      if (
+        !notebook?.cells.some(
+          (cell) => cell.id === cellId && cell.type === 'sql',
+        )
+      ) {
+        throw new Error('ICEBERG_NOTEBOOK_CELL_NOT_FOUND');
+      }
+      const result = await IcebergDatalakeService.executeSql(
+        {
+          instanceId: connectionId.slice(8),
+          executionId,
+          sql,
+          maxRows: MAX_STORED_ROWS,
+          mutationConfirmed: options?.mutationConfirmed,
+        },
+        run.signal,
+      );
+      output = {
+        type: result.rows.length ? 'table' : 'empty',
+        data: result.rows,
+        columns: result.columns,
+        truncated: result.truncated,
+        rowCount:
+          result.statementClass === 'select'
+            ? result.rows.length
+            : result.rowsChanged,
+        statementClass: result.statementClass,
+        executionTime: Date.now() - started,
+      };
+    } catch (error) {
+      let message = 'Iceberg execution failed.';
+      if (run.signal.aborted) {
+        message = 'Iceberg execution cancelled.';
+      } else if (error instanceof Error) {
+        message = error.message;
+      }
+      output = {
+        type: 'error',
+        error: message,
+        cancelled: run.signal.aborted,
+        executionTime: Date.now() - started,
+      };
+    } finally {
+      this.icebergRuns.delete(executionId);
+    }
+    await this.updateCellOutput(connectionId, notebookId, cellId, output);
+    return output;
+  }
+
   /**
    * List all notebooks for a connection
    */
@@ -745,7 +837,17 @@ export class NotebooksService {
     sql: string,
     limit?: number,
     offset?: number,
+    options?: NotebookExecutionOptions,
   ): Promise<CellOutput> {
+    if (connectionId.startsWith('iceberg-')) {
+      return this.runIcebergCell(
+        connectionId,
+        notebookId,
+        cellId,
+        sql,
+        options,
+      );
+    }
     try {
       const startTime = Date.now();
 
@@ -922,6 +1024,11 @@ export class NotebooksService {
     limit: number,
     offset: number,
   ): Promise<CellOutput> {
+    if (connectionId.startsWith('iceberg-')) {
+      throw new Error(
+        'ICEBERG_NOTEBOOK_BOUNDED_RESULTS: Refine and rerun the original query.',
+      );
+    }
     try {
       const startTime = Date.now();
 
@@ -1067,7 +1174,23 @@ export class NotebooksService {
   static async runAllCells(
     connectionId: string,
     notebookId: string,
+    cellRun?: NotebookRunAllCell,
   ): Promise<void> {
+    if (connectionId.startsWith('iceberg-')) {
+      // The renderer pauses for confirmation between cells and submits each
+      // confirmed cell through this same Run All route. Bare IPC cannot bypass it.
+      if (!cellRun)
+        throw new Error('ICEBERG_NOTEBOOK_CELL_CONFIRMATION_REQUIRED');
+      const output = await this.runIcebergCell(
+        connectionId,
+        notebookId,
+        cellRun.cellId,
+        cellRun.sql,
+        cellRun,
+      );
+      if (output.type === 'error') throw new Error(output.error);
+      return;
+    }
     try {
       const notebook = await this.getNotebook(connectionId, notebookId);
       if (!notebook) {
@@ -1117,7 +1240,20 @@ export class NotebooksService {
       const limitedOutput = limitCellOutputData(output);
 
       const updatedCells = notebook.cells.map((cell) =>
-        cell.id === cellId ? { ...cell, output: limitedOutput } : cell,
+        cell.id === cellId
+          ? {
+              ...cell,
+              output: limitedOutput,
+              ...(connectionId.startsWith('iceberg-')
+                ? {
+                    status:
+                      output.type === 'error'
+                        ? ('error' as const)
+                        : ('success' as const),
+                  }
+                : {}),
+            }
+          : cell,
       );
 
       await this.updateNotebook(connectionId, notebookId, {

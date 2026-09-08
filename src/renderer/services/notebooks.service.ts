@@ -3,7 +3,79 @@
  * Frontend service for notebook operations
  */
 
+import { v4 as uuidv4 } from 'uuid';
+import { executeIcebergSql, getIcebergInstance } from './iceberg.service';
 import { Notebook, NotebookCell, CellOutput } from '../../types/notebooks';
+
+type RunOptions = { executionId?: string; signal?: AbortSignal };
+
+async function runConfirmedIcebergCell(
+  connectionId: string,
+  notebookId: string,
+  cellId: string,
+  sql: string,
+  options: RunOptions = {},
+  runAll = false,
+): Promise<CellOutput> {
+  const executionId = options.executionId ?? `notebook-${uuidv4()}`;
+  const checkCancelled = () => {
+    if (options.signal?.aborted)
+      throw new Error('Iceberg execution cancelled.');
+  };
+  checkCancelled();
+  const instanceId = connectionId.slice(8);
+  const classification = await executeIcebergSql({
+    instanceId,
+    executionId,
+    sql,
+    validateOnly: true,
+  });
+  checkCancelled();
+  const mutating = classification.statementClass !== 'select';
+  if (mutating) {
+    const instance = await getIcebergInstance(instanceId);
+    checkCancelled();
+    if (
+      // eslint-disable-next-line no-alert
+      !window.confirm(
+        `Run ${classification.statementClass.toUpperCase()} on Iceberg "${instance.name}"? This modifies the catalog or its data.`,
+      )
+    ) {
+      throw new Error('Iceberg mutation confirmation declined.');
+    }
+  }
+  checkCancelled();
+  const cancel = () => {
+    window.electron.ipcRenderer
+      .invoke('notebooks:cancelIcebergCell', executionId)
+      .catch(() => undefined);
+  };
+  options.signal?.addEventListener('abort', cancel);
+  try {
+    const execution = { executionId, mutationConfirmed: mutating };
+    if (runAll) {
+      await window.electron.ipcRenderer.invoke(
+        'notebooks:runAll',
+        connectionId,
+        notebookId,
+        { ...execution, cellId, sql },
+      );
+      return { type: 'empty', statementClass: classification.statementClass };
+    }
+    return await window.electron.ipcRenderer.invoke(
+      'notebooks:runCell',
+      connectionId,
+      notebookId,
+      cellId,
+      sql,
+      undefined,
+      undefined,
+      execution,
+    );
+  } finally {
+    options.signal?.removeEventListener('abort', cancel);
+  }
+}
 
 export const notebooksService = {
   /**
@@ -154,7 +226,16 @@ export const notebooksService = {
     sql: string,
     limit?: number,
     offset?: number,
+    options?: RunOptions,
   ): Promise<CellOutput> => {
+    if (connectionId.startsWith('iceberg-'))
+      return runConfirmedIcebergCell(
+        connectionId,
+        notebookId,
+        cellId,
+        sql,
+        options,
+      );
     return window.electron.ipcRenderer.invoke(
       'notebooks:runCell',
       connectionId,
@@ -194,8 +275,34 @@ export const notebooksService = {
   runAllCells: async (
     connectionId: string,
     notebookId: string,
+    options?: RunOptions,
   ): Promise<void> => {
-    return window.electron.ipcRenderer.invoke(
+    if (connectionId.startsWith('iceberg-')) {
+      const notebook = await notebooksService.getNotebook(
+        connectionId,
+        notebookId,
+      );
+      if (!notebook) throw new Error('Notebook not found');
+      // Sequential confirmation is intentional: rejection/failure stops the batch.
+      // eslint-disable-next-line no-restricted-syntax
+      for (const cell of [...notebook.cells].sort(
+        (a, b) => a.order - b.order,
+      )) {
+        if (cell.type === 'sql' && cell.content.trim()) {
+          // eslint-disable-next-line no-await-in-loop
+          await runConfirmedIcebergCell(
+            connectionId,
+            notebookId,
+            cell.id,
+            cell.content,
+            { signal: options?.signal },
+            true,
+          );
+        }
+      }
+      return;
+    }
+    await window.electron.ipcRenderer.invoke(
       'notebooks:runAll',
       connectionId,
       notebookId,

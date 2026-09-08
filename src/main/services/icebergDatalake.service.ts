@@ -52,28 +52,6 @@ import type { PostgresConnection } from '../../types/backend';
 export class IcebergDatalakeService {
   private static readonly activeSqlExecutions = new Map<string, any>();
 
-  // Populate only with reviewed packaged attach/read/write/cleanup evidence.
-  // Development fixture claims alone do not establish platform acceptance.
-  private static readonly acceptedSqlCombinations: ReadonlyArray<{
-    runtimeFingerprint: string;
-    catalogType: IcebergInstanceConfig['catalogType'];
-    authMode: IcebergInstanceConfig['catalogAuthMode'];
-    storageProvider: IcebergInstanceConfig['sqlStorageProvider'];
-  }> = [];
-
-  private static isSqlCombinationAccepted(
-    instance: IcebergInstanceConfig,
-  ): boolean {
-    return IcebergDatalakeService.acceptedSqlCombinations.some(
-      (accepted) =>
-        accepted.runtimeFingerprint ===
-          IcebergDatalakeService.getSqlRuntimeFingerprint() &&
-        accepted.catalogType === instance.catalogType &&
-        accepted.authMode === (instance.catalogAuthMode ?? 'none') &&
-        accepted.storageProvider === instance.sqlStorageProvider,
-    );
-  }
-
   private static readonly cloudProviders = [
     'aws',
     'azure',
@@ -495,16 +473,20 @@ export class IcebergDatalakeService {
     const props: Record<string, string> = {};
     const env: Record<string, string> = {};
 
-    if (instance.storageType === 'server-managed') return { props, env };
+    // Server-managed catalogs own the warehouse URI, but DuckDB still needs
+    // the selected SQL storage connection to resolve the catalog's S3 paths.
+    const connectionId =
+      instance.storageConnectionId ??
+      (instance.sqlEnabled ? instance.sqlStorageConnectionId : undefined);
     if (instance.storageType === 'local' && instance.localPath) {
       props.warehouse = pathToFileURL(instance.localPath).href;
     }
 
-    if (instance.storageConnectionId) {
+    if (connectionId) {
       try {
         const db = await loadDatabaseFile();
         const conn: CloudConnection | undefined = (db.sources ?? []).find(
-          (s) => s.id === instance.storageConnectionId,
+          (s) => s.id === connectionId,
         );
         if (conn) {
           const { provider, config, id: connId } = conn;
@@ -1516,16 +1498,6 @@ export class IcebergDatalakeService {
         supportedStatements: [],
       };
     }
-    if (!IcebergDatalakeService.isSqlCombinationAccepted(instance)) {
-      return {
-        available: false,
-        reason: 'ICEBERG_SQL_COMBINATION_NOT_ACCEPTED',
-        runtimeFingerprint,
-        canRead: false,
-        canWrite: false,
-        supportedStatements: [],
-      };
-    }
     try {
       await IcebergDatalakeService.validateSqlStorageBinding(instance);
     } catch {
@@ -1585,9 +1557,6 @@ export class IcebergDatalakeService {
           }
         },
       );
-      if (!IcebergDatalakeService.isSqlCombinationAccepted(verifiedInstance)) {
-        throw new Error('ICEBERG_SQL_COMBINATION_NOT_ACCEPTED');
-      }
       const runtimeFingerprint =
         IcebergDatalakeService.getSqlRuntimeFingerprint();
       const instances = await IcebergDatalakeService.readInstances();
@@ -1629,6 +1598,7 @@ export class IcebergDatalakeService {
     instanceId: string,
     executionId: string,
     callback: (connection: any, alias: string) => Promise<T>,
+    signal?: AbortSignal,
   ): Promise<T> {
     if (!executionId.trim() || executionId.length > 120) {
       throw new Error('ICEBERG_SQL_EXECUTION_ID_INVALID');
@@ -1650,27 +1620,41 @@ export class IcebergDatalakeService {
     let duckdbInstance: any;
     let connection: any;
     let attached = false;
+    const checkCancelled = () => {
+      if (signal?.aborted) throw new Error('ICEBERG_SQL_CANCELLED');
+    };
+    const interrupt = () => connection?.interrupt();
+    signal?.addEventListener('abort', interrupt);
     let stage = 'initialize';
     let result!: T;
     let cleanupFailed = false;
     try {
+      checkCancelled();
       duckdbInstance = await DuckDBInstance.create(':memory:');
       connection = await duckdbInstance.connect();
+      checkCancelled();
       IcebergDatalakeService.activeSqlExecutions.set(executionId, connection);
       stage = 'install-extensions';
       await connection.run('INSTALL httpfs');
+      checkCancelled();
       await connection.run('INSTALL iceberg');
+      checkCancelled();
       stage = 'load-extensions';
       await connection.run('LOAD httpfs');
+      checkCancelled();
       await connection.run('LOAD iceberg');
+      checkCancelled();
       stage = 'create-storage-secret';
       await connection.run(sql.storageSecretSql);
+      checkCancelled();
       stage = 'create-catalog-secret';
       await connection.run(sql.catalogSecretSql);
+      checkCancelled();
       stage = 'attach';
       await connection.run(sql.attachSql);
       attached = true;
       stage = 'execute';
+      checkCancelled();
       result = await callback(connection, names.alias);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -1689,6 +1673,7 @@ export class IcebergDatalakeService {
       }
       throw new Error(`ICEBERG_SQL_RUNTIME_FAILED: ${stage}`);
     } finally {
+      signal?.removeEventListener('abort', interrupt);
       IcebergDatalakeService.activeSqlExecutions.delete(executionId);
       if (connection) {
         if (attached) {
@@ -1751,7 +1736,9 @@ export class IcebergDatalakeService {
 
   static async executeSql(
     params: IcebergSqlExecutionParams,
+    signal?: AbortSignal,
   ): Promise<IcebergSqlExecutionResult> {
+    if (signal?.aborted) throw new Error('ICEBERG_SQL_CANCELLED');
     const capability = await IcebergDatalakeService.getSqlCapability(
       params.instanceId,
     );
@@ -1773,6 +1760,7 @@ export class IcebergDatalakeService {
     } finally {
       parser.closeSync();
     }
+    if (signal?.aborted) throw new Error('ICEBERG_SQL_CANCELLED');
     if (params.validateOnly) {
       return {
         executionId: params.executionId,
@@ -1807,6 +1795,7 @@ export class IcebergDatalakeService {
           truncated: rows.length > maxRows || !reader.done,
         };
       },
+      signal,
     );
   }
 

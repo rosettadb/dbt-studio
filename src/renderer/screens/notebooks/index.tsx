@@ -9,6 +9,7 @@ import SplitPane, { Pane } from 'split-pane-react';
 import 'split-pane-react/esm/themes/default.css';
 import {
   Box,
+  Alert,
   FormControl,
   Select,
   MenuItem,
@@ -37,6 +38,8 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import { useListIcebergInstances } from '../../controllers/icebergDatalake.controller';
+import { getIcebergNotebookTables } from '../../services/iceberg.service';
 import { AppLayout } from '../../layouts';
 import { useGetConnections, useDuckLakeInstances } from '../../controllers';
 import {
@@ -53,7 +56,9 @@ import {
 } from '../../controllers/notebooks.controller';
 import connectionIcons, {
   defaultIcon,
+  icebergCatalogImages,
 } from '../../../../assets/connectionIcons';
+import icebergIcon from '../../../../assets/icons/apache-iceberg-lake.png';
 import { AppContext } from '../../context';
 import { connectorsServices, DuckLakeService } from '../../services';
 import { AnalyticsEditor } from '../../components/analytics';
@@ -106,6 +111,8 @@ const Notebooks = () => {
   const { isSidebarOpen } = useContext(AppContext);
   const { data: connections = [] } = useGetConnections();
   const { data: duckLakeInstances = [] } = useDuckLakeInstances();
+  const { data: icebergInstances = [], isLoading: icebergLoading } =
+    useListIcebergInstances();
 
   const { isChatOpen, setIsChatOpen } = useAppContext();
 
@@ -167,6 +174,8 @@ const Notebooks = () => {
   // Validate hydrated connection exists, clear if not
   useEffect(() => {
     if (!isConnectionHydrated || !activeConnectionId) return;
+    // Preserve the saved identity even when its Iceberg instance is unavailable.
+    if (activeConnectionId.startsWith('iceberg-')) return;
 
     const connectionExists =
       connections.some((c) => c.id === activeConnectionId) ||
@@ -237,7 +246,21 @@ const Notebooks = () => {
   >(null);
 
   // Get active connection details
+  const activeIceberg = icebergInstances.find(
+    (item) => `iceberg-${item.id}` === activeConnectionId,
+  );
+  const icebergUnavailable =
+    activeConnectionId.startsWith('iceberg-') && !activeIceberg?.sqlAvailable;
   const activeConnection = useMemo(() => {
+    if (activeConnectionId.startsWith('iceberg-')) {
+      return {
+        id: activeConnectionId,
+        connection: {
+          name: activeIceberg?.name ?? 'Unavailable Iceberg connection',
+          type: 'iceberg',
+        },
+      };
+    }
     if (activeConnectionId.startsWith('ducklake-')) {
       const instanceId = activeConnectionId.replace('ducklake-', '');
       const instance = duckLakeInstances.find((inst) => inst.id === instanceId);
@@ -252,7 +275,7 @@ const Notebooks = () => {
       }
     }
     return connections.find((c) => c.id === activeConnectionId);
-  }, [connections, duckLakeInstances, activeConnectionId]);
+  }, [connections, duckLakeInstances, activeConnectionId, activeIceberg]);
 
   // Get schema for active connection from cache
   const activeSchema = activeConnectionId
@@ -274,7 +297,10 @@ const Notebooks = () => {
       setLoadingSchemas((prev) => ({ ...prev, [connectionId]: true }));
 
       try {
-        if (connectionId.startsWith('ducklake-')) {
+        if (connectionId.startsWith('iceberg-')) {
+          const tables = await getIcebergNotebookTables(connectionId);
+          setTabSchemas((prev) => ({ ...prev, [connectionId]: tables }));
+        } else if (connectionId.startsWith('ducklake-')) {
           // DuckLake schema extraction
           const instanceId = connectionId.replace('ducklake-', '');
           const duckLakeSchema =
@@ -381,6 +407,10 @@ const Notebooks = () => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const connectionExists = useCallback(
     (connectionKey: string) => {
+      if (connectionKey.startsWith('iceberg:'))
+        return icebergInstances.some(
+          (item) => item.id === connectionKey.slice(8),
+        );
       if (connectionKey.startsWith('ducklake:')) {
         const instanceId = connectionKey.replace('ducklake:', '');
         return duckLakeInstances.some((inst) => inst.id === instanceId);
@@ -391,12 +421,17 @@ const Notebooks = () => {
       }
       return false;
     },
-    [connections, duckLakeInstances],
+    [connections, duckLakeInstances, icebergInstances],
   );
 
   // Helper: Get connection name from connectionKey
   const getConnectionName = useCallback(
     (connectionKey: string) => {
+      if (connectionKey.startsWith('iceberg:'))
+        return (
+          icebergInstances.find((item) => item.id === connectionKey.slice(8))
+            ?.name ?? 'Unavailable Iceberg connection'
+        );
       if (connectionKey.startsWith('ducklake:')) {
         const instanceId = connectionKey.replace('ducklake:', '');
         const instance = duckLakeInstances.find(
@@ -411,7 +446,7 @@ const Notebooks = () => {
       }
       return 'Unknown';
     },
-    [connections, duckLakeInstances],
+    [connections, duckLakeInstances, icebergInstances],
   );
 
   // Handle restore archived notebook
@@ -791,6 +826,31 @@ const Notebooks = () => {
                   }
 
                   // Check DuckLake instances
+                  if (selected.startsWith('iceberg-')) {
+                    const instance = icebergInstances.find(
+                      (item) => `iceberg-${item.id}` === selected,
+                    );
+                    return (
+                      <Box
+                        sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
+                      >
+                        <img
+                          src={
+                            icebergCatalogImages[
+                              instance?.catalogType as keyof typeof icebergCatalogImages
+                            ] || icebergIcon
+                          }
+                          alt=""
+                          style={{
+                            width: 14,
+                            height: 14,
+                            objectFit: 'contain',
+                          }}
+                        />
+                        {instance?.name ?? 'Unavailable Iceberg connection'}
+                      </Box>
+                    );
+                  }
                   if (selected.startsWith('ducklake-')) {
                     const instanceId = selected.replace('ducklake-', '');
                     const instance = duckLakeInstances.find(
@@ -807,7 +867,7 @@ const Notebooks = () => {
                           }}
                         >
                           <img
-                            src={connectionIcons.images.ducklake || defaultIcon}
+                            src={connectionIcons.images.duckdb || defaultIcon}
                             alt=""
                             style={{
                               width: 14,
@@ -849,6 +909,11 @@ const Notebooks = () => {
                 <MenuItem value="" disabled sx={{ fontSize: '0.8rem' }}>
                   Select Connection
                 </MenuItem>
+                {connections.length > 0 && (
+                  <MenuItem disabled sx={{ fontSize: '0.75rem', opacity: 0.6 }}>
+                    <strong>Database Connections</strong>
+                  </MenuItem>
+                )}
                 {connections.map((conn) => {
                   const linkedProject = projects?.find(
                     (p) => p.connectionId === conn.id,
@@ -920,14 +985,70 @@ const Notebooks = () => {
                     }}
                   >
                     <img
-                      src={connectionIcons.images.ducklake || defaultIcon}
+                      src={connectionIcons.images.duckdb || defaultIcon}
                       alt=""
                       style={{ width: 14, height: 14, objectFit: 'contain' }}
                     />
                     {instance.name}
                   </MenuItem>
                 ))}
+                {icebergInstances.some((instance) => instance.sqlAvailable) && (
+                  <MenuItem
+                    disabled
+                    sx={{ fontSize: '0.75rem', opacity: 0.6, mt: 1 }}
+                  >
+                    <strong>Iceberg Catalogs</strong>
+                  </MenuItem>
+                )}
+                {icebergInstances
+                  .filter((instance) => instance.sqlAvailable)
+                  .map((instance) => (
+                    <MenuItem
+                      key={`iceberg-${instance.id}`}
+                      value={`iceberg-${instance.id}`}
+                      sx={{ fontSize: '0.8rem' }}
+                    >
+                      <Box
+                        sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
+                      >
+                        <img
+                          src={
+                            icebergCatalogImages[
+                              instance.catalogType as keyof typeof icebergCatalogImages
+                            ] || icebergIcon
+                          }
+                          alt=""
+                          style={{
+                            width: 14,
+                            height: 14,
+                            objectFit: 'contain',
+                          }}
+                        />
+                        {instance.name}
+                      </Box>
+                    </MenuItem>
+                  ))}
+                {activeConnectionId.startsWith('iceberg-') &&
+                  !activeIceberg?.sqlAvailable && (
+                    <MenuItem
+                      value={activeConnectionId}
+                      disabled
+                      sx={{ display: 'none' }}
+                    >
+                      {activeIceberg?.name ?? 'Unavailable Iceberg connection'}
+                    </MenuItem>
+                  )}
               </Select>
+              {icebergUnavailable && (
+                <Alert severity="warning" sx={{ mt: 1 }}>
+                  {icebergLoading
+                    ? 'Checking Iceberg connection…'
+                    : (activeIceberg?.sqlUnavailableReason ??
+                      'Iceberg connection was deleted or is unavailable.')}{' '}
+                  Saved notebooks remain accessible; SQL execution is
+                  unavailable.
+                </Alert>
+              )}
             </FormControl>
             <Tooltip title="Add Connection">
               <IconButton

@@ -1,3 +1,4 @@
+import type { Table } from '../../types/backend';
 /**
  * Iceberg renderer service
  * Named exports wrapping window.electron.ipcRenderer.invoke — no default exports.
@@ -224,3 +225,39 @@ export const executeConfirmedIcebergSql = async (
     mutationConfirmed: mutating,
   });
 };
+
+/** Shared Notebook schema adapter; identifiers stay separate until SQL insertion. */
+export const getIcebergNotebookTables = async (
+  connectionId: string,
+): Promise<Table[]> => {
+  const schema = await getIcebergSqlSchema(connectionId.slice(8));
+  return schema.namespaces.flatMap((namespace) =>
+    namespace.tables.map((table) => ({
+      name: table.name,
+      schema: namespace.name,
+      type: table.type,
+      columns: table.columns.map((column) => ({
+        name: column.name,
+        typeName: column.type,
+        type: column.type,
+        nullable: true,
+        ordinalPosition: column.position,
+        primaryKeySequenceId: 0,
+        columnDisplaySize: 0,
+        scale: 0,
+        precision: 0,
+        columnProperties: [],
+        autoincrement: false,
+        primaryKey: false,
+      })),
+    })),
+  );
+};
+export const icebergQualifiedName = (...parts: string[]) =>
+  ['iceberg', ...parts]
+    .map((part) =>
+      /^[A-Za-z_][A-Za-z0-9_]*$/.test(part)
+        ? part
+        : `"${part.replace(/"/g, '""')}"`,
+    )
+    .join('.');

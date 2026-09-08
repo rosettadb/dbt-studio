@@ -44,6 +44,7 @@ import {
   icebergService,
 } from '../../services';
 import { QueryResultStore } from './queryResultStore';
+import { icebergQualifiedName } from '../../services/iceberg.service';
 import { registerQueryResultBridge } from '../../services/agentEditorBridge.service';
 import type { QueryResultSnapshot } from '../../../types/backend';
 import { useLocalStorage } from '../../hooks';
@@ -425,9 +426,8 @@ const Sql = () => {
       : [];
 
     if (isIcebergConnection) {
-      const quote = (value: string) => `"${value.replace(/"/g, '""')}"`;
       const icebergItems = activeSchema.flatMap((table) => {
-        const qualifiedTable = `${quote('iceberg')}.${quote(table.schema)}.${quote(table.name)}`;
+        const qualifiedTable = icebergQualifiedName(table.schema, table.name);
         return [
           {
             label: `iceberg.${table.schema}.${table.name}`,
@@ -438,7 +438,11 @@ const Sql = () => {
           ...table.columns.map((column) => ({
             label: `iceberg.${table.schema}.${table.name}.${column.name}`,
             kind: MonacoCompletionItemKind.Field,
-            insertText: `${qualifiedTable}.${quote(column.name)}`,
+            insertText: icebergQualifiedName(
+              table.schema,
+              table.name,
+              column.name,
+            ),
             detail: 'Iceberg column',
           })),
         ];

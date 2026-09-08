@@ -100,9 +100,6 @@ describe('IcebergDatalakeService DuckDB Iceberg lifecycle', () => {
   beforeEach(() => {
     jest.restoreAllMocks();
     jest.clearAllMocks();
-    jest
-      .spyOn(IcebergDatalakeService as any, 'isSqlCombinationAccepted')
-      .mockReturnValue(true);
     mockRunAndReadAll.mockResolvedValue({
       getRowObjectsJson: () => [
         {
@@ -138,6 +135,20 @@ describe('IcebergDatalakeService DuckDB Iceberg lifecycle', () => {
       ],
       rowsChanged: 0,
       done: true,
+    });
+  });
+
+  it('passes the SQL storage endpoint to server-managed REST catalogs', async () => {
+    const buildProperties = (IcebergDatalakeService as any)
+      .buildCatalogProperties as (config: unknown) => Promise<{
+      props: Record<string, string>;
+      env: Record<string, string>;
+    }>;
+    const result = await buildProperties(instance);
+
+    expect(result.props).toMatchObject({
+      's3.endpoint': 'http://localhost:9000',
+      's3.access-key-id': 'minioadmin',
     });
   });
 
@@ -362,7 +373,6 @@ describe('IcebergDatalakeService DuckDB Iceberg lifecycle', () => {
     'empty table',
     'unreadable table',
     'cleanup failure',
-    'unaccepted pair',
   ])('does not persist verification for %s', async (failure) => {
     if (failure === 'empty catalog') {
       mockRunAndReadUntil.mockResolvedValueOnce({
@@ -388,10 +398,6 @@ describe('IcebergDatalakeService DuckDB Iceberg lifecycle', () => {
       mockRun.mockImplementation(async (sql: string) => {
         if (sql.startsWith('DETACH')) throw new Error('detach failed');
       });
-    } else {
-      (IcebergDatalakeService as any).isSqlCombinationAccepted.mockReturnValue(
-        false,
-      );
     }
     expect(
       (await IcebergDatalakeService.verifySqlAccess(instance.id)).success,
@@ -401,7 +407,7 @@ describe('IcebergDatalakeService DuckDB Iceberg lifecycle', () => {
     expect(mockCloseInstance).toHaveBeenCalled();
   });
 
-  it('does not advertise a verified but unaccepted combination', async () => {
+  it('enables SQL for a verified connection without a combination registry', async () => {
     mockedLoadDatabase.mockResolvedValue({
       ...database,
       icebergInstances: [
@@ -414,18 +420,15 @@ describe('IcebergDatalakeService DuckDB Iceberg lifecycle', () => {
         },
       ],
     });
-    (IcebergDatalakeService as any).isSqlCombinationAccepted.mockReturnValue(
-      false,
-    );
     expect(
       await IcebergDatalakeService.getSqlCapability(instance.id),
     ).toMatchObject({
-      available: false,
-      canWrite: false,
-      reason: 'ICEBERG_SQL_COMBINATION_NOT_ACCEPTED',
+      available: true,
+      canRead: true,
+      canWrite: true,
     });
     expect((await IcebergDatalakeService.listInstances())[0].sqlAvailable).toBe(
-      false,
+      true,
     );
   });
 

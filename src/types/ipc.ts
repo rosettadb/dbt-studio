@@ -426,6 +426,7 @@ export type NotebookChannels =
   | 'notebooks:import'
   | 'notebooks:importAll'
   | 'notebooks:delete'
+  | 'notebooks:cancelIcebergCell'
   | 'notebooks:runCell'
   | 'notebooks:fetchCellPage'
   | 'notebooks:runAll'

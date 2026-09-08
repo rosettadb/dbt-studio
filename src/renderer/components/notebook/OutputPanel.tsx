@@ -338,6 +338,7 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
   };
 
   const handleExportParquet = async () => {
+    if (connectionId.startsWith('iceberg-')) return;
     handleExportMenuClose();
 
     try {
@@ -556,7 +557,9 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
               color="text.secondary"
               sx={{ fontSize: 11 }}
             >
-              Query executed successfully (no results)
+              {output.statementClass && output.statementClass !== 'select'
+                ? `${output.statementClass.toUpperCase()} completed (${output.rowCount ?? 0} rows affected)`
+                : 'Query executed successfully (no results)'}
             </Typography>
             <Typography
               variant="caption"
@@ -575,7 +578,10 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
 
   // Table output - use CustomTable with pagination
   const columns = output.columns || [];
-  const hasPagination = output.totalRows !== undefined && output.totalRows > 10;
+  const hasPagination =
+    !connectionId.startsWith('iceberg-') &&
+    output.totalRows !== undefined &&
+    output.totalRows > 10;
 
   // Custom pagination for large datasets
   const customPagination = hasPagination
@@ -813,7 +819,7 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
 
             <MenuItem
               onClick={handleExportParquet}
-              disabled={isExporting}
+              disabled={isExporting || connectionId.startsWith('iceberg-')}
               dense
             >
               <ListItemIcon>
@@ -835,6 +841,13 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
 
   return (
     <Box sx={{ width: '100%', mt: 0.5 }}>
+      {output.truncated && (
+        <Typography role="status" sx={{ p: 1 }} color="warning.main">
+          Showing only the first {output.data?.length ?? 0} rows. Displayed
+          results and JSON/CSV exports are limited to these rows. Refine and
+          rerun the query for other rows.
+        </Typography>
+      )}
       {viewMode === 'chart' ? (
         <Box
           ref={chartContainerRef}

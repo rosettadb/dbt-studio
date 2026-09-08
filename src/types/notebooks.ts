@@ -11,6 +11,9 @@ export interface CellOutput {
   totalRows?: number; // Total rows in full dataset (for pagination)
   executionTime?: number;
   error?: string;
+  truncated?: boolean;
+  statementClass?: string;
+  cancelled?: boolean;
 }
 
 export interface NotebookCell {
@@ -65,4 +68,14 @@ export interface SchemaInfo {
     parent_column?: string;
     parent_column_name?: string;
   }>;
+}
+
+/** Iceberg-only execution controls; SQL and credentials are never persisted here. */
+export interface NotebookExecutionOptions {
+  executionId: string;
+  mutationConfirmed?: boolean;
+}
+export interface NotebookRunAllCell extends NotebookExecutionOptions {
+  cellId: string;
+  sql: string;
 }
