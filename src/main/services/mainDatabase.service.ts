@@ -33,6 +33,8 @@ import {
   ChatMessage,
   NewChatMessage,
   ChatMessageWithContext,
+  ChatImageAttachment,
+  NewChatImageAttachment,
   ContextItem,
   NewContextItem,
   SessionMetadata,
@@ -227,6 +229,21 @@ export default class MainDatabaseService {
         FOREIGN KEY (message_id) REFERENCES chat_messages(id) ON DELETE CASCADE
       );
 
+      CREATE TABLE IF NOT EXISTS chat_image_attachments (
+        id TEXT PRIMARY KEY,
+        conversation_id INTEGER NOT NULL,
+        message_id INTEGER,
+        name TEXT NOT NULL,
+        media_type TEXT NOT NULL,
+        byte_size INTEGER NOT NULL,
+        width INTEGER NOT NULL,
+        height INTEGER NOT NULL,
+        storage_key TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id) ON DELETE CASCADE,
+        FOREIGN KEY (message_id) REFERENCES chat_messages(id) ON DELETE CASCADE
+      );
+
       -- Session Metadata table - For Continue.dev session-specific data
       CREATE TABLE IF NOT EXISTS session_metadata (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -304,6 +321,8 @@ export default class MainDatabaseService {
       CREATE INDEX IF NOT EXISTS context_items_message_idx ON context_items(message_id);
       CREATE INDEX IF NOT EXISTS context_items_type_idx ON context_items(type);
       CREATE INDEX IF NOT EXISTS context_items_name_idx ON context_items(name);
+      CREATE INDEX IF NOT EXISTS chat_image_attachments_conversation_idx ON chat_image_attachments(conversation_id);
+      CREATE INDEX IF NOT EXISTS chat_image_attachments_message_idx ON chat_image_attachments(message_id);
 
       CREATE INDEX IF NOT EXISTS session_metadata_conversation_idx ON session_metadata(conversation_id);
       CREATE INDEX IF NOT EXISTS session_metadata_key_idx ON session_metadata(key);
@@ -1740,10 +1759,134 @@ export default class MainDatabaseService {
         ...newMessage,
         contextItems: contextItemsResult,
         toolCalls: toolCallsResult,
+        imageAttachments: [],
       };
     } catch (error) {
       throw error;
     }
+  }
+
+  static async createChatImageAttachment(
+    attachment: NewChatImageAttachment,
+  ): Promise<ChatImageAttachment> {
+    const db = await this.getDatabase();
+    const rows = await db
+      .insert(schema.chatImageAttachments)
+      .values(attachment)
+      .returning();
+    if (!rows[0]) throw new Error('Failed to stage image attachment');
+    return rows[0];
+  }
+
+  static async bindChatImageAttachments(
+    conversationId: number,
+    messageId: number,
+    attachmentIds: string[],
+  ): Promise<ChatImageAttachment[]> {
+    if (attachmentIds.length === 0) return [];
+    const db = await this.getDatabase();
+    const attachments = await db
+      .select()
+      .from(schema.chatImageAttachments)
+      .where(
+        and(
+          eq(schema.chatImageAttachments.conversationId, conversationId),
+          isNull(schema.chatImageAttachments.messageId),
+          inArray(schema.chatImageAttachments.id, attachmentIds),
+        ),
+      );
+    if (attachments.length !== attachmentIds.length) {
+      throw new Error('One or more image attachments are unavailable.');
+    }
+    await db
+      .update(schema.chatImageAttachments)
+      .set({ messageId })
+      .where(inArray(schema.chatImageAttachments.id, attachmentIds));
+    return attachments.map((attachment) => ({ ...attachment, messageId }));
+  }
+
+  static async getStagedChatImageAttachments(
+    conversationId: number,
+    attachmentIds: string[],
+  ): Promise<ChatImageAttachment[]> {
+    if (attachmentIds.length === 0) return [];
+    const db = await this.getDatabase();
+    return db
+      .select()
+      .from(schema.chatImageAttachments)
+      .where(
+        and(
+          eq(schema.chatImageAttachments.conversationId, conversationId),
+          isNull(schema.chatImageAttachments.messageId),
+          inArray(schema.chatImageAttachments.id, attachmentIds),
+        ),
+      );
+  }
+
+  static async getChatImageAttachments(
+    messageId: number,
+  ): Promise<ChatImageAttachment[]> {
+    const db = await this.getDatabase();
+    return db
+      .select()
+      .from(schema.chatImageAttachments)
+      .where(eq(schema.chatImageAttachments.messageId, messageId));
+  }
+
+  static async getChatImageAttachmentById(
+    id: string,
+  ): Promise<(ChatImageAttachment & { storageKey: string }) | null> {
+    const db = await this.getDatabase();
+    const rows = await db
+      .select()
+      .from(schema.chatImageAttachments)
+      .where(eq(schema.chatImageAttachments.id, id))
+      .limit(1);
+    return (rows[0] as ChatImageAttachment & { storageKey: string }) ?? null;
+  }
+
+  static async releaseStagedChatImageAttachments(
+    conversationId: number,
+    attachmentIds: string[],
+  ): Promise<string[]> {
+    if (attachmentIds.length === 0) return [];
+    const db = await this.getDatabase();
+    const attachments = await db
+      .select({
+        id: schema.chatImageAttachments.id,
+        storageKey: schema.chatImageAttachments.storageKey,
+      })
+      .from(schema.chatImageAttachments)
+      .where(
+        and(
+          eq(schema.chatImageAttachments.conversationId, conversationId),
+          isNull(schema.chatImageAttachments.messageId),
+          inArray(schema.chatImageAttachments.id, attachmentIds),
+        ),
+      );
+
+    if (attachments.length > 0) {
+      await db.delete(schema.chatImageAttachments).where(
+        inArray(
+          schema.chatImageAttachments.id,
+          attachments.map((attachment) => attachment.id),
+        ),
+      );
+    }
+
+    return attachments.map((attachment) => attachment.storageKey);
+  }
+
+  static async getChatImageStorageKeysForConversation(
+    conversationId: number,
+  ): Promise<string[]> {
+    const db = await this.getDatabase();
+    const attachments = await db
+      .select({ storageKey: schema.chatImageAttachments.storageKey })
+      .from(schema.chatImageAttachments)
+      .where(eq(schema.chatImageAttachments.conversationId, conversationId));
+
+    return attachments.map((attachment) => attachment.storageKey);
   }
 
   static async getMessageWithContext(
@@ -1761,15 +1904,17 @@ export default class MainDatabaseService {
         return null;
       }
 
-      const [contextItems, toolCalls] = await Promise.all([
+      const [contextItems, toolCalls, imageAttachments] = await Promise.all([
         this.getContextItems(messageId),
         this.getToolCalls(messageId),
+        this.getChatImageAttachments(messageId),
       ]);
 
       return {
         ...message[0],
         contextItems,
         toolCalls,
+        imageAttachments,
       };
     } catch (error) {
       throw error;
@@ -1789,15 +1934,19 @@ export default class MainDatabaseService {
       // Then get context items and tool calls for each message
       const messagesWithContext = await Promise.all(
         messages.map(async (message) => {
-          const [contextItems, toolCalls] = await Promise.all([
-            this.getContextItems(message.id),
-            this.getToolCalls(message.id),
-          ]);
+          const [contextItems, toolCalls, imageAttachments] = await Promise.all(
+            [
+              this.getContextItems(message.id),
+              this.getToolCalls(message.id),
+              this.getChatImageAttachments(message.id),
+            ],
+          );
 
           return {
             ...message,
             contextItems,
             toolCalls,
+            imageAttachments,
           };
         }),
       );

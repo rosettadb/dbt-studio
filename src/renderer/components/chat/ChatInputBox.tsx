@@ -13,6 +13,9 @@ import StopIcon from '@mui/icons-material/Stop';
 import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlined';
 import CodeOutlinedIcon from '@mui/icons-material/CodeOutlined';
 import AddIcon from '@mui/icons-material/Add';
+import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
+import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
+import CloseIcon from '@mui/icons-material/Close';
 
 import { FilePickerModal } from './FilePickerModal';
 
@@ -38,6 +41,128 @@ import { useToolMode } from '../../hooks/useToolMode';
 import { ContextUsageRing } from './ContextUsageRing';
 import type { ContextUsageBreakdown } from './ContextUsageRing';
 import { getUserMessageLimitError } from '../../../types/agentEvents';
+import {
+  selectChatImages,
+  previewChatImage,
+  releaseChatImages,
+} from '../../services/agent.service';
+import { ImageLightbox } from './ImageLightbox';
+import {
+  MAX_CHAT_IMAGES_PER_MESSAGE,
+  type ChatImageAttachment,
+} from '../../../types/chatAttachments';
+
+// ---------------------------------------------------------------------------
+// InputImageChip — thumbnail chip shown in the composer before sending
+// ---------------------------------------------------------------------------
+
+interface InputImageChipProps {
+  image: ChatImageAttachment;
+  onRemove: () => void;
+}
+
+const InputImageChip: React.FC<InputImageChipProps> = ({ image, onRemove }) => {
+  const [dataUrl, setDataUrl] = React.useState<string | null>(null);
+  const [lightboxOpen, setLightboxOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await previewChatImage(image.id, image.conversationId);
+        if (!cancelled) setDataUrl(res.dataUrl);
+      } catch {
+        // silently ignore — image just won't show
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [image.id]);
+
+  return (
+    <>
+      <Box
+        sx={{
+          position: 'relative',
+          width: 48,
+          height: 48,
+          borderRadius: 0.75,
+          border: '1px solid',
+          borderColor: 'divider',
+          overflow: 'hidden',
+          flexShrink: 0,
+          cursor: 'pointer',
+          '&:hover .remove-btn': { opacity: 1 },
+        }}
+        onClick={() => setLightboxOpen(true)}
+        title={image.name}
+      >
+        {dataUrl ? (
+          <Box
+            component="img"
+            src={dataUrl}
+            alt={image.name}
+            sx={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              display: 'block',
+            }}
+          />
+        ) : (
+          <Box
+            sx={{
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              bgcolor: 'action.hover',
+            }}
+          >
+            <ImageOutlinedIcon sx={{ fontSize: 18, color: 'text.disabled' }} />
+          </Box>
+        )}
+        {/* Remove button */}
+        <IconButton
+          className="remove-btn"
+          size="small"
+          aria-label={`Remove ${image.name}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          sx={{
+            position: 'absolute',
+            top: 1,
+            right: 1,
+            p: 0.125,
+            opacity: 0,
+            transition: 'opacity 0.15s',
+            bgcolor: 'rgba(0,0,0,0.55)',
+            color: 'white',
+            '&:hover': { bgcolor: 'rgba(0,0,0,0.8)' },
+            fontSize: 10,
+            width: 16,
+            height: 16,
+          }}
+        >
+          <CloseIcon sx={{ fontSize: 10 }} />
+        </IconButton>
+      </Box>
+
+      <ImageLightbox
+        id={image.id}
+        conversationId={image.conversationId}
+        name={image.name}
+        open={lightboxOpen}
+        onClose={() => setLightboxOpen(false)}
+      />
+    </>
+  );
+};
 
 interface ChatInputBoxProps {
   sessionId?: number;
@@ -47,10 +172,11 @@ interface ChatInputBoxProps {
     content: string,
     contextItems?: any[],
     toolMode?: 'chat' | 'agent',
-  ) => Promise<void>;
+    imageAttachmentIds?: string[],
+    imageAttachments?: ChatImageAttachment[],
+  ) => Promise<boolean>;
   onCancelStream?: () => void;
   contextBreakdown?: ContextUsageBreakdown | null;
-  screenKey?: string;
   disabledReason?: string | null;
 }
 
@@ -61,13 +187,17 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   onStartStream,
   onCancelStream,
   contextBreakdown,
-  screenKey,
   disabledReason,
 }) => {
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
   const [input, setInput] = React.useState('');
   const [isFilePickerOpen, setIsFilePickerOpen] = React.useState(false);
+  const [addMenuAnchor, setAddMenuAnchor] = React.useState<null | HTMLElement>(
+    null,
+  );
+  const [images, setImages] = React.useState<ChatImageAttachment[]>([]);
+  const [isSelectingImages, setIsSelectingImages] = React.useState(false);
   const [modeMenuAnchor, setModeMenuAnchor] =
     React.useState<null | HTMLElement>(null);
   const [providerMenuAnchor, setProviderMenuAnchor] =
@@ -142,8 +272,6 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   const handleSendAgentMessage = async (messageContent: string) => {
     if (!sessionId || !onStartStream) return;
 
-    setInput('');
-
     const agentContextItems =
       await activeContextManager.getContextItemsWithAdditionalFiles();
     const activeFileContext = activeContextManager.selectedFileContext;
@@ -157,15 +285,23 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
       agentContextItems.unshift(activeFileContext);
     }
 
+    // Snapshot current drafts before clearing.
+    const pendingImages = [...images];
+
+    // Clear the composer immediately; the optimistic user turn remains visible
+    // while the request runs or reports an execution error.
+    setInput('');
+    setImages([]);
+    activeContextManager.clearAdditionalFiles();
+
+    autoRename(messageContent || 'Image conversation');
     await onStartStream(
       messageContent,
       agentContextItems.length > 0 ? agentContextItems : undefined,
       currentMode,
+      pendingImages.map((image) => image.id),
+      pendingImages,
     );
-
-    // Auto-rename session after successful send (optimistic or actually done depends on hook)
-    autoRename(messageContent);
-    activeContextManager.clearAdditionalFiles();
   };
 
   const handleSendMessage = async (content?: string) => {
@@ -177,7 +313,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
       contextBreakdown?.contextWindow ?? 32_000,
     );
     if (limitError) return;
-    if (sessionId && messageContent && activeProvider) {
+    if (sessionId && (messageContent || images.length > 0) && activeProvider) {
       await handleSendAgentMessage(messageContent);
     }
   };
@@ -189,6 +325,26 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   const handleCancel = () => {
     if (!sessionId) return;
     if (onCancelStream) onCancelStream();
+  };
+
+  const handleSelectImages = async () => {
+    if (
+      !sessionId ||
+      isSelectingImages ||
+      images.length >= MAX_CHAT_IMAGES_PER_MESSAGE
+    )
+      return;
+    setAddMenuAnchor(null);
+    setIsSelectingImages(true);
+    try {
+      const selected = await selectChatImages(
+        sessionId,
+        MAX_CHAT_IMAGES_PER_MESSAGE - images.length,
+      );
+      setImages((existing) => [...existing, ...selected]);
+    } finally {
+      setIsSelectingImages(false);
+    }
   };
 
   React.useEffect(() => {
@@ -214,6 +370,32 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
       {/* Context file chips (manually added files only) */}
       {activeContextManager.additionalFiles.length > 0 && (
         <ContextTabs contextManager={activeContextManager} />
+      )}
+      {images.length > 0 && (
+        <Box
+          sx={{
+            px: 1.5,
+            pt: 0.75,
+            display: 'flex',
+            gap: 0.5,
+            flexWrap: 'wrap',
+          }}
+        >
+          {images.map((image) => (
+            <InputImageChip
+              key={image.id}
+              image={image}
+              onRemove={() =>
+                setImages((existing) => {
+                  releaseChatImages(image.conversationId, [image.id]).catch(
+                    () => {},
+                  );
+                  return existing.filter((item) => item.id !== image.id);
+                })
+              }
+            />
+          ))}
+        </Box>
       )}
 
       <Box
@@ -255,61 +437,94 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
         }}
       >
         {/* + button to add context files */}
-        {screenKey !== 'sql' && (
-          <>
-            <Tooltip
-              title={disabledReason ?? 'Add context...'}
-              placement="top"
-              arrow
-              enterDelay={500}
-            >
-              <IconButton
-                size="small"
-                onClick={() => {
-                  if (!isBlocked) {
-                    setIsFilePickerOpen(true);
-                  }
-                }}
-                disabled={isBlocked}
-                sx={{
-                  width: 20,
-                  height: 20,
-                  color: 'text.secondary',
-                  border: `1px solid ${theme.palette.divider}`,
-                  borderRadius: 0.5,
-                  '&:hover': {
-                    color: 'text.primary',
-                    bgcolor: 'action.hover',
-                    borderColor: 'text.secondary',
-                  },
-                }}
-              >
-                <AddIcon sx={{ fontSize: '0.8rem' }} />
-              </IconButton>
-            </Tooltip>
-
-            <FilePickerModal
-              open={isFilePickerOpen}
-              onClose={() => setIsFilePickerOpen(false)}
-              onSelect={(selectedFiles) => {
-                const currentPaths = activeContextManager.additionalFiles.map(
-                  (f) => f.path,
-                );
-                const toAdd = selectedFiles
-                  .filter((f) => !currentPaths.includes(f.path))
-                  .map((f) => ({ ...f, fileType: f.fileType ?? 'other' }));
-                if (toAdd.length > 0) activeContextManager.addFiles(toAdd);
-                setIsFilePickerOpen(false);
+        <>
+          <Tooltip
+            title={disabledReason ?? 'Add context...'}
+            placement="top"
+            arrow
+            enterDelay={500}
+          >
+            <IconButton
+              size="small"
+              onClick={(event) => {
+                if (!isBlocked) setAddMenuAnchor(event.currentTarget);
               }}
-              selectedFiles={activeContextManager.additionalFiles.map(
+              disabled={isBlocked}
+              sx={{
+                width: 20,
+                height: 20,
+                color: 'text.secondary',
+                border: `1px solid ${theme.palette.divider}`,
+                borderRadius: 0.5,
+                '&:hover': {
+                  color: 'text.primary',
+                  bgcolor: 'action.hover',
+                  borderColor: 'text.secondary',
+                },
+              }}
+            >
+              <AddIcon sx={{ fontSize: '0.8rem' }} />
+            </IconButton>
+          </Tooltip>
+
+          <Menu
+            anchorEl={addMenuAnchor}
+            open={Boolean(addMenuAnchor)}
+            onClose={() => setAddMenuAnchor(null)}
+            anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
+            transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+            PaperProps={{ sx: { mt: -0.5, minWidth: 160 } }}
+            MenuListProps={{ sx: { py: 0.5 } }}
+          >
+            <MenuItem
+              onClick={handleSelectImages}
+              disabled={isSelectingImages}
+              sx={{ py: 0.5, px: 1.5, minHeight: 'auto' }}
+            >
+              <ImageOutlinedIcon
+                sx={{ fontSize: 14, mr: 1, color: 'text.secondary' }}
+              />
+              <Typography variant="body2" sx={{ fontSize: 12 }}>
+                Upload image
+              </Typography>
+            </MenuItem>
+            <MenuItem
+              onClick={() => {
+                setAddMenuAnchor(null);
+                setIsFilePickerOpen(true);
+              }}
+              sx={{ py: 0.5, px: 1.5, minHeight: 'auto' }}
+            >
+              <InsertDriveFileOutlinedIcon
+                sx={{ fontSize: 14, mr: 1, color: 'text.secondary' }}
+              />
+              <Typography variant="body2" sx={{ fontSize: 12 }}>
+                Files
+              </Typography>
+            </MenuItem>
+          </Menu>
+
+          <FilePickerModal
+            open={isFilePickerOpen}
+            onClose={() => setIsFilePickerOpen(false)}
+            onSelect={(selectedFiles) => {
+              const currentPaths = activeContextManager.additionalFiles.map(
                 (f) => f.path,
-              )}
-              excludeFiles={activeContextManager.additionalFiles.map(
-                (f) => f.path,
-              )}
-            />
-          </>
-        )}
+              );
+              const toAdd = selectedFiles
+                .filter((f) => !currentPaths.includes(f.path))
+                .map((f) => ({ ...f, fileType: f.fileType ?? 'other' }));
+              if (toAdd.length > 0) activeContextManager.addFiles(toAdd);
+              setIsFilePickerOpen(false);
+            }}
+            selectedFiles={activeContextManager.additionalFiles.map(
+              (f) => f.path,
+            )}
+            excludeFiles={activeContextManager.additionalFiles.map(
+              (f) => f.path,
+            )}
+          />
+        </>
 
         {/* Agent/Chat Mode Selector - Custom Dropdown */}
         <Box
@@ -615,7 +830,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
           const sendDisabled =
             isBlocked ||
             !sessionId ||
-            !plainText.trim() ||
+            (!plainText.trim() && images.length === 0) ||
             !!messageLimitError ||
             !activeProvider ||
             activeContextManager.isResolvingContext;
@@ -624,8 +839,8 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
           else if (!activeProvider)
             tooltipTitle = 'Select an AI provider to send';
           else if (!sessionId) tooltipTitle = 'Open or create a chat session';
-          else if (!plainText.trim())
-            tooltipTitle = 'Type a message to enable send';
+          else if (!plainText.trim() && images.length === 0)
+            tooltipTitle = 'Type a message or upload an image to enable send';
           else if (messageLimitError) tooltipTitle = messageLimitError;
           else if (activeContextManager.isResolvingContext)
             tooltipTitle = 'Resolving context files...';

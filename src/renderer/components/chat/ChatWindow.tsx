@@ -1268,9 +1268,14 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
             sessionId={selectedSessionId}
             contextManager={contextManager}
             isStreaming={streamState.isStreaming}
-            screenKey={screenKey}
             disabledReason={disabledReason}
-            onStartStream={(content, contextItems, toolMode) =>
+            onStartStream={(
+              content,
+              contextItems,
+              toolMode,
+              imageAttachmentIds,
+              imageAttachments,
+            ) =>
               // toolMode is now forwarded from ChatInputBox (owns the toggle state)
               startStream(
                 content,
@@ -1282,6 +1287,8 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
                 notebookId,
                 pageId,
                 projectMemoryEnabled,
+                imageAttachmentIds,
+                imageAttachments,
               )
             }
             onCancelStream={cancelStream}

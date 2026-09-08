@@ -101,6 +101,32 @@ export const chatMessages: any = sqliteTable(
   }),
 );
 
+export const chatImageAttachments = sqliteTable(
+  'chat_image_attachments',
+  {
+    id: text('id').primaryKey(),
+    conversationId: integer('conversation_id')
+      .notNull()
+      .references(() => chatConversations.id, { onDelete: 'cascade' }),
+    messageId: integer('message_id').references(() => chatMessages.id, {
+      onDelete: 'cascade',
+    }),
+    name: text('name').notNull(),
+    mediaType: text('media_type').notNull(),
+    byteSize: integer('byte_size').notNull(),
+    width: integer('width').notNull(),
+    height: integer('height').notNull(),
+    storageKey: text('storage_key').notNull(),
+    createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    conversationIdx: index('chat_image_attachments_conversation_idx').on(
+      table.conversationId,
+    ),
+    messageIdx: index('chat_image_attachments_message_idx').on(table.messageId),
+  }),
+);
+
 // AI Prompt Templates Table
 export const promptTemplates = sqliteTable(
   'prompt_templates',
@@ -336,6 +362,8 @@ export type NewChatConversation = typeof chatConversations.$inferInsert;
 
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type NewChatMessage = typeof chatMessages.$inferInsert;
+export type ChatImageAttachment = typeof chatImageAttachments.$inferSelect;
+export type NewChatImageAttachment = typeof chatImageAttachments.$inferInsert;
 
 export type ContextItem = typeof contextItems.$inferSelect;
 export type NewContextItem = typeof contextItems.$inferInsert;
@@ -364,6 +392,7 @@ export type ChatConversationWithMessages = ChatConversation & {
 export type ChatMessageWithContext = ChatMessage & {
   contextItems: ContextItem[];
   toolCalls: ToolCall[];
+  imageAttachments: ChatImageAttachment[];
   parentMessage?: ChatMessage;
 };
 

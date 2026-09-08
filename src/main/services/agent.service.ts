@@ -2,7 +2,7 @@
 import fs from 'fs-extra';
 import path from 'path';
 import { IpcMainInvokeEvent, app, BrowserWindow } from 'electron';
-import { generateText } from 'ai';
+import { generateText, type ModelMessage } from 'ai';
 import { buildBaseAgentConfig } from './ai/agents/baseAgentConfig';
 import { createProjectAgent } from './ai/agents/projectAgent';
 import { createSqlAgent } from './ai/agents/sqlAgent';
@@ -29,6 +29,7 @@ import { buildSessionContextBlock } from './ai/sessionContext.service';
 import type {
   NewContextItem,
   ChatMessage,
+  ChatImageAttachment,
 } from '../schemas/mainDatabase.schema';
 import type { AISettingsConfig } from '../../types/backend';
 import type {
@@ -51,6 +52,8 @@ import {
   PROJECT_PIPELINE_TOOL_NAMES,
 } from './ai/tools/studio/pipeline.tools';
 import { STUDIO_KEYSTORE_TOOL_NAMES } from './ai/tools/studio/keystore.tools';
+import ChatImageAttachmentService from './ai/chatImageAttachment.service';
+import { MAX_CHAT_IMAGES_PER_MESSAGE } from '../../types/chatAttachments';
 
 // ─── AI Settings ─────────────────────────────────────────────────────────────
 
@@ -302,6 +305,7 @@ export function getToolsForMode(
 export interface AgentRunRequest {
   conversationId: number;
   content: string;
+  imageAttachmentIds?: string[];
   contextItems?: Omit<NewContextItem, 'messageId'>[];
   requestedModel?: string;
   projectPath?: string;
@@ -450,17 +454,46 @@ const activeCompactions = new Set<number>();
 /**
  * Converts ChatMessage[] into the CoreMessage format expected by the Vercel AI SDK.
  */
-function buildCoreMessages(
-  messages: ChatMessage[],
-): Array<{ role: 'user' | 'assistant' | 'system'; content: string }> {
-  return messages
-    .filter(
-      (m) => m.role === 'user' || m.role === 'assistant' || m.role === 'system',
-    )
-    .map((m) => ({
-      role: m.role as 'user' | 'assistant' | 'system',
-      content: m.content,
-    }));
+type ChatMessageWithImages = ChatMessage & {
+  imageAttachments?: ChatImageAttachment[];
+};
+
+async function buildCoreMessages(
+  messages: ChatMessageWithImages[],
+): Promise<ModelMessage[]> {
+  return Promise.all(
+    messages
+      .filter(
+        (m) =>
+          m.role === 'user' || m.role === 'assistant' || m.role === 'system',
+      )
+      .map(async (message): Promise<ModelMessage> => {
+        if (message.role !== 'user' || !message.imageAttachments?.length) {
+          return {
+            role: message.role as 'user' | 'assistant' | 'system',
+            content: message.content,
+          } as ModelMessage;
+        }
+        const images = await Promise.all(
+          message.imageAttachments.map(
+            async (attachment: ChatImageAttachment) => ({
+              type: 'image' as const,
+              image: await ChatImageAttachmentService.readForModel(attachment),
+              mediaType: attachment.mediaType,
+            }),
+          ),
+        );
+        return {
+          role: 'user',
+          content: [
+            ...(message.content.trim()
+              ? [{ type: 'text' as const, text: message.content }]
+              : []),
+            ...images,
+          ],
+        };
+      }),
+  );
 }
 
 /**
@@ -939,9 +972,7 @@ COMBINED SUMMARY:`,
     latestSummary: any | null,
     event: IpcMainInvokeEvent,
     contextWindow: number,
-  ): Promise<
-    Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
-  > {
+  ): Promise<ModelMessage[]> {
     const tailTokenBudget = Math.floor(contextWindow * 0.2);
     const summaryMaxTokens = Math.floor(contextWindow * 0.05);
 
@@ -953,7 +984,7 @@ COMBINED SUMMARY:`,
       : null;
 
     if (activeCompactions.has(conversationId)) {
-      const core = buildCoreMessages(activeMessages);
+      const core = await buildCoreMessages(activeMessages);
       return systemSummaryMessage ? [systemSummaryMessage, ...core] : core;
     }
     activeCompactions.add(conversationId);
@@ -979,7 +1010,7 @@ COMBINED SUMMARY:`,
       }
 
       if (olderMessages.length === 0) {
-        const core = buildCoreMessages(activeMessages);
+        const core = await buildCoreMessages(activeMessages);
         return systemSummaryMessage ? [systemSummaryMessage, ...core] : core;
       }
 
@@ -1009,7 +1040,7 @@ COMBINED SUMMARY:`,
           role: 'system',
           content: `## Earlier Conversation (summarized)\n\n${summaryText}`,
         },
-        ...buildCoreMessages(tailMessages.reverse()),
+        ...(await buildCoreMessages(tailMessages.reverse())),
       ];
     } finally {
       activeCompactions.delete(conversationId);
@@ -1034,7 +1065,7 @@ COMBINED SUMMARY:`,
       secondBrain?: number;
     },
   ): Promise<{
-    messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
+    messages: ModelMessage[];
     breakdown: ContextUsageBreakdown;
   }> {
     const allMessages =
@@ -1058,7 +1089,7 @@ COMBINED SUMMARY:`,
       };
     }
 
-    const coreHistory = buildCoreMessages(activeMessages);
+    const coreHistory = await buildCoreMessages(activeMessages);
     const fullHistory = systemSummaryMessage
       ? [systemSummaryMessage, ...coreHistory]
       : coreHistory;
@@ -1122,7 +1153,7 @@ COMBINED SUMMARY:`,
       };
     }
 
-    return { messages: fullHistory as any, breakdown };
+    return { messages: fullHistory as ModelMessage[], breakdown };
   }
 
   /**
@@ -1290,7 +1321,13 @@ COMBINED SUMMARY:`,
     event: IpcMainInvokeEvent,
     request: AgentRunRequest,
   ): Promise<{ success: boolean }> {
-    const { conversationId, content, contextItems, requestedModel } = request;
+    const {
+      conversationId,
+      content,
+      contextItems,
+      requestedModel,
+      imageAttachmentIds = [],
+    } = request;
 
     // Resolve projectPath and connectionId from selected project if not provided
     let { projectPath, connectionId } = request;
@@ -1329,13 +1366,39 @@ COMBINED SUMMARY:`,
         (model as any).model ||
         requestedModel ||
         'default';
+      if (!content.trim() && imageAttachmentIds.length === 0) {
+        throw new Error('Enter a message or attach at least one image.');
+      }
+      if (imageAttachmentIds.length > MAX_CHAT_IMAGES_PER_MESSAGE) {
+        throw new Error(
+          `Attach at most ${MAX_CHAT_IMAGES_PER_MESSAGE} images per message.`,
+        );
+      }
+      const stagedImages =
+        await MainDatabaseService.getStagedChatImageAttachments(
+          conversationId,
+          imageAttachmentIds,
+        );
+      if (stagedImages.length !== imageAttachmentIds.length) {
+        throw new Error('One or more image attachments are unavailable.');
+      }
+      await Promise.all(
+        stagedImages.map((attachment) =>
+          ChatImageAttachmentService.readForModel(attachment),
+        ),
+      );
       this.assertUserMessageWithinLimit(content, getContextWindow(modelId));
 
       // 3. Persist user message
-      await MainDatabaseService.addMessageWithContext(
+      const userMessage = await MainDatabaseService.addMessageWithContext(
         conversationId,
         { role: 'user', content },
         contextItems,
+      );
+      await MainDatabaseService.bindChatImageAttachments(
+        conversationId,
+        userMessage.id,
+        imageAttachmentIds,
       );
 
       // 4. Load & potentially compact conversation history
