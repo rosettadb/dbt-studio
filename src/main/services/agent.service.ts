@@ -1231,10 +1231,10 @@ COMBINED SUMMARY:`,
   static async resolveEnrichedConnectionMeta(
     connectionId?: string,
   ): Promise<EnrichedConnectionMeta> {
-    const base = { name: 'unknown', type: 'unknown' };
+    const base: EnrichedConnectionMeta = { name: 'unknown', type: 'unknown' };
     if (!connectionId) return base;
     try {
-      let meta: typeof base & { database?: string; schema?: string } = base;
+      let meta: EnrichedConnectionMeta = base;
       if (connectionId.startsWith('ducklake-')) {
         const instanceId = connectionId.replace(/^ducklake-/, '');
         const { default: DuckLakeService } = await import('./duckLake.service');
@@ -1243,6 +1243,31 @@ COMBINED SUMMARY:`,
           meta = {
             name: instance.name || 'DuckLake Instance',
             type: 'ducklake',
+          };
+        }
+      } else if (connectionId.startsWith('iceberg-')) {
+        const instanceId = connectionId.replace(/^iceberg-/, '');
+        const { IcebergDatalakeService } = await import(
+          './icebergDatalake.service'
+        );
+        try {
+          const [instance, capability] = await Promise.all([
+            IcebergDatalakeService.getInstance(instanceId),
+            IcebergDatalakeService.getSqlCapability(instanceId),
+          ]);
+          meta = {
+            name: instance.name || 'Iceberg Catalog',
+            type: 'iceberg',
+            catalogType: instance.catalogType,
+            sqlAvailable: capability.available,
+            unavailableReason: capability.reason,
+          };
+        } catch {
+          meta = {
+            name: 'Unavailable Iceberg Catalog',
+            type: 'iceberg',
+            sqlAvailable: false,
+            unavailableReason: 'ICEBERG_INSTANCE_NOT_FOUND',
           };
         }
       } else {

@@ -14,6 +14,7 @@ import MainDatabaseService, {
 } from '../../mainDatabase.service';
 import ProjectsService from '../../projects.service';
 import ConnectorsService from '../../connectors.service';
+import { IcebergDatalakeService } from '../../icebergDatalake.service';
 import { NotebooksService } from '../../notebooks.service';
 import { DbtCoreVersionService } from '../../dbtCoreVersion.service';
 import { getVercelModel } from '../agentAdapter';
@@ -38,6 +39,9 @@ const PROJECT_FILE_BYTE_LIMIT = 64 * 1024;
 const OPERATION_LIMIT = 24;
 const PAGE_CHANGE_LIMIT = 12;
 const REFRESH_LOG_PREFIX = '[WikiMemory][Refresh]';
+const ICEBERG_NAMESPACE_LIMIT = 20;
+const ICEBERG_TABLE_LIMIT = 50;
+const ICEBERG_COLUMN_LIMIT = 20;
 
 const logRefresh = (
   event: string,
@@ -185,6 +189,8 @@ type SecondBrainRefreshDependencies = {
   collectSessions?: typeof MainDatabaseService.getSecondBrainSessionEvidence;
   collectAnalytics?: typeof MainDatabaseService.getSecondBrainAnalyticsEvidence;
   loadConnections?: typeof ConnectorsService.loadConnections;
+  listIcebergInstances?: typeof IcebergDatalakeService.listInstances;
+  getIcebergSqlSchema?: typeof IcebergDatalakeService.getSqlSchema;
   listNotebooks?: typeof NotebooksService.listNotebooks;
   collectGitStatus?: (projectPath: string) => Promise<Record<string, unknown>>;
   collectDbtRuntimeEvidence?: typeof DbtCoreVersionService.getInstalledDbtCore;
@@ -397,6 +403,35 @@ const cursorFromItems = (
   return last ? { updatedAt: last.updatedAt, stableId: last.stableId } : null;
 };
 
+const summarizeIcebergSchema = (
+  schema: Awaited<ReturnType<typeof IcebergDatalakeService.getSqlSchema>>,
+): { namespaces: Array<Record<string, unknown>>; truncated: boolean } => {
+  let remainingTables = ICEBERG_TABLE_LIMIT;
+  let truncated = schema.namespaces.length > ICEBERG_NAMESPACE_LIMIT;
+  const namespaces = schema.namespaces
+    .slice(0, ICEBERG_NAMESPACE_LIMIT)
+    .map((namespace) => {
+      const tables = namespace.tables.slice(0, remainingTables).map((table) => {
+        const columns = table.columns
+          .slice(0, ICEBERG_COLUMN_LIMIT)
+          .map((column) => ({ name: column.name, type: column.type }));
+        if (table.columns.length > columns.length) truncated = true;
+        return { name: table.name, type: table.type, columns };
+      });
+      if (namespace.tables.length > tables.length) truncated = true;
+      remainingTables -= tables.length;
+      return { name: namespace.name, tables };
+    })
+    .filter((namespace) => namespace.tables.length > 0);
+  if (
+    schema.namespaces.some((namespace) => namespace.tables.length > 0) &&
+    remainingTables === 0
+  ) {
+    truncated = true;
+  }
+  return { namespaces, truncated };
+};
+
 const projectPageIdAllowed = (pageId: string): boolean =>
   !isSecondBrainGeneratedPageId(pageId) &&
   (pageId === SECOND_BRAIN_ENTRY_PAGE ||
@@ -420,6 +455,10 @@ export default class SecondBrainRefreshService {
   private readonly collectAnalytics: typeof MainDatabaseService.getSecondBrainAnalyticsEvidence;
 
   private readonly loadConnections: typeof ConnectorsService.loadConnections;
+
+  private readonly listIcebergInstances: typeof IcebergDatalakeService.listInstances;
+
+  private readonly getIcebergSqlSchema: typeof IcebergDatalakeService.getSqlSchema;
 
   private readonly listNotebooks: typeof NotebooksService.listNotebooks;
 
@@ -450,6 +489,10 @@ export default class SecondBrainRefreshService {
       );
     this.loadConnections =
       dependencies.loadConnections ?? ConnectorsService.loadConnections;
+    this.listIcebergInstances =
+      dependencies.listIcebergInstances ?? IcebergDatalakeService.listInstances;
+    this.getIcebergSqlSchema =
+      dependencies.getIcebergSqlSchema ?? IcebergDatalakeService.getSqlSchema;
     this.listNotebooks =
       dependencies.listNotebooks ?? NotebooksService.listNotebooks;
     this.collectGitStatus =
@@ -977,9 +1020,10 @@ export default class SecondBrainRefreshService {
   private async collectApplicationMetadataBatch(
     abortSignal?: AbortSignal,
   ): Promise<SecondBrainSourceBatch> {
-    const [projects, connections] = await Promise.all([
+    const [projects, connections, icebergInstances] = await Promise.all([
       this.loadProjects(),
       this.loadConnections(true),
+      this.listIcebergInstances(),
     ]);
     assertNotCancelled(abortSignal);
     const items: SecondBrainEvidenceItem[] = [];
@@ -1041,6 +1085,44 @@ export default class SecondBrainRefreshService {
         truncated: false,
       });
     }
+    for (const instance of icebergInstances
+      .filter((candidate) => candidate.sqlAvailable)
+      .slice(0, SOURCE_ITEM_LIMIT - items.length)) {
+      assertNotCancelled(abortSignal);
+      let schemaSummary: Array<Record<string, unknown>> = [];
+      let schemaTruncated = false;
+      try {
+        const schema = await this.getIcebergSqlSchema(instance.id);
+        const summary = summarizeIcebergSchema(schema);
+        schemaSummary = summary.namespaces;
+        schemaTruncated = summary.truncated;
+      } catch (error) {
+        warnRefresh('iceberg-schema-source-skipped', {
+          connectionId: `iceberg-${instance.id}`,
+          code: error instanceof Error ? error.name : 'UNKNOWN',
+        });
+      }
+      const connectionId = `iceberg-${instance.id}`;
+      const projection = {
+        kind: 'connection',
+        name: redactSecondBrainEvidence(instance.name).slice(0, 200),
+        type: 'iceberg',
+        catalogType: instance.catalogType,
+        sqlAvailable: true,
+        schema: schemaSummary,
+      };
+      items.push({
+        sourceId: 'application',
+        sourceKind: 'application',
+        stableId: `connection:${connectionId}`,
+        updatedAt: instance.updatedAt ?? '',
+        contentHash: hashValue(projection),
+        scope: { connectionId },
+        provenance: `application:connection:${connectionId}`,
+        projection,
+        truncated: schemaTruncated,
+      });
+    }
     items.sort((left, right) => left.stableId.localeCompare(right.stableId));
     return {
       sourceId: 'application',
@@ -1049,24 +1131,35 @@ export default class SecondBrainRefreshService {
       items,
       truncated:
         projects.length > SOURCE_ITEM_LIMIT ||
-        connections.length > SOURCE_ITEM_LIMIT,
+        connections.length > SOURCE_ITEM_LIMIT ||
+        icebergInstances.filter((instance) => instance.sqlAvailable).length >
+          SOURCE_ITEM_LIMIT - connections.length,
     };
   }
 
   private async collectNotebookBatch(
     abortSignal?: AbortSignal,
   ): Promise<SecondBrainSourceBatch> {
-    const connections = await this.loadConnections(true);
+    const [connections, icebergInstances] = await Promise.all([
+      this.loadConnections(true),
+      this.listIcebergInstances(),
+    ]);
+    const notebookConnections = [
+      ...connections.map((connection) => connection.id),
+      ...icebergInstances
+        .filter((instance) => instance.sqlAvailable)
+        .map((instance) => `iceberg-${instance.id}`),
+    ];
     const items: SecondBrainEvidenceItem[] = [];
     let truncated = false;
-    for (const connection of connections) {
+    for (const connectionId of notebookConnections) {
       assertNotCancelled(abortSignal);
       let notebooks;
       try {
-        notebooks = await this.listNotebooks(connection.id);
+        notebooks = await this.listNotebooks(connectionId);
       } catch (error) {
         warnRefresh('notebook-source-skipped', {
-          connectionId: connection.id,
+          connectionId,
           code: error instanceof Error ? error.name : 'UNKNOWN',
         });
         continue;
@@ -1086,18 +1179,18 @@ export default class SecondBrainRefreshService {
           description: notebook.description
             ? redactSecondBrainEvidence(notebook.description).slice(0, 500)
             : undefined,
-          connectionId: connection.id,
+          connectionId,
           cellCount: notebook.cellCount,
           cells: projectedCells,
         };
         items.push({
           sourceId: 'notebooks',
           sourceKind: 'notebook',
-          stableId: `${connection.id}:${notebook.id}`,
+          stableId: `${connectionId}:${notebook.id}`,
           updatedAt: notebook.updatedAt,
           contentHash: hashValue(projection),
-          scope: { connectionId: connection.id, notebookId: notebook.id },
-          provenance: `notebook:${connection.id}:${notebook.id}`,
+          scope: { connectionId, notebookId: notebook.id },
+          provenance: `notebook:${connectionId}:${notebook.id}`,
           projection,
           truncated: notebook.cells.length > projectedCells.length,
         });

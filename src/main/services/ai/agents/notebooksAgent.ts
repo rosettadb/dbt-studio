@@ -88,6 +88,13 @@ export async function createNotebooksAgent(
 
   let connectionHints = '';
   switch (connectionMeta.type) {
+    case 'iceberg':
+      connectionHints = `\n\n## Iceberg Specifics
+You are connected to an Apache Iceberg ${connectionMeta.catalogType ?? 'REST'} catalog through DuckDB's Iceberg extension.
+- Use DuckDB SQL and fully qualified catalog references such as \`iceberg.<namespace>.<table>\`.
+- Inspect the schema before composing a query. Notebook execution uses the trusted Iceberg policy and requires confirmation for mutations.
+- Do not write \`ATTACH\`, \`DETACH\`, extension, secret, storage, or catalog configuration SQL; DBT Studio owns the temporary attachment lifecycle.`;
+      break;
     case 'ducklake':
       connectionHints = `\n\n## DuckLake Specifics
 You are connected to a DuckLake lakehouse. DuckLake is a DuckDB extension (not a separate library).
