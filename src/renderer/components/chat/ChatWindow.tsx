@@ -1266,6 +1266,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
         <GradientBorder loading={streamState.isStreaming}>
           <ChatInputBox
             sessionId={selectedSessionId}
+            screenKey={screenKey}
             contextManager={contextManager}
             isStreaming={streamState.isStreaming}
             disabledReason={disabledReason}

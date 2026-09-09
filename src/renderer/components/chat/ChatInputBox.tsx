@@ -166,6 +166,7 @@ const InputImageChip: React.FC<InputImageChipProps> = ({ image, onRemove }) => {
 
 interface ChatInputBoxProps {
   sessionId?: number;
+  screenKey?: 'project' | 'sql' | 'notebooks' | 'analytics';
   contextManager?: ReturnType<typeof useContextManager>;
   isStreaming?: boolean;
   onStartStream?: (
@@ -182,6 +183,7 @@ interface ChatInputBoxProps {
 
 export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   sessionId,
+  screenKey = 'project',
   contextManager,
   isStreaming,
   onStartStream,
@@ -224,6 +226,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   const isCanceling = false;
   const isBlocked = !!disabledReason;
   const inputDisabled = isLoading || isBlocked;
+  const supportsFileContext = screenKey === 'project';
 
   // Auto-rename session hook
   const { autoRename } = useAutoRenameSession(sessionId);
@@ -272,9 +275,12 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   const handleSendAgentMessage = async (messageContent: string) => {
     if (!sessionId || !onStartStream) return;
 
-    const agentContextItems =
-      await activeContextManager.getContextItemsWithAdditionalFiles();
-    const activeFileContext = activeContextManager.selectedFileContext;
+    const agentContextItems = supportsFileContext
+      ? await activeContextManager.getContextItemsWithAdditionalFiles()
+      : [];
+    const activeFileContext = supportsFileContext
+      ? activeContextManager.selectedFileContext
+      : undefined;
     if (
       aiSettings?.chat?.autoIncludeFileContext !== false &&
       activeFileContext &&
@@ -368,9 +374,10 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
       sx={{ display: 'flex', flexDirection: 'column', position: 'relative' }}
     >
       {/* Context file chips (manually added files only) */}
-      {activeContextManager.additionalFiles.length > 0 && (
-        <ContextTabs contextManager={activeContextManager} />
-      )}
+      {supportsFileContext &&
+        activeContextManager.additionalFiles.length > 0 && (
+          <ContextTabs contextManager={activeContextManager} />
+        )}
       {images.length > 0 && (
         <Box
           sx={{
@@ -488,42 +495,46 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
                 Upload image
               </Typography>
             </MenuItem>
-            <MenuItem
-              onClick={() => {
-                setAddMenuAnchor(null);
-                setIsFilePickerOpen(true);
-              }}
-              sx={{ py: 0.5, px: 1.5, minHeight: 'auto' }}
-            >
-              <InsertDriveFileOutlinedIcon
-                sx={{ fontSize: 14, mr: 1, color: 'text.secondary' }}
-              />
-              <Typography variant="body2" sx={{ fontSize: 12 }}>
-                Files
-              </Typography>
-            </MenuItem>
+            {supportsFileContext && (
+              <MenuItem
+                onClick={() => {
+                  setAddMenuAnchor(null);
+                  setIsFilePickerOpen(true);
+                }}
+                sx={{ py: 0.5, px: 1.5, minHeight: 'auto' }}
+              >
+                <InsertDriveFileOutlinedIcon
+                  sx={{ fontSize: 14, mr: 1, color: 'text.secondary' }}
+                />
+                <Typography variant="body2" sx={{ fontSize: 12 }}>
+                  Files
+                </Typography>
+              </MenuItem>
+            )}
           </Menu>
 
-          <FilePickerModal
-            open={isFilePickerOpen}
-            onClose={() => setIsFilePickerOpen(false)}
-            onSelect={(selectedFiles) => {
-              const currentPaths = activeContextManager.additionalFiles.map(
+          {supportsFileContext && (
+            <FilePickerModal
+              open={isFilePickerOpen}
+              onClose={() => setIsFilePickerOpen(false)}
+              onSelect={(selectedFiles) => {
+                const currentPaths = activeContextManager.additionalFiles.map(
+                  (f) => f.path,
+                );
+                const toAdd = selectedFiles
+                  .filter((f) => !currentPaths.includes(f.path))
+                  .map((f) => ({ ...f, fileType: f.fileType ?? 'other' }));
+                if (toAdd.length > 0) activeContextManager.addFiles(toAdd);
+                setIsFilePickerOpen(false);
+              }}
+              selectedFiles={activeContextManager.additionalFiles.map(
                 (f) => f.path,
-              );
-              const toAdd = selectedFiles
-                .filter((f) => !currentPaths.includes(f.path))
-                .map((f) => ({ ...f, fileType: f.fileType ?? 'other' }));
-              if (toAdd.length > 0) activeContextManager.addFiles(toAdd);
-              setIsFilePickerOpen(false);
-            }}
-            selectedFiles={activeContextManager.additionalFiles.map(
-              (f) => f.path,
-            )}
-            excludeFiles={activeContextManager.additionalFiles.map(
-              (f) => f.path,
-            )}
-          />
+              )}
+              excludeFiles={activeContextManager.additionalFiles.map(
+                (f) => f.path,
+              )}
+            />
+          )}
         </>
 
         {/* Agent/Chat Mode Selector - Custom Dropdown */}
