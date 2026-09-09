@@ -13,6 +13,7 @@ import { test as base, ElectronApplication, Page } from '@playwright/test';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
+import { CURRENT_SCHEMA_VERSION } from '../../src/main/database/migrations';
 
 // Type definitions for our fixtures
 export type ElectronFixtures = {
@@ -81,6 +82,7 @@ export const test = base.extend<ElectronFixtures>({
       const dbPath = path.join(userData, 'database.json');
 
       const settings = {
+        schemaVersion: CURRENT_SCHEMA_VERSION,
         settings: {
           isSetup: 'true',
           pythonPath:

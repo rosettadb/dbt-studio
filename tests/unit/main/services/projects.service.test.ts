@@ -2,12 +2,7 @@ jest.mock('openai', () => ({
   OpenAI: jest.fn(),
 }));
 
-const loadDatabaseFile = jest.fn();
-const updateDatabase = jest.fn();
-
 jest.mock('../../../../src/main/utils/fileHelper', () => ({
-  loadDatabaseFile: (...args: any[]) => loadDatabaseFile(...args),
-  updateDatabase: (...args: any[]) => updateDatabase(...args),
   createNewFile: jest.fn(),
   createNewFolder: jest.fn(),
   copyPath: jest.fn(),
@@ -17,6 +12,16 @@ jest.mock('../../../../src/main/utils/fileHelper', () => ({
   getDirectoryStructure: jest.fn(),
   readFileContent: jest.fn(),
   saveFileContent: jest.fn(),
+}));
+
+jest.mock('../../../../src/main/database', () => ({
+  __esModule: true,
+  default: {
+    getField: jest.fn(),
+    updateField: jest.fn(),
+    transaction: jest.fn(),
+    getSnapshot: jest.fn(),
+  },
 }));
 
 jest.mock('../../../../src/main/services/settings.service', () => ({
@@ -57,15 +62,34 @@ jest.mock('../../../../src/main/extractor', () => ({
 }));
 
 import ProjectsService from '../../../../src/main/services/projects.service';
+import databaseStore from '../../../../src/main/database';
+
+const mockedGetSnapshot = databaseStore.getSnapshot as jest.Mock;
+const mockedTransaction = databaseStore.transaction as jest.Mock;
 
 describe('ProjectsService (main)', () => {
+  // Lightweight fake backing store: getSnapshot reads it, transaction
+  // mutates it in place — mirrors DatabaseStore's contract closely enough
+  // for these tests, which care about persisted state, not the storage
+  // mechanism.
+  let fakeDb: { connections: unknown[]; projects: unknown[] };
+
   beforeEach(() => {
     jest.clearAllMocks();
+    fakeDb = { connections: [], projects: [] };
+    mockedGetSnapshot.mockImplementation(() => Promise.resolve(fakeDb));
+    mockedTransaction.mockImplementation(
+      (mutator: (db: typeof fakeDb) => { db: typeof fakeDb; result: unknown }) => {
+        const { db, result } = mutator(fakeDb);
+        fakeDb = db;
+        return Promise.resolve(result);
+      },
+    );
   });
 
   describe('loadProjects', () => {
     it('maps connection config onto projects', async () => {
-      loadDatabaseFile.mockResolvedValue({
+      fakeDb = {
         connections: [
           {
             id: 'c1',
@@ -82,7 +106,7 @@ describe('ProjectsService (main)', () => {
             isExtracted: false,
           },
         ],
-      });
+      };
 
       const result = await ProjectsService.loadProjects();
       expect(result).toHaveLength(1);
@@ -94,7 +118,7 @@ describe('ProjectsService (main)', () => {
     it('updates lastOpenedAt and returns configured project when ConnectorsService.loadConfigurations succeeds', async () => {
       const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(123);
 
-      loadDatabaseFile.mockResolvedValue({
+      fakeDb = {
         connections: [],
         projects: [
           {
@@ -105,7 +129,7 @@ describe('ProjectsService (main)', () => {
             isExtracted: false,
           },
         ],
-      });
+      };
 
       parseProjectConnectionFiles.mockResolvedValue({
         rosettaConnection: { dialect: 'duckdb' },
@@ -114,8 +138,7 @@ describe('ProjectsService (main)', () => {
 
       const result = await ProjectsService.getProject('p1');
 
-      expect(updateDatabase).toHaveBeenCalledWith(
-        'projects',
+      expect(fakeDb.projects).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ id: 'p1', lastOpenedAt: 123 }),
         ]),
@@ -133,7 +156,7 @@ describe('ProjectsService (main)', () => {
     });
 
     it('falls back to raw project when ConnectorsService.loadConfigurations throws', async () => {
-      loadDatabaseFile.mockResolvedValue({
+      fakeDb = {
         connections: [],
         projects: [
           {
@@ -144,7 +167,7 @@ describe('ProjectsService (main)', () => {
             isExtracted: false,
           },
         ],
-      });
+      };
 
       parseProjectConnectionFiles.mockImplementation(async () => {
         throw new Error('Missing connection');

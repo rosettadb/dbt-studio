@@ -14,7 +14,7 @@ import { pathToFileURL } from 'url';
 import { spawn } from 'child_process';
 import { app } from 'electron';
 
-import { loadDatabaseFile, updateDatabase } from '../utils/fileHelper';
+import databaseStore from '../database';
 import secureStorage from './secureStorage.service';
 import SettingsService from './settings.service';
 
@@ -131,25 +131,28 @@ export class IcebergDatalakeService {
   //  Private: persistence helpers
   // ─────────────────────────────────────────────
 
+  // Old persisted records used catalogType 'file'; normalize to 'sqlite' on
+  // every read. Any subsequent write of the normalized array also fixes the
+  // value at rest, so this doubles as a lazy migration for that field.
+  private static normalizeInstances(
+    instances: IcebergInstanceConfig[],
+  ): IcebergInstanceConfig[] {
+    return instances.map((instance) => {
+      const persisted = instance as unknown as { catalogType: string };
+      if (persisted.catalogType !== 'file') return instance;
+      return { ...instance, catalogType: 'sqlite' };
+    });
+  }
+
   private static async readInstances(): Promise<IcebergInstanceConfig[]> {
     try {
-      const db = await loadDatabaseFile();
-      return (db.icebergInstances ?? []).map((instance) => {
-        const persisted = instance as unknown as { catalogType: string };
-        if (persisted.catalogType !== 'file') return instance;
-        return { ...instance, catalogType: 'sqlite' };
-      });
+      const instances = await databaseStore.getField('icebergInstances');
+      return IcebergDatalakeService.normalizeInstances(instances ?? []);
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('[IcebergDatalakeService] readInstances error:', error);
       return [];
     }
-  }
-
-  private static async writeInstances(
-    instances: IcebergInstanceConfig[],
-  ): Promise<void> {
-    await updateDatabase('icebergInstances', instances);
   }
 
   // ─────────────────────────────────────────────
@@ -467,8 +470,8 @@ export class IcebergDatalakeService {
 
     if (instance.storageConnectionId) {
       try {
-        const db = await loadDatabaseFile();
-        const conn: CloudConnection | undefined = (db.sources ?? []).find(
+        const sources = await databaseStore.getField('sources');
+        const conn: CloudConnection | undefined = (sources ?? []).find(
           (s) => s.id === instance.storageConnectionId,
         );
         if (conn) {
@@ -570,8 +573,8 @@ export class IcebergDatalakeService {
     if (!config.databaseConnectionId) {
       throw new Error('ICEBERG_REQUIRED_FIELD: databaseConnectionId');
     }
-    const db = await loadDatabaseFile();
-    const model = (db.connections ?? []).find(
+    const connections = await databaseStore.getField('connections');
+    const model = (connections ?? []).find(
       (item) => item.id === config.databaseConnectionId,
     );
     if (!model || model.connection.type !== 'postgres') {
@@ -823,9 +826,10 @@ export class IcebergDatalakeService {
         updatedAt: now,
       };
 
-      const instances = await IcebergDatalakeService.readInstances();
-      instances.push(newInstance);
-      await IcebergDatalakeService.writeInstances(instances);
+      await databaseStore.updateField('icebergInstances', (current) => [
+        ...IcebergDatalakeService.normalizeInstances(current ?? []),
+        newInstance,
+      ]);
 
       return newInstance;
     } catch (error) {
@@ -840,30 +844,34 @@ export class IcebergDatalakeService {
     data: UpdateIcebergInstanceDTO,
   ): Promise<IcebergInstanceConfig> {
     try {
-      const instances = await IcebergDatalakeService.readInstances();
-      const idx = instances.findIndex((i) => i.id === id);
-      if (idx < 0) throw new Error(`Iceberg instance not found: ${id}`);
+      const existing = (await IcebergDatalakeService.readInstances()).find(
+        (i) => i.id === id,
+      );
+      if (!existing) throw new Error(`Iceberg instance not found: ${id}`);
 
-      const updatedConfig = {
-        ...instances[idx],
-        ...data,
-      };
+      const updatedConfig = { ...existing, ...data };
       IcebergDatalakeService.validateCatalogWarehousePair(updatedConfig);
       IcebergDatalakeService.validateCatalogAuthentication(updatedConfig);
 
       // Handle access token update
+      let { catalogAccessTokenKey } = existing;
       if (data.accessToken) {
-        const key =
-          instances[idx].catalogAccessTokenKey ?? `iceberg-catalog-token-${id}`;
-        await secureStorage.setCredential(key, data.accessToken);
-        instances[idx].catalogAccessTokenKey = key;
+        catalogAccessTokenKey =
+          catalogAccessTokenKey ?? `iceberg-catalog-token-${id}`;
+        await secureStorage.setCredential(
+          catalogAccessTokenKey,
+          data.accessToken,
+        );
       }
 
+      let { oauthClientSecretKey } = existing;
       if (data.oauthClientSecret) {
-        const key =
-          instances[idx].oauthClientSecretKey ?? `iceberg-oauth-secret-${id}`;
-        await secureStorage.setCredential(key, data.oauthClientSecret);
-        instances[idx].oauthClientSecretKey = key;
+        oauthClientSecretKey =
+          oauthClientSecretKey ?? `iceberg-oauth-secret-${id}`;
+        await secureStorage.setCredential(
+          oauthClientSecretKey,
+          data.oauthClientSecret,
+        );
       }
 
       // Strip raw secrets before persisting
@@ -875,15 +883,28 @@ export class IcebergDatalakeService {
       } = data;
       /* eslint-enable @typescript-eslint/no-unused-vars */
 
-      instances[idx] = {
-        ...instances[idx],
+      const changes = {
         ...rest,
         id,
+        catalogAccessTokenKey,
+        oauthClientSecretKey,
         updatedAt: new Date().toISOString(),
       };
 
-      await IcebergDatalakeService.writeInstances(instances);
-      return instances[idx];
+      let finalInstance: IcebergInstanceConfig | undefined;
+      await databaseStore.updateField('icebergInstances', (current) => {
+        const instances = IcebergDatalakeService.normalizeInstances(
+          current ?? [],
+        );
+        const idx = instances.findIndex((i) => i.id === id);
+        if (idx < 0) throw new Error(`Iceberg instance not found: ${id}`);
+        const next = [...instances];
+        next[idx] = { ...next[idx], ...changes };
+        finalInstance = next[idx];
+        return next;
+      });
+
+      return finalInstance as IcebergInstanceConfig;
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('[IcebergDatalakeService] updateInstance error:', error);
@@ -893,8 +914,9 @@ export class IcebergDatalakeService {
 
   static async deleteInstance(id: string): Promise<void> {
     try {
-      const instances = await IcebergDatalakeService.readInstances();
-      const instance = instances.find((i) => i.id === id);
+      const instance = (await IcebergDatalakeService.readInstances()).find(
+        (i) => i.id === id,
+      );
       if (!instance) throw new Error(`Iceberg instance not found: ${id}`);
 
       if (instance.catalogAccessTokenKey) {
@@ -920,8 +942,11 @@ export class IcebergDatalakeService {
         }
       }
 
-      const updated = instances.filter((i) => i.id !== id);
-      await IcebergDatalakeService.writeInstances(updated);
+      await databaseStore.updateField('icebergInstances', (current) =>
+        IcebergDatalakeService.normalizeInstances(current ?? []).filter(
+          (i) => i.id !== id,
+        ),
+      );
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('[IcebergDatalakeService] deleteInstance error:', error);
@@ -1146,8 +1171,8 @@ export class IcebergDatalakeService {
   }
 
   private static async resolveCloudStorageConnection(connectionId: string) {
-    const db = await loadDatabaseFile();
-    const connection = (db.sources ?? []).find(
+    const sources = await databaseStore.getField('sources');
+    const connection = (sources ?? []).find(
       (source) => source.id === connectionId,
     );
     if (!connection) throw new Error('ICEBERG_CLOUD_CONNECTION_NOT_FOUND');
@@ -1238,7 +1263,6 @@ export class IcebergDatalakeService {
       // Settings record the last successful installation for diagnostics, but
       // do not prove the currently selected Python still has every required
       // extra. Verify once per app session before trusting it.
-      const settings = await SettingsService.loadSettings();
 
       // Check via Python bridge (runs pip only if the runtime profile is incomplete)
       const checkResult = (await IcebergDatalakeService.runBridge({
@@ -1248,7 +1272,6 @@ export class IcebergDatalakeService {
       if (checkResult.installed) {
         const version = checkResult.version as string | undefined;
         await SettingsService.saveSettings({
-          ...settings,
           icebergInstalled: true,
           icebergVersion: version,
         });
@@ -1283,9 +1306,7 @@ export class IcebergDatalakeService {
 
       if (verifyResult.installed) {
         const version = verifyResult.version as string | undefined;
-        const currentSettings = await SettingsService.loadSettings();
         await SettingsService.saveSettings({
-          ...currentSettings,
           icebergInstalled: true,
           icebergVersion: version,
         });

@@ -1,13 +1,13 @@
 import { IcebergDatalakeService } from '../../../../src/main/services/icebergDatalake.service';
 import secureStorage from '../../../../src/main/services/secureStorage.service';
-import {
-  loadDatabaseFile,
-  updateDatabase,
-} from '../../../../src/main/utils/fileHelper';
+import databaseStore from '../../../../src/main/database';
 
-jest.mock('../../../../src/main/utils/fileHelper', () => ({
-  loadDatabaseFile: jest.fn(),
-  updateDatabase: jest.fn(),
+jest.mock('../../../../src/main/database', () => ({
+  __esModule: true,
+  default: {
+    getField: jest.fn(),
+    updateField: jest.fn(),
+  },
 }));
 
 jest.mock('../../../../src/main/services/secureStorage.service', () => ({
@@ -24,15 +24,34 @@ jest.mock('../../../../src/main/services/settings.service', () => ({
   default: { loadSettings: jest.fn() },
 }));
 
-const mockedLoadDatabase = loadDatabaseFile as jest.Mock;
-const mockedUpdateDatabase = updateDatabase as jest.Mock;
+const mockedGetField = databaseStore.getField as jest.Mock;
+const mockedUpdateField = databaseStore.updateField as jest.Mock;
 const mockedSecureStorage = secureStorage as jest.Mocked<typeof secureStorage>;
 
 describe('IcebergDatalakeService compatibility and secret persistence', () => {
+  // Lightweight fake backing store: getField/updateField mutate this in
+  // place, mirroring the real DatabaseStore's contract closely enough for
+  // these tests (which care about what ends up persisted, not the storage
+  // mechanism itself).
+  let icebergInstances: any[];
+
   beforeEach(() => {
     jest.clearAllMocks();
-    mockedLoadDatabase.mockResolvedValue({ icebergInstances: [] });
-    mockedUpdateDatabase.mockResolvedValue(undefined);
+    icebergInstances = [];
+    mockedGetField.mockImplementation((key: string) =>
+      Promise.resolve(
+        key === 'icebergInstances' ? icebergInstances : undefined,
+      ),
+    );
+    mockedUpdateField.mockImplementation(
+      (key: string, updater: (current: unknown) => unknown) => {
+        if (key === 'icebergInstances') {
+          icebergInstances = updater(icebergInstances) as any[];
+          return Promise.resolve(icebergInstances);
+        }
+        return Promise.resolve(updater(undefined));
+      },
+    );
     mockedSecureStorage.setCredential.mockResolvedValue(undefined);
   });
 
@@ -117,7 +136,7 @@ describe('IcebergDatalakeService compatibility and secret persistence', () => {
       `iceberg-oauth-secret-${created.id}`,
       'top-secret',
     );
-    const persisted = mockedUpdateDatabase.mock.calls[0][1][0];
+    const persisted = icebergInstances[0];
     expect(persisted.oauthClientSecret).toBeUndefined();
     expect(JSON.stringify(persisted)).not.toContain('top-secret');
     expect(persisted.oauthClientSecretKey).toBe(
@@ -135,7 +154,7 @@ describe('IcebergDatalakeService compatibility and secret persistence', () => {
       storageType: 'server-managed',
     });
 
-    const persisted = mockedUpdateDatabase.mock.calls[0][1][0];
+    const persisted = icebergInstances[0];
     expect(persisted).toMatchObject({
       id: created.id,
       catalogType: 'lakekeeper',
@@ -427,19 +446,17 @@ describe('IcebergDatalakeService compatibility and secret persistence', () => {
     });
 
     it('passes sanitized nested namespaces to the bridge', async () => {
-      mockedLoadDatabase.mockResolvedValue({
-        icebergInstances: [
-          {
-            id: 'instance-1',
-            name: 'test',
-            catalogType: 'sqlite',
-            storageType: 'local',
-            localPath: '/tmp/warehouse',
-            createdAt: 'now',
-            updatedAt: 'now',
-          },
-        ],
-      });
+      icebergInstances = [
+        {
+          id: 'instance-1',
+          name: 'test',
+          catalogType: 'sqlite',
+          storageType: 'local',
+          localPath: '/tmp/warehouse',
+          createdAt: 'now',
+          updatedAt: 'now',
+        },
+      ];
       const runBridgeSpy = jest
         .spyOn(IcebergDatalakeService as any, 'runBridge')
         .mockResolvedValue({ ok: true, namespace: ['a', 'b'] });

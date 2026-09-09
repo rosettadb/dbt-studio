@@ -3,6 +3,7 @@ import { test as base, ElectronApplication, Page } from '@playwright/test';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
+import { CURRENT_SCHEMA_VERSION } from '../../src/main/database/migrations';
 
 export type TestFixtures = {
   electronApp: ElectronApplication;
@@ -47,6 +48,7 @@ export const test = base.extend<TestFixtures>({
 
     // Seed database.json with test project and connection
     const databaseJson = {
+      schemaVersion: CURRENT_SCHEMA_VERSION,
       settings: {
         isSetup: 'true',
         pythonPath:
