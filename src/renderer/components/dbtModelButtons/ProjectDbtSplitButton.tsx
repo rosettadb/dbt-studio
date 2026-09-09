@@ -39,6 +39,7 @@ interface ProjectDbtSplitButtonProps {
   // from onBeforeExecute, which switches to the plain terminal tab) so the
   // terminal panel can expand to the runner logs tab instead.
   onLocalRunStarted?: () => void;
+  onLocalPipelineSelected?: (pipelineRelativePath: string) => void;
   // Function handlers that are used elsewhere in ProjectDetails
   rosettaDbt: (project: Project, command: Command) => Promise<void>;
 }
@@ -54,6 +55,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
   environment = 'local',
   onBeforeExecute,
   onLocalRunStarted,
+  onLocalPipelineSelected,
   rosettaDbt,
 }) => {
   // Functions that are only used in this component - moved inside
@@ -534,25 +536,34 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           onClose={() => setLocalPipelineModal(false)}
           mode="local"
           project={project}
-          onSelect={async (pipeline) => {
+          onSelect={(pipeline) => {
             setLocalPipelineModal(false);
             if (!settings?.runnerPath) {
               toast.error('Local runner is not installed.');
               return;
             }
             const ext = pipeline.path.slice(pipeline.path.lastIndexOf('.'));
-            const result = await runPipelineLocally({
-              workspaceDir: project.path,
-              pipelineFile: `${pipeline.name}${ext}`,
-              connectionName: connection?.connection?.name,
-            });
-            if (result.success) {
-              onLocalRunStarted?.();
-              toast.success(
-                'Pipeline run started. Track progress in Task Manager.',
-              );
+            const pipelineRelativePath = `${pipeline.name}${ext}`;
+            if (onLocalPipelineSelected) {
+              onLocalPipelineSelected(pipelineRelativePath);
             } else {
-              toast.error(result.error || 'Failed to start the pipeline run');
+              runPipelineLocally({
+                workspaceDir: project.path,
+                pipelineFile: pipelineRelativePath,
+                connectionName: connection?.connection?.name,
+              })
+                .then((result) => {
+                  if (result.success) {
+                    onLocalRunStarted?.();
+                    return toast.success(
+                      'Pipeline run started. Track progress in Task Manager.',
+                    );
+                  }
+                  return toast.error(
+                    result.error || 'Failed to start the pipeline run',
+                  );
+                })
+                .catch(() => {});
             }
           }}
         />
