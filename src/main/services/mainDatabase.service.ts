@@ -239,6 +239,7 @@ export default class MainDatabaseService {
         width INTEGER NOT NULL,
         height INTEGER NOT NULL,
         storage_key TEXT NOT NULL,
+        data_url TEXT,
         created_at TEXT DEFAULT (datetime('now')),
         FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id) ON DELETE CASCADE,
         FOREIGN KEY (message_id) REFERENCES chat_messages(id) ON DELETE CASCADE
@@ -486,6 +487,13 @@ export default class MainDatabaseService {
       if (!chatMsgCols.has('parent_message_id')) {
         alterStatements.push(
           'ALTER TABLE chat_messages ADD COLUMN parent_message_id INTEGER;',
+        );
+      }
+
+      const imageAttachmentCols = getColumns('chat_image_attachments');
+      if (!imageAttachmentCols.has('data_url')) {
+        alterStatements.push(
+          'ALTER TABLE chat_image_attachments ADD COLUMN data_url TEXT;',
         );
       }
 

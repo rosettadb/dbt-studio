@@ -117,6 +117,7 @@ export const chatImageAttachments = sqliteTable(
     width: integer('width').notNull(),
     height: integer('height').notNull(),
     storageKey: text('storage_key').notNull(),
+    dataUrl: text('data_url'),
     createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => ({

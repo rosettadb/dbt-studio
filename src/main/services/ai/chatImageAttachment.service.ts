@@ -19,7 +19,10 @@ type ImageInfo = {
   height: number;
 };
 
-type StagedAttachment = ChatImageAttachment & { storageKey: string };
+type StagedAttachment = ChatImageAttachment & {
+  storageKey: string;
+  dataUrl: string | null;
+};
 
 const MAX_IMAGE_PIXELS = 20_000_000;
 
@@ -97,15 +100,9 @@ const assertImageInfo = (bytes: Buffer): ImageInfo => {
   return info;
 };
 
-const inMemoryImages = new Map<string, Buffer>();
-
-const deleteStoredImages = async (storageKeys: string[]) => {
-  storageKeys.forEach((storageKey) => inMemoryImages.delete(storageKey));
-};
-
 export default class ChatImageAttachmentService {
-  static isAvailable(storageKey: string): boolean {
-    return inMemoryImages.has(storageKey);
+  static isAvailable(attachment: { dataUrl: string | null }): boolean {
+    return !!attachment.dataUrl;
   }
 
   static async selectAndStage(
@@ -145,23 +142,18 @@ export default class ChatImageAttachmentService {
       const bytes = await fs.readFile(sourcePath);
       const info = assertImageInfo(bytes);
       const id = crypto.randomUUID();
-      inMemoryImages.set(id, bytes);
-      try {
-        return (await MainDatabaseService.createChatImageAttachment({
-          id,
-          conversationId,
-          messageId: null,
-          name: sourcePath.split(/[\\/]/).pop() || 'image',
-          mediaType: info.mediaType,
-          byteSize: bytes.length,
-          width: info.width,
-          height: info.height,
-          storageKey: id,
-        })) as StagedAttachment;
-      } catch (error) {
-        inMemoryImages.delete(id);
-        throw error;
-      }
+      return (await MainDatabaseService.createChatImageAttachment({
+        id,
+        conversationId,
+        messageId: null,
+        name: sourcePath.split(/[\\/]/).pop() || 'image',
+        mediaType: info.mediaType,
+        byteSize: bytes.length,
+        width: info.width,
+        height: info.height,
+        storageKey: id,
+        dataUrl: `data:${info.mediaType};base64,${bytes.toString('base64')}`,
+      })) as StagedAttachment;
     };
 
     const staged: StagedAttachment[] = [];
@@ -183,21 +175,22 @@ export default class ChatImageAttachmentService {
         createdAt: image.createdAt,
       }));
     } catch (error) {
-      await deleteStoredImages(staged.map((image) => image.storageKey));
+      await MainDatabaseService.releaseStagedChatImageAttachments(
+        conversationId,
+        staged.map((image) => image.id),
+      );
       throw error;
     }
   }
 
   static async readForModel(attachment: {
-    storageKey: string;
+    dataUrl: string | null;
     mediaType: string;
   }): Promise<Uint8Array> {
-    const bytes = inMemoryImages.get(attachment.storageKey);
-    if (!bytes) {
-      throw new Error(
-        'This image is only available while the current app session is open.',
-      );
-    }
+    if (!attachment.dataUrl) throw new Error('Image attachment not found.');
+    const base64 = attachment.dataUrl.split(',', 2)[1];
+    if (!base64) throw new Error('Image attachment not found.');
+    const bytes = Buffer.from(base64, 'base64');
     assertImageInfo(bytes);
     return bytes;
   }
@@ -215,31 +208,24 @@ export default class ChatImageAttachmentService {
     if (attachment.conversationId !== conversationId) {
       throw new Error('Image attachment not found.');
     }
-    const bytes = inMemoryImages.get(attachment.storageKey);
-    if (!bytes) throw new Error('Image attachment not found.');
-    assertImageInfo(bytes);
-    const dataUrl = `data:${attachment.mediaType};base64,${bytes.toString('base64')}`;
-    return { dataUrl, mediaType: attachment.mediaType };
+    if (!attachment.dataUrl) {
+      return { dataUrl: '', mediaType: attachment.mediaType };
+    }
+    await this.readForModel(attachment);
+    return { dataUrl: attachment.dataUrl, mediaType: attachment.mediaType };
   }
 
   static async releaseStaged(
     conversationId: number,
     ids: string[],
   ): Promise<void> {
-    const storageKeys =
-      await MainDatabaseService.releaseStagedChatImageAttachments(
-        conversationId,
-        ids,
-      );
-    await deleteStoredImages(storageKeys);
+    await MainDatabaseService.releaseStagedChatImageAttachments(
+      conversationId,
+      ids,
+    );
   }
 
   static async deleteForConversation(conversationId: number): Promise<void> {
-    const storageKeys =
-      await MainDatabaseService.getChatImageStorageKeysForConversation(
-        conversationId,
-      );
     await MainDatabaseService.deleteConversation(conversationId);
-    await deleteStoredImages(storageKeys);
   }
 }

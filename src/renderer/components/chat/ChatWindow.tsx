@@ -60,6 +60,7 @@ import {
   restoreFileMutation,
 } from '../../services/agent.service';
 import { PROJECT_AGENT_CONTEXT_FILE } from '../../../shared/agentMemoryConstants';
+import { CHAT_IMAGE_TOKEN_ESTIMATE } from '../../../types/chatAttachments';
 import {
   collectSuccessfulPipelineMutations,
   isSuccessfulGenericFileWrite,
@@ -94,6 +95,7 @@ const estimateMessagesTokens = (
   messages: Array<{
     content: unknown;
     contextItems?: Array<{ content?: string | null }>;
+    imageAttachments?: unknown[];
     toolCalls?: Array<{
       toolInput?: unknown;
       toolOutput?: unknown;
@@ -119,6 +121,8 @@ const estimateMessagesTokens = (
         return toolSum + estimateTokens(toolInput) + estimateTokens(toolOutput);
       }, 0);
     }
+
+    tokens += (msg.imageAttachments?.length ?? 0) * CHAT_IMAGE_TOKEN_ESTIMATE;
 
     return sum + tokens + 4;
   }, 0);
@@ -337,6 +341,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       estimatedMessages as Array<{
         content: unknown;
         contextItems?: Array<{ content?: string | null }>;
+        imageAttachments?: unknown[];
         toolCalls?: Array<{
           toolInput?: unknown;
           toolOutput?: unknown;

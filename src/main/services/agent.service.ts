@@ -455,7 +455,7 @@ const activeCompactions = new Set<number>();
  * Converts ChatMessage[] into the CoreMessage format expected by the Vercel AI SDK.
  */
 type ChatMessageWithImages = ChatMessage & {
-  imageAttachments?: ChatImageAttachment[];
+  imageAttachments?: Array<ChatImageAttachment & { dataUrl: string | null }>;
 };
 
 async function buildCoreMessages(
@@ -468,9 +468,8 @@ async function buildCoreMessages(
           m.role === 'user' || m.role === 'assistant' || m.role === 'system',
       )
       .map(async (message): Promise<ModelMessage> => {
-        const availableImages = message.imageAttachments?.filter(
-          (attachment: ChatImageAttachment) =>
-            ChatImageAttachmentService.isAvailable(attachment.storageKey),
+        const availableImages = message.imageAttachments?.filter((attachment) =>
+          ChatImageAttachmentService.isAvailable(attachment),
         );
         if (message.role !== 'user' || !availableImages?.length) {
           return {
