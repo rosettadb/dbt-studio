@@ -1,7 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 import { DataBase } from '../../types/backend';
-import { CURRENT_SCHEMA_VERSION, migrate } from './migrations';
+import {
+  CURRENT_SCHEMA_VERSION,
+  migrate,
+  passthroughNewerVersion,
+} from './migrations';
 
 function defaultDatabase(): DataBase {
   return {
@@ -43,10 +47,19 @@ export class DatabaseStore {
     this.cache = null;
   }
 
+  /**
+   * Returns a deep clone, never a live reference into the cache. Callers
+   * routinely enrich what they get back in place (e.g. materializing a
+   * secure-storage credential onto a connection object before using it) —
+   * with a cached store, mutating a live reference would poison the cache
+   * itself, and the next unrelated write would persist that mutation to
+   * disk. Cloning here is the one place that has to hold for every caller,
+   * present and future, rather than trusting each call site to remember.
+   */
   async getField<K extends keyof DataBase>(key: K): Promise<DataBase[K]> {
     return this.enqueue(async () => {
       const db = await this.ensureLoaded();
-      return db[key];
+      return structuredClone(db[key]);
     });
   }
 
@@ -55,9 +68,10 @@ export class DatabaseStore {
    * separate getField calls whenever a caller combines two or more fields
    * (e.g. joining projects to connections), since two separate getField
    * calls are two separate queue turns and a write could land in between.
+   * Also a deep clone, for the same reason as getField.
    */
   async getSnapshot(): Promise<Readonly<DataBase>> {
-    return this.enqueue(async () => this.ensureLoaded());
+    return this.enqueue(async () => structuredClone(await this.ensureLoaded()));
   }
 
   async updateField<K extends keyof DataBase>(
@@ -134,6 +148,18 @@ export class DatabaseStore {
 
     const onDiskVersion =
       (parsed as { schemaVersion?: number })?.schemaVersion ?? 0;
+
+    if (onDiskVersion > CURRENT_SCHEMA_VERSION) {
+      // Written by a newer build than this one (e.g. after a downgrade).
+      // Back up first — this branch never persists on its own, but the
+      // very next write from this build otherwise would, with no backup
+      // ever having been taken — then read it without running it through
+      // migrate()'s reconstructive whitelist, which would silently drop
+      // every field this older build doesn't recognize.
+      await this.backup(raw, onDiskVersion);
+      return passthroughNewerVersion(parsed);
+    }
+
     const needsMigration = onDiskVersion < CURRENT_SCHEMA_VERSION;
     if (needsMigration) {
       await this.backup(raw, onDiskVersion);

@@ -94,6 +94,50 @@ describe('DatabaseStore', () => {
         legacyContent,
       );
     });
+
+    it('backs up and preserves unknown fields from a file written by a newer build (downgrade)', async () => {
+      const newerVersion = CURRENT_SCHEMA_VERSION + 1;
+      const fromNewerBuild = JSON.stringify({
+        schemaVersion: newerVersion,
+        projects: [{ id: 'p1' }],
+        settings: {},
+        queries: {},
+        connections: [],
+        sources: [],
+        recentItems: [],
+        // A field only the newer build understands — must survive.
+        futureFeatureConfig: { enabled: true },
+      });
+      fs.writeFileSync(dbPath, fromNewerBuild);
+
+      const store = new DatabaseStore(dbPath);
+      const projects = await store.getField('projects');
+      expect(projects).toEqual([{ id: 'p1' }]);
+
+      // A backup was taken before this (older) build touched anything.
+      const backupFiles = fs
+        .readdirSync(dir)
+        .filter((name) => name.includes(`.v${newerVersion}.bak-`));
+      expect(backupFiles).toHaveLength(1);
+      expect(fs.readFileSync(path.join(dir, backupFiles[0]), 'utf8')).toBe(
+        fromNewerBuild,
+      );
+
+      // The mere read did not touch the live file — same as any other
+      // read-only access.
+      const stillOnDisk = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+      expect(stillOnDisk.schemaVersion).toBe(newerVersion);
+
+      // A subsequent write from this older build must not delete the
+      // field it doesn't understand.
+      await store.updateField('projects', (current) => [
+        ...current,
+        { id: 'p2' } as never,
+      ]);
+      const afterWrite = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+      expect(afterWrite.futureFeatureConfig).toEqual({ enabled: true });
+      expect(afterWrite.projects).toEqual([{ id: 'p1' }, { id: 'p2' }]);
+    });
   });
 
   describe('corruption recovery', () => {
@@ -139,6 +183,41 @@ describe('DatabaseStore', () => {
       const store = new DatabaseStore(dbPath);
 
       await expect(store.getField('projects')).rejects.toThrow(/corrupted/i);
+    });
+  });
+
+  describe('getField isolation', () => {
+    it('returns a value that is safe to mutate without affecting the store', async () => {
+      const store = new DatabaseStore(dbPath);
+      await store.updateField('connections', () => [
+        { id: 'c1', connection: { type: 'postgres' } } as never,
+      ]);
+
+      const connections = await store.getField('connections');
+      // Simulates materializing a secure-storage credential onto a
+      // connection object for immediate use — a real, existing pattern in
+      // ConnectorsService (extractSchemaFromConnection, etc.).
+      (connections[0] as any).connection.password = 'super-secret-password';
+
+      const reread = await store.getField('connections');
+      expect((reread[0] as any).connection.password).toBeUndefined();
+    });
+
+    it('does not leak a mutated value into a later unrelated write', async () => {
+      const store = new DatabaseStore(dbPath);
+      await store.updateField('connections', () => [
+        { id: 'c1', connection: { type: 'postgres' } } as never,
+      ]);
+
+      const connections = await store.getField('connections');
+      (connections[0] as any).connection.password = 'super-secret-password';
+
+      // An unrelated write (e.g. adding a recent item) must not carry the
+      // credential injected above into what actually gets persisted.
+      await store.updateField('recentItems', () => [{ id: 'r1' } as never]);
+
+      const onDisk = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+      expect(onDisk.connections[0].connection.password).toBeUndefined();
     });
   });
 

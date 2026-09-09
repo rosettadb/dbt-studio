@@ -1,6 +1,7 @@
 import {
   CURRENT_SCHEMA_VERSION,
   migrate,
+  passthroughNewerVersion,
   pendingMigrations,
 } from '../../../../src/main/database/migrations';
 
@@ -59,6 +60,47 @@ describe('migrations', () => {
       const result = migrate(current);
 
       expect(result).toEqual(current);
+    });
+  });
+
+  describe('passthroughNewerVersion', () => {
+    it('preserves fields this build does not recognize instead of dropping them', () => {
+      const fromNewerBuild = {
+        schemaVersion: CURRENT_SCHEMA_VERSION + 1,
+        projects: [{ id: '1' }],
+        settings: {},
+        queries: {},
+        connections: [],
+        sources: [],
+        recentItems: [],
+        // A field only the newer build understands.
+        futureFeatureConfig: { enabled: true },
+      };
+
+      const result = passthroughNewerVersion(
+        fromNewerBuild,
+      ) as unknown as typeof fromNewerBuild;
+
+      expect(result.futureFeatureConfig).toEqual({ enabled: true });
+      expect(result.projects).toEqual(fromNewerBuild.projects);
+    });
+
+    it('does not down-stamp schemaVersion to the current build version', () => {
+      const fromNewerBuild = { schemaVersion: CURRENT_SCHEMA_VERSION + 5 };
+
+      const result = passthroughNewerVersion(fromNewerBuild);
+
+      expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION + 5);
+    });
+
+    it('still fills in safe defaults for known fields that are missing', () => {
+      const result = passthroughNewerVersion({
+        schemaVersion: CURRENT_SCHEMA_VERSION + 1,
+      });
+
+      expect(result.projects).toEqual([]);
+      expect(result.connections).toEqual([]);
+      expect(result.recentItems).toEqual([]);
     });
   });
 
