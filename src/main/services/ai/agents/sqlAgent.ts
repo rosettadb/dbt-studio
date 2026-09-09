@@ -56,7 +56,8 @@ export async function createSqlAgent(
       connectionHints = `\n\n## Iceberg Specifics
 You are connected to an Apache Iceberg ${connectionMeta.catalogType ?? 'REST'} catalog through DuckDB's Iceberg extension.
 - Use DuckDB SQL and fully qualified catalog references such as \`iceberg.<namespace>.<table>\`.
-- Inspect the schema before composing a query. The trusted SQL path enforces the Iceberg statement policy and requires confirmation for mutations.
+- Inspect the schema before composing a query. You may prepare supported catalog and data mutations; the SQL Editor presents the user confirmation before it executes the exact statement.
+- Every table target must be \`iceberg.<namespace>.<table>\`. Never infer that unqualified database syntax, attachment SQL, credentials, or storage SQL is available for this connection.
 - Do not write \`ATTACH\`, \`DETACH\`, extension, secret, storage, or catalog configuration SQL; DBT Studio owns the temporary attachment lifecycle.`;
       break;
     case 'ducklake':

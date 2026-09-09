@@ -233,6 +233,46 @@ describe('IcebergDatalakeService DuckDB Iceberg lifecycle', () => {
     );
   });
 
+  it('ignores read pagination for a confirmed mutation', async () => {
+    mockedLoadDatabase.mockResolvedValue({
+      ...database,
+      icebergInstances: [
+        {
+          ...instance,
+          sqlAccessVerifiedAt: '2026-08-14T00:00:00.000Z',
+          sqlRuntimeFingerprint: (
+            IcebergDatalakeService as any
+          ).getSqlRuntimeFingerprint(),
+        },
+      ],
+    });
+    mockRunAndReadUntil.mockResolvedValue({
+      columnNames: () => [],
+      getRowObjectsJson: () => [],
+      rowsChanged: 0,
+      done: true,
+    });
+
+    await expect(
+      IcebergDatalakeService.executeSql({
+        instanceId: instance.id,
+        executionId: 'create-customers',
+        sql: 'CREATE TABLE iceberg.sales.customers (id BIGINT)',
+        pageLimit: 10,
+        pageOffset: 0,
+        mutationConfirmed: true,
+      }),
+    ).resolves.toMatchObject({
+      statementClass: 'create',
+      rows: [],
+      rowsChanged: 0,
+    });
+    expect(mockRunAndReadUntil).toHaveBeenCalledWith(
+      'CREATE TABLE iceberg.sales.customers (id BIGINT)',
+      1001,
+    );
+  });
+
   it('verifies with temporary secrets, attach, detach, and cleanup', async () => {
     const result = await IcebergDatalakeService.verifySqlAccess(instance.id);
 

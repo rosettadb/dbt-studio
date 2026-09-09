@@ -219,8 +219,19 @@ export const executeConfirmedIcebergSql = async (
   const mutating = classification.statementClass !== 'select';
   if (mutating && !confirmMutation(classification.statementClass))
     return undefined;
+  // Pagination belongs exclusively to result-producing reads. Do not let a
+  // SQL Editor page request turn an already-confirmed mutation into a rejected
+  // operation in the main process.
+  const executionParams = mutating
+    ? {
+        instanceId: request.instanceId,
+        executionId: request.executionId,
+        sql: request.sql,
+        maxRows: request.maxRows,
+      }
+    : request;
   return executeIcebergSql({
-    ...request,
+    ...executionParams,
     validateOnly: false,
     mutationConfirmed: mutating,
   });

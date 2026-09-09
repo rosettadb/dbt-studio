@@ -297,12 +297,15 @@ export class NotebooksService {
       ) {
         throw new Error('ICEBERG_NOTEBOOK_CELL_NOT_FOUND');
       }
+      const pagination = options?.mutationConfirmed
+        ? {}
+        : sanitizePagination(limit, offset);
       const result = await IcebergDatalakeService.executeSql(
         {
           instanceId: connectionId.slice(8),
           executionId,
           sql,
-          ...sanitizePagination(limit, offset),
+          ...pagination,
           mutationConfirmed: options?.mutationConfirmed,
         },
         run.signal,

@@ -40,6 +40,30 @@ describe('Iceberg mutation confirmation', () => {
       validateOnly: false,
     });
   });
+  it('removes read pagination before executing a confirmed mutation', async () => {
+    invoke
+      .mockResolvedValueOnce({ statementClass: 'create' })
+      .mockResolvedValueOnce({ rows: [], rowsChanged: 0 });
+
+    await executeConfirmedIcebergSql(
+      {
+        instanceId: 'id',
+        executionId: 'run',
+        sql: 'CREATE TABLE iceberg.sales.customers (id BIGINT)',
+        pageLimit: 10,
+        pageOffset: 0,
+      },
+      () => true,
+    );
+
+    expect(invoke.mock.calls[1][1]).toMatchObject({
+      sql: 'CREATE TABLE iceberg.sales.customers (id BIGINT)',
+      mutationConfirmed: true,
+      validateOnly: false,
+    });
+    expect(invoke.mock.calls[1][1]).not.toHaveProperty('pageLimit');
+    expect(invoke.mock.calls[1][1]).not.toHaveProperty('pageOffset');
+  });
   it('does not prompt for a backend-classified read', async () => {
     invoke
       .mockResolvedValueOnce({ statementClass: 'select' })

@@ -1774,11 +1774,12 @@ export class IcebergDatalakeService {
     if (statementClass !== 'select' && params.mutationConfirmed !== true) {
       throw new Error('ICEBERG_SQL_CONFIRMATION_REQUIRED');
     }
+    // Callers may carry their current result-page settings into an execution.
+    // A mutation has no result set to page, so ignore those settings after the
+    // trusted classifier and confirmation gate have accepted it.
     const hasPageRequest =
-      params.pageLimit !== undefined || params.pageOffset !== undefined;
-    if (hasPageRequest && statementClass !== 'select') {
-      throw new Error('ICEBERG_SQL_PAGINATION_REQUIRES_SELECT');
-    }
+      statementClass === 'select' &&
+      (params.pageLimit !== undefined || params.pageOffset !== undefined);
     const pageLimit = params.pageLimit ?? 10;
     const pageOffset = params.pageOffset ?? 0;
     if (

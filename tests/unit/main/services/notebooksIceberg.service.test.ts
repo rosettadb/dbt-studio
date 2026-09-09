@@ -76,6 +76,37 @@ describe('NotebooksService Iceberg execution', () => {
     expect(executeSql).not.toHaveBeenCalled();
   });
 
+  it('does not attach read pagination to a confirmed mutation cell', async () => {
+    executeSql.mockResolvedValue({
+      statementClass: 'create',
+      rows: [],
+      columns: [],
+      rowsChanged: 0,
+      truncated: false,
+    });
+
+    await NotebooksService.runCell(
+      'iceberg-instance-1',
+      notebook.id,
+      'cell-1',
+      'CREATE TABLE iceberg.sales.customers (id BIGINT)',
+      10,
+      20,
+      { executionId: 'mutation-run', mutationConfirmed: true },
+    );
+
+    expect(executeSql).toHaveBeenCalledWith(
+      expect.objectContaining({
+        instanceId: 'instance-1',
+        executionId: 'mutation-run',
+        mutationConfirmed: true,
+      }),
+      expect.any(AbortSignal),
+    );
+    expect(executeSql.mock.calls[0][0]).not.toHaveProperty('pageLimit');
+    expect(executeSql.mock.calls[0][0]).not.toHaveProperty('pageOffset');
+  });
+
   it('runs one confirmed Run All cell and propagates its failure', async () => {
     executeSql.mockRejectedValue(new Error('write failed'));
 

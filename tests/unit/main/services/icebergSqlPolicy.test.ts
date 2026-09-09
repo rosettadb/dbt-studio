@@ -71,6 +71,10 @@ describe('Iceberg SQL policy with the native DuckDB parser', () => {
       'create',
     ],
     [
+      'CREATE TABLE iceberg.sales.customers (customer_id BIGINT PRIMARY KEY, email VARCHAR)',
+      'create',
+    ],
+    [
       'CREATE TABLE iceberg.sales.orders AS SELECT * FROM iceberg.sales.source',
       'create',
     ],

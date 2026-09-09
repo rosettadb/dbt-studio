@@ -316,10 +316,10 @@ export function parseIcebergSql(sql: string): {
         return select(text(t.slice(i)), 'create');
       }
       const columns = group();
-      // Basic typed columns only. Defaults, constraints with expressions,
-      // custom types and generated columns require separate acceptance.
+      // Basic typed columns and primary keys only. Defaults, expression-based
+      // constraints, custom types and generated columns require separate acceptance.
       const definition =
-        /^(?:"(?:[^"]|"")*"|[a-z_][a-z_0-9]*)\s+(?:BOOLEAN|TINYINT|SMALLINT|INTEGER|INT|BIGINT|FLOAT|REAL|DOUBLE(?: PRECISION)?|VARCHAR|TEXT|STRING|BLOB|DATE|TIME|TIMESTAMP|TIMESTAMPTZ|UUID|DECIMAL(?:\s*\(\s*\d+\s*,\s*\d+\s*\))?)(?:\s+NOT\s+NULL)?$/i;
+        /^(?:"(?:[^"]|"")*"|[a-z_][a-z_0-9]*)\s+(?:BOOLEAN|TINYINT|SMALLINT|INTEGER|INT|BIGINT|FLOAT|REAL|DOUBLE(?: PRECISION)?|VARCHAR|TEXT|STRING|BLOB|DATE|TIME|TIMESTAMP|TIMESTAMPTZ|UUID|DECIMAL(?:\s*\(\s*\d+\s*,\s*\d+\s*\))?)(?:\s+NOT\s+NULL)?(?:\s+PRIMARY\s+KEY)?$/i;
       const definitions: Token[][] = [[]];
       let depth = 0;
       columns.forEach((token) => {

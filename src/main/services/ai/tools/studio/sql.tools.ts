@@ -443,8 +443,12 @@ export function createStudioSqlTools(
             );
           }
 
-          // Step 2 — For destructive/mutating statements, ask the user before executing
-          if (isMutationSql(sql)) {
+          // Iceberg SQL Editor execution has its own classified confirmation
+          // dialog. Other connections use the existing terminal gate.
+          if (
+            isMutationSql(sql) &&
+            !isIcebergConnectionId(context.connectionId)
+          ) {
             const allowed = await TerminalConfirmGate.request({
               event: context.event,
               conversationId,
