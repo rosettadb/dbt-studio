@@ -468,8 +468,9 @@ async function buildCoreMessages(
           m.role === 'user' || m.role === 'assistant' || m.role === 'system',
       )
       .map(async (message): Promise<ModelMessage> => {
-        const availableImages = message.imageAttachments?.filter((attachment) =>
-          ChatImageAttachmentService.isAvailable(attachment),
+        const availableImages = message.imageAttachments?.filter(
+          (attachment: ChatImageAttachment & { dataUrl: string | null }) =>
+            ChatImageAttachmentService.isAvailable(attachment),
         );
         if (message.role !== 'user' || !availableImages?.length) {
           return {
