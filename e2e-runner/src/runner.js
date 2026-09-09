@@ -104,6 +104,11 @@ async function executeRun(run) {
           `${PLAYWRIGHT_CACHE_VOLUME}:/root/.cache/ms-playwright`,
         ],
         ShmSize: 1024 * 1024 * 1024, // Electron/Chromium need more than Docker's 64MB default
+        // Docker's default seccomp profile blocks syscalls Chromium's renderer
+        // still uses even with --no-sandbox, which silently stalls window
+        // creation. This container only ever runs this repo's own test suite,
+        // so relaxing it here is the standard, low-risk fix for that.
+        SecurityOpt: ['seccomp=unconfined'],
       },
     });
     container.__runId = runId;
