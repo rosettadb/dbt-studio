@@ -468,20 +468,22 @@ async function buildCoreMessages(
           m.role === 'user' || m.role === 'assistant' || m.role === 'system',
       )
       .map(async (message): Promise<ModelMessage> => {
-        if (message.role !== 'user' || !message.imageAttachments?.length) {
+        const availableImages = message.imageAttachments?.filter(
+          (attachment: ChatImageAttachment) =>
+            ChatImageAttachmentService.isAvailable(attachment.storageKey),
+        );
+        if (message.role !== 'user' || !availableImages?.length) {
           return {
             role: message.role as 'user' | 'assistant' | 'system',
             content: message.content,
           } as ModelMessage;
         }
         const images = await Promise.all(
-          message.imageAttachments.map(
-            async (attachment: ChatImageAttachment) => ({
-              type: 'image' as const,
-              image: await ChatImageAttachmentService.readForModel(attachment),
-              mediaType: attachment.mediaType,
-            }),
-          ),
+          availableImages.map(async (attachment: ChatImageAttachment) => ({
+            type: 'image' as const,
+            image: await ChatImageAttachmentService.readForModel(attachment),
+            mediaType: attachment.mediaType,
+          })),
         );
         return {
           role: 'user',

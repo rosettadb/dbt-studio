@@ -1,8 +1,6 @@
 import crypto from 'crypto';
 import fs from 'fs/promises';
-import path from 'path';
 import {
-  app,
   BrowserWindow,
   dialog,
   IpcMainInvokeEvent,
@@ -99,18 +97,17 @@ const assertImageInfo = (bytes: Buffer): ImageInfo => {
   return info;
 };
 
-const storageDirectory = () =>
-  path.join(app.getPath('userData'), 'chat-images');
+const inMemoryImages = new Map<string, Buffer>();
 
 const deleteStoredImages = async (storageKeys: string[]) => {
-  await Promise.all(
-    storageKeys.map((storageKey) =>
-      fs.unlink(path.join(storageDirectory(), storageKey)).catch(() => {}),
-    ),
-  );
+  storageKeys.forEach((storageKey) => inMemoryImages.delete(storageKey));
 };
 
 export default class ChatImageAttachmentService {
+  static isAvailable(storageKey: string): boolean {
+    return inMemoryImages.has(storageKey);
+  }
+
   static async selectAndStage(
     event: IpcMainInvokeEvent,
     conversationId: number,
@@ -135,7 +132,6 @@ export default class ChatImageAttachmentService {
         `Attach at most ${allowedImages} more image${allowedImages === 1 ? '' : 's'}.`,
       );
     }
-    await fs.mkdir(storageDirectory(), { recursive: true });
     const stageSource = async (
       sourcePath: string,
     ): Promise<StagedAttachment> => {
@@ -149,26 +145,21 @@ export default class ChatImageAttachmentService {
       const bytes = await fs.readFile(sourcePath);
       const info = assertImageInfo(bytes);
       const id = crypto.randomUUID();
-      const storageKey = `${id}.${info.mediaType.split('/')[1]}`;
-      await fs.writeFile(path.join(storageDirectory(), storageKey), bytes, {
-        flag: 'wx',
-      });
+      inMemoryImages.set(id, bytes);
       try {
         return (await MainDatabaseService.createChatImageAttachment({
           id,
           conversationId,
           messageId: null,
-          name: path.basename(sourcePath),
+          name: sourcePath.split(/[\\/]/).pop() || 'image',
           mediaType: info.mediaType,
           byteSize: bytes.length,
           width: info.width,
           height: info.height,
-          storageKey,
+          storageKey: id,
         })) as StagedAttachment;
       } catch (error) {
-        await fs
-          .unlink(path.join(storageDirectory(), storageKey))
-          .catch(() => {});
+        inMemoryImages.delete(id);
         throw error;
       }
     };
@@ -192,13 +183,7 @@ export default class ChatImageAttachmentService {
         createdAt: image.createdAt,
       }));
     } catch (error) {
-      await Promise.all(
-        staged.map((image) =>
-          fs
-            .unlink(path.join(storageDirectory(), image.storageKey))
-            .catch(() => {}),
-        ),
-      );
+      await deleteStoredImages(staged.map((image) => image.storageKey));
       throw error;
     }
   }
@@ -207,9 +192,12 @@ export default class ChatImageAttachmentService {
     storageKey: string;
     mediaType: string;
   }): Promise<Uint8Array> {
-    const bytes = await fs.readFile(
-      path.join(storageDirectory(), attachment.storageKey),
-    );
+    const bytes = inMemoryImages.get(attachment.storageKey);
+    if (!bytes) {
+      throw new Error(
+        'This image is only available while the current app session is open.',
+      );
+    }
     assertImageInfo(bytes);
     return bytes;
   }
@@ -227,9 +215,8 @@ export default class ChatImageAttachmentService {
     if (attachment.conversationId !== conversationId) {
       throw new Error('Image attachment not found.');
     }
-    const bytes = await fs.readFile(
-      path.join(storageDirectory(), attachment.storageKey),
-    );
+    const bytes = inMemoryImages.get(attachment.storageKey);
+    if (!bytes) throw new Error('Image attachment not found.');
     assertImageInfo(bytes);
     const dataUrl = `data:${attachment.mediaType};base64,${bytes.toString('base64')}`;
     return { dataUrl, mediaType: attachment.mediaType };
