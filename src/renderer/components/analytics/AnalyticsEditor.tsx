@@ -36,12 +36,14 @@ import MonacoEditor from '@monaco-editor/react';
 import SplitPane, { Pane } from 'split-pane-react';
 import 'split-pane-react/esm/themes/default.css';
 import * as monaco from 'monaco-editor';
+import { MonacoAutocompleteSQLKeywords } from '../../config/constants';
 import {
   useGetAnalyticsPages,
   useUpdateAnalyticsPage,
 } from '../../controllers/analyticsPages.controller';
 import { useListIcebergInstances } from '../../controllers/icebergDatalake.controller';
 import { useSchemaForConnection, useMonacoAutocomplete } from '../../hooks';
+import { icebergQualifiedName } from '../../services/iceberg.service';
 import {
   executeAnalyticsQuery,
   resolveQueryDependencies,
@@ -214,10 +216,40 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
 
   // ── Schema for SQL autocomplete ───────────────────────────────────────
   const { data: schemaData } = useSchemaForConnection(connectionId);
-  const completions = useMonacoAutocomplete(
+  const baseCompletions = useMonacoAutocomplete(
     schemaData?.tables || null,
     schemaData?.duckLakeSchema || null,
   );
+  const completions = useMemo(() => {
+    if (!isIcebergConnection) return baseCompletions;
+
+    return [
+      ...MonacoAutocompleteSQLKeywords.map((keyword) => ({
+        label: keyword,
+        insertText: keyword,
+        kind: monaco.languages.CompletionItemKind.Keyword,
+        detail: 'SQL keyword',
+      })),
+      ...(schemaData?.tables ?? []).flatMap((table) => [
+        {
+          label: `iceberg.${table.schema}.${table.name}`,
+          insertText: icebergQualifiedName(table.schema, table.name),
+          kind: monaco.languages.CompletionItemKind.Class,
+          detail: 'Iceberg table',
+        },
+        ...table.columns.map((column) => ({
+          label: `iceberg.${table.schema}.${table.name}.${column.name}`,
+          insertText: icebergQualifiedName(
+            table.schema,
+            table.name,
+            column.name,
+          ),
+          kind: monaco.languages.CompletionItemKind.Field,
+          detail: 'Iceberg column',
+        })),
+      ]),
+    ];
+  }, [baseCompletions, isIcebergConnection, schemaData]);
 
   // Keep the singleton ref updated so the provider always uses fresh completions
   useEffect(() => {
