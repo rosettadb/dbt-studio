@@ -396,6 +396,12 @@ export type IcebergChannels =
   | 'iceberg:createMetadataFile'
   | 'iceberg:ensureInstalled';
 
+export type BackupChannels =
+  | 'backup:export'
+  | 'backup:import'
+  | 'backup:import:select'
+  | 'backup:import:result';
+
 export type LineageChannels =
   | 'lineage:getUpstream'
   | 'lineage:getDownstream'
@@ -580,7 +586,8 @@ export type Channels =
   | FlowfileChannels
   | PipelineTemplatesChannels
   | SecondBrainChannels
-  | IcebergChannels;
+  | IcebergChannels
+  | BackupChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;
