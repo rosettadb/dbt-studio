@@ -14,6 +14,24 @@ const TEST_RUNNER_IMAGE = process.env.TEST_RUNNER_IMAGE || 'e2e-test-runner:late
 const NPM_CACHE_VOLUME = 'e2e-runner-npm-cache';
 const PLAYWRIGHT_CACHE_VOLUME = 'e2e-runner-playwright-cache';
 
+const activeContainers = new Map(); // runId -> dockerode container
+const cancelledRuns = new Set();
+
+// Stops a run's container if it's currently active. Returns false if the
+// run isn't in this map (already finished, or never started — the caller
+// should try queue.cancelQueued for that case instead).
+async function cancelRun(runId) {
+  const container = activeContainers.get(runId);
+  if (!container) return false;
+  cancelledRuns.add(runId);
+  try {
+    await container.stop({ t: 5 }); // SIGTERM, then SIGKILL after 5s if still stuck
+  } catch (_) {
+    // already stopped/removed
+  }
+  return true;
+}
+
 function runDir(runId) {
   const dir = path.join(db.dataDir, 'runs', String(runId));
   fs.mkdirSync(dir, { recursive: true });
@@ -89,6 +107,7 @@ async function executeRun(run) {
       },
     });
     container.__runId = runId;
+    activeContainers.set(runId, container);
 
     const attachStream = await container.attach({ stream: true, stdout: true, stderr: true });
     const stdoutSplitter = lineSplitter((line) => log(redact(line)));
@@ -102,19 +121,22 @@ async function executeRun(run) {
 
     await extractReport(container, dir);
 
-    const status = exitCode === 0 ? 'passed' : 'failed';
+    const wasCancelled = cancelledRuns.delete(runId);
+    const status = wasCancelled ? 'cancelled' : exitCode === 0 ? 'passed' : 'failed';
     db.updateRun(runId, {
       status,
       exit_code: exitCode,
       finished_at: new Date().toISOString(),
     });
     emitStatus(runId, status);
-    log(`[runner] run finished with exit code ${exitCode}`);
+    log(`[runner] run ${wasCancelled ? 'cancelled' : `finished with exit code ${exitCode}`}`);
   } catch (err) {
     log(`[runner] error: ${redact(err.message)}`);
     db.updateRun(runId, { status: 'error', finished_at: new Date().toISOString() });
     emitStatus(runId, 'error');
   } finally {
+    activeContainers.delete(runId);
+    cancelledRuns.delete(runId);
     logStream.end();
     if (container) {
       try {
@@ -126,4 +148,4 @@ async function executeRun(run) {
   }
 }
 
-module.exports = { executeRun };
+module.exports = { executeRun, cancelRun };

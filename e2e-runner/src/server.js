@@ -6,9 +6,11 @@ const express = require('express');
 
 const db = require('./db');
 const { listBranches } = require('./git');
-const { executeRun } = require('./runner');
-const { enqueue } = require('./queue');
-const { emitter, getBuffer } = require('./logBus');
+const { executeRun, cancelRun } = require('./runner');
+const { enqueue, cancelQueued } = require('./queue');
+const { emitter, getBuffer, emitStatus } = require('./logBus');
+
+const TERMINAL_STATUSES = ['passed', 'failed', 'error', 'cancelled'];
 
 const app = express();
 app.use(express.json());
@@ -38,8 +40,34 @@ app.post('/api/runs', (req, res) => {
     return res.status(400).json({ error: 'branch is required' });
   }
   const run = db.createRun(branch);
-  enqueue(() => executeRun(run));
+  enqueue(run.id, () => executeRun(run));
   res.status(201).json({ run });
+});
+
+app.post('/api/runs/:id/cancel', async (req, res) => {
+  const runId = Number(req.params.id);
+  const run = db.getRun(runId);
+  if (!run) return res.status(404).json({ error: 'not found' });
+  if (TERMINAL_STATUSES.includes(run.status)) {
+    return res.status(409).json({ error: `run already ${run.status}` });
+  }
+
+  if (cancelQueued(runId)) {
+    const updated = db.updateRun(runId, {
+      status: 'cancelled',
+      finished_at: new Date().toISOString(),
+    });
+    emitStatus(runId, 'cancelled');
+    return res.json({ run: updated });
+  }
+
+  const stopped = await cancelRun(runId);
+  if (!stopped) {
+    return res.status(409).json({ error: 'run is finishing up, could not cancel in time' });
+  }
+  // executeRun's own finally block updates status to "cancelled" once the
+  // container actually stops; the client picks that up over the SSE stream.
+  res.json({ run: db.getRun(runId) });
 });
 
 app.get('/api/runs/:id/stream', (req, res) => {
@@ -52,7 +80,16 @@ app.get('/api/runs/:id/stream', (req, res) => {
   });
   res.flushHeaders();
 
-  getBuffer(runId).forEach((line) => {
+  // Replay past output: prefer the in-memory buffer, but fall back to the
+  // log file on disk so a run's history survives a server restart.
+  let pastLines = getBuffer(runId);
+  if (pastLines.length === 0) {
+    const logPath = path.join(db.dataDir, 'runs', String(runId), 'output.log');
+    if (fs.existsSync(logPath)) {
+      pastLines = fs.readFileSync(logPath, 'utf8').split('\n').filter(Boolean);
+    }
+  }
+  pastLines.forEach((line) => {
     res.write(`event: log\ndata: ${JSON.stringify(line)}\n\n`);
   });
 

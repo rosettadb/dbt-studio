@@ -6,9 +6,19 @@ const liveBranch = document.getElementById('live-branch');
 const liveStatus = document.getElementById('live-status');
 const liveLog = document.getElementById('live-log');
 const liveReport = document.getElementById('live-report');
+const liveStop = document.getElementById('live-stop');
 const historyBody = document.querySelector('#history tbody');
 
 let currentStream = null;
+let currentRunId = null;
+
+const TERMINAL_STATUSES = ['passed', 'failed', 'error', 'cancelled'];
+const ACTIVE_STATUSES = ['queued', 'running'];
+
+async function cancelRun(id) {
+  await fetch(`/api/runs/${id}/cancel`, { method: 'POST' });
+  loadHistory();
+}
 
 async function loadBranches() {
   const res = await fetch('/api/branches');
@@ -48,19 +58,41 @@ async function loadHistory() {
         <td><span class="badge ${r.status}">${r.status}</span></td>
         <td>${r.started_at || '—'}</td>
         <td>${formatDuration(r)}</td>
+        <td>
+          <button class="link-btn" data-view-logs="${r.id}">Logs</button>
+          ${
+            TERMINAL_STATUSES.includes(r.status)
+              ? `<a href="/api/runs/${r.id}/report/" target="_blank">Report</a>`
+              : `<button class="link-btn danger" data-stop="${r.id}">Stop</button>`
+          }
+        </td>
       </tr>`,
     )
     .join('');
 }
 
+historyBody.addEventListener('click', async (e) => {
+  const viewId = e.target.dataset.viewLogs;
+  if (viewId) {
+    const res = await fetch(`/api/runs/${viewId}`);
+    const { run } = await res.json();
+    watchRun(run);
+    return;
+  }
+  const stopId = e.target.dataset.stop;
+  if (stopId) cancelRun(stopId);
+});
+
 function watchRun(run) {
   if (currentStream) currentStream.close();
 
+  currentRunId = run.id;
   live.classList.remove('hidden');
   liveId.textContent = run.id;
   liveBranch.textContent = run.branch;
   liveLog.textContent = '';
   liveReport.classList.add('hidden');
+  liveStop.classList.toggle('hidden', !ACTIVE_STATUSES.includes(run.status));
   setStatusBadge(liveStatus, run.status);
 
   const stream = new EventSource(`/api/runs/${run.id}/stream`);
@@ -74,13 +106,18 @@ function watchRun(run) {
   stream.addEventListener('status', (e) => {
     const status = JSON.parse(e.data);
     setStatusBadge(liveStatus, status);
-    if (['passed', 'failed', 'error'].includes(status)) {
+    liveStop.classList.toggle('hidden', !ACTIVE_STATUSES.includes(status));
+    if (TERMINAL_STATUSES.includes(status)) {
       liveReport.href = `/api/runs/${run.id}/report/`;
       liveReport.classList.remove('hidden');
       loadHistory();
     }
   });
 }
+
+liveStop.addEventListener('click', () => {
+  if (currentRunId) cancelRun(currentRunId);
+});
 
 runBtn.addEventListener('click', async () => {
   const branch = branchSelect.value;

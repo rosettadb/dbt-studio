@@ -5,25 +5,35 @@
 
 const MAX_CONCURRENT_RUNS = Math.max(1, Number(process.env.MAX_CONCURRENT_RUNS) || 1);
 
-const pending = [];
+const pending = []; // { id, job }
 let active = 0;
 
-function enqueue(job) {
-  pending.push(job);
+function enqueue(id, job) {
+  pending.push({ id, job });
   drain();
+}
+
+// Removes a job that hasn't started yet. Returns true if it was found and
+// removed — false means it's already running (or finished), and the caller
+// needs to stop it a different way.
+function cancelQueued(id) {
+  const index = pending.findIndex((entry) => entry.id === id);
+  if (index === -1) return false;
+  pending.splice(index, 1);
+  return true;
 }
 
 async function drain() {
   if (active >= MAX_CONCURRENT_RUNS) return;
-  const job = pending.shift();
-  if (!job) return;
+  const entry = pending.shift();
+  if (!entry) return;
   active += 1;
   try {
-    await job();
+    await entry.job();
   } finally {
     active -= 1;
     drain();
   }
 }
 
-module.exports = { enqueue, MAX_CONCURRENT_RUNS };
+module.exports = { enqueue, cancelQueued, MAX_CONCURRENT_RUNS };

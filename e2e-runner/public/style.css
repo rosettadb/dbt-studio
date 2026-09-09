@@ -68,3 +68,25 @@ th { color: #9aa1ac; font-weight: 500; }
 .badge.passed { background: #0d3b23; color: #6bdc9c; }
 .badge.failed { background: #4a1414; color: #ff8f8f; }
 .badge.error { background: #4a1414; color: #ff8f8f; }
+.badge.cancelled { background: #2e333d; color: #b7bcc4; }
+
+td .link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #6ea8fe;
+  font-size: 0.85rem;
+}
+td .link-btn:hover { text-decoration: underline; background: none; }
+td a { color: #6ea8fe; margin-left: 0.75rem; }
+td a:first-child { margin-left: 0; }
+
+.link-btn.danger { color: #ff8f8f; }
+
+#live-stop {
+  margin-top: 0.75rem;
+  background: #4a1414;
+  color: #ff8f8f;
+  border-color: #6b1f1f;
+}
+#live-stop:hover { background: #5c1a1a; }
