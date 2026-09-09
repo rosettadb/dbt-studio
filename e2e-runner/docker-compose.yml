@@ -1,0 +1,19 @@
+services:
+  e2e-runner:
+    build: .
+    image: e2e-runner:latest
+    ports:
+      - '4300:4300'
+    environment:
+      - GIT_REPO_URL=${GIT_REPO_URL}
+      - GIT_USERNAME=${GIT_USERNAME}
+      - GIT_TOKEN=${GIT_TOKEN}
+      - TEST_RUNNER_IMAGE=${TEST_RUNNER_IMAGE:-e2e-test-runner:latest}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/app/data
+    restart: unless-stopped
+
+volumes:
+  e2e-runner-npm-cache:
+  e2e-runner-playwright-cache:

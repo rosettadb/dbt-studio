@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>E2E Runner</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>E2E Runner</h1>
+      <div class="trigger">
+        <select id="branch-select"><option>Loading branches…</option></select>
+        <button id="run-btn" disabled>Run tests</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="live" class="hidden">
+        <h2>
+          Run #<span id="live-id"></span> — <span id="live-branch"></span>
+          <span id="live-status" class="badge"></span>
+        </h2>
+        <pre id="live-log"></pre>
+        <a id="live-report" class="hidden" href="#" target="_blank">Open Playwright report</a>
+      </section>
+
+      <section>
+        <h2>History</h2>
+        <table id="history">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Branch</th>
+              <th>Commit</th>
+              <th>Status</th>
+              <th>Started</th>
+              <th>Duration</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
