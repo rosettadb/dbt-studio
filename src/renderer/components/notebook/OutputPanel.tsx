@@ -578,10 +578,7 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
 
   // Table output - use CustomTable with pagination
   const columns = output.columns || [];
-  const hasPagination =
-    !connectionId.startsWith('iceberg-') &&
-    output.totalRows !== undefined &&
-    output.totalRows > 10;
+  const hasPagination = output.totalRows !== undefined && output.totalRows > 10;
 
   // Custom pagination for large datasets
   const customPagination = hasPagination
@@ -841,13 +838,6 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
 
   return (
     <Box sx={{ width: '100%', mt: 0.5 }}>
-      {output.truncated && (
-        <Typography role="status" sx={{ p: 1 }} color="warning.main">
-          Showing only the first {output.data?.length ?? 0} rows. Displayed
-          results and JSON/CSV exports are limited to these rows. Refine and
-          rerun the query for other rows.
-        </Typography>
-      )}
       {viewMode === 'chart' ? (
         <Box
           ref={chartContainerRef}

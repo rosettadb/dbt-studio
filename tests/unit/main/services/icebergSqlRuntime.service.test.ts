@@ -182,6 +182,57 @@ describe('IcebergDatalakeService DuckDB Iceberg lifecycle', () => {
     expect(result.rows).toEqual([{ Id: 1, Keywords: 'iceberg' }]);
   });
 
+  it('pages Iceberg reads in DuckDB and returns the total row count', async () => {
+    mockedLoadDatabase.mockResolvedValue({
+      ...database,
+      icebergInstances: [
+        {
+          ...instance,
+          sqlAccessVerifiedAt: '2026-08-14T00:00:00.000Z',
+          sqlRuntimeFingerprint: (
+            IcebergDatalakeService as any
+          ).getSqlRuntimeFingerprint(),
+        },
+      ],
+    });
+    mockRunAndReadAll
+      .mockResolvedValueOnce({
+        getRowObjectsJson: () => [
+          {
+            ast: JSON.stringify({
+              error: false,
+              statements: [{ node: { type: 'SELECT_NODE' } }],
+            }),
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ getRowObjectsJson: () => [{ count: 20_000 }] });
+    mockRunAndReadUntil.mockResolvedValue({
+      columnNames: () => ['id'],
+      getRowObjectsJson: () => [{ id: 11 }],
+      rowsChanged: 0,
+      done: true,
+    });
+
+    await expect(
+      IcebergDatalakeService.executeSql({
+        instanceId: instance.id,
+        executionId: 'page-2',
+        sql: 'SELECT * FROM iceberg.sales.orders',
+        pageLimit: 10,
+        pageOffset: 10,
+      }),
+    ).resolves.toMatchObject({
+      rows: [{ id: 11 }],
+      totalRows: 20_000,
+      truncated: false,
+    });
+    expect(mockRunAndReadUntil).toHaveBeenCalledWith(
+      'SELECT * FROM (SELECT * FROM iceberg.sales.orders) AS iceberg_page LIMIT 10 OFFSET 10',
+      10,
+    );
+  });
+
   it('verifies with temporary secrets, attach, detach, and cleanup', async () => {
     const result = await IcebergDatalakeService.verifySqlAccess(instance.id);
 

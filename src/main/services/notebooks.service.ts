@@ -272,6 +272,8 @@ export class NotebooksService {
     notebookId: string,
     cellId: string,
     sql: string,
+    limit?: number,
+    offset?: number,
     options?: NotebookExecutionOptions,
   ): Promise<CellOutput> {
     const executionId = options?.executionId ?? `notebook-${uuidv4()}`;
@@ -300,7 +302,7 @@ export class NotebooksService {
           instanceId: connectionId.slice(8),
           executionId,
           sql,
-          maxRows: MAX_STORED_ROWS,
+          ...sanitizePagination(limit, offset),
           mutationConfirmed: options?.mutationConfirmed,
         },
         run.signal,
@@ -312,8 +314,9 @@ export class NotebooksService {
         truncated: result.truncated,
         rowCount:
           result.statementClass === 'select'
-            ? result.rows.length
+            ? (result.totalRows ?? result.rows.length)
             : result.rowsChanged,
+        totalRows: result.totalRows,
         statementClass: result.statementClass,
         executionTime: Date.now() - started,
       };
@@ -845,6 +848,8 @@ export class NotebooksService {
         notebookId,
         cellId,
         sql,
+        limit,
+        offset,
         options,
       );
     }
@@ -1024,11 +1029,6 @@ export class NotebooksService {
     limit: number,
     offset: number,
   ): Promise<CellOutput> {
-    if (connectionId.startsWith('iceberg-')) {
-      throw new Error(
-        'ICEBERG_NOTEBOOK_BOUNDED_RESULTS: Refine and rerun the original query.',
-      );
-    }
     try {
       const startTime = Date.now();
 
@@ -1052,6 +1052,24 @@ export class NotebooksService {
       let totalRows: number | undefined;
 
       // Execute query based on connection type
+      if (connectionId.startsWith('iceberg-')) {
+        const icebergResult = await IcebergDatalakeService.executeSql({
+          instanceId: connectionId.slice(8),
+          executionId: `notebook-page-${uuidv4()}`,
+          sql,
+          pageLimit,
+          pageOffset,
+        });
+        return {
+          type: icebergResult.rows.length ? 'table' : 'empty',
+          data: icebergResult.rows,
+          columns: icebergResult.columns,
+          rowCount: icebergResult.rows.length,
+          totalRows: icebergResult.totalRows,
+          executionTime: Date.now() - startTime,
+        };
+      }
+
       if (connectionId.startsWith('ducklake-')) {
         const instanceId = connectionId.replace('ducklake-', '');
 
@@ -1186,6 +1204,8 @@ export class NotebooksService {
         notebookId,
         cellRun.cellId,
         cellRun.sql,
+        undefined,
+        undefined,
         cellRun,
       );
       if (output.type === 'error') throw new Error(output.error);

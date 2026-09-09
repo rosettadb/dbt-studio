@@ -209,6 +209,9 @@ export interface IcebergSqlExecutionParams {
   executionId: string;
   sql: string;
   maxRows?: number;
+  /** Bounded server-side page for a read query. */
+  pageLimit?: number;
+  pageOffset?: number;
   validateOnly?: boolean;
   mutationConfirmed?: boolean;
 }
@@ -220,6 +223,7 @@ export interface IcebergSqlExecutionResult {
   rows: Array<Record<string, unknown>>;
   rowsChanged: number;
   truncated: boolean;
+  totalRows?: number;
 }
 
 export interface IcebergSqlSchemaInfo {

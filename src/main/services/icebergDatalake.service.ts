@@ -1774,11 +1774,49 @@ export class IcebergDatalakeService {
     if (statementClass !== 'select' && params.mutationConfirmed !== true) {
       throw new Error('ICEBERG_SQL_CONFIRMATION_REQUIRED');
     }
+    const hasPageRequest =
+      params.pageLimit !== undefined || params.pageOffset !== undefined;
+    if (hasPageRequest && statementClass !== 'select') {
+      throw new Error('ICEBERG_SQL_PAGINATION_REQUIRES_SELECT');
+    }
+    const pageLimit = params.pageLimit ?? 10;
+    const pageOffset = params.pageOffset ?? 0;
+    if (
+      hasPageRequest &&
+      (!Number.isInteger(pageLimit) ||
+        pageLimit <= 0 ||
+        !Number.isInteger(pageOffset) ||
+        pageOffset < 0)
+    ) {
+      throw new Error('ICEBERG_SQL_PAGINATION_INVALID');
+    }
     const maxRows = Math.max(1, Math.min(params.maxRows ?? 1000, 5000));
     return IcebergDatalakeService.withAttachedSqlCatalog(
       params.instanceId,
       params.executionId,
       async (connection) => {
+        if (hasPageRequest) {
+          const boundedLimit = Math.min(pageLimit, 1000);
+          const baseSql = params.sql.trim().replace(/;+$/, '');
+          const pageSql = `SELECT * FROM (${baseSql}) AS iceberg_page LIMIT ${boundedLimit} OFFSET ${pageOffset}`;
+          const countSql = `SELECT COUNT(*) AS count FROM (${baseSql}) AS iceberg_count`;
+          const countReader = await connection.runAndReadAll(countSql);
+          const reader = await connection.runAndReadUntil(
+            pageSql,
+            boundedLimit,
+          );
+          const count = countReader.getRowObjectsJson()[0]?.count;
+          return {
+            executionId: params.executionId,
+            statementClass,
+            columns: reader.columnNames(),
+            rows: reader.getRowObjectsJson() as Array<Record<string, unknown>>,
+            rowsChanged: Number(reader.rowsChanged ?? 0),
+            truncated: false,
+            totalRows:
+              typeof count === 'bigint' ? Number(count) : Number(count ?? 0),
+          };
+        }
         const reader = await connection.runAndReadUntil(
           params.sql,
           maxRows + 1,

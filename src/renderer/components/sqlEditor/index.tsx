@@ -154,7 +154,8 @@ export const SqlEditor: React.FC<Props> = ({
             instanceId: icebergInstanceId,
             executionId: queryId,
             sql: selectedQuery,
-            maxRows: 1000,
+            pageLimit: 10,
+            pageOffset: 0,
           },
           (statementClass) => {
             // eslint-disable-next-line no-alert
@@ -175,7 +176,7 @@ export const SqlEditor: React.FC<Props> = ({
           fields: icebergResult.columns.map((name) => ({ name, type: 0 })),
           rowCount:
             icebergResult.statementClass === 'select'
-              ? icebergResult.rows.length
+              ? (icebergResult.totalRows ?? icebergResult.rows.length)
               : icebergResult.rowsChanged,
         };
       } else if (isDuckLakeConnection && instanceId) {

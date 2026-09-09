@@ -30,13 +30,14 @@ describe('NotebooksService Iceberg execution', () => {
       .mockResolvedValue(undefined);
   });
 
-  it('executes the original cell through the shared bounded Iceberg runtime', async () => {
+  it('executes the original cell through the paginated Iceberg runtime', async () => {
     executeSql.mockResolvedValue({
       statementClass: 'select',
       rows: [{ id: 1 }],
       columns: ['id'],
       rowsChanged: 0,
-      truncated: true,
+      truncated: false,
+      totalRows: 1_001,
     });
 
     const output = await NotebooksService.runCell(
@@ -54,14 +55,16 @@ describe('NotebooksService Iceberg execution', () => {
         instanceId: 'instance-1',
         executionId: 'cell-run',
         sql: 'SELECT * FROM iceberg.sales.orders',
-        maxRows: 100,
+        pageLimit: 10,
+        pageOffset: 20,
         mutationConfirmed: undefined,
       },
       expect.any(AbortSignal),
     );
     expect(output).toMatchObject({
       type: 'table',
-      truncated: true,
+      truncated: false,
+      totalRows: 1_001,
       statementClass: 'select',
     });
   });

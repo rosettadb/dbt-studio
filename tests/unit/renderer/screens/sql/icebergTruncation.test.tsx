@@ -18,8 +18,8 @@ jest.mock('../../../../../src/renderer/services/duckLake.service', () => ({
   DuckLakeService: {},
 }));
 
-describe('SQL result truncation notice', () => {
-  it('shows that displayed rows and exports are incomplete', () => {
+describe('SQL result pagination', () => {
+  it('does not present a fixed-result limit warning', () => {
     render(
       <QueryResult
         results={{
@@ -30,12 +30,7 @@ describe('SQL result truncation notice', () => {
         }}
       />,
     );
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      'Showing only the first 1 rows',
-    );
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      'exports are limited to these rows',
-    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
   it('does not change the display of complete results', () => {
     render(

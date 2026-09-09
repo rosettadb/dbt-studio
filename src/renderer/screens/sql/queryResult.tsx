@@ -3,7 +3,6 @@ import { toast } from 'react-toastify';
 import { styled } from '@mui/material/styles';
 import {
   Box,
-  Alert,
   Backdrop,
   CircularProgress,
   Typography,
@@ -32,6 +31,7 @@ import { QueryResultVisualization } from '../../components/queryResult/queryVisu
 import { CustomTable } from '../../components/customTable';
 import { underscoreToTitleCase } from '../../helpers/utils';
 import { DuckLakeService } from '../../services/duckLake.service';
+import * as icebergService from '../../services/iceberg.service';
 
 const SuccessContainer = styled(Box)(({ theme }) => ({
   backgroundColor: theme.palette.background.paper,
@@ -84,6 +84,10 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
     !!originalSql;
 
   const isDuckLakeReady = !isDuckLake || exportContext?.duckLakeReady !== false;
+  const icebergInstanceId = exportContext?.connectionId?.startsWith('iceberg-')
+    ? exportContext.connectionId.slice(8)
+    : undefined;
+  const isIceberg = !!icebergInstanceId && !!originalSql;
 
   const [columns, setColumns] = React.useState<string[]>(
     results.fields?.map((f) => f.name) ?? [],
@@ -107,8 +111,8 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
 
   const fetchPage = React.useCallback(
     async (newPage: number, newPerPage: number) => {
-      if (!isDuckLake) return;
-      if (!exportContext?.duckLakeInstanceId || !originalSql) return;
+      if (!isDuckLake && !isIceberg) return;
+      if (!originalSql) return;
 
       fetchSeqRef.current += 1;
       const seq = fetchSeqRef.current;
@@ -116,25 +120,45 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
       try {
         setLoading(true);
         setFetchError(null);
-        const res = await DuckLakeService.executeQuery({
-          instanceId: exportContext.duckLakeInstanceId,
-          query: originalSql,
-          limit: newPerPage,
-          offset: newPage * newPerPage,
-        });
+        const res = isIceberg
+          ? await icebergService.executeIcebergSql({
+              instanceId: icebergInstanceId!,
+              executionId: `sql-page-${Date.now()}-${newPage}`,
+              sql: originalSql,
+              pageLimit: newPerPage,
+              pageOffset: newPage * newPerPage,
+            })
+          : await DuckLakeService.executeQuery({
+              instanceId: exportContext!.duckLakeInstanceId!,
+              query: originalSql,
+              limit: newPerPage,
+              offset: newPage * newPerPage,
+            });
         if (seq !== fetchSeqRef.current) return;
-        if (!res?.success) {
-          const message = res?.error || 'Failed to fetch page data';
+        if (!isIceberg && !(res as { success?: boolean }).success) {
+          const message = (res as any)?.error || 'Failed to fetch page data';
           // eslint-disable-next-line no-console
           console.error('[QueryResult] DuckLake page fetch failed:', message);
           toast.error(message);
           setFetchError(message);
           return;
         }
-        setColumns(res.fields?.map((f) => f.name) ?? []);
-        setRows(res.data ?? []);
-        if (typeof res.rowCount === 'number') {
-          setTotalCount(res.rowCount);
+        if (isIceberg) {
+          const icebergResult = res as Awaited<
+            ReturnType<typeof icebergService.executeIcebergSql>
+          >;
+          setColumns(icebergResult.columns);
+          setRows(icebergResult.rows);
+          setTotalCount(icebergResult.totalRows ?? icebergResult.rows.length);
+        } else {
+          const duckLakeResult = res as Awaited<
+            ReturnType<typeof DuckLakeService.executeQuery>
+          >;
+          setColumns(duckLakeResult.fields?.map((f) => f.name) ?? []);
+          setRows(duckLakeResult.data ?? []);
+          if (typeof duckLakeResult.rowCount === 'number') {
+            setTotalCount(duckLakeResult.rowCount);
+          }
         }
       } catch (e: any) {
         if (seq !== fetchSeqRef.current) return;
@@ -147,7 +171,13 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
         }
       }
     },
-    [isDuckLake, exportContext?.duckLakeInstanceId, originalSql],
+    [
+      isDuckLake,
+      isIceberg,
+      icebergInstanceId,
+      exportContext?.duckLakeInstanceId,
+      originalSql,
+    ],
   );
 
   React.useEffect(() => {
@@ -159,7 +189,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
       results.isCommand ||
       ((!results.fields || results.fields.length === 0) && results.success);
 
-    if (isDuckLake && !isCmd) {
+    if ((isDuckLake || isIceberg) && !isCmd) {
       setTotalCount(baseTotal);
       setPage(0);
       if (isDuckLakeReady) {
@@ -175,10 +205,10 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
     // We intentionally only respond to new results / connection type;
     // perPage changes are handled via customPagination.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [results, isDuckLake, isDuckLakeReady, fetchPage]);
+  }, [results, isDuckLake, isIceberg, isDuckLakeReady, fetchPage]);
 
   const customPagination = React.useMemo(() => {
-    if (!isDuckLake) return undefined;
+    if (!isDuckLake && !isIceberg) return undefined;
     return {
       page,
       setPage: (p: number) => {
@@ -205,6 +235,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
     };
   }, [
     isDuckLake,
+    isIceberg,
     isDuckLakeReady,
     page,
     perPage,
@@ -863,12 +894,6 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
         overflow: 'hidden',
       }}
     >
-      {results.truncated && (
-        <Alert severity="info" sx={{ mb: 1 }}>
-          Showing only the first {results.data?.length ?? 0} rows. Results and
-          exports are limited to these rows. Refine the query to see other rows.
-        </Alert>
-      )}
       {viewMode === 'chart' ? (
         <Box
           ref={chartContainerRef}
