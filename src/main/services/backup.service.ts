@@ -165,6 +165,21 @@ async function addDirectoryToArchive(
   }
 }
 
+// ─── Security helpers ────────────────────────────────────────────────────────
+
+/**
+ * Resolves `segments` relative to `base` and returns the absolute path only
+ * if it stays inside `base`. Returns null for any path that would escape
+ * (e.g. containing ".." segments or an absolute path in the ZIP entry name).
+ */
+function resolveWithin(base: string, ...segments: string[]): string | null {
+  const resolvedBase = path.resolve(base);
+  const target = path.resolve(resolvedBase, ...segments);
+  const rel = path.relative(resolvedBase, target);
+  if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) return null;
+  return target;
+}
+
 // ─── Service ─────────────────────────────────────────────────────────────────
 
 export default class BackupService {
@@ -584,13 +599,12 @@ export default class BackupService {
       );
       if (Array.isArray(analyticsData)) {
         let importedCount = 0;
-        try {
-          const existingPages =
-            await MainDatabaseService.getAllAnalyticsPages();
-          const existingIds = new Set(existingPages.map((p: any) => p.id));
+        const existingPages = await MainDatabaseService.getAllAnalyticsPages();
+        const existingIds = new Set(existingPages.map((p: any) => p.id));
 
-          for (const p of analyticsData) {
-            if (!existingIds.has(p.id)) {
+        for (const p of analyticsData) {
+          if (!existingIds.has(p.id)) {
+            try {
               await MainDatabaseService.importAnalyticsPage({
                 id: p.id,
                 connectionId: p.connectionId,
@@ -601,11 +615,14 @@ export default class BackupService {
                 updatedAt: p.updatedAt,
               });
               importedCount += 1;
+            } catch (err) {
+              result.warnings.push(
+                `Skipped analytics page "${p.title ?? p.id}": ${err instanceof Error ? err.message : err}`,
+              );
             }
           }
-        } catch (err) {
-          result.warnings.push(`Failed to import some Analytics pages: ${err}`);
         }
+
         if (importedCount > 0) result.imported.analytics = importedCount;
       }
       reportProgress();
@@ -707,7 +724,16 @@ export default class BackupService {
         for (const proj of projectsData) {
           // ZIP entry prefix always uses forward slashes (ZIP spec)
           const zipPrefix = `Projects/${proj.name}/`;
-          const projectDest = path.resolve(targetBaseDir, proj.name);
+          const projectDest = resolveWithin(targetBaseDir, proj.name);
+
+          // Skip projects whose name would escape the target directory
+          if (!projectDest) {
+            result.warnings.push(
+              `Skipped project "${proj.name}": unsafe path.`,
+            );
+            // eslint-disable-next-line no-continue
+            continue;
+          }
 
           // Only extract files if the folder doesn't exist yet on this machine.
           // If it already exists, the project is already there — just register the path.
@@ -729,11 +755,20 @@ export default class BackupService {
                   const zipRelativePath = normalizedZipName.substring(
                     zipPrefix.length,
                   );
-                  // Split on '/' (posix ZIP) and use path.join to reconstruct OS-native path
-                  const fileDest = path.resolve(
+                  // Resolve within projectDest — skip entries that escape it
+                  const fileDest = resolveWithin(
                     projectDest,
                     ...zipRelativePath.split('/'),
                   );
+
+                  if (!fileDest) {
+                    // eslint-disable-next-line no-console
+                    console.warn(
+                      `[BackupService] Skipping unsafe entry: ${entry.entryName}`,
+                    );
+                    // eslint-disable-next-line no-continue
+                    continue;
+                  }
 
                   try {
                     fs.mkdirSync(path.dirname(fileDest), { recursive: true });
@@ -807,7 +842,17 @@ export default class BackupService {
         // split on '/' and re-join with path.join so the result is OS-native.
         const zipRelPath = entry.entryName.split(path.sep).join('/');
         const relPath = zipRelPath.substring(NOTEBOOKS_PREFIX.length);
-        const destPath = path.join(NOTEBOOKS_DIR, ...relPath.split('/'));
+        const destPath = resolveWithin(NOTEBOOKS_DIR, ...relPath.split('/'));
+
+        // Skip entries that would escape the notebooks directory
+        if (!destPath) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[BackupService] Skipping unsafe notebook entry: ${entry.entryName}`,
+          );
+          // eslint-disable-next-line no-continue
+          continue;
+        }
 
         let dataBuf: Buffer | null = null;
         if (password) {

@@ -151,6 +151,9 @@ export const BackupSettings: React.FC = () => {
 
   const exportTaskIdRef = React.useRef<string | null>(null);
   const importTaskIdRef = React.useRef<string | null>(null);
+  // Tracks task IDs whose result has already been processed to prevent the
+  // task:event listener and the immediate poll from both handling the same import.
+  const handledImportTaskIds = React.useRef<Set<string>>(new Set());
 
   React.useEffect(() => {
     exportTaskIdRef.current = exportTaskId;
@@ -194,6 +197,8 @@ export const BackupSettings: React.FC = () => {
             setImportProgress(task.progress.percentage);
           }
           if (task.status === 'completed') {
+            if (handledImportTaskIds.current.has(task.id)) return;
+            handledImportTaskIds.current.add(task.id);
             window.electron.ipcRenderer
               .invoke('backup:import:result', { taskId: task.id })
               .then((meta: any) => {
@@ -323,7 +328,7 @@ export const BackupSettings: React.FC = () => {
         'backup:import',
         {
           filePath: selectedImportPath,
-          password: importPassword || undefined,
+          password: importPassword.trim() || undefined,
         },
       );
 
@@ -340,7 +345,9 @@ export const BackupSettings: React.FC = () => {
       );
 
       if (meta?.status === 'completed' && meta?.result) {
-        // Task already finished successfully
+        // Task already finished successfully — only handle if not already done by task:event
+        if (handledImportTaskIds.current.has(response.taskId)) return;
+        handledImportTaskIds.current.add(response.taskId);
         setImportTaskId(null);
         setImportProgress(100);
         setImportResult(meta.result);
