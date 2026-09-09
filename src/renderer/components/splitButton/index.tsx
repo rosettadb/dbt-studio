@@ -23,6 +23,11 @@ type Props = {
   leftIcon?: React.ReactNode;
   tooltipTitle?: string;
   height?: number;
+  /**
+   * Optional handler for the primary (left) segment. Defaults to a no-op so
+   * existing consumers that only use menuItems are unaffected.
+   */
+  onClick?: () => void;
   menuItems: {
     name: React.ReactNode;
     onClick: () => void;
@@ -39,6 +44,7 @@ export const SplitButton: React.FC<Props> = ({
   leftIcon,
   tooltipTitle = '',
   height = 28,
+  onClick,
   menuItems,
 }) => {
   const theme = useTheme();
@@ -99,14 +105,14 @@ export const SplitButton: React.FC<Props> = ({
         >
           <Button
             size="small"
-            onClick={() => {}}
+            onClick={onClick ?? (() => {})}
             sx={{
               padding: '2px 8px',
               fontSize: '0.8rem',
               minWidth: 'auto',
               fontWeight: 500,
               textTransform: 'none',
-              cursor: 'default',
+              cursor: onClick ? 'pointer' : 'default',
             }}
             disabled={isLoading || disabled}
           >

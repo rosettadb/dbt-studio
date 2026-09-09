@@ -116,6 +116,7 @@ interface SqlTabManagerProps {
   onSelect: (tabId: SqlTabId) => void;
   onClose: (tabId: SqlTabId) => void;
   onReorder: (fromIndex: number, toIndex: number) => void;
+  actions?: React.ReactNode;
 }
 
 type DragState = {
@@ -129,6 +130,7 @@ export const SqlTabManager: React.FC<SqlTabManagerProps> = ({
   onSelect,
   onClose,
   onReorder,
+  actions,
 }) => {
   const [dragState, setDragState] = React.useState<DragState>({
     tabId: null,
@@ -274,6 +276,7 @@ export const SqlTabManager: React.FC<SqlTabManagerProps> = ({
           {dragState.overTabId === null && dragState.tabId && <DropIndicator />}
         </TabsContainer>
       )}
+      {actions}
     </SqlTabBar>
   );
 };

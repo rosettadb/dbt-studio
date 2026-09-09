@@ -21,7 +21,10 @@ import {
   useGetConnections,
 } from '../../controllers';
 import ConnectionHeader from './connection-header';
-import { useConnectionNameValidation } from '../../utils/connectionValidation';
+import {
+  useConnectionNameValidation,
+  validateBigQueryDatasetName,
+} from '../../utils/connectionValidation';
 import useSecureStorage from '../../hooks/useSecureStorage';
 
 type Props = {
@@ -75,6 +78,7 @@ export const BigQuery: React.FC<Props> = ({
     'idle' | 'success' | 'failed'
   >('idle');
   const [nameTouched, setNameTouched] = React.useState(false);
+  const [datasetTouched, setDatasetTouched] = React.useState(false);
   const [keyfileError, setKeyfileError] = React.useState<string>('');
 
   const { mutate: testConnection, isLoading: isTesting } = useTestConnection({
@@ -170,6 +174,7 @@ export const BigQuery: React.FC<Props> = ({
 
   // Get real-time validation result for name field
   const nameValidation = validateName(formState.name);
+  const datasetValidation = validateBigQueryDatasetName(formState.dataset);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -183,6 +188,11 @@ export const BigQuery: React.FC<Props> = ({
     // Validate connection name before submitting
     if (!nameValidation.isValid) {
       toast.error(nameValidation.message || 'Invalid connection name');
+      return;
+    }
+
+    if (!datasetValidation.isValid) {
+      toast.error(datasetValidation.message || 'Invalid dataset name');
       return;
     }
 
@@ -329,8 +339,15 @@ export const BigQuery: React.FC<Props> = ({
           name="dataset"
           value={formState.dataset}
           onChange={handleChange}
+          onBlur={() => setDatasetTouched(true)}
           fullWidth
           required
+          error={datasetTouched && !datasetValidation.isValid}
+          helperText={
+            datasetTouched && !datasetValidation.isValid
+              ? datasetValidation.message
+              : ''
+          }
         />
 
         <TextField

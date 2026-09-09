@@ -45,6 +45,10 @@ import {
 import SecureStorageService from './secureStorage.service';
 import ConnectorsService from './connectors.service';
 import MainDatabaseService from './mainDatabase.service';
+import {
+  extractPipelineRequiredEnvVars,
+  RequiredEnvVarSource,
+} from '../utils/pipelineEnvVars';
 
 export default class ProjectsService {
   static async loadProjects(): Promise<Project[]> {
@@ -1361,6 +1365,70 @@ export default class ProjectsService {
     return Array.from(vars)
       .sort()
       .map((name) => ({ name }));
+  }
+
+  /**
+   * Extract every env var a local run of a pipeline is likely to need:
+   * profiles.yml env_var() references plus, when a pipeline is given,
+   * TF_VAR_* names for any terraform@v1 step's declared variables and
+   * shell-style var references found in any step's command.
+   */
+  static async extractRequiredEnvVars(
+    projectId: string,
+    pipelineRelativePath?: string,
+  ): Promise<
+    { name: string; value?: string; sources: RequiredEnvVarSource[] }[]
+  > {
+    const project = await this.getProject(projectId);
+    if (!project) throw new Error('Project not found');
+
+    const profileVars = await this.extractProfileEnvVars(projectId);
+    const combined = new Map<
+      string,
+      { name: string; value?: string; sources: RequiredEnvVarSource[] }
+    >();
+    profileVars.forEach((v) => {
+      combined.set(v.name, { ...v, sources: ['profile'] });
+    });
+
+    if (pipelineRelativePath) {
+      // pipelineRelativePath is relative to the pipeline root (rosetta/pipelines/,
+      // with .rosetta/ as the deprecated fallback), not the project root - it's
+      // produced by getPipelineRelativeName / listPipelines, neither of which
+      // include that root prefix.
+      const canonicalPath = path.join(
+        project.path,
+        'rosetta',
+        'pipelines',
+        pipelineRelativePath,
+      );
+      const legacyPath = path.join(
+        project.path,
+        '.rosetta',
+        pipelineRelativePath,
+      );
+      const pipelineAbsolutePath = fs.existsSync(canonicalPath)
+        ? canonicalPath
+        : legacyPath;
+      const pipelineVars = await extractPipelineRequiredEnvVars(
+        project.path,
+        pipelineAbsolutePath,
+      );
+      pipelineVars.forEach((v) => {
+        const existing = combined.get(v.name);
+        if (existing) {
+          existing.sources = Array.from(
+            new Set([...existing.sources, ...v.sources]),
+          );
+        } else {
+          combined.set(v.name, { name: v.name, sources: v.sources });
+        }
+      });
+    }
+
+    return Array.from(combined.values()).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
   }
 
   /**

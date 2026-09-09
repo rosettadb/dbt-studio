@@ -61,6 +61,7 @@ import {
   usePlanDbtVersionChange,
   useUninstallPackage,
 } from '../../controllers';
+import { ConfirmationModal } from '../modals';
 
 interface DbtSettingsProps {
   settings: SettingsType;
@@ -101,6 +102,8 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
   const [isLoadingInstall, setIsLoadingInstall] = React.useState(false);
   const [currentPackage, setCurrentPackage] = React.useState('');
   const [installProgress, setInstallProgress] = React.useState(0);
+  const [showInstallAllConfirmation, setShowInstallAllConfirmation] =
+    React.useState(false);
   const listDbtCoreVersions = useListDbtCoreVersions();
   const getInstalledDbtCore = useGetInstalledDbtCore();
   const getInstalledPackages = useGetInstalledPackages();
@@ -569,6 +572,74 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
       setIsLoadingDialog(false);
       setLoadingMessage('');
     }
+  };
+
+  const ADAPTER_PACKAGES = [
+    'dbt-postgres',
+    'dbt-snowflake',
+    'dbt-bigquery',
+    'dbt-redshift',
+    'dbt-databricks',
+    'dbt-duckdb',
+  ] as const;
+
+  const handleInstallAllAdapters = async () => {
+    if (!settings.pythonPath) {
+      toast.info('dbt Core must be installed before installing adapters.');
+      return;
+    }
+
+    const toInstall = ADAPTER_PACKAGES.filter((pkg) => !installedPackages[pkg]);
+    if (toInstall.length === 0) {
+      toast.info('All adapters are already installed.');
+      return;
+    }
+
+    setIsLoadingInstall(true);
+    setIsLoadingDialog(true);
+    setVersionChangeResult(null);
+
+    const errors: string[] = [];
+
+    for (let i = 0; i < toInstall.length; i += 1) {
+      const pkg = toInstall[i];
+      setCurrentPackage(pkg);
+      setLoadingMessage(`Installing ${pkg} (${i + 1}/${toInstall.length})...`);
+      setInstallProgress((i / toInstall.length) * 100);
+
+      // eslint-disable-next-line no-await-in-loop
+      const result = await installLatestPackage({
+        pythonPath: settings.pythonPath,
+        packageName: pkg,
+      });
+
+      if (result.ok && result.installedVersion) {
+        setInstalledPackages((prev) => ({
+          ...prev,
+          [pkg]: result.installedVersion as string,
+        }));
+      } else if (!result.ok) {
+        errors.push(`${pkg}: ${result.error || 'unknown error'}`);
+      }
+    }
+
+    setInstallProgress(100);
+
+    if (errors.length > 0) {
+      setVersionChangeResult({
+        ok: false,
+        error: errors.join('\n'),
+      });
+    } else {
+      toast.success(
+        `All ${toInstall.length} adapter(s) installed successfully.`,
+      );
+    }
+
+    setIsLoadingInstall(false);
+    setCurrentPackage('');
+    setIsLoadingDialog(false);
+    setLoadingMessage('');
   };
 
   useEffect(() => {
@@ -1055,11 +1126,42 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
       </Box>
 
       <Box sx={{ mb: 3 }}>
-        <Typography variant="h6" gutterBottom>
-          {settings.dbtVersion?.startsWith('2.')
-            ? 'Project adapter compatibility'
-            : 'Adapter packages'}
-        </Typography>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            mb: 1,
+            flexWrap: 'wrap',
+            gap: 1,
+          }}
+        >
+          <Typography variant="h6">
+            {settings.dbtVersion?.startsWith('2.')
+              ? 'Project adapter compatibility'
+              : 'Adapter packages'}
+          </Typography>
+
+          {!settings.dbtVersion?.startsWith('2.') &&
+            settings.dbtPath &&
+            settings.dbtPath !== 'dbt' && (
+              <Button
+                size="small"
+                variant="contained"
+                onClick={() => setShowInstallAllConfirmation(true)}
+                disabled={isLoadingInstall || isLoadingDialog}
+                startIcon={
+                  isLoadingInstall ? (
+                    <CircularProgress size={16} color="inherit" />
+                  ) : (
+                    <CloudDownload />
+                  )
+                }
+              >
+                {isLoadingInstall ? 'Installing...' : 'Install All Adapters'}
+              </Button>
+            )}
+        </Box>
 
         {settings.dbtVersion?.startsWith('2.') && adapterCapabilities && (
           <Box
@@ -1498,6 +1600,17 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
           </Box>
         </Box>
       )}
+
+      <ConfirmationModal
+        isOpen={showInstallAllConfirmation}
+        onClose={() => setShowInstallAllConfirmation(false)}
+        onConfirm={() => {
+          setShowInstallAllConfirmation(false);
+          handleInstallAllAdapters().catch(() => undefined);
+        }}
+        title="Install All Adapters"
+        question="This will install the latest version of all dbt adapter packages (postgres, snowflake, bigquery, redshift, databricks, duckdb). Already-installed adapters will be skipped. Continue?"
+      />
 
       <Dialog
         open={isVersionChangeDialogOpen}

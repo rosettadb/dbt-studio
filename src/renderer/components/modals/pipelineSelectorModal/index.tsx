@@ -33,6 +33,7 @@ interface PipelineSelectorModalProps {
   onClose: () => void;
   project: Project;
   onSelect: (pipeline: { name: string; path: string }) => void;
+  mode?: 'local' | 'cloud';
 }
 
 const PIPELINE_TEMPLATE = `name: "CI"
@@ -55,8 +56,11 @@ export const PipelineSelectorModal: React.FC<PipelineSelectorModalProps> = ({
   onClose,
   project,
   onSelect,
+  mode = 'local',
 }) => {
   const theme = useTheme();
+  const isCloud = mode === 'cloud';
+
   const {
     data: pipelines = [],
     isLoading,
@@ -65,6 +69,8 @@ export const PipelineSelectorModal: React.FC<PipelineSelectorModalProps> = ({
 
   const [selected, setSelected] = React.useState('');
   const [isCreating, setIsCreating] = React.useState(false);
+
+  // Cloud-only git status state
   const [fileStatus, setFileStatus] = React.useState<string | null>(null);
   const [isUnpushed, setIsUnpushed] = React.useState(false);
   const [isCheckingStatus, setIsCheckingStatus] = React.useState(false);
@@ -79,11 +85,9 @@ export const PipelineSelectorModal: React.FC<PipelineSelectorModalProps> = ({
     }
   }, [pipelines]);
 
-  // Check git status when selection changes
+  // Check git status on selection change — cloud mode only
   React.useEffect(() => {
-    if (!selected || selected === statusCheckedFor) {
-      return;
-    }
+    if (!isCloud || !selected || selected === statusCheckedFor) return;
 
     const pipeline = pipelines.find((p) => p.name === selected);
     if (!pipeline) return;
@@ -102,13 +106,13 @@ export const PipelineSelectorModal: React.FC<PipelineSelectorModalProps> = ({
       isFileUnpushed(project.path, relativePath),
     ])
       .then(([status, unpushed]) => {
-        // eslint-disable-next-line promise/always-return
         if (!cancelled) {
           setFileStatus(status?.status || null);
           setIsUnpushed(!!unpushed);
           setIsCheckingStatus(false);
           setStatusCheckedFor(selected);
         }
+        return undefined;
       })
       .catch(() => {
         if (!cancelled) {
@@ -124,19 +128,19 @@ export const PipelineSelectorModal: React.FC<PipelineSelectorModalProps> = ({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, project.path]);
+  }, [isCloud, selected, project.path]);
 
   const hasUncommittedChanges =
     fileStatus === 'untracked' ||
     fileStatus === 'modified' ||
     fileStatus === 'staged';
 
-  const hasBlockingChanges = hasUncommittedChanges || isUnpushed;
+  const hasBlockingChanges = isCloud && (hasUncommittedChanges || isUnpushed);
 
   const handleCreatePipeline = async () => {
     setIsCreating(true);
     try {
-      // Ensure rosetta/pipelines directory exists before writing into it
+      // Always: create the folder + write the file
       await projectsServices.createFolderAsync({
         filePath: project.path,
         name: 'rosetta/pipelines',
@@ -148,6 +152,15 @@ export const PipelineSelectorModal: React.FC<PipelineSelectorModalProps> = ({
         content: PIPELINE_TEMPLATE,
       });
 
+      if (!isCloud) {
+        // Local mode: file is ready, no git needed
+        toast.success('Pipeline created successfully.');
+        await refetch();
+        setSelected('pipeline');
+        return;
+      }
+
+      // Cloud mode: commit and push
       await window.electron.ipcRenderer.invoke('git:add', {
         repoPath: project.path,
         files: ['rosetta/pipelines/pipeline.yml'],
@@ -165,7 +178,6 @@ export const PipelineSelectorModal: React.FC<PipelineSelectorModalProps> = ({
           'Pipeline created and committed, but push failed. Please push manually before running on cloud.',
         );
         await refetch();
-        setIsCreating(false);
         return;
       }
 
@@ -184,9 +196,7 @@ export const PipelineSelectorModal: React.FC<PipelineSelectorModalProps> = ({
   const handleConfirm = () => {
     if (!selected || hasBlockingChanges) return;
     const pipeline = pipelines.find((p) => p.name === selected);
-    if (pipeline) {
-      onSelect(pipeline);
-    }
+    if (pipeline) onSelect(pipeline);
   };
 
   const renderContent = () => {
@@ -207,7 +217,7 @@ export const PipelineSelectorModal: React.FC<PipelineSelectorModalProps> = ({
       );
     }
 
-    // No pipelines — creation wizard
+    // No pipelines — quick create
     if (pipelines.length === 0) {
       return (
         <Paper
@@ -232,8 +242,8 @@ export const PipelineSelectorModal: React.FC<PipelineSelectorModalProps> = ({
             <Typography variant="body2" color="text.secondary">
               No pipeline configuration files were found under{' '}
               <code>rosetta/pipelines/</code>. A pipeline defines a sequence of
-              steps (e.g., dbt deps, dbt run, dbt test) that will be executed on
-              the cloud.
+              steps (e.g., dbt deps, dbt run, dbt test) that will be executed{' '}
+              {isCloud ? 'on the cloud' : 'on this machine'}.
             </Typography>
             <Button
               variant="contained"
@@ -244,11 +254,17 @@ export const PipelineSelectorModal: React.FC<PipelineSelectorModalProps> = ({
               }
               sx={{ mt: 1 }}
             >
-              {isCreating ? 'Creating...' : 'Create Default Pipeline & Push'}
+              {/* eslint-disable-next-line no-nested-ternary */}
+              {isCreating
+                ? 'Creating...'
+                : isCloud
+                  ? 'Create Default Pipeline & Push'
+                  : 'Create Default Pipeline'}
             </Button>
             <Typography variant="caption" color="text.secondary">
-              This will create <code>rosetta/pipelines/pipeline.yml</code>,
-              commit, and push it to your remote repository.
+              {isCloud
+                ? 'Creates rosetta/pipelines/pipeline.yml, commits, and pushes to your remote repository.'
+                : 'Creates rosetta/pipelines/pipeline.yml in your project.'}
             </Typography>
           </Stack>
         </Paper>
@@ -259,7 +275,9 @@ export const PipelineSelectorModal: React.FC<PipelineSelectorModalProps> = ({
     return (
       <Stack spacing={2.5}>
         <Typography variant="body2" color="text.secondary">
-          Select which pipeline to run on the cloud.
+          {isCloud
+            ? 'Select which pipeline to run on the cloud.'
+            : 'Select which pipeline to run on this machine.'}
         </Typography>
         <FormControl fullWidth>
           <InputLabel id="pipeline-select-label">Pipeline</InputLabel>
@@ -277,7 +295,7 @@ export const PipelineSelectorModal: React.FC<PipelineSelectorModalProps> = ({
           </Select>
         </FormControl>
 
-        {hasBlockingChanges && (
+        {isCloud && hasBlockingChanges && (
           <Alert
             severity="error"
             sx={{
@@ -293,8 +311,8 @@ export const PipelineSelectorModal: React.FC<PipelineSelectorModalProps> = ({
             </Typography>
             <Typography variant="body2">
               {hasUncommittedChanges
-                ? `The selected pipeline file has uncommitted changes (${fileStatus}). Please commit and push your changes before running on the cloud.`
-                : 'The selected pipeline file has been committed but not pushed to the remote. Please push your changes before running on the cloud.'}
+                ? `The selected pipeline file has uncommitted changes (${fileStatus}). Please commit and push before running on the cloud.`
+                : 'The selected pipeline file has been committed but not pushed to the remote. Please push before running on the cloud.'}
             </Typography>
           </Alert>
         )}
@@ -330,9 +348,11 @@ export const PipelineSelectorModal: React.FC<PipelineSelectorModalProps> = ({
               variant="contained"
               color="primary"
               onClick={handleConfirm}
-              disabled={!selected || hasBlockingChanges || isCheckingStatus}
+              disabled={
+                !selected || hasBlockingChanges || (isCloud && isCheckingStatus)
+              }
               startIcon={
-                isCheckingStatus ? (
+                isCloud && isCheckingStatus ? (
                   <CircularProgress size={16} />
                 ) : (
                   <PlayArrow />

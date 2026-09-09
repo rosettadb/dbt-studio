@@ -87,6 +87,7 @@ export type ProjectChannels =
   | 'project:renamePath'
   | 'project:downloadSeed'
   | 'project:extractProfileEnvVars'
+  | 'project:extractRequiredEnvVars'
   | 'project:listPipelines';
 
 export type RosettaCloudChannels =

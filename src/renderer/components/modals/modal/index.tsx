@@ -3,6 +3,7 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogActions,
   IconButton,
   Box,
   Breakpoint,
@@ -17,6 +18,8 @@ type Props = {
   hideHeader?: boolean;
   maxWidth?: Breakpoint;
   fullScreen?: boolean;
+  /** Footer buttons, pinned below the scrolling content. */
+  actions?: ReactNode;
 };
 
 export const Modal: React.FC<Props> = ({
@@ -27,6 +30,7 @@ export const Modal: React.FC<Props> = ({
   hideHeader,
   maxWidth,
   fullScreen,
+  actions,
 }) => {
   return (
     <Dialog
@@ -66,6 +70,9 @@ export const Modal: React.FC<Props> = ({
       <DialogContent dividers={!hideHeader} sx={fullScreen ? { p: 0 } : {}}>
         {children}
       </DialogContent>
+      {actions && (
+        <DialogActions sx={{ px: 3, py: 2 }}>{actions}</DialogActions>
+      )}
     </Dialog>
   );
 };

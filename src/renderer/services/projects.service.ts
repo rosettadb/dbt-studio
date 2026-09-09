@@ -366,6 +366,17 @@ export const extractProfileEnvVars = async (
   return data;
 };
 
+export const extractRequiredEnvVars = async (
+  projectId: string,
+  pipelineRelativePath?: string,
+): Promise<{ name: string; value?: string; sources: string[] }[]> => {
+  const { data } = await client.post<
+    { projectId: string; pipelineRelativePath?: string },
+    { name: string; value?: string; sources: string[] }[]
+  >('project:extractRequiredEnvVars', { projectId, pipelineRelativePath });
+  return data;
+};
+
 export const listPipelines = async (
   projectId: string,
 ): Promise<{ name: string; path: string }[]> => {
