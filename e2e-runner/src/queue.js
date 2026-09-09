@@ -1,9 +1,12 @@
 // Electron E2E tests already run with workers: 1 (playwright.config.ts) —
-// the host can only usefully run one browser+Electron instance at a time,
-// so the queue mirrors that and processes one run at a time.
+// today's server can only usefully run one browser+Electron instance at a
+// time. MAX_CONCURRENT_RUNS lets that cap move with you to bigger hardware
+// without any code changes.
+
+const MAX_CONCURRENT_RUNS = Math.max(1, Number(process.env.MAX_CONCURRENT_RUNS) || 1);
 
 const pending = [];
-let processing = false;
+let active = 0;
 
 function enqueue(job) {
   pending.push(job);
@@ -11,16 +14,16 @@ function enqueue(job) {
 }
 
 async function drain() {
-  if (processing) return;
+  if (active >= MAX_CONCURRENT_RUNS) return;
   const job = pending.shift();
   if (!job) return;
-  processing = true;
+  active += 1;
   try {
     await job();
   } finally {
-    processing = false;
+    active -= 1;
     drain();
   }
 }
 
-module.exports = { enqueue };
+module.exports = { enqueue, MAX_CONCURRENT_RUNS };

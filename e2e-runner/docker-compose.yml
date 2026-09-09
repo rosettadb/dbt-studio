@@ -9,6 +9,7 @@ services:
       - GIT_USERNAME=${GIT_USERNAME}
       - GIT_TOKEN=${GIT_TOKEN}
       - TEST_RUNNER_IMAGE=${TEST_RUNNER_IMAGE:-e2e-test-runner:latest}
+      - MAX_CONCURRENT_RUNS=${MAX_CONCURRENT_RUNS:-1}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./data:/app/data

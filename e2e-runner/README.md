@@ -13,7 +13,7 @@ Two Docker images:
 
 Two named Docker volumes (`e2e-runner-npm-cache`, `e2e-runner-playwright-cache`) are mounted into each test container to skip re-downloading packages/browsers that haven't changed — `npm ci` still reinstalls fresh from that branch's lockfile every run, so results stay correct.
 
-Runs are processed one at a time (matches `playwright.config.ts`'s `workers: 1` — Electron tests can't usefully run in parallel on one machine anyway).
+Runs are processed `MAX_CONCURRENT_RUNS` at a time (`.env`, default `1`) — matches `playwright.config.ts`'s `workers: 1` on today's hardware. Each run is its own isolated container, so raising this is just a number to bump once you move to bigger hardware, no code changes needed. Caveat: the two cache volumes are shared across concurrent containers — safe in practice (npm's cache handles concurrent access), but a first-ever concurrent run against a brand-new Playwright version could race while both containers populate the browser cache at once.
 
 ## Setup
 
