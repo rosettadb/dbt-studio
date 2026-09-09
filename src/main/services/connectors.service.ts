@@ -24,7 +24,8 @@ import {
   SnowflakeConnection,
   SQLiteConnection,
 } from '../../types/backend';
-import { loadDatabaseFile, updateDatabase } from '../utils/fileHelper';
+import databaseStore from '../database';
+import { sanitizeBigQueryKeyfile } from '../utils/sanitizeBigQueryKeyfile';
 import { ProjectsService } from './index';
 import MainDatabaseService from './mainDatabase.service';
 import { ConfigureConnectionBody, UpdateConnectionBody } from '../../types/ipc';
@@ -133,8 +134,7 @@ export default class ConnectorsService {
   static async loadConnections(
     includeDataLake: boolean = false,
   ): Promise<ConnectionModel[]> {
-    const db = await loadDatabaseFile();
-    const connections = db.connections ?? [];
+    const connections = (await databaseStore.getField('connections')) ?? [];
 
     // Filter out ducklake connections by default
     if (includeDataLake) {
@@ -343,45 +343,33 @@ export default class ConnectorsService {
     connection: ConnectionInput,
     allowReservedNames: boolean = false,
   ): Promise<string> {
-    const connections = await this.loadConnections(true); // Include all connections including ducklake
-
-    // Validate connection name with optional allowReservedNames flag
-    const nameValidation = this.validateConnectionName(
-      connection.name,
-      connections,
-      undefined,
-      allowReservedNames,
-    );
-
-    if (!nameValidation.isValid) {
-      throw new Error(nameValidation.message);
-    }
-
     const connectionId = uuidV4();
     const newConnection: ConnectionModel = {
       id: connectionId,
       connection,
     };
-    await updateDatabase<'connections'>('connections', [
-      ...connections,
-      newConnection,
-    ]);
+
+    await databaseStore.updateField('connections', (current) => {
+      const connections = current ?? [];
+      // Validate connection name with optional allowReservedNames flag
+      const nameValidation = this.validateConnectionName(
+        connection.name,
+        connections,
+        undefined,
+        allowReservedNames,
+      );
+      if (!nameValidation.isValid) {
+        throw new Error(nameValidation.message);
+      }
+      const next = [...connections, newConnection];
+      next.forEach((conn) => sanitizeBigQueryKeyfile(conn));
+      return next;
+    });
+
     return connectionId;
   }
 
   static async saveNewConnection(connection: ConnectionInput): Promise<string> {
-    const connections = await this.loadConnections(true); // Include all connections including ducklake
-
-    // Validate connection name
-    const nameValidation = this.validateConnectionName(
-      connection.name,
-      connections,
-    );
-
-    if (!nameValidation.isValid) {
-      throw new Error(nameValidation.message);
-    }
-
     const connectionId = uuidV4();
 
     // For ducklake connections, store S3 credentials securely
@@ -420,15 +408,26 @@ export default class ConnectorsService {
       id: connectionId,
       connection,
     };
-    await updateDatabase<'connections'>('connections', [
-      ...connections,
-      newConnection,
-    ]);
+
+    await databaseStore.updateField('connections', (current) => {
+      const connections = current ?? [];
+      const nameValidation = this.validateConnectionName(
+        connection.name,
+        connections,
+      );
+      if (!nameValidation.isValid) {
+        throw new Error(nameValidation.message);
+      }
+      const next = [...connections, newConnection];
+      next.forEach((conn) => sanitizeBigQueryKeyfile(conn));
+      return next;
+    });
+
     return connectionId;
   }
 
   static async getProjectById(projectId: string): Promise<Project | undefined> {
-    const { projects } = await loadDatabaseFile();
+    const projects = await databaseStore.getField('projects');
     return projects.find((p) => p.id === projectId);
   }
 
@@ -621,29 +620,30 @@ export default class ConnectorsService {
   }: UpdateConnectionBody): Promise<void> {
     await this.validateConnection(connection.connection);
 
-    const connections = await this.loadConnections(true); // Include all connections including ducklake
+    await databaseStore.updateField('connections', (current) => {
+      const connections = current ?? [];
+      // Validate connection name (exclude current connection from uniqueness check)
+      const nameValidation = this.validateConnectionName(
+        connection.connection.name,
+        connections,
+        connection.id,
+      );
+      if (!nameValidation.isValid) {
+        throw new Error(nameValidation.message);
+      }
 
-    // Validate connection name (exclude current connection from uniqueness check)
-    const nameValidation = this.validateConnectionName(
-      connection.connection.name,
-      connections,
-      connection.id,
-    );
+      const connectionIndex = connections.findIndex(
+        (c) => c.id === connection.id,
+      );
+      if (connectionIndex === -1) {
+        throw new Error('Connection not found');
+      }
 
-    if (!nameValidation.isValid) {
-      throw new Error(nameValidation.message);
-    }
-
-    const connectionIndex = connections.findIndex(
-      (c) => c.id === connection.id,
-    );
-
-    if (connectionIndex === -1) {
-      throw new Error('Connection not found');
-    }
-
-    connections[connectionIndex] = connection;
-    await updateDatabase<'connections'>('connections', connections);
+      const updated = [...connections];
+      updated[connectionIndex] = connection;
+      updated.forEach((conn) => sanitizeBigQueryKeyfile(conn));
+      return updated;
+    });
 
     if (connection.connection.type === 'sqlite') return;
 
@@ -744,11 +744,9 @@ export default class ConnectorsService {
     await NotebooksService.archiveConnectionNotebooks(connectionToDelete.id);
 
     // Remove the connection from the database
-    const updatedConnections = connections.filter(
-      (connection) => connection.id !== connectionId,
+    await databaseStore.updateField('connections', (current) =>
+      (current ?? []).filter((c) => c.id !== connectionId),
     );
-
-    await updateDatabase<'connections'>('connections', updatedConnections);
 
     // Only clean up AI chats after the connection deletion is persisted.
     try {
@@ -1793,29 +1791,25 @@ export default class ConnectorsService {
   }
 
   static async loadCloudConnections(): Promise<CloudConnection[]> {
-    const db = await loadDatabaseFile();
-    return db.sources ?? [];
+    const sources = await databaseStore.getField('sources');
+    return sources ?? [];
   }
 
   static async saveCloudConnection(connection: CloudConnection): Promise<void> {
-    const db = await loadDatabaseFile();
-    const sources = db.sources ?? [];
-
-    const existingIndex = sources.findIndex((c) => c.id === connection.id);
-
-    if (existingIndex >= 0) {
-      sources[existingIndex] = connection;
-    } else {
-      sources.push(connection);
-    }
-
-    await updateDatabase<'sources'>('sources', sources);
+    await databaseStore.updateField('sources', (current) => {
+      const sources = current ?? [];
+      const existingIndex = sources.findIndex((c) => c.id === connection.id);
+      if (existingIndex >= 0) {
+        const updated = [...sources];
+        updated[existingIndex] = connection;
+        return updated;
+      }
+      return [...sources, connection];
+    });
   }
 
   static async deleteCloudConnection(id: string): Promise<void> {
-    const db = await loadDatabaseFile();
-    const sources = db.sources ?? [];
-
+    const sources = (await databaseStore.getField('sources')) ?? [];
     const connectionToDelete = sources.find((c) => c.id === id);
     if (connectionToDelete) {
       // Clean up cloud connection-specific credentials from secure storage
@@ -1832,9 +1826,9 @@ export default class ConnectorsService {
       }
     }
 
-    const filteredSources = sources.filter((c) => c.id !== id);
-
-    await updateDatabase<'sources'>('sources', filteredSources);
+    await databaseStore.updateField('sources', (current) =>
+      (current ?? []).filter((c) => c.id !== id),
+    );
   }
 
   static async getCloudConnectionById(
@@ -1850,9 +1844,8 @@ export default class ConnectorsService {
 
   static async loadRecentItems(): Promise<RecentItem[]> {
     try {
-      const db = await loadDatabaseFile();
-      const items = db.recentItems ?? [];
-      return items.sort(
+      const items = (await databaseStore.getField('recentItems')) ?? [];
+      return [...items].sort(
         (a, b) =>
           new Date(b.accessedAt).getTime() - new Date(a.accessedAt).getTime(),
       );
@@ -1864,32 +1857,21 @@ export default class ConnectorsService {
   static async addRecentItem(
     item: Omit<RecentItem, 'accessedAt'>,
   ): Promise<void> {
-    const db = await loadDatabaseFile();
-    const items = db.recentItems ?? [];
-
-    const existingIndex = items.findIndex((i) => i.id === item.id);
-
-    if (existingIndex >= 0) {
-      items.splice(existingIndex, 1);
-    }
-
-    items.unshift({ ...item, accessedAt: new Date() });
-
-    const recentItems = items.slice(0, 50);
-    await updateDatabase<'recentItems'>('recentItems', recentItems);
+    await databaseStore.updateField('recentItems', (current) => {
+      const items = (current ?? []).filter((i) => i.id !== item.id);
+      const next = [{ ...item, accessedAt: new Date() }, ...items];
+      return next.slice(0, 50);
+    });
   }
 
   static async removeRecentItem(id: string): Promise<void> {
-    const db = await loadDatabaseFile();
-    const items = db.recentItems ?? [];
-
-    const filteredItems = items.filter((i) => i.id !== id);
-
-    await updateDatabase<'recentItems'>('recentItems', filteredItems);
+    await databaseStore.updateField('recentItems', (current) =>
+      (current ?? []).filter((i) => i.id !== id),
+    );
   }
 
   static async clearRecentItems(): Promise<void> {
-    await updateDatabase<'recentItems'>('recentItems', []);
+    await databaseStore.updateField('recentItems', () => []);
   }
 
   /**
@@ -2110,19 +2092,19 @@ export default class ConnectorsService {
     connectionId: string,
     query: string,
   ): Promise<void> {
-    const db = await loadDatabaseFile();
-    const queries = db.queries ?? {};
     // Use a connection-specific key prefix to distinguish from project queries
-    queries[`connection:${connectionId}`] = query;
-    await updateDatabase('queries', queries);
+    await databaseStore.updateField('queries', (current) => ({
+      ...(current ?? {}),
+      [`connection:${connectionId}`]: query,
+    }));
   }
 
   /**
    * Get the saved query for a specific connection
    */
   static async getConnectionQuery(connectionId: string): Promise<string> {
-    const db = await loadDatabaseFile();
-    return db.queries?.[`connection:${connectionId}`] ?? '';
+    const queries = await databaseStore.getField('queries');
+    return queries?.[`connection:${connectionId}`] ?? '';
   }
 
   /**

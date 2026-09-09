@@ -375,6 +375,10 @@ export interface SavedQuery {
 }
 
 export type DataBase = {
+  // Absent on any database.json written before the migration system existed
+  // (schema version 0). Never written as undefined once loaded through
+  // DatabaseStore — always stamped to CURRENT_SCHEMA_VERSION on save.
+  schemaVersion?: number;
   projects: Project[];
   settings: SettingsType;
   selectedProject?: Project;

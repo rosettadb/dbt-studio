@@ -11,11 +11,21 @@ jest.mock('openai', () => ({
   OpenAI: jest.fn(),
 }));
 
-jest.mock('../../../../src/main/utils/fileHelper', () => ({
-  loadDatabaseFile: jest
-    .fn()
-    .mockResolvedValue({ connections: [], projects: [] }),
-  updateDatabase: jest.fn(),
+jest.mock('../../../../src/main/database', () => ({
+  __esModule: true,
+  default: {
+    getField: jest.fn((key: string) =>
+      Promise.resolve(
+        key === 'connections' || key === 'projects' ? [] : undefined,
+      ),
+    ),
+    updateField: jest.fn(
+      (key: string, updater: (current: unknown) => unknown) =>
+        Promise.resolve(
+          updater(key === 'connections' || key === 'projects' ? [] : undefined),
+        ),
+    ),
+  },
 }));
 
 jest.mock('../../../../src/main/services/index', () => ({
