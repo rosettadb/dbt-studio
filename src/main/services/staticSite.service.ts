@@ -9,12 +9,14 @@
 import { BrowserWindow, shell, dialog, app } from 'electron';
 import fs from 'fs';
 import path from 'path';
+import { v4 as uuidv4 } from 'uuid';
 import { AnalyticsPagesService } from './analyticsPages.service';
 import ConnectorsService from './connectors.service';
 import MainDatabaseService from './mainDatabase.service';
 import SettingsService from './settings.service';
 import { extractQueryReferences } from '../../renderer/components/analytics/runtime/queryDependencyResolver';
 import DuckLakeService from './duckLake.service';
+import { IcebergDatalakeService } from './icebergDatalake.service';
 import {
   toSlug,
   generateSiteShell,
@@ -177,6 +179,39 @@ async function executeQueryInMain(params: {
   const { connectionId, sql } = params;
 
   try {
+    if (connectionId.startsWith('iceberg-')) {
+      const instanceId = connectionId.replace('iceberg-', '');
+      const executionId = `analytics-static-${uuidv4()}`;
+      const classification = await IcebergDatalakeService.executeSql({
+        instanceId,
+        executionId,
+        sql,
+        pageLimit: MAX_ROWS_PER_QUERY,
+        pageOffset: 0,
+        validateOnly: true,
+      });
+      if (classification.statementClass !== 'select') {
+        return {
+          data: [],
+          error: 'Analytics pages support read-only Iceberg SELECT queries.',
+          truncated: false,
+        };
+      }
+
+      const response = await IcebergDatalakeService.executeSql({
+        instanceId,
+        executionId,
+        sql,
+        pageLimit: MAX_ROWS_PER_QUERY,
+        pageOffset: 0,
+      });
+      return {
+        data: response.rows.slice(0, MAX_ROWS_PER_QUERY),
+        error: null,
+        truncated: response.truncated,
+      };
+    }
+
     if (connectionId.startsWith('ducklake-')) {
       const instanceId = connectionId.replace('ducklake-', '');
       const response = await DuckLakeService.executeQuery({
