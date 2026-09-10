@@ -73,6 +73,7 @@ const App: React.FC = () => {
           <Route path="settings/runner" element={<Settings />} />
           <Route path="settings/keystore" element={<Settings />} />
           <Route path="settings/task-manager" element={<Settings />} />
+          <Route path="settings/backup" element={<Settings />} />
           <Route path="sql" element={<Sql />} />
           <Route path="notebooks" element={<Notebooks />} />
           <Route
