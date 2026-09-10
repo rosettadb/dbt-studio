@@ -41,6 +41,13 @@ export DISABLE_ANALYTICS=1
 export ELECTRON_DISABLE_GPU=1
 export SKIP_NOTARIZATION=true
 
+# Playwright's automatic trace config doesn't capture snapshots/screenshots
+# for Electron contexts launched via _electron.launch() (see
+# e2e/fixtures/electron.fixture.ts), which otherwise leaves every trace
+# permanently blank here. Only this tool sets this — local/CI runs are
+# unaffected.
+export E2E_FORCE_TRACE_SNAPSHOTS=true
+
 # The app's secure-storage service uses `keytar`, which needs a real D-Bus
 # Secret Service to talk to — without one it hangs forever (no error) the
 # instant it's imported, which blocks the splash window from ever being
