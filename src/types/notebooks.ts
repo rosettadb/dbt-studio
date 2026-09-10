@@ -36,6 +36,30 @@ export interface Notebook {
   cellCount: number;
 }
 
+export type PythonNotebookRuntimeState =
+  | 'not-installed'
+  | 'ready'
+  | 'needs-attention';
+
+export interface PythonNotebookPackageStatus {
+  name: 'ipykernel' | 'jupyter_client' | 'nbformat';
+  requiredVersion: string;
+  installedVersion: string | null;
+}
+
+export interface PythonNotebookRuntimeStatus {
+  state: PythonNotebookRuntimeState;
+  managedPython: {
+    available: boolean;
+    version: string | null;
+    minimumVersion: string;
+  };
+  environmentPath: string;
+  packages: PythonNotebookPackageStatus[];
+  activeSessionCount: number;
+  message?: string;
+}
+
 /** Preview of a notebook JSON export file, returned before the file is actually imported. */
 export interface NotebookImportPreview {
   isBulk: boolean;

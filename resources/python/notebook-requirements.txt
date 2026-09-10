@@ -1,0 +1,4 @@
+# Python >= 3.9 required by ipykernel 6.30.1.
+ipykernel==6.30.1
+jupyter_client==8.6.3
+nbformat==5.10.4

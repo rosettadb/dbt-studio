@@ -432,6 +432,7 @@ export type NotebookChannels =
   | 'notebooks:runCell'
   | 'notebooks:fetchCellPage'
   | 'notebooks:runAll'
+  | 'notebooks:python:runtimeStatus'
   | 'notebooks:archived:list'
   | 'notebooks:archived:restore'
   | 'notebooks:archived:delete'

@@ -17,3 +17,4 @@ export * from './editor.controller';
 export * from './analyticsPages.controller';
 export * from './dbtVersions.controller';
 export * from './secondBrain.controller';
+export * from './notebooks.controller';

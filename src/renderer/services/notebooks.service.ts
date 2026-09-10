@@ -8,9 +8,14 @@ import {
   NotebookCell,
   CellOutput,
   NotebookImportPreview,
+  PythonNotebookRuntimeStatus,
 } from '../../types/notebooks';
 
 export const notebooksService = {
+  getPythonRuntimeStatus: async (): Promise<PythonNotebookRuntimeStatus> => {
+    return window.electron.ipcRenderer.invoke('notebooks:python:runtimeStatus');
+  },
+
   /**
    * List all notebooks for a connection
    */

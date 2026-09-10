@@ -5,8 +5,13 @@
 
 import { ipcMain } from 'electron';
 import { NotebooksService } from '../services/notebooks.service';
+import { PythonNotebookService } from '../services/pythonNotebook.service';
 
 export function registerNotebooksHandlers() {
+  ipcMain.handle('notebooks:python:runtimeStatus', async () => {
+    return PythonNotebookService.getRuntimeStatus();
+  });
+
   // List notebooks for a connection
   ipcMain.handle('notebooks:list', async (_event, connectionId: string) => {
     return NotebooksService.listNotebooks(connectionId);

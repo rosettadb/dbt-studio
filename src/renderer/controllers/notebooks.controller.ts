@@ -5,7 +5,12 @@
 
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { toast } from 'react-toastify';
-import { Notebook, NotebookCell, SchemaInfo } from '../../types/notebooks';
+import {
+  Notebook,
+  NotebookCell,
+  PythonNotebookRuntimeStatus,
+  SchemaInfo,
+} from '../../types/notebooks';
 import { notebooksService } from '../services/notebooks.service';
 import { connectorsServices } from '../services';
 import { DuckLakeService } from '../services/duckLake.service';
@@ -22,7 +27,16 @@ export const notebooksKeys = {
   schema: (connectionId: string) =>
     [...notebooksKeys.all, 'schema', connectionId] as const,
   archived: () => [...notebooksKeys.all, 'archived'] as const,
+  pythonRuntime: () => [...notebooksKeys.all, 'python', 'runtime'] as const,
 };
+
+export function usePythonNotebookRuntimeStatus() {
+  return useQuery<PythonNotebookRuntimeStatus>({
+    queryKey: notebooksKeys.pythonRuntime(),
+    queryFn: () => notebooksService.getPythonRuntimeStatus(),
+    staleTime: 30000,
+  });
+}
 
 // List notebooks for a connection
 export function useNotebooks(connectionId: string) {

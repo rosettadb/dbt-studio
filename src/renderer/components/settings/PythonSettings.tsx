@@ -23,6 +23,7 @@ import {
 import { toast } from 'react-toastify';
 import { SettingsType, PythonVersionInfo } from '../../../types/backend';
 import { ConfirmationModal } from '../modals';
+import { JupyterNotebookSettings } from './JupyterNotebookSettings';
 import {
   useCheckPythonVersions,
   useInstallPythonVersion,
@@ -305,6 +306,8 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
           </Button>
         </Box>
       )}
+
+      <JupyterNotebookSettings />
 
       <ConfirmationModal
         isOpen={Boolean(pendingVersion)}
