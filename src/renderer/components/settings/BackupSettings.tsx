@@ -209,11 +209,14 @@ export const BackupSettings: React.FC = () => {
                   setImportFilePath(meta.filePath);
                   if (meta.result.warnings.length > 0) {
                     toast.warn(
-                      `Import completed with ${meta.result.warnings.length} warning(s).`,
+                      `Import completed with ${meta.result.warnings.length} warning(s). Restarting…`,
                     );
                   } else {
-                    toast.success('Backup imported successfully!');
+                    toast.success('Backup imported successfully! Restarting…');
                   }
+                  setTimeout(() => {
+                    window.electron.ipcRenderer.invoke('settings:restart');
+                  }, 1500);
                 }
                 // Invalidate all caches so the dropdown and other views reflect imported data
                 queryClient.invalidateQueries([QUERY_KEYS.GET_PROJECTS]);
@@ -354,11 +357,14 @@ export const BackupSettings: React.FC = () => {
         setImportFilePath(meta.filePath);
         if (meta.result.warnings.length > 0) {
           toast.warn(
-            `Import completed with ${meta.result.warnings.length} warning(s).`,
+            `Import completed with ${meta.result.warnings.length} warning(s). Restarting…`,
           );
         } else {
-          toast.success('Backup imported successfully!');
+          toast.success('Backup imported successfully! Restarting…');
         }
+        setTimeout(() => {
+          window.electron.ipcRenderer.invoke('settings:restart');
+        }, 1500);
         // Invalidate all caches so the dropdown and other views reflect imported data
         queryClient.invalidateQueries([QUERY_KEYS.GET_PROJECTS]);
         queryClient.invalidateQueries([QUERY_KEYS.GET_CONNECTIONS]);
