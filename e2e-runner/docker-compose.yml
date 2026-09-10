@@ -1,3 +1,5 @@
+name: studio-testing-tool
+
 services:
   e2e-runner:
     build: .
@@ -10,6 +12,7 @@ services:
       - GIT_TOKEN=${GIT_TOKEN}
       - TEST_RUNNER_IMAGE=${TEST_RUNNER_IMAGE:-e2e-test-runner:latest}
       - MAX_CONCURRENT_RUNS=${MAX_CONCURRENT_RUNS:-1}
+      - TEST_CONTAINER_MEMORY_MB=${TEST_CONTAINER_MEMORY_MB:-4096}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./data:/app/data

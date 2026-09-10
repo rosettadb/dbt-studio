@@ -36,6 +36,14 @@ button:not(:disabled):hover { background: #24272f; }
 
 .hidden { display: none !important; }
 
+.live-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+.live-header h2 { margin: 0; }
+
 #live-log {
   background: #05060a;
   border: 1px solid #262a33;
@@ -84,7 +92,6 @@ td a:first-child { margin-left: 0; }
 .link-btn.danger { color: #ff8f8f; }
 
 #live-stop {
-  margin-top: 0.75rem;
   background: #4a1414;
   color: #ff8f8f;
   border-color: #6b1f1f;

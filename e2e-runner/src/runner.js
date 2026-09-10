@@ -14,6 +14,16 @@ const TEST_RUNNER_IMAGE = process.env.TEST_RUNNER_IMAGE || 'e2e-test-runner:late
 const NPM_CACHE_VOLUME = 'e2e-runner-npm-cache';
 const PLAYWRIGHT_CACHE_VOLUME = 'e2e-runner-playwright-cache';
 
+// Memory and MemoryReservation set to the same value give the container a
+// fixed allocation up front instead of growing it on demand, which is
+// otherwise a real source of slowness under Docker's dynamic memory
+// accounting.
+const TEST_CONTAINER_MEMORY_MB = Math.max(
+  512,
+  Number(process.env.TEST_CONTAINER_MEMORY_MB) || 4096,
+);
+const TEST_CONTAINER_MEMORY_BYTES = TEST_CONTAINER_MEMORY_MB * 1024 * 1024;
+
 const activeContainers = new Map(); // runId -> dockerode container
 const cancelledRuns = new Set();
 
@@ -109,6 +119,8 @@ async function executeRun(run) {
         // creation. This container only ever runs this repo's own test suite,
         // so relaxing it here is the standard, low-risk fix for that.
         SecurityOpt: ['seccomp=unconfined'],
+        Memory: TEST_CONTAINER_MEMORY_BYTES,
+        MemoryReservation: TEST_CONTAINER_MEMORY_BYTES,
       },
     });
     container.__runId = runId;

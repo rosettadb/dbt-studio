@@ -16,12 +16,14 @@
 
     <main>
       <section id="live" class="hidden">
-        <h2>
-          Run #<span id="live-id"></span> — <span id="live-branch"></span>
-          <span id="live-status" class="badge"></span>
-        </h2>
+        <div class="live-header">
+          <h2>
+            Run #<span id="live-id"></span> — <span id="live-branch"></span>
+            <span id="live-status" class="badge"></span>
+          </h2>
+          <button id="live-stop" class="hidden danger">Stop</button>
+        </div>
         <pre id="live-log"></pre>
-        <button id="live-stop" class="hidden danger">Stop</button>
         <a id="live-report" class="hidden" href="#" target="_blank">Open Playwright report</a>
       </section>
 
