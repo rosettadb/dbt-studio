@@ -68,6 +68,27 @@ export async function storeImportedConnectionCredentials(
   }
 }
 
+export async function deleteImportedConnectionCredentials(
+  connection: ConnectionInput,
+  secureStorage: SecureStorage,
+): Promise<void> {
+  const { name } = connection;
+  const asAny = connection as any;
+
+  if ('username' in connection && asAny.username) {
+    await secureStorage.deleteDatabaseUsername(name);
+  }
+  if ('password' in connection && asAny.password) {
+    await secureStorage.deleteDatabasePassword(name);
+  }
+  if ('token' in connection && asAny.token) {
+    await secureStorage.deleteDatabaseToken(name);
+  }
+  if (connection.type === 'bigquery' && asAny.keyfile) {
+    await secureStorage.deleteBigQueryServiceAccountKey(name);
+  }
+}
+
 /**
  * Given a desired connection name, return a name that doesn't collide
  * (case-insensitively) with any existing connection, appending

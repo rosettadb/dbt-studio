@@ -3,7 +3,7 @@
  * Exports all notebook-related components
  */
 
-export { NotebookEditor } from './NotebookEditor';
+export { NotebookEditor, flushNotebookPendingSave } from './NotebookEditor';
 export { NotebookCell } from './NotebookCell';
 export { SQLCell } from './SQLCell';
 export { MarkdownCell } from './MarkdownCell';

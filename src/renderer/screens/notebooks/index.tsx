@@ -65,7 +65,10 @@ import { notebooksService } from '../../services/notebooks.service';
 import { AnalyticsEditor } from '../../components/analytics';
 import { NotebooksSidebar } from '../../components/notebook/NotebooksSidebar';
 import { NotebookTabManager } from '../../components/notebook/NotebookTabManager';
-import { NotebookEditor } from '../../components/notebook';
+import {
+  NotebookEditor,
+  flushNotebookPendingSave,
+} from '../../components/notebook';
 import { ExportNotebookDialog } from '../../components/notebook/ExportNotebookDialog';
 import { ImportConnectionDialog } from '../../components/notebook/ImportConnectionDialog';
 import { ChatWindow } from '../../components/chat';
@@ -760,6 +763,9 @@ const Notebooks = () => {
           activeConnection.connection as ConnectionInput,
           secureStorage,
         );
+      }
+      if (notebookTabManager.activeTabId) {
+        await flushNotebookPendingSave(notebookTabManager.activeTabId);
       }
 
       // Fetch fresh from disk instead of the notebooks list cache, which is

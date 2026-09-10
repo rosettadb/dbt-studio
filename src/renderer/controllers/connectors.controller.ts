@@ -24,6 +24,7 @@ import useSecureStorage from '../hooks/useSecureStorage';
 import {
   getUniqueConnectionName,
   storeImportedConnectionCredentials,
+  deleteImportedConnectionCredentials,
 } from '../utils/notebookConnectionTransfer';
 
 export const useGetConnections = (
@@ -176,8 +177,24 @@ export const useImportConnectionFromNotebook = (
         name: uniqueName,
       };
 
-      const id = await connectorsServices.saveConnection(finalConnection);
-      await storeImportedConnectionCredentials(finalConnection, secureStorage);
+      let id: string | undefined;
+      try {
+        id = await connectorsServices.saveConnection(finalConnection);
+        await storeImportedConnectionCredentials(
+          finalConnection,
+          secureStorage,
+        );
+      } catch (err) {
+        const rollbacks: Promise<void>[] = [];
+        if (id) {
+          rollbacks.push(connectorsServices.deleteConnection(id));
+        }
+        rollbacks.push(
+          deleteImportedConnectionCredentials(finalConnection, secureStorage),
+        );
+        await Promise.allSettled(rollbacks);
+        throw err;
+      }
 
       return { id, name: uniqueName };
     },

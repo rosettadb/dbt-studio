@@ -58,6 +58,17 @@ import { resolveConnectionCredentials } from '../../utils/notebookConnectionTran
 let sharedCompletionProvider: any = null;
 const completionsRefSingleton = { current: [] as any[] };
 
+const notebookSaveFlushers = new Map<string, () => Promise<void>>();
+
+export async function flushNotebookPendingSave(
+  notebookId: string,
+): Promise<void> {
+  const flush = notebookSaveFlushers.get(notebookId);
+  if (flush) {
+    await flush();
+  }
+}
+
 interface NotebookEditorProps {
   instanceId: string; // This is actually the connectionId
   notebookId: string;
@@ -102,6 +113,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   // Local state for cells to enable immediate UI updates
   const [localCells, setLocalCells] = useState<NotebookCellType[]>([]);
   const updateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const localCellsRef = useRef<NotebookCellType[]>([]);
 
   // Cancel pending debounced save to prevent stale timeouts from overwriting structural edits
   const cancelPendingCellSave = useCallback(() => {
@@ -110,6 +122,26 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
       updateTimeoutRef.current = null;
     }
   }, []);
+
+  const flushPendingSave = useCallback(async () => {
+    if (!updateTimeoutRef.current) return;
+    clearTimeout(updateTimeoutRef.current);
+    updateTimeoutRef.current = null;
+    await updateNotebook.mutateAsync({
+      connectionId,
+      notebookId,
+      cells: localCellsRef.current,
+    });
+  }, [connectionId, notebookId, updateNotebook]);
+
+  // Register this editor's flush barrier so the parent screen can drain pending
+  // saves ahead of an export.
+  useEffect(() => {
+    notebookSaveFlushers.set(notebookId, flushPendingSave);
+    return () => {
+      notebookSaveFlushers.delete(notebookId);
+    };
+  }, [notebookId, flushPendingSave]);
 
   const { data: schemaData } = useSchemaForConnection(connectionId);
   const completions = useMonacoAutocomplete(
@@ -156,6 +188,10 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
       setLocalCells(notebook.cells);
     }
   }, [notebook?.cells]);
+
+  useEffect(() => {
+    localCellsRef.current = localCells;
+  }, [localCells]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -501,6 +537,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
           secureStorage,
         );
       }
+      await flushNotebookPendingSave(notebookId);
 
       // Fetch fresh from disk instead of the notebook detail cache, which is
       // only refreshed on mount or after running a cell — not after simply
