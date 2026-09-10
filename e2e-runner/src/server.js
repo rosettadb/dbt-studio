@@ -111,6 +111,17 @@ app.get('/api/runs/:id/stream', (req, res) => {
 app.use('/api/runs/:id/report', (req, res, next) => {
   const reportDir = path.join(db.dataDir, 'runs', req.params.id, 'report', 'html');
   if (!fs.existsSync(reportDir)) return res.status(404).send('Report not available for this run');
+
+  // The trace viewer's service worker (trace/sw.bundle.js) intercepts
+  // absolute-root requests like /snapshot to render each step's captured
+  // screenshot. Served from a subpath, a worker only controls that subpath
+  // by default — this header is what lets it claim the whole origin instead,
+  // the same thing Playwright's own `show-report` server sends. Without it,
+  // every trace step falls back to the same blank frame.
+  if (req.path.endsWith('sw.bundle.js')) {
+    res.set('Service-Worker-Allowed', '/');
+  }
+
   express.static(reportDir)(req, res, next);
 });
 
