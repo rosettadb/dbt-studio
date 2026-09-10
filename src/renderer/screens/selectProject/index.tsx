@@ -715,20 +715,15 @@ const SelectProject: React.FC = () => {
                           return;
                         }
 
-                        // Show more specific error messages
                         if (error.message.includes('compressed')) {
                           toast.error(
                             'Failed to extract compressed file. Please ensure it contains a valid dbt project.',
                           );
-                        } else if (error.message.includes('validation')) {
-                          toast.error(
-                            'Invalid dbt project structure. Please ensure the folder contains a valid dbt_project.yml file.',
-                          );
-                        } else if (error.message.includes('already exists')) {
-                          toast.error(error.message);
                         } else {
                           toast.error(
-                            'Failed to import project. Please try again.',
+                            error instanceof Error
+                              ? error.message
+                              : 'Failed to import project. Please try again.',
                           );
                         }
                       }
