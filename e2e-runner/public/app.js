@@ -12,6 +12,23 @@ const historyBody = document.querySelector('#history tbody');
 let currentStream = null;
 let currentRunId = null;
 
+// Full test runs can emit tens of thousands of lines (webpack, npm, the
+// Playwright reporter) — unbounded appends to the DOM eventually exhaust
+// the tab's memory on a long run. Keep only the most recent lines.
+const MAX_LOG_LINES = 5000;
+let logLines = [];
+
+function appendLogLine(line) {
+  logLines.push(line);
+  if (logLines.length > MAX_LOG_LINES) {
+    logLines = logLines.slice(-MAX_LOG_LINES);
+    liveLog.textContent = `${logLines.join('\n')}\n`;
+  } else {
+    liveLog.textContent += `${line}\n`;
+  }
+  liveLog.scrollTop = liveLog.scrollHeight;
+}
+
 const TERMINAL_STATUSES = ['passed', 'failed', 'error', 'cancelled'];
 const ACTIVE_STATUSES = ['queued', 'running'];
 
@@ -90,6 +107,7 @@ function watchRun(run) {
   live.classList.remove('hidden');
   liveId.textContent = run.id;
   liveBranch.textContent = run.branch;
+  logLines = [];
   liveLog.textContent = '';
   liveReport.classList.add('hidden');
   liveStop.classList.toggle('hidden', !ACTIVE_STATUSES.includes(run.status));
@@ -99,8 +117,7 @@ function watchRun(run) {
   currentStream = stream;
 
   stream.addEventListener('log', (e) => {
-    liveLog.textContent += `${JSON.parse(e.data)}\n`;
-    liveLog.scrollTop = liveLog.scrollHeight;
+    appendLogLine(JSON.parse(e.data));
   });
 
   stream.addEventListener('status', (e) => {
