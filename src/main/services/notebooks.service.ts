@@ -1357,22 +1357,22 @@ export class NotebooksService {
         // Limit output data size to prevent massive files
         const limitedOutput = limitCellOutputData(output);
 
-      const updatedCells = notebook.cells.map((cell) =>
-        cell.id === cellId
-          ? {
-              ...cell,
-              output: limitedOutput,
-              ...(connectionId.startsWith('iceberg-')
-                ? {
-                    status:
-                      output.type === 'error'
-                        ? ('error' as const)
-                        : ('success' as const),
-                  }
-                : {}),
-            }
-          : cell,
-      );
+        const updatedCells = notebook.cells.map((cell) =>
+          cell.id === cellId
+            ? {
+                ...cell,
+                output: limitedOutput,
+                ...(connectionId.startsWith('iceberg-')
+                  ? {
+                      status:
+                        output.type === 'error'
+                          ? ('error' as const)
+                          : ('success' as const),
+                    }
+                  : {}),
+              }
+            : cell,
+        );
 
         const updatedNotebook: Notebook = {
           ...notebook,
