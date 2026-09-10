@@ -55,6 +55,8 @@ import {
   useImportAllNotebooksFromPath,
   useRenameNotebook,
   useDuplicateNotebook,
+  usePythonNotebooks,
+  useCreatePythonNotebook,
 } from '../../controllers/notebooks.controller';
 import connectionIcons, {
   defaultIcon,
@@ -67,6 +69,7 @@ import { NotebooksSidebar } from '../../components/notebook/NotebooksSidebar';
 import { NotebookTabManager } from '../../components/notebook/NotebookTabManager';
 import {
   NotebookEditor,
+  PythonNotebookEditor,
   flushNotebookPendingSave,
 } from '../../components/notebook';
 import { ExportNotebookDialog } from '../../components/notebook/ExportNotebookDialog';
@@ -177,6 +180,12 @@ const Notebooks = () => {
   }, []);
 
   const notebookTabManager = useNotebookTabManager();
+  const isPythonNotebookActive =
+    notebookTabManager.activeTab?.kind === 'python';
+
+  useEffect(() => {
+    if (isPythonNotebookActive && isChatOpen) setIsChatOpen?.(false);
+  }, [isChatOpen, isPythonNotebookActive, setIsChatOpen]);
 
   // Wait for all hydration to complete
   const isFullyHydrated =
@@ -226,11 +235,15 @@ const Notebooks = () => {
   const deleteArchivedNotebook = useDeleteArchivedNotebook();
   const deleteAllArchived = useDeleteAllArchivedNotebooks();
   const createNotebook = useCreateNotebook();
+  const { data: pythonNotebooks = [] } = usePythonNotebooks();
+  const createPythonNotebook = useCreatePythonNotebook();
 
   // Confirmation dialogs state
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteAllConfirmOpen, setDeleteAllConfirmOpen] = useState(false);
   const [createNotebookOpen, setCreateNotebookOpen] = useState(false);
+  const [createPythonNotebookOpen, setCreatePythonNotebookOpen] =
+    useState(false);
   const [deleteNotebookConfirmOpen, setDeleteNotebookConfirmOpen] =
     useState(false);
   const [renameNotebookOpen, setRenameNotebookOpen] = useState(false);
@@ -514,6 +527,17 @@ const Notebooks = () => {
     createNotebook,
     notebookTabManager,
   ]);
+
+  const handleCreatePythonNotebook = useCallback(() => {
+    if (!newNotebookName.trim()) return;
+    createPythonNotebook.mutate(newNotebookName.trim(), {
+      onSuccess: (notebook) => {
+        notebookTabManager.openPythonNotebook(notebook);
+        setCreatePythonNotebookOpen(false);
+        setNewNotebookName('');
+      },
+    });
+  }, [createPythonNotebook, newNotebookName, notebookTabManager]);
 
   // Import notebooks (and optionally the connection they were exported from)
   // into the given connection, opening the first imported notebook.
@@ -1113,77 +1137,113 @@ const Notebooks = () => {
           </Box>
 
           {/* Tabbed Sidebar */}
-          {!activeConnectionId ? (
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                p: 2,
-                height: '100%',
-              }}
-            >
-              <Typography
-                variant="body2"
-                color="text.secondary"
+          <>
+            <Box sx={{ p: 1, borderBottom: 1, borderColor: 'divider' }}>
+              <Box
+                sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}
+              >
+                <Typography variant="subtitle2">Python Notebooks</Typography>
+                <Box sx={{ flex: 1 }} />
+                <IconButton
+                  size="small"
+                  aria-label="Create Python notebook"
+                  onClick={() => setCreatePythonNotebookOpen(true)}
+                >
+                  <Add fontSize="small" />
+                </IconButton>
+              </Box>
+              {pythonNotebooks.length === 0 ? (
+                <Typography variant="caption" color="text.secondary">
+                  Create a connection-independent Python notebook.
+                </Typography>
+              ) : (
+                pythonNotebooks.map((notebook) => (
+                  <Button
+                    key={notebook.id}
+                    fullWidth
+                    size="small"
+                    sx={{ justifyContent: 'flex-start', textTransform: 'none' }}
+                    onClick={() =>
+                      notebookTabManager.openPythonNotebook(notebook)
+                    }
+                  >
+                    {notebook.name}
+                  </Button>
+                ))
+              )}
+            </Box>
+            {!activeConnectionId ? (
+              <Box
                 sx={{
-                  textAlign: 'center',
-                  wordWrap: 'break-word',
-                  overflowWrap: 'break-word',
-                  whiteSpace: 'normal',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  p: 2,
+                  height: '100%',
                 }}
               >
-                Select a connection to view schema and notebooks
-              </Typography>
-            </Box>
-          ) : (
-            <NotebooksSidebar
-              connectionName={activeConnection?.connection.name || 'Database'}
-              connectionType={
-                (activeConnectionId.startsWith('ducklake-')
-                  ? 'ducklake'
-                  : activeConnection?.connection
-                      .type) as SupportedConnectionTypes
-              }
-              schema={activeSchema}
-              isLoadingSchema={isLoadingSchema}
-              notebooks={notebooks}
-              isLoadingNotebooks={isLoadingNotebooks}
-              archivedNotebooks={archivedNotebooks}
-              showArchived={showArchived}
-              onRefresh={handleRefreshSchema}
-              onCreateNotebook={() => setCreateNotebookOpen(true)}
-              onOpenNotebook={handleOpenNotebook}
-              onRenameNotebook={handleRenameNotebook}
-              onDuplicateNotebook={handleDuplicateNotebook}
-              onDeleteNotebook={handleDeleteNotebook}
-              onRestoreNotebook={handleRestoreNotebook}
-              onDeleteArchivedNotebook={(
-                connectionKey,
-                notebookId,
-                notebookName,
-              ) => {
-                setNotebookToDelete({
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{
+                    textAlign: 'center',
+                    wordWrap: 'break-word',
+                    overflowWrap: 'break-word',
+                    whiteSpace: 'normal',
+                  }}
+                >
+                  Select a connection to view schema and notebooks
+                </Typography>
+              </Box>
+            ) : (
+              <NotebooksSidebar
+                connectionName={activeConnection?.connection.name || 'Database'}
+                connectionType={
+                  (activeConnectionId.startsWith('ducklake-')
+                    ? 'ducklake'
+                    : activeConnection?.connection
+                        .type) as SupportedConnectionTypes
+                }
+                schema={activeSchema}
+                isLoadingSchema={isLoadingSchema}
+                notebooks={notebooks}
+                isLoadingNotebooks={isLoadingNotebooks}
+                archivedNotebooks={archivedNotebooks}
+                showArchived={showArchived}
+                onRefresh={handleRefreshSchema}
+                onCreateNotebook={() => setCreateNotebookOpen(true)}
+                onOpenNotebook={handleOpenNotebook}
+                onRenameNotebook={handleRenameNotebook}
+                onDuplicateNotebook={handleDuplicateNotebook}
+                onDeleteNotebook={handleDeleteNotebook}
+                onRestoreNotebook={handleRestoreNotebook}
+                onDeleteArchivedNotebook={(
                   connectionKey,
                   notebookId,
                   notebookName,
-                });
-                setDeleteConfirmOpen(true);
-              }}
-              onToggleArchived={setShowArchived}
-              getConnectionName={getConnectionName}
-              onExportAllNotebooks={handleExportAllNotebooksClick}
-              onImportAllNotebooks={handleImportAllNotebooks}
-              onTabChange={setActiveSidebarTab}
-              connectionId={activeConnectionId}
-              activeAnalyticsPageId={activeAnalyticsPageId}
-              onOpenAnalyticsPage={handleOpenAnalyticsPage}
-              onDeleteAnalyticsPage={(id) => {
-                if (id === activeAnalyticsPageId)
-                  setActiveAnalyticsPageId(null);
-              }}
-            />
-          )}
+                ) => {
+                  setNotebookToDelete({
+                    connectionKey,
+                    notebookId,
+                    notebookName,
+                  });
+                  setDeleteConfirmOpen(true);
+                }}
+                onToggleArchived={setShowArchived}
+                getConnectionName={getConnectionName}
+                onExportAllNotebooks={handleExportAllNotebooksClick}
+                onImportAllNotebooks={handleImportAllNotebooks}
+                onTabChange={setActiveSidebarTab}
+                connectionId={activeConnectionId}
+                activeAnalyticsPageId={activeAnalyticsPageId}
+                onOpenAnalyticsPage={handleOpenAnalyticsPage}
+                onDeleteAnalyticsPage={(id) => {
+                  if (id === activeAnalyticsPageId)
+                    setActiveAnalyticsPageId(null);
+                }}
+              />
+            )}
+          </>
         </Box>
       }
     >
@@ -1267,6 +1327,23 @@ const Notebooks = () => {
                     >
                       Import Notebook (JSON)
                     </Button>
+                    <Button
+                      variant="contained"
+                      onClick={() => setCreatePythonNotebookOpen(true)}
+                    >
+                      New Python Notebook
+                    </Button>
+                    {pythonNotebooks.map((notebook) => (
+                      <Button
+                        key={notebook.id}
+                        variant="text"
+                        onClick={() =>
+                          notebookTabManager.openPythonNotebook(notebook)
+                        }
+                      >
+                        {notebook.name}
+                      </Button>
+                    ))}
                   </Box>
                 );
               }
@@ -1335,7 +1412,14 @@ const Notebooks = () => {
                         : 'calc(100vw - 56px)',
                     }}
                   >
-                    {notebookTabManager.activeTabId && activeConnectionId ? (
+                    {/* Python and SQL dispatch remain isolated at the tab boundary. */}
+                    {/* eslint-disable-next-line no-nested-ternary */}
+                    {notebookTabManager.activeTab?.kind === 'python' ? (
+                      <PythonNotebookEditor
+                        key={`python-notebook-${notebookTabManager.activeTab.notebookId}`}
+                        notebookId={notebookTabManager.activeTab.notebookId}
+                      />
+                    ) : notebookTabManager.activeTabId && activeConnectionId ? (
                       <NotebookEditor
                         key={`notebook-${notebookTabManager.activeTabId}`}
                         instanceId={activeConnectionId}
@@ -1416,7 +1500,7 @@ const Notebooks = () => {
               flexDirection: 'column',
             }}
           >
-            {isChatOpen && !isNarrow && (
+            {isChatOpen && !isNarrow && !isPythonNotebookActive && (
               <ChatWindow
                 key={`${activeSidebarTab === 2 ? 'analytics' : 'notebooks'}-${activeConnectionId}-${activeSidebarTab === 2 ? (activeAnalyticsPageId ?? 'none') : (notebookTabManager.activeTabId ?? 'none')}`}
                 screenKey={activeSidebarTab === 2 ? 'analytics' : 'notebooks'}
@@ -1445,7 +1529,7 @@ const Notebooks = () => {
       {isNarrow && (
         <Dialog
           fullScreen
-          open={!!isChatOpen}
+          open={!!isChatOpen && !isPythonNotebookActive}
           onClose={() => setIsChatOpen?.(false)}
         >
           <Box
@@ -1596,6 +1680,37 @@ const Notebooks = () => {
             disabled={!newNotebookName.trim() || createNotebook.isLoading}
           >
             {createNotebook.isLoading ? 'Creating...' : 'Create'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={createPythonNotebookOpen}
+        onClose={() => setCreatePythonNotebookOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Create Python Notebook</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            fullWidth
+            label="Notebook Name"
+            value={newNotebookName}
+            onChange={(event) => setNewNotebookName(event.target.value)}
+            sx={{ mt: 1 }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCreatePythonNotebookOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            disabled={!newNotebookName.trim() || createPythonNotebook.isLoading}
+            onClick={handleCreatePythonNotebook}
+          >
+            Create
           </Button>
         </DialogActions>
       </Dialog>

@@ -4,6 +4,7 @@
  */
 
 export { NotebookEditor, flushNotebookPendingSave } from './NotebookEditor';
+export { PythonNotebookEditor } from './PythonNotebookEditor';
 export { NotebookCell } from './NotebookCell';
 export { SQLCell } from './SQLCell';
 export { MarkdownCell } from './MarkdownCell';

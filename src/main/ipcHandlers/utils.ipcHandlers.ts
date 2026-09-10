@@ -23,12 +23,21 @@ const removeUtilsIpcHandlers = () => {
   });
 };
 
+const isAllowedExternalUrl = (value: string) => {
+  try {
+    const url = new URL(value);
+    return ['http:', 'https:', 'mailto:'].includes(url.protocol);
+  } catch {
+    return false;
+  }
+};
+
 const registerUtilsHandlers = () => {
   removeUtilsIpcHandlers();
 
   // Handler for opening external URLs
   ipcMain.handle('open:external', async (_event, url) => {
-    if (typeof url === 'string') {
+    if (typeof url === 'string' && isAllowedExternalUrl(url)) {
       await shell.openExternal(url);
       return true;
     }
