@@ -124,6 +124,7 @@ export type PythonCellExecution = {
 
 export function usePythonNotebookExecution(notebookId: string) {
   const [cells, setCells] = useState<Record<string, PythonCellExecution>>({});
+  const [hasActiveSession, setHasActiveSession] = useState(false);
 
   useEffect(
     () =>
@@ -164,12 +165,14 @@ export function usePythonNotebookExecution(notebookId: string) {
   const execute = useMutation({
     mutationFn: (request: PythonNotebookExecuteRequest) =>
       notebooksService.executePythonCell(request),
+    onSuccess: () => setHasActiveSession(true),
   });
   const shutdown = useMutation({
     mutationFn: () => notebooksService.shutdownPythonNotebook(notebookId),
+    onSuccess: () => setHasActiveSession(false),
   });
 
-  return { cells, execute, shutdown };
+  return { cells, execute, hasActiveSession, shutdown };
 }
 
 // List notebooks for a connection

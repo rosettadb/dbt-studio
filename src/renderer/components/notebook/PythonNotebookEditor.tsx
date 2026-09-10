@@ -35,6 +35,7 @@ export const PythonNotebookEditor: React.FC<{ notebookId: string }> = ({
   const {
     cells: executionCells,
     execute,
+    hasActiveSession,
     shutdown,
   } = usePythonNotebookExecution(notebookId);
   const [draft, setDraft] = React.useState<PythonNotebook | null>(null);
@@ -84,7 +85,10 @@ export const PythonNotebookEditor: React.FC<{ notebookId: string }> = ({
         <Box sx={{ flex: 1 }} />
         <Button
           size="small"
-          disabled={shutdown.isLoading || runtime?.activeSessionCount === 0}
+          disabled={
+            shutdown.isLoading ||
+            (!hasActiveSession && (runtime?.activeSessionCount ?? 0) === 0)
+          }
           startIcon={<Stop />}
           onClick={() => shutdown.mutate()}
         >

@@ -1,5 +1,6 @@
 import importlib.metadata as metadata
 import json
+import re
 import sys
 
 from jupyter_client import KernelManager
@@ -7,10 +8,11 @@ from jupyter_client import KernelManager
 
 REQUIRED_PACKAGES = ("ipykernel", "jupyter_client", "nbformat")
 MAX_TEXT_LENGTH = 64 * 1024
+ANSI_ESCAPE = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
 
 
 def bounded_text(value):
-    text = str(value)
+    text = ANSI_ESCAPE.sub("", str(value))
     return text[:MAX_TEXT_LENGTH], len(text) > MAX_TEXT_LENGTH
 
 
