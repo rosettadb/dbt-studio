@@ -261,6 +261,9 @@ const ProjectDetails: React.FC = () => {
   const [pipelineRunArgs, setPipelineRunArgs] = React.useState('');
   const [pipelineCloudModal, setPipelineCloudModal] = React.useState(false);
   const [runWithEnvModalOpen, setRunWithEnvModalOpen] = React.useState(false);
+  const [runWithEnvPipelineFile, setRunWithEnvPipelineFile] = React.useState<
+    string | null
+  >(null);
   const theme = useTheme();
 
   const handleRunPipelineFile = React.useCallback(
@@ -334,11 +337,7 @@ const ProjectDetails: React.FC = () => {
     recordedPipelineActionId,
   );
 
-  const {
-    run: runPipelineLocally,
-    isRunning: isRunnerRunning,
-    logs: runnerLogs,
-  } = useRunner();
+  const { isRunning: isRunnerRunning, logs: runnerLogs } = useRunner();
   const showRunnerLogsTab = isRunnerRunning || runnerLogs.length > 0;
 
   // Relative path (with its real extension) of the pipeline currently open
@@ -367,57 +366,26 @@ const ProjectDetails: React.FC = () => {
     activeRunnerTask?.status === 'running' ||
     activeRunnerTask?.status === 'pending';
 
-  const handleRunPipelineLocally = React.useCallback(async () => {
+  const handleRunPipelineLocally = React.useCallback(() => {
     if (!activeLocalPipelineFile || !project?.path || !settings?.runnerPath) {
       return;
     }
-    const result = await runPipelineLocally({
-      workspaceDir: project.path,
-      pipelineFile: activeLocalPipelineFile,
-      connectionName: connection?.connection?.name,
-    });
-    if (result.success) {
-      handleTerminalTabSwitch('runnerLogs');
-      toast.success('Pipeline run started. Track progress in Task Manager.');
-    } else {
-      toast.error(result.error || 'Failed to start the pipeline run');
-    }
-  }, [
-    activeLocalPipelineFile,
-    project?.path,
-    settings?.runnerPath,
-    runPipelineLocally,
-    connection,
-    handleTerminalTabSwitch,
-  ]);
+    setRunWithEnvPipelineFile(activeLocalPipelineFile);
+    setRunWithEnvModalOpen(true);
+  }, [activeLocalPipelineFile, project?.path, settings?.runnerPath]);
 
   // Same as handleRunPipelineLocally, but for the file-tree's per-pipeline
   // "Run Pipeline (Local Runner)" button, which passes an explicit filePath
   // instead of relying on the currently open pipeline tab.
   const handleRunPipelineFileLocally = React.useCallback(
-    async (filePath: string) => {
+    (filePath: string) => {
       if (!project?.path || !settings?.runnerPath) return;
       const pipelineName = getPipelineRelativeName(filePath, project.path);
       const ext = filePath.slice(filePath.lastIndexOf('.'));
-      const result = await runPipelineLocally({
-        workspaceDir: project.path,
-        pipelineFile: `${pipelineName}${ext}`,
-        connectionName: connection?.connection?.name,
-      });
-      if (result.success) {
-        handleTerminalTabSwitch('runnerLogs');
-        toast.success('Pipeline run started. Track progress in Task Manager.');
-      } else {
-        toast.error(result.error || 'Failed to start the pipeline run');
-      }
+      setRunWithEnvPipelineFile(`${pipelineName}${ext}`);
+      setRunWithEnvModalOpen(true);
     },
-    [
-      project?.path,
-      settings?.runnerPath,
-      runPipelineLocally,
-      connection,
-      handleTerminalTabSwitch,
-    ],
+    [project?.path, settings?.runnerPath],
   );
 
   const pipelineRunHandler = React.useMemo(() => {
@@ -1324,6 +1292,10 @@ const ProjectDetails: React.FC = () => {
             }
           }}
           onLocalRunStarted={() => handleTerminalTabSwitch('runnerLogs')}
+          onLocalPipelineSelected={(pipelineRelativePath) => {
+            setRunWithEnvPipelineFile(pipelineRelativePath);
+            setRunWithEnvModalOpen(true);
+          }}
         />
       }
       panelTitle="DBT Studio"
@@ -1983,16 +1955,23 @@ const ProjectDetails: React.FC = () => {
                   initialDbtArguments={pipelineRunArgs}
                 />
               )}
-              {runWithEnvModalOpen && project && activeLocalPipelineFile && (
-                <RunWithEnvModal
-                  isOpen={runWithEnvModalOpen}
-                  onClose={() => setRunWithEnvModalOpen(false)}
-                  onSuccess={() => handleTerminalTabSwitch('runnerLogs')}
-                  project={project}
-                  pipelineRelativePath={activeLocalPipelineFile}
-                  connectionName={connection?.connection?.name}
-                />
-              )}
+              {runWithEnvModalOpen &&
+                project &&
+                (runWithEnvPipelineFile ?? activeLocalPipelineFile) && (
+                  <RunWithEnvModal
+                    isOpen={runWithEnvModalOpen}
+                    onClose={() => {
+                      setRunWithEnvModalOpen(false);
+                      setRunWithEnvPipelineFile(null);
+                    }}
+                    onSuccess={() => handleTerminalTabSwitch('runnerLogs')}
+                    project={project}
+                    pipelineRelativePath={
+                      (runWithEnvPipelineFile ?? activeLocalPipelineFile)!
+                    }
+                    connectionName={connection?.connection?.name}
+                  />
+                )}
             </div>
           </Box>
         </Pane>
