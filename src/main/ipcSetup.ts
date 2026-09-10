@@ -28,6 +28,7 @@ import {
   registerTaskManagerHandlers,
   registerSecondBrainHandlers,
   registerIcebergDatalakeHandlers,
+  registerBackupHandlers,
 } from './ipcHandlers';
 import { installIpcErrorHandling } from './utils/ipcErrorHandler';
 
@@ -61,6 +62,7 @@ const registerHandlers = (mainWindow: BrowserWindow) => {
   registerTaskManagerHandlers(mainWindow);
   registerSecondBrainHandlers();
   registerIcebergDatalakeHandlers();
+  registerBackupHandlers(mainWindow);
 };
 
 export default registerHandlers;

@@ -5,7 +5,12 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { executeIcebergSql, getIcebergInstance } from './iceberg.service';
-import { Notebook, NotebookCell, CellOutput } from '../../types/notebooks';
+import {
+  Notebook,
+  NotebookCell,
+  CellOutput,
+  NotebookImportPreview,
+} from '../../types/notebooks';
 
 type RunOptions = { executionId?: string; signal?: AbortSignal };
 
@@ -172,6 +177,17 @@ export const notebooksService = {
    */
   selectImportFile: async (): Promise<string | null> => {
     return window.electron.ipcRenderer.invoke('notebooks:selectImportFile');
+  },
+
+  /**
+   * Peek at a notebook export JSON file (check for embedded connection
+   * details) without importing it
+   */
+  peekImportFile: async (filePath: string): Promise<NotebookImportPreview> => {
+    return window.electron.ipcRenderer.invoke(
+      'notebooks:peekImportFile',
+      filePath,
+    );
   },
 
   /**

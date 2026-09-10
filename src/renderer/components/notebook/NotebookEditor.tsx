@@ -48,18 +48,35 @@ import {
   useDeleteNotebook,
   useDuplicateNotebook,
 } from '../../controllers/notebooks.controller';
+import { useGetConnections } from '../../controllers';
+import { notebooksService } from '../../services/notebooks.service';
 import {
   NotebookCell as NotebookCellType,
   Notebook,
 } from '../../../types/notebooks';
+import { ConnectionInput } from '../../../types/backend';
 import { NotebookToolbar } from './NotebookToolbar';
 import { NotebookCell } from './NotebookCell';
+import { ExportNotebookDialog } from './ExportNotebookDialog';
 import { useSchemaForConnection, useMonacoAutocomplete } from '../../hooks';
 import { useNotebookBridge } from '../../hooks/useNotebookBridge';
+import useSecureStorage from '../../hooks/useSecureStorage';
+import { resolveConnectionCredentials } from '../../utils/notebookConnectionTransfer';
 
 // Module-level singleton for SQL completion provider
 let sharedCompletionProvider: any = null;
 const completionsRefSingleton = { current: [] as any[] };
+
+const notebookSaveFlushers = new Map<string, () => Promise<void>>();
+
+export async function flushNotebookPendingSave(
+  notebookId: string,
+): Promise<void> {
+  const flush = notebookSaveFlushers.get(notebookId);
+  if (flush) {
+    await flush();
+  }
+}
 
 interface NotebookEditorProps {
   instanceId: string; // This is actually the connectionId
@@ -107,12 +124,19 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [newNotebookName, setNewNotebookName] = useState('');
   const [duplicateNotebookName, setDuplicateNotebookName] = useState('');
+
+  const { data: connections = [] } = useGetConnections();
+  const secureStorage = useSecureStorage();
+  const activeConnection = connections.find((c) => c.id === connectionId);
+  const isDuckLakeConnection = connectionId.startsWith('ducklake-');
 
   // Local state for cells to enable immediate UI updates
   const [localCells, setLocalCells] = useState<NotebookCellType[]>([]);
   const updateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const localCellsRef = useRef<NotebookCellType[]>([]);
 
   // Cancel pending debounced save to prevent stale timeouts from overwriting structural edits
   const cancelPendingCellSave = useCallback(() => {
@@ -121,6 +145,26 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
       updateTimeoutRef.current = null;
     }
   }, []);
+
+  const flushPendingSave = useCallback(async () => {
+    if (!updateTimeoutRef.current) return;
+    clearTimeout(updateTimeoutRef.current);
+    updateTimeoutRef.current = null;
+    await updateNotebook.mutateAsync({
+      connectionId,
+      notebookId,
+      cells: localCellsRef.current,
+    });
+  }, [connectionId, notebookId, updateNotebook]);
+
+  // Register this editor's flush barrier so the parent screen can drain pending
+  // saves ahead of an export.
+  useEffect(() => {
+    notebookSaveFlushers.set(notebookId, flushPendingSave);
+    return () => {
+      notebookSaveFlushers.delete(notebookId);
+    };
+  }, [notebookId, flushPendingSave]);
 
   const { data: schemaData } = useSchemaForConnection(connectionId);
   const baseCompletions = useMonacoAutocomplete(
@@ -195,6 +239,10 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
       setLocalCells(notebook.cells);
     }
   }, [notebook?.cells]);
+
+  useEffect(() => {
+    localCellsRef.current = localCells;
+  }, [localCells]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -565,31 +613,66 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
 
   const handleExport = useCallback(() => {
     if (!notebook) return;
-
-    // Create export data without cell output data (to keep file size small)
-    const exportData = {
-      ...notebook,
-      cells: notebook.cells.map((cell) => ({
-        ...cell,
-        output: cell.output
-          ? {
-              ...cell.output,
-              data: [], // Remove data array to reduce file size
-            }
-          : undefined,
-      })),
-    };
-
-    // Export as JSON
-    const dataStr = JSON.stringify(exportData, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${notebook.name}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
+    setExportDialogOpen(true);
   }, [notebook]);
+
+  const handleExportConfirm = useCallback(
+    async (includeConnection: boolean) => {
+      setExportDialogOpen(false);
+      if (!notebook) return;
+
+      let connectionDetails: ConnectionInput | undefined;
+      if (includeConnection && activeConnection && !isDuckLakeConnection) {
+        connectionDetails = await resolveConnectionCredentials(
+          activeConnection.connection as ConnectionInput,
+          secureStorage,
+        );
+      }
+      await flushNotebookPendingSave(notebookId);
+
+      // Fetch fresh from disk instead of the notebook detail cache, which is
+      // only refreshed on mount or after running a cell — not after simply
+      // adding/editing one — and can be stale by the time of export.
+      const freshNotebook =
+        (await notebooksService.getNotebook(connectionId, notebookId)) ??
+        notebook;
+
+      // Create export data without cell output data (to keep file size small)
+      const exportData = {
+        ...freshNotebook,
+        connectionId,
+        connectionName: activeConnection?.connection.name,
+        connection: connectionDetails,
+        cells: freshNotebook.cells.map((cell) => ({
+          ...cell,
+          output: cell.output
+            ? {
+                ...cell.output,
+                data: [], // Remove data array to reduce file size
+              }
+            : undefined,
+        })),
+      };
+
+      // Export as JSON
+      const dataStr = JSON.stringify(exportData, null, 2);
+      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(dataBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${notebook.name}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    },
+    [
+      notebook,
+      connectionId,
+      notebookId,
+      activeConnection,
+      isDuckLakeConnection,
+      secureStorage,
+    ],
+  );
 
   const handleRename = useCallback(() => {
     if (!notebook) return;
@@ -1098,6 +1181,16 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Export Notebook Dialog */}
+      <ExportNotebookDialog
+        open={exportDialogOpen}
+        onClose={() => setExportDialogOpen(false)}
+        onConfirm={handleExportConfirm}
+        subject={`notebook "${notebook?.name ?? ''}"`}
+        connectionName={activeConnection?.connection.name}
+        connectionExportDisabled={isDuckLakeConnection || !activeConnection}
+      />
 
       {/* Run All Backdrop */}
       <Backdrop

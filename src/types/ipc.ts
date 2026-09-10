@@ -401,6 +401,12 @@ export type IcebergChannels =
   | 'iceberg:createMetadataFile'
   | 'iceberg:ensureInstalled';
 
+export type BackupChannels =
+  | 'backup:export'
+  | 'backup:import'
+  | 'backup:import:select'
+  | 'backup:import:result';
+
 export type LineageChannels =
   | 'lineage:getUpstream'
   | 'lineage:getDownstream'
@@ -424,6 +430,7 @@ export type NotebookChannels =
   | 'notebooks:rename'
   | 'notebooks:duplicate'
   | 'notebooks:selectImportFile'
+  | 'notebooks:peekImportFile'
   | 'notebooks:import'
   | 'notebooks:importAll'
   | 'notebooks:delete'
@@ -586,7 +593,8 @@ export type Channels =
   | FlowfileChannels
   | PipelineTemplatesChannels
   | SecondBrainChannels
-  | IcebergChannels;
+  | IcebergChannels
+  | BackupChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;
