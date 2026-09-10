@@ -1,12 +1,13 @@
 import React from 'react';
-import { Notebook } from '../../types/notebooks';
+import { Notebook, PythonNotebook } from '../../types/notebooks';
 
 const STORAGE_KEY = 'dbt-studio:notebook-tabs';
 
 export interface NotebookTabState {
   notebookId: string;
   notebookName: string;
-  connectionId: string;
+  kind: 'sql' | 'python';
+  connectionId?: string;
   isModified: boolean;
 }
 
@@ -81,6 +82,7 @@ export interface UseNotebookTabManagerReturn {
   activeTab: NotebookTabState | undefined;
   isHydrated: boolean;
   openNotebook: (notebook: Notebook, connectionId: string) => string;
+  openPythonNotebook: (notebook: PythonNotebook) => string;
   switchTab: (tabId: string) => void;
   closeTab: (tabId: string) => void;
   markTabModified: (tabId: string, isModified: boolean) => void;
@@ -105,7 +107,9 @@ const useNotebookTabManager = (): UseNotebookTabManagerReturn => {
     const persisted = readPersistedState();
 
     if (persisted) {
-      setTabs(persisted.tabs);
+      setTabs(
+        persisted.tabs.map((tab) => ({ ...tab, kind: tab.kind ?? 'sql' })),
+      );
       const hasValidActiveTab = persisted.tabs.some(
         (tab) => tab.notebookId === persisted.activeTabId,
       );
@@ -201,7 +205,7 @@ const useNotebookTabManager = (): UseNotebookTabManagerReturn => {
     (connectionId: string) => {
       setTabs((current) => {
         const updated = current.filter(
-          (tab) => tab.connectionId !== connectionId,
+          (tab) => tab.kind !== 'sql' || tab.connectionId !== connectionId,
         );
         // If active tab was closed, switch to first remaining tab
         if (
@@ -233,6 +237,7 @@ const useNotebookTabManager = (): UseNotebookTabManagerReturn => {
         notebookId: notebook.id,
         notebookName: notebook.name,
         connectionId,
+        kind: 'sql',
         isModified: false,
       };
 
@@ -242,6 +247,32 @@ const useNotebookTabManager = (): UseNotebookTabManagerReturn => {
         return updated;
       });
 
+      setActiveTabId(notebook.id);
+      return notebook.id;
+    },
+    [],
+  );
+
+  const openPythonNotebook = React.useCallback(
+    (notebook: PythonNotebook): string => {
+      const existingTab = tabsRef.current.find(
+        (tab) => tab.kind === 'python' && tab.notebookId === notebook.id,
+      );
+      if (existingTab) {
+        setActiveTabId(existingTab.notebookId);
+        return existingTab.notebookId;
+      }
+      const newTab: NotebookTabState = {
+        notebookId: notebook.id,
+        notebookName: notebook.name,
+        kind: 'python',
+        isModified: false,
+      };
+      setTabs((current) => {
+        const updated = [...current, newTab];
+        tabsRef.current = updated;
+        return updated;
+      });
       setActiveTabId(notebook.id);
       return notebook.id;
     },
@@ -259,6 +290,7 @@ const useNotebookTabManager = (): UseNotebookTabManagerReturn => {
     activeTab,
     isHydrated,
     openNotebook,
+    openPythonNotebook,
     switchTab,
     closeTab,
     markTabModified,

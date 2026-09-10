@@ -36,6 +36,32 @@ export interface Notebook {
   cellCount: number;
 }
 
+export type NotebookRef =
+  | { kind: 'sql'; connectionId: string; notebookId: string }
+  | { kind: 'python'; notebookId: string };
+
+export interface PythonNotebookCell {
+  id: string;
+  cellType: 'code' | 'markdown' | 'raw';
+  source: string;
+  metadata?: Record<string, unknown>;
+  executionCount?: number | null;
+  outputProvenance?: {
+    documentRevision: number;
+    executedAt: string;
+  };
+}
+
+export interface PythonNotebook {
+  id: string;
+  name: string;
+  cells: PythonNotebookCell[];
+  createdAt: string;
+  updatedAt: string;
+  revision: number;
+  metadata?: Record<string, unknown>;
+}
+
 export type PythonNotebookRuntimeState =
   | 'not-installed'
   | 'installing'

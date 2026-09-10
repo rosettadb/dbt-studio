@@ -6,6 +6,7 @@
 import { ipcMain } from 'electron';
 import { NotebooksService } from '../services/notebooks.service';
 import { PythonNotebookService } from '../services/pythonNotebook.service';
+import type { PythonNotebook } from '../../types/notebooks';
 
 export function registerNotebooksHandlers() {
   ipcMain.handle('notebooks:python:runtimeStatus', async () => {
@@ -19,6 +20,25 @@ export function registerNotebooksHandlers() {
   ipcMain.handle('notebooks:python:checkRuntime', async () => {
     return PythonNotebookService.checkRuntime();
   });
+
+  ipcMain.handle('notebooks:python:list', async () => {
+    return NotebooksService.listPythonNotebooks();
+  });
+
+  ipcMain.handle('notebooks:python:get', async (_event, notebookId: string) => {
+    return NotebooksService.getPythonNotebook(notebookId);
+  });
+
+  ipcMain.handle('notebooks:python:create', async (_event, name: string) => {
+    return NotebooksService.createPythonNotebook(name);
+  });
+
+  ipcMain.handle(
+    'notebooks:python:save',
+    async (_event, notebook: PythonNotebook, expectedRevision: number) => {
+      return NotebooksService.savePythonNotebook(notebook, expectedRevision);
+    },
+  );
 
   // List notebooks for a connection
   ipcMain.handle('notebooks:list', async (_event, connectionId: string) => {

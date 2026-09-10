@@ -13,12 +13,20 @@ import {
   NotebookCell,
   CellOutput,
   NotebookImportPreview,
+  PythonNotebook,
 } from '../../types/notebooks';
 import ConnectorsService from './connectors.service';
 import DuckLakeService from './duckLake.service';
 
 const NOTEBOOKS_DIR = path.join(app.getPath('userData'), 'notebooks');
 const ORPHANED_DIR = path.join(NOTEBOOKS_DIR, '_orphaned');
+const PYTHON_NOTEBOOKS_DIR = path.join(
+  app.getPath('userData'),
+  'python-notebooks',
+  'documents',
+);
+const MAX_PYTHON_NOTEBOOK_CELLS = 1_000;
+const MAX_PYTHON_CELL_SOURCE_BYTES = 1024 * 1024;
 
 // Maximum rows to store in notebook output (prevent massive files)
 const MAX_STORED_ROWS = 100;
@@ -256,6 +264,73 @@ async function writeNotebookFile(
   await fs.rename(tempPath, filePath);
 }
 
+function getPythonNotebookPath(notebookId: string): string {
+  const safeNotebookId = assertSafeSegment(notebookId, 'python notebook id');
+  const filePath = path.resolve(
+    PYTHON_NOTEBOOKS_DIR,
+    `${safeNotebookId}.ipynb`,
+  );
+  if (
+    !filePath.startsWith(`${path.resolve(PYTHON_NOTEBOOKS_DIR)}${path.sep}`)
+  ) {
+    throw new Error('Invalid Python notebook path - path traversal detected');
+  }
+  return filePath;
+}
+
+function validatePythonNotebook(notebook: PythonNotebook): PythonNotebook {
+  if (
+    !notebook ||
+    typeof notebook !== 'object' ||
+    !notebook.id ||
+    !notebook.name?.trim()
+  ) {
+    throw new Error('Invalid Python notebook document.');
+  }
+  assertSafeSegment(notebook.id, 'python notebook id');
+  if (
+    !Array.isArray(notebook.cells) ||
+    notebook.cells.length > MAX_PYTHON_NOTEBOOK_CELLS
+  ) {
+    throw new Error('Python notebook has an invalid number of cells.');
+  }
+  notebook.cells.forEach((cell) => {
+    if (!cell || !['code', 'markdown', 'raw'].includes(cell.cellType)) {
+      throw new Error('Python notebook contains an invalid cell.');
+    }
+    if (
+      typeof cell.source !== 'string' ||
+      Buffer.byteLength(cell.source, 'utf-8') > MAX_PYTHON_CELL_SOURCE_BYTES
+    ) {
+      throw new Error(
+        'Python notebook cell source exceeds the supported limit.',
+      );
+    }
+  });
+  return notebook;
+}
+
+async function readPythonNotebookFile(
+  filePath: string,
+): Promise<PythonNotebook> {
+  return validatePythonNotebook(
+    JSON.parse(await fs.readFile(filePath, 'utf-8')) as PythonNotebook,
+  );
+}
+
+async function writePythonNotebookFile(
+  filePath: string,
+  notebook: PythonNotebook,
+): Promise<void> {
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  await fs.writeFile(
+    tempPath,
+    JSON.stringify(validatePythonNotebook(notebook), null, 2),
+    'utf-8',
+  );
+  await fs.rename(tempPath, filePath);
+}
+
 // Normalize connection ID to connectionKey format with input validation
 function normalizeConnectionKey(connectionId: string): string {
   // Validate input before transformation
@@ -273,6 +348,84 @@ function normalizeConnectionKey(connectionId: string): string {
 }
 
 export class NotebooksService {
+  static async listPythonNotebooks(): Promise<PythonNotebook[]> {
+    await fs.mkdir(PYTHON_NOTEBOOKS_DIR, { recursive: true });
+    const entries = await fs.readdir(PYTHON_NOTEBOOKS_DIR);
+    const notebooks = await Promise.all(
+      entries
+        .filter((entry) => entry.endsWith('.ipynb'))
+        .map(async (entry) => {
+          try {
+            return await readPythonNotebookFile(
+              path.join(PYTHON_NOTEBOOKS_DIR, entry),
+            );
+          } catch {
+            return null;
+          }
+        }),
+    );
+    return notebooks
+      .filter((notebook): notebook is PythonNotebook => notebook !== null)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
+  static async getPythonNotebook(
+    notebookId: string,
+  ): Promise<PythonNotebook | null> {
+    try {
+      return await readPythonNotebookFile(getPythonNotebookPath(notebookId));
+    } catch {
+      return null;
+    }
+  }
+
+  static async createPythonNotebook(name: string): Promise<PythonNotebook> {
+    await fs.mkdir(PYTHON_NOTEBOOKS_DIR, { recursive: true });
+    const now = new Date().toISOString();
+    const notebook: PythonNotebook = {
+      id: uuidv4(),
+      name: name.trim(),
+      cells: [
+        {
+          id: uuidv4(),
+          cellType: 'code',
+          source: '',
+          executionCount: null,
+        },
+      ],
+      createdAt: now,
+      updatedAt: now,
+      revision: 1,
+      metadata: { language: 'python', nbformat: 4, nbformatMinor: 5 },
+    };
+    await writePythonNotebookFile(getPythonNotebookPath(notebook.id), notebook);
+    return notebook;
+  }
+
+  static async savePythonNotebook(
+    notebook: PythonNotebook,
+    expectedRevision: number,
+  ): Promise<PythonNotebook> {
+    const filePath = getPythonNotebookPath(notebook.id);
+    return withNotebookWriteLock(filePath, async () => {
+      const current = await this.getPythonNotebook(notebook.id);
+      if (!current) throw new Error('Python notebook not found.');
+      if (current.revision !== expectedRevision) {
+        throw new Error(
+          'Python notebook was changed in another view. Refresh before saving.',
+        );
+      }
+      const updated: PythonNotebook = {
+        ...notebook,
+        name: notebook.name.trim(),
+        revision: current.revision + 1,
+        updatedAt: new Date().toISOString(),
+      };
+      await writePythonNotebookFile(filePath, updated);
+      return updated;
+    });
+  }
+
   /**
    * List all notebooks for a connection
    */

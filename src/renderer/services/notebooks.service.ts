@@ -9,9 +9,33 @@ import {
   CellOutput,
   NotebookImportPreview,
   PythonNotebookRuntimeStatus,
+  PythonNotebook,
 } from '../../types/notebooks';
 
 export const notebooksService = {
+  listPythonNotebooks: async (): Promise<PythonNotebook[]> => {
+    return window.electron.ipcRenderer.invoke('notebooks:python:list');
+  },
+
+  getPythonNotebook: async (id: string): Promise<PythonNotebook | null> => {
+    return window.electron.ipcRenderer.invoke('notebooks:python:get', id);
+  },
+
+  createPythonNotebook: async (name: string): Promise<PythonNotebook> => {
+    return window.electron.ipcRenderer.invoke('notebooks:python:create', name);
+  },
+
+  savePythonNotebook: async (
+    notebook: PythonNotebook,
+    expectedRevision: number,
+  ): Promise<PythonNotebook> => {
+    return window.electron.ipcRenderer.invoke(
+      'notebooks:python:save',
+      notebook,
+      expectedRevision,
+    );
+  },
+
   getPythonRuntimeStatus: async (): Promise<PythonNotebookRuntimeStatus> => {
     return window.electron.ipcRenderer.invoke('notebooks:python:runtimeStatus');
   },

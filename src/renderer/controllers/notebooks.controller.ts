@@ -9,6 +9,7 @@ import {
   Notebook,
   NotebookCell,
   PythonNotebookRuntimeStatus,
+  PythonNotebook,
   SchemaInfo,
 } from '../../types/notebooks';
 import { notebooksService } from '../services/notebooks.service';
@@ -28,7 +29,54 @@ export const notebooksKeys = {
     [...notebooksKeys.all, 'schema', connectionId] as const,
   archived: () => [...notebooksKeys.all, 'archived'] as const,
   pythonRuntime: () => [...notebooksKeys.all, 'python', 'runtime'] as const,
+  pythonDocuments: () => [...notebooksKeys.all, 'python', 'documents'] as const,
+  pythonDocument: (id: string) =>
+    [...notebooksKeys.pythonDocuments(), id] as const,
 };
+
+export function usePythonNotebooks() {
+  return useQuery<PythonNotebook[]>({
+    queryKey: notebooksKeys.pythonDocuments(),
+    queryFn: () => notebooksService.listPythonNotebooks(),
+  });
+}
+
+export function usePythonNotebook(id: string) {
+  return useQuery<PythonNotebook | null>({
+    queryKey: notebooksKeys.pythonDocument(id),
+    queryFn: () => notebooksService.getPythonNotebook(id),
+    enabled: Boolean(id),
+  });
+}
+
+export function useCreatePythonNotebook() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => notebooksService.createPythonNotebook(name),
+    onSuccess: () =>
+      queryClient.invalidateQueries(notebooksKeys.pythonDocuments()),
+  });
+}
+
+export function useSavePythonNotebook() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      notebook,
+      expectedRevision,
+    }: {
+      notebook: PythonNotebook;
+      expectedRevision: number;
+    }) => notebooksService.savePythonNotebook(notebook, expectedRevision),
+    onSuccess: (notebook) => {
+      queryClient.setQueryData(
+        notebooksKeys.pythonDocument(notebook.id),
+        notebook,
+      );
+      queryClient.invalidateQueries(notebooksKeys.pythonDocuments());
+    },
+  });
+}
 
 export function usePythonNotebookRuntimeStatus() {
   return useQuery<PythonNotebookRuntimeStatus>({
