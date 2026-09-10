@@ -15,7 +15,8 @@ import {
   Project,
 } from '../../../types/backend';
 import { useDbt, useProcess, useRunner } from '../../hooks';
-import { useGetSettings } from '../../controllers';
+import { useCloudActionStatus, useGetSettings } from '../../controllers';
+import { isTerminalActionStatus } from '../../../types/cloudAction';
 import {
   StagingModal,
   IncrementalModal,
@@ -80,6 +81,14 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
   const { data: settings } = useGetSettings();
   const isDbtV2 = !!settings?.dbtVersion?.startsWith('2.');
   const cloudV2Blocked = environment === 'cloud' && isDbtV2;
+
+  const lastCloudActionId =
+    environment === 'cloud' ? (project.lastCloudActionId ?? null) : null;
+  const { data: cloudActionStatus } = useCloudActionStatus(lastCloudActionId);
+  const isCloudRunActive =
+    !!lastCloudActionId &&
+    !!cloudActionStatus?.status &&
+    !isTerminalActionStatus(cloudActionStatus.status);
   const [stagingPath, setStagingPath] = React.useState('');
   const [rawPath, setRawPath] = React.useState('');
   const [incrementalPath, setIncrementalPath] = React.useState('');
@@ -401,6 +410,8 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
   if (cloudV2Blocked) {
     projectTooltipTitle =
       'dbt Core v2 is in alpha and not yet supported for cloud runs. Support will be added after the first official v2 release.';
+  } else if (isCloudRunActive) {
+    projectTooltipTitle = 'A cloud run is already in progress';
   } else if (!isDbtConfigured) {
     projectTooltipTitle = 'Please configure dbt path in settings';
   }
@@ -410,8 +421,13 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
       <SplitButton
         title="Project"
         tooltipTitle={projectTooltipTitle}
-        disabled={isRunningDbt || isRunningRosettaDbt || cloudV2Blocked}
-        isLoading={isRunningDbt || isRunningRosettaDbt}
+        disabled={
+          isRunningDbt ||
+          isRunningRosettaDbt ||
+          isCloudRunActive ||
+          cloudV2Blocked
+        }
+        isLoading={isRunningDbt || isRunningRosettaDbt || isCloudRunActive}
         leftIcon={<PlayCircleOutline />}
         height={24}
         menuItems={filteredMenuItems.map((item) => {
