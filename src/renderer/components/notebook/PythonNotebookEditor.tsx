@@ -5,6 +5,11 @@ import {
   Box,
   Button,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   IconButton,
   Typography,
 } from '@mui/material';
@@ -13,7 +18,9 @@ import {
   ArrowDownward,
   ArrowUpward,
   Delete,
+  Pause,
   PlayArrow,
+  RestartAlt,
   Stop,
 } from '@mui/icons-material';
 import { v4 as uuidv4 } from 'uuid';
@@ -26,6 +33,12 @@ import {
 } from '../../controllers/notebooks.controller';
 import { MarkdownCell } from './MarkdownCell';
 
+const pythonNotebookSaveFlushers = new Map<string, () => Promise<void>>();
+
+export async function flushPythonNotebookPendingSave(notebookId: string) {
+  await pythonNotebookSaveFlushers.get(notebookId)?.();
+}
+
 export const PythonNotebookEditor: React.FC<{ notebookId: string }> = ({
   notebookId,
 }) => {
@@ -36,10 +49,15 @@ export const PythonNotebookEditor: React.FC<{ notebookId: string }> = ({
     cells: executionCells,
     execute,
     hasActiveSession,
+    interrupt,
+    restart,
+    runAll,
+    sessionState,
     shutdown,
   } = usePythonNotebookExecution(notebookId);
   const [draft, setDraft] = React.useState<PythonNotebook | null>(null);
   const saveTimer = React.useRef<number | null>(null);
+  const [restartOpen, setRestartOpen] = React.useState(false);
 
   React.useEffect(() => setDraft(notebook ?? null), [notebook]);
 
@@ -58,6 +76,23 @@ export const PythonNotebookEditor: React.FC<{ notebookId: string }> = ({
     }, 500);
   };
 
+  const flushPendingSave = React.useCallback(async () => {
+    if (!draft) return;
+    if (saveTimer.current) window.clearTimeout(saveTimer.current);
+    const saved = await save.mutateAsync({
+      notebook: draft,
+      expectedRevision: draft.revision,
+    });
+    setDraft(saved);
+  }, [draft, save]);
+
+  React.useEffect(() => {
+    pythonNotebookSaveFlushers.set(notebookId, flushPendingSave);
+    return () => {
+      pythonNotebookSaveFlushers.delete(notebookId);
+    };
+  }, [flushPendingSave, notebookId]);
+
   const runCell = async (cellId: string) => {
     if (!draft || execute.isLoading) return;
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
@@ -74,6 +109,25 @@ export const PythonNotebookEditor: React.FC<{ notebookId: string }> = ({
     });
   };
 
+  const runAllCells = async () => {
+    if (!draft || runAll.isLoading) return;
+    if (saveTimer.current) window.clearTimeout(saveTimer.current);
+    const saved = await save.mutateAsync({
+      notebook: draft,
+      expectedRevision: draft.revision,
+    });
+    setDraft(saved);
+    await runAll.mutateAsync({
+      notebookId: saved.id,
+      revision: saved.revision,
+      requestId: uuidv4(),
+    });
+  };
+
+  const isBusy = ['running', 'interrupting', 'restarting'].includes(
+    sessionState,
+  );
+
   if (isLoading || !draft)
     return <Typography sx={{ p: 2 }}>Loading notebook…</Typography>;
 
@@ -83,6 +137,33 @@ export const PythonNotebookEditor: React.FC<{ notebookId: string }> = ({
         <Typography variant="h6">{draft.name}</Typography>
         <Chip size="small" label="Python" color="primary" />
         <Box sx={{ flex: 1 }} />
+        <Button
+          size="small"
+          startIcon={<PlayArrow />}
+          disabled={runtime?.state !== 'ready' || isBusy || runAll.isLoading}
+          onClick={runAllCells}
+        >
+          Run All
+        </Button>
+        <Button
+          size="small"
+          startIcon={<Pause />}
+          disabled={sessionState !== 'running' || interrupt.isLoading}
+          onClick={() => interrupt.mutate()}
+        >
+          Interrupt
+        </Button>
+        <Button
+          size="small"
+          startIcon={<RestartAlt />}
+          disabled={
+            (!hasActiveSession && sessionState !== 'dead') ||
+            sessionState === 'restarting'
+          }
+          onClick={() => setRestartOpen(true)}
+        >
+          Restart
+        </Button>
         <Button
           size="small"
           disabled={
@@ -144,6 +225,11 @@ export const PythonNotebookEditor: React.FC<{ notebookId: string }> = ({
           ? 'Run saves the latest source before executing it in this notebook kernel.'
           : 'Set up Jupyter packages in Settings → Python before running cells.'}
       </Alert>
+      {restart.isSuccess && sessionState === 'idle' && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          The kernel was restarted. Existing output may be stale.
+        </Alert>
+      )}
       {draft.cells.map((cell, index) => (
         <Box
           key={cell.id}
@@ -172,7 +258,9 @@ export const PythonNotebookEditor: React.FC<{ notebookId: string }> = ({
               <Button
                 size="small"
                 startIcon={<PlayArrow fontSize="small" />}
-                disabled={runtime?.state !== 'ready' || execute.isLoading}
+                disabled={
+                  runtime?.state !== 'ready' || execute.isLoading || isBusy
+                }
                 onClick={() => runCell(cell.id)}
               >
                 Run
@@ -305,6 +393,28 @@ export const PythonNotebookEditor: React.FC<{ notebookId: string }> = ({
           )}
         </Box>
       ))}
+      <Dialog open={restartOpen} onClose={() => setRestartOpen(false)}>
+        <DialogTitle>Restart Python kernel?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Restarting clears all Python variables. Saved cells and visible
+            output remain, but existing output may be stale.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRestartOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={() => {
+              restart.mutate(undefined, {
+                onSuccess: () => setRestartOpen(false),
+              });
+            }}
+          >
+            Restart
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

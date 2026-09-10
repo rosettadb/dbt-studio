@@ -3,7 +3,7 @@
  * React Query hooks for notebook operations
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { toast } from 'react-toastify';
 import {
@@ -13,6 +13,8 @@ import {
   PythonNotebook,
   PythonNotebookEvent,
   PythonNotebookExecuteRequest,
+  PythonNotebookRunAllRequest,
+  PythonNotebookSessionSnapshot,
   SchemaInfo,
 } from '../../types/notebooks';
 import { notebooksService } from '../services/notebooks.service';
@@ -125,54 +127,110 @@ export type PythonCellExecution = {
 export function usePythonNotebookExecution(notebookId: string) {
   const [cells, setCells] = useState<Record<string, PythonCellExecution>>({});
   const [hasActiveSession, setHasActiveSession] = useState(false);
+  const [sessionState, setSessionState] =
+    useState<PythonNotebookSessionSnapshot['state']>('stopped');
 
-  useEffect(
-    () =>
-      notebooksService.onPythonNotebookEvent((event: PythonNotebookEvent) => {
-        if (event.notebookId !== notebookId) return;
-        setCells((current) => {
-          const cell = current[event.cellId] ?? { status: 'idle', text: '' };
-          if (event.type === 'status') {
-            return {
-              ...current,
-              [event.cellId]: { ...cell, status: event.status },
-            };
-          }
-          if (event.type === 'error') {
-            return {
-              ...current,
-              [event.cellId]: {
-                status: 'error',
-                text: cell.text,
-                error: `${event.name}: ${event.text}`,
-                truncated: event.truncated,
-              },
-            };
-          }
+  const applyEvent = useCallback((event: PythonNotebookEvent) => {
+    if (event.type === 'session') {
+      setSessionState(event.status);
+      setHasActiveSession(
+        event.status !== 'stopped' && event.status !== 'dead',
+      );
+      return;
+    }
+    setCells((current) => {
+      const cell = current[event.cellId] ?? { status: 'idle', text: '' };
+      if (event.type === 'status') {
+        if (event.status === 'running') {
           return {
             ...current,
-            [event.cellId]: {
-              ...cell,
-              text: `${cell.text}${event.text}`,
-              truncated: cell.truncated || event.truncated,
-            },
+            [event.cellId]: { status: 'running', text: '' },
           };
-        });
-      }),
-    [notebookId],
-  );
+        }
+        return {
+          ...current,
+          [event.cellId]: { ...cell, status: event.status },
+        };
+      }
+      if (event.type === 'error') {
+        return {
+          ...current,
+          [event.cellId]: {
+            status: 'error',
+            text: cell.text,
+            error: `${event.name}: ${event.text}`,
+            truncated: event.truncated,
+          },
+        };
+      }
+      return {
+        ...current,
+        [event.cellId]: {
+          ...cell,
+          text: `${cell.text}${event.text}`,
+          truncated: cell.truncated || event.truncated,
+        },
+      };
+    });
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const unsubscribe = notebooksService.onPythonNotebookEvent(
+      (event: PythonNotebookEvent) => {
+        if (event.notebookId !== notebookId) return;
+        applyEvent(event);
+      },
+    );
+    notebooksService
+      .getPythonSessionSnapshot(notebookId)
+      .then((snapshot) => {
+        if (!active) return undefined;
+        setSessionState(snapshot.state);
+        setHasActiveSession(
+          snapshot.state !== 'stopped' && snapshot.state !== 'dead',
+        );
+        snapshot.events.forEach(applyEvent);
+        return undefined;
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [applyEvent, notebookId]);
 
   const execute = useMutation({
     mutationFn: (request: PythonNotebookExecuteRequest) =>
       notebooksService.executePythonCell(request),
     onSuccess: () => setHasActiveSession(true),
   });
+  const runAll = useMutation({
+    mutationFn: (request: PythonNotebookRunAllRequest) =>
+      notebooksService.runAllPythonCells(request),
+    onSuccess: () => setHasActiveSession(true),
+  });
+  const interrupt = useMutation({
+    mutationFn: () => notebooksService.interruptPythonNotebook(notebookId),
+  });
+  const restart = useMutation({
+    mutationFn: () => notebooksService.restartPythonNotebook(notebookId),
+  });
   const shutdown = useMutation({
     mutationFn: () => notebooksService.shutdownPythonNotebook(notebookId),
     onSuccess: () => setHasActiveSession(false),
   });
 
-  return { cells, execute, hasActiveSession, shutdown };
+  return {
+    cells,
+    execute,
+    hasActiveSession,
+    interrupt,
+    restart,
+    runAll,
+    sessionState,
+    shutdown,
+  };
 }
 
 // List notebooks for a connection

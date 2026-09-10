@@ -86,6 +86,18 @@ export type PythonNotebookEvent =
       name: string;
       text: string;
       truncated?: boolean;
+    }
+  | {
+      type: 'session';
+      notebookId: string;
+      status:
+        | 'idle'
+        | 'running'
+        | 'interrupting'
+        | 'restarting'
+        | 'stopped'
+        | 'dead';
+      message?: string;
     };
 
 export interface PythonNotebookExecuteRequest {
@@ -97,6 +109,25 @@ export interface PythonNotebookExecuteRequest {
 
 export interface PythonNotebookExecuteResponse {
   executionId: string;
+}
+
+export interface PythonNotebookRunAllRequest {
+  notebookId: string;
+  revision: number;
+  requestId: string;
+}
+
+export interface PythonNotebookSessionSnapshot {
+  notebookId: string;
+  state:
+    | 'idle'
+    | 'running'
+    | 'interrupting'
+    | 'restarting'
+    | 'stopped'
+    | 'dead';
+  generation: number;
+  events: PythonNotebookEvent[];
 }
 
 export type PythonNotebookRuntimeState =

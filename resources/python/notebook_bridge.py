@@ -1,7 +1,9 @@
 import importlib.metadata as metadata
 import json
+import queue
 import re
 import sys
+import threading
 
 from jupyter_client import KernelManager
 
@@ -62,11 +64,30 @@ def serve():
         client.start_channels()
         client.wait_for_ready(timeout=15)
 
-        for line in sys.stdin:
-            command = json.loads(line)
-            if command.get("operation") == "shutdown":
+        commands = queue.Queue()
+
+        def read_commands():
+            for line in sys.stdin:
+                commands.put(json.loads(line))
+            commands.put({"operation": "shutdown"})
+
+        threading.Thread(target=read_commands, daemon=True).start()
+
+        should_shutdown = False
+        while not should_shutdown:
+            command = commands.get()
+            operation = command.get("operation")
+            if operation == "shutdown":
                 break
-            if command.get("operation") != "execute":
+            if operation == "interrupt":
+                manager.interrupt_kernel()
+                continue
+            if operation == "restart":
+                manager.restart_kernel(now=True)
+                client.wait_for_ready(timeout=15)
+                emit({"type": "session", "status": "idle"})
+                continue
+            if operation != "execute":
                 continue
 
             execution_id = command.get("executionId")
@@ -75,8 +96,26 @@ def serve():
                 continue
             message_id = client.execute(command.get("code", ""), store_history=True)
             saw_error = False
+            restart_requested = False
             while True:
-                message = client.get_iopub_msg(timeout=30)
+                try:
+                    control = commands.get_nowait()
+                    control_operation = control.get("operation")
+                    if control_operation == "interrupt":
+                        manager.interrupt_kernel()
+                    elif control_operation == "restart":
+                        restart_requested = True
+                        manager.interrupt_kernel()
+                    elif control_operation == "shutdown":
+                        should_shutdown = True
+                        manager.interrupt_kernel()
+                except queue.Empty:
+                    pass
+
+                try:
+                    message = client.get_iopub_msg(timeout=0.1)
+                except queue.Empty:
+                    continue
                 parent_id = message.get("parent_header", {}).get("msg_id")
                 if parent_id != message_id:
                     continue
@@ -125,6 +164,10 @@ def serve():
                         "status": "error" if saw_error else "success",
                     })
                     break
+            if restart_requested and not should_shutdown:
+                manager.restart_kernel(now=True)
+                client.wait_for_ready(timeout=15)
+                emit({"type": "session", "status": "idle"})
     finally:
         if client is not None:
             client.stop_channels()

@@ -9,6 +9,7 @@ import { PythonNotebookService } from '../services/pythonNotebook.service';
 import type {
   PythonNotebook,
   PythonNotebookExecuteRequest,
+  PythonNotebookRunAllRequest,
 } from '../../types/notebooks';
 
 let appCleanupRegistered = false;
@@ -52,6 +53,30 @@ export function registerNotebooksHandlers() {
     async (_event, notebook: PythonNotebook, expectedRevision: number) => {
       return NotebooksService.savePythonNotebook(notebook, expectedRevision);
     },
+  );
+
+  ipcMain.handle(
+    'notebooks:python:runAll',
+    async (_event, request: PythonNotebookRunAllRequest) =>
+      PythonNotebookService.runAll(request, _event.sender),
+  );
+
+  ipcMain.handle(
+    'notebooks:python:interrupt',
+    async (_event, notebookId: string) =>
+      PythonNotebookService.interrupt(notebookId, _event.sender),
+  );
+
+  ipcMain.handle(
+    'notebooks:python:restart',
+    async (_event, notebookId: string) =>
+      PythonNotebookService.restart(notebookId, _event.sender),
+  );
+
+  ipcMain.handle(
+    'notebooks:python:sessionSnapshot',
+    async (_event, notebookId: string) =>
+      PythonNotebookService.sessionSnapshot(notebookId, _event.sender),
   );
 
   ipcMain.handle(

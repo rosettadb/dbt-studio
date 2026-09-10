@@ -13,6 +13,8 @@ import {
   PythonNotebookEvent,
   PythonNotebookExecuteRequest,
   PythonNotebookExecuteResponse,
+  PythonNotebookRunAllRequest,
+  PythonNotebookSessionSnapshot,
 } from '../../types/notebooks';
 
 export const notebooksService = {
@@ -57,6 +59,28 @@ export const notebooksService = {
     request: PythonNotebookExecuteRequest,
   ): Promise<PythonNotebookExecuteResponse> =>
     window.electron.ipcRenderer.invoke('notebooks:python:execute', request),
+
+  runAllPythonCells: async (
+    request: PythonNotebookRunAllRequest,
+  ): Promise<PythonNotebookExecuteResponse> =>
+    window.electron.ipcRenderer.invoke('notebooks:python:runAll', request),
+
+  interruptPythonNotebook: async (notebookId: string): Promise<void> =>
+    window.electron.ipcRenderer.invoke(
+      'notebooks:python:interrupt',
+      notebookId,
+    ),
+
+  restartPythonNotebook: async (notebookId: string): Promise<void> =>
+    window.electron.ipcRenderer.invoke('notebooks:python:restart', notebookId),
+
+  getPythonSessionSnapshot: async (
+    notebookId: string,
+  ): Promise<PythonNotebookSessionSnapshot> =>
+    window.electron.ipcRenderer.invoke(
+      'notebooks:python:sessionSnapshot',
+      notebookId,
+    ),
 
   shutdownPythonNotebook: async (notebookId: string): Promise<void> =>
     window.electron.ipcRenderer.invoke('notebooks:python:shutdown', notebookId),

@@ -71,6 +71,7 @@ import {
   NotebookEditor,
   PythonNotebookEditor,
   flushNotebookPendingSave,
+  flushPythonNotebookPendingSave,
 } from '../../components/notebook';
 import { ExportNotebookDialog } from '../../components/notebook/ExportNotebookDialog';
 import { ImportConnectionDialog } from '../../components/notebook/ImportConnectionDialog';
@@ -275,6 +276,52 @@ const Notebooks = () => {
   const [connectionKeyToDeleteAll, setConnectionKeyToDeleteAll] = useState<
     string | null
   >(null);
+  const [pythonTabToClose, setPythonTabToClose] = useState<{
+    notebookId: string;
+    notebookName: string;
+  } | null>(null);
+
+  const closePythonTab = useCallback(
+    async (notebookId: string) => {
+      await notebooksService.shutdownPythonNotebook(notebookId);
+      notebookTabManager.closeTab(notebookId);
+    },
+    [notebookTabManager],
+  );
+
+  const handleCloseNotebookTab = useCallback(
+    async (notebookId: string) => {
+      const tab = notebookTabManager.tabs.find(
+        (item) => item.notebookId === notebookId,
+      );
+      if (tab?.kind !== 'python') {
+        notebookTabManager.closeTab(notebookId);
+        return;
+      }
+      try {
+        await flushPythonNotebookPendingSave(notebookId);
+        const snapshot =
+          await notebooksService.getPythonSessionSnapshot(notebookId);
+        if (
+          snapshot.state === 'running' ||
+          snapshot.state === 'interrupting' ||
+          snapshot.state === 'restarting'
+        ) {
+          setPythonTabToClose({
+            notebookId,
+            notebookName: tab.notebookName,
+          });
+          return;
+        }
+        await closePythonTab(notebookId);
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : 'Could not close notebook.',
+        );
+      }
+    },
+    [closePythonTab, notebookTabManager],
+  );
 
   // Get active connection details
   const activeConnection = useMemo(() => {
@@ -1396,7 +1443,7 @@ const Notebooks = () => {
                     tabs={notebookTabManager.tabs}
                     activeTabId={notebookTabManager.activeTabId}
                     onSelect={notebookTabManager.switchTab}
-                    onClose={notebookTabManager.closeTab}
+                    onClose={handleCloseNotebookTab}
                     onReorder={notebookTabManager.reorderTabs}
                   />
 
@@ -1711,6 +1758,33 @@ const Notebooks = () => {
             onClick={handleCreatePythonNotebook}
           >
             Create
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(pythonTabToClose)}
+        onClose={() => setPythonTabToClose(null)}
+      >
+        <DialogTitle>Close running Python notebook?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Closing {pythonTabToClose?.notebookName} stops its kernel and loses
+            all in-memory Python variables. Saved cells are preserved.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPythonTabToClose(null)}>Cancel</Button>
+          <Button
+            variant="contained"
+            color="warning"
+            onClick={async () => {
+              if (!pythonTabToClose) return;
+              await closePythonTab(pythonTabToClose.notebookId);
+              setPythonTabToClose(null);
+            }}
+          >
+            Stop Kernel and Close
           </Button>
         </DialogActions>
       </Dialog>

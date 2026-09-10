@@ -6,6 +6,8 @@ import type {
   PythonNotebookEvent,
   PythonNotebookExecuteRequest,
   PythonNotebookExecuteResponse,
+  PythonNotebookRunAllRequest,
+  PythonNotebookSessionSnapshot,
   PythonNotebookPackageStatus,
   PythonNotebookRuntimeStatus,
 } from '../../types/notebooks';
@@ -40,6 +42,14 @@ type NotebookSession = {
   process: ChildProcessWithoutNullStreams;
   pendingLine: string;
   retries: Map<string, string>;
+  state: PythonNotebookSessionSnapshot['state'];
+  generation: number;
+  events: PythonNotebookEvent[];
+  activeExecution: { cellId: string; executionId: string } | null;
+  runAll: {
+    revision: number;
+    cells: Array<{ cellId: string; code: string }>;
+  } | null;
 };
 
 export class PythonNotebookService {
@@ -210,6 +220,8 @@ export class PythonNotebookService {
   }
 
   private static emit(session: NotebookSession, event: PythonNotebookEvent) {
+    session.events.push(event);
+    session.events = session.events.slice(-200);
     if (!session.sender.isDestroyed()) {
       session.sender.send('notebooks:python:event', event);
     }
@@ -219,6 +231,20 @@ export class PythonNotebookService {
     session: NotebookSession,
     event: Record<string, unknown>,
   ): PythonNotebookEvent | null {
+    if (
+      event.type === 'session' &&
+      (event.status === 'idle' || event.status === 'dead')
+    ) {
+      return {
+        type: 'session',
+        notebookId: session.notebookId,
+        status: event.status,
+        message:
+          typeof event.message === 'string'
+            ? event.message.slice(0, MAX_DIAGNOSTIC_LENGTH)
+            : undefined,
+      };
+    }
     const executionId =
       typeof event.executionId === 'string' ? event.executionId : null;
     const cellId = typeof event.cellId === 'string' ? event.cellId : null;
@@ -273,7 +299,34 @@ export class PythonNotebookService {
           session,
           JSON.parse(line) as Record<string, unknown>,
         );
-        if (event) this.emit(session, event);
+        if (!event) return;
+        this.emit(session, event);
+        if (event.type === 'session') {
+          session.state = event.status;
+          if (event.status === 'idle') session.activeExecution = null;
+          return;
+        }
+        if (
+          event.type === 'status' &&
+          (event.status === 'success' || event.status === 'error')
+        ) {
+          session.activeExecution = null;
+          session.state = 'idle';
+          this.emit(session, {
+            type: 'session',
+            notebookId: session.notebookId,
+            status: 'idle',
+          });
+          if (session.runAll) {
+            if (event.status === 'error') {
+              session.runAll = null;
+            } else {
+              this.continueRunAll(session).catch(() => {
+                session.runAll = null;
+              });
+            }
+          }
+        }
       } catch {
         // The bridge's stdout protocol is deliberately fail-closed.
       }
@@ -318,6 +371,11 @@ export class PythonNotebookService {
       process: child,
       pendingLine: '',
       retries: new Map(),
+      state: 'idle',
+      generation: 1,
+      events: [],
+      activeExecution: null,
+      runAll: null,
     };
     child.stdout.on('data', (chunk: Buffer) =>
       this.consumeBridgeOutput(session, chunk),
@@ -325,6 +383,18 @@ export class PythonNotebookService {
     child.stderr.on('data', () => undefined);
     child.on('error', () => this.sessions.delete(notebookId));
     child.on('exit', () => {
+      if (
+        this.sessions.get(notebookId) === session &&
+        session.state !== 'stopped'
+      ) {
+        session.state = 'dead';
+        this.emit(session, {
+          type: 'session',
+          notebookId,
+          status: 'dead',
+          message: 'The Python kernel stopped unexpectedly.',
+        });
+      }
       this.sessions.delete(notebookId);
       this.activeSessionCount = this.sessions.size;
     });
@@ -362,6 +432,9 @@ export class PythonNotebookService {
     }
 
     const session = await this.startSession(request.notebookId, sender);
+    if (session.activeExecution || session.runAll) {
+      throw new Error('The Python kernel is already running a cell.');
+    }
     const retryExecutionId = session.retries.get(request.requestId);
     if (retryExecutionId) return { executionId: retryExecutionId };
 
@@ -370,22 +443,153 @@ export class PythonNotebookService {
     if (session.retries.size > MAX_RETRY_IDS) {
       session.retries.delete(session.retries.keys().next().value as string);
     }
+    this.dispatchExecution(session, request.cellId, cell.source, executionId);
+    return { executionId };
+  }
+
+  private static dispatchExecution(
+    session: NotebookSession,
+    cellId: string,
+    code: string,
+    executionId: string,
+  ) {
+    session.activeExecution = { cellId, executionId };
+    session.state = 'running';
     this.emit(session, {
       type: 'status',
-      notebookId: request.notebookId,
-      cellId: request.cellId,
+      notebookId: session.notebookId,
+      cellId,
       executionId,
+      status: 'running',
+    });
+    this.emit(session, {
+      type: 'session',
+      notebookId: session.notebookId,
       status: 'running',
     });
     session.process.stdin.write(
       `${JSON.stringify({
         operation: 'execute',
-        cellId: request.cellId,
+        cellId,
         executionId,
-        code: cell.source,
+        code,
       })}\n`,
     );
+  }
+
+  private static async continueRunAll(session: NotebookSession) {
+    const { runAll } = session;
+    if (!runAll) return;
+    const notebook = await NotebooksService.getPythonNotebook(
+      session.notebookId,
+    );
+    if (!notebook || notebook.revision !== runAll.revision) {
+      session.runAll = null;
+      this.emit(session, {
+        type: 'session',
+        notebookId: session.notebookId,
+        status: 'idle',
+        message: 'Run All stopped because the notebook changed.',
+      });
+      return;
+    }
+    const next = runAll.cells.shift();
+    if (!next) {
+      session.runAll = null;
+      return;
+    }
+    const executionId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    this.dispatchExecution(session, next.cellId, next.code, executionId);
+  }
+
+  static async runAll(
+    request: PythonNotebookRunAllRequest,
+    sender: WebContents,
+  ): Promise<PythonNotebookExecuteResponse> {
+    const notebook = await NotebooksService.getPythonNotebook(
+      request.notebookId,
+    );
+    if (!notebook || notebook.revision !== request.revision) {
+      throw new Error(
+        'Save the latest notebook changes before running all cells.',
+      );
+    }
+    const session = await this.startSession(request.notebookId, sender);
+    if (session.activeExecution || session.runAll) {
+      throw new Error('The Python kernel is already running.');
+    }
+    const cells = notebook.cells
+      .filter((cell) => cell.cellType === 'code')
+      .map((cell) => ({ cellId: cell.id, code: cell.source }));
+    if (cells.length === 0)
+      throw new Error('There are no Python code cells to run.');
+    session.runAll = { revision: notebook.revision, cells };
+    const executionId = request.requestId;
+    await this.continueRunAll(session);
     return { executionId };
+  }
+
+  private static requireOwnedSession(notebookId: string, sender: WebContents) {
+    const session = this.sessions.get(notebookId);
+    if (!session)
+      throw new Error('This notebook does not have a running kernel.');
+    if (session.ownerWebContentsId !== sender.id) {
+      throw new Error('This notebook kernel belongs to another window.');
+    }
+    return session;
+  }
+
+  static async interrupt(
+    notebookId: string,
+    sender: WebContents,
+  ): Promise<void> {
+    const session = this.requireOwnedSession(notebookId, sender);
+    session.runAll = null;
+    session.state = 'interrupting';
+    this.emit(session, { type: 'session', notebookId, status: 'interrupting' });
+    session.process.stdin.write(
+      `${JSON.stringify({ operation: 'interrupt' })}\n`,
+    );
+  }
+
+  static async restart(notebookId: string, sender: WebContents): Promise<void> {
+    const existing = this.sessions.get(notebookId);
+    if (!existing) {
+      const session = await this.startSession(notebookId, sender);
+      this.emit(session, { type: 'session', notebookId, status: 'idle' });
+      return;
+    }
+    const session = this.requireOwnedSession(notebookId, sender);
+    session.runAll = null;
+    session.state = 'restarting';
+    session.generation += 1;
+    this.emit(session, {
+      type: 'session',
+      notebookId,
+      status: 'restarting',
+      message: 'Restarting clears all Python variables.',
+    });
+    session.process.stdin.write(
+      `${JSON.stringify({ operation: 'restart' })}\n`,
+    );
+  }
+
+  static async sessionSnapshot(
+    notebookId: string,
+    sender: WebContents,
+  ): Promise<PythonNotebookSessionSnapshot> {
+    const session = this.sessions.get(notebookId);
+    if (!session)
+      return { notebookId, state: 'stopped', generation: 0, events: [] };
+    if (session.ownerWebContentsId !== sender.id) {
+      throw new Error('This notebook kernel belongs to another window.');
+    }
+    return {
+      notebookId,
+      state: session.state,
+      generation: session.generation,
+      events: session.events,
+    };
   }
 
   static async shutdown(
@@ -394,9 +598,10 @@ export class PythonNotebookService {
   ): Promise<void> {
     const session = this.sessions.get(notebookId);
     if (!session) return;
-    if (session.ownerWebContentsId !== sender.id) {
+    if (session.ownerWebContentsId !== sender.id)
       throw new Error('This notebook kernel belongs to another window.');
-    }
+    session.runAll = null;
+    session.state = 'stopped';
     session.process.stdin.end(`${JSON.stringify({ operation: 'shutdown' })}\n`);
   }
 
