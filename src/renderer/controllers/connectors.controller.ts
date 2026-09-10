@@ -20,6 +20,12 @@ import type {
 } from '../../types/ipc';
 import { QUERY_KEYS } from '../config/constants';
 import { connectorsServices } from '../services';
+import useSecureStorage from '../hooks/useSecureStorage';
+import {
+  getUniqueConnectionName,
+  storeImportedConnectionCredentials,
+  deleteImportedConnectionCredentials,
+} from '../utils/notebookConnectionTransfer';
 
 export const useGetConnections = (
   includeDataLake?: boolean,
@@ -128,6 +134,72 @@ export const useDeleteConnection = (
       await queryClient.invalidateQueries([QUERY_KEYS.GET_PROJECTS]);
       await queryClient.invalidateQueries([QUERY_KEYS.GET_SELECTED_PROJECT]);
       queryClient.removeQueries([QUERY_KEYS.GET_PROJECT_BY_ID]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
+  });
+};
+
+/**
+ * Persist a connection embedded in an imported notebook export JSON file
+ * (see notebooks export "Include connection details" option). Dedupes the
+ * connection name against existing connections and writes credentials to
+ * secure storage the same way the connection forms do on save.
+ */
+export const useImportConnectionFromNotebook = (
+  customOptions?: UseMutationOptions<
+    { id: string; name: string },
+    CustomError,
+    ConnectionInput
+  >,
+): UseMutationResult<
+  { id: string; name: string },
+  CustomError,
+  ConnectionInput
+> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  const secureStorage = useSecureStorage();
+
+  return useMutation({
+    mutationFn: async (connection: ConnectionInput) => {
+      const existingConnections =
+        await connectorsServices.listConnections(true);
+      const uniqueName = getUniqueConnectionName(
+        connection.name,
+        existingConnections,
+      );
+      const finalConnection: ConnectionInput = {
+        ...connection,
+        name: uniqueName,
+      };
+
+      let id: string | undefined;
+      try {
+        id = await connectorsServices.saveConnection(finalConnection);
+        await storeImportedConnectionCredentials(
+          finalConnection,
+          secureStorage,
+        );
+      } catch (err) {
+        const rollbacks: Promise<void>[] = [];
+        if (id) {
+          rollbacks.push(connectorsServices.deleteConnection(id));
+        }
+        rollbacks.push(
+          deleteImportedConnectionCredentials(finalConnection, secureStorage),
+        );
+        await Promise.allSettled(rollbacks);
+        throw err;
+      }
+
+      return { id, name: uniqueName };
+    },
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_CONNECTIONS]);
       onCustomSuccess?.(...args);
     },
     onError: (...args) => {
