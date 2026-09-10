@@ -186,8 +186,7 @@ async function executeQueryInMain(params: {
         instanceId,
         executionId,
         sql,
-        pageLimit: MAX_ROWS_PER_QUERY,
-        pageOffset: 0,
+        maxRows: MAX_ROWS_PER_QUERY,
         validateOnly: true,
       });
       if (classification.statementClass !== 'select') {
@@ -202,8 +201,7 @@ async function executeQueryInMain(params: {
         instanceId,
         executionId,
         sql,
-        pageLimit: MAX_ROWS_PER_QUERY,
-        pageOffset: 0,
+        maxRows: MAX_ROWS_PER_QUERY,
       });
       return {
         data: response.rows.slice(0, MAX_ROWS_PER_QUERY),

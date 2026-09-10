@@ -408,7 +408,8 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
   const canExportParquet =
     !!exportContext &&
     !!resolvedOriginalSql &&
-    (exportContext.connectionType === 'duckdb' ||
+    ((exportContext.connectionType === 'duckdb' &&
+      !exportContext.connectionId?.startsWith('iceberg-')) ||
       exportContext.connectionType === 'ducklake');
 
   const handleExportParquet = async () => {

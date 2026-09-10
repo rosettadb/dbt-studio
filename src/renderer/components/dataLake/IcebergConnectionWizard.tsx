@@ -521,20 +521,31 @@ export const IcebergConnectionWizard: React.FC<
       prefix?: string,
       provider?: IcebergCloudProvider,
     ) => {
-      setStorageTestResult(null);
-      setData((current) => ({
-        ...current,
-        sql: {
-          ...current.sql,
-          connectionId,
-          bucket,
-          prefix,
-          provider,
-          warehouseMatchAcknowledged: false,
-          accessVerifiedAt: undefined,
-          runtimeFingerprint: undefined,
-        },
-      }));
+      setData((current) => {
+        const isSame =
+          current.sql.connectionId === connectionId &&
+          current.sql.bucket === bucket &&
+          current.sql.prefix === prefix &&
+          current.sql.provider === provider;
+
+        if (isSame) return current;
+
+        setTimeout(() => setStorageTestResult(null), 0);
+
+        return {
+          ...current,
+          sql: {
+            ...current.sql,
+            connectionId,
+            bucket,
+            prefix,
+            provider,
+            warehouseMatchAcknowledged: false,
+            accessVerifiedAt: undefined,
+            runtimeFingerprint: undefined,
+          },
+        };
+      });
     },
     [],
   );
@@ -662,7 +673,7 @@ export const IcebergConnectionWizard: React.FC<
       setStorageTestResult({
         success: result.success,
         message: result.success
-          ? 'The matching object-store location is accessible. DuckDB attachment verification is completed in Phase 3.'
+          ? 'The matching object-store location is accessible. Use "Test SQL Access" on the Review step to verify DuckDB attachment.'
           : (result.error ?? 'Object-store access test failed.'),
       });
     } catch (error: any) {
@@ -678,13 +689,20 @@ export const IcebergConnectionWizard: React.FC<
   const handleVerifySqlAccess = async () => {
     if (!initialData?.id) return;
     setSqlTestResult(null);
-    const result = await verifySqlMutation.mutateAsync(initialData.id);
-    setSqlTestResult({
-      success: result.success,
-      message: result.success
-        ? 'DuckDB attached to the catalog and cleaned up successfully.'
-        : (result.error ?? 'DuckDB SQL access test failed.'),
-    });
+    try {
+      const result = await verifySqlMutation.mutateAsync(initialData.id);
+      setSqlTestResult({
+        success: result.success,
+        message: result.success
+          ? 'DuckDB attached to the catalog and cleaned up successfully.'
+          : (result.error ?? 'DuckDB SQL access test failed.'),
+      });
+    } catch (error: any) {
+      setSqlTestResult({
+        success: false,
+        message: error?.message ?? 'DuckDB SQL access test failed.',
+      });
+    }
   };
 
   // ── Step content renderers ──────────────────────────────────────────────

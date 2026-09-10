@@ -909,6 +909,17 @@ export class IcebergDatalakeService {
         : instance.catalogName;
     if (!warehouse) throw new Error('ICEBERG_REQUIRED_FIELD: catalogName');
 
+    // DuckDB's Iceberg ATTACH has no branch/tag selector: honour the configured
+    // reference by rejecting SQL access when a non-default reference is set.
+    if (instance.catalogType === 'nessie') {
+      const ref = instance.nessieReference?.trim();
+      if (ref && ref !== 'main') {
+        throw new Error(
+          'ICEBERG_SQL_NESSIE_REFERENCE_UNSUPPORTED: DuckDB ATTACH does not support Nessie branch or tag selection; configure the main branch or use the catalog API.',
+        );
+      }
+    }
+
     return {
       storageSecretSql: `CREATE TEMPORARY SECRET ${IcebergDatalakeService.quoteSqlIdentifier(
         names.storageSecret,
@@ -949,6 +960,8 @@ export class IcebergDatalakeService {
   static async listInstances(): Promise<IcebergInstanceListItem[]> {
     try {
       const instances = await IcebergDatalakeService.readInstances();
+      // Reuse the already-loaded instances and avoid redundant DB reads +
+      // keychain lookups that getSqlCapability(id) would incur per instance.
       return Promise.all(
         instances.map(async (instance) => {
           const {
@@ -963,7 +976,8 @@ export class IcebergDatalakeService {
             createdAt,
             updatedAt,
           } = instance;
-          const capability = await IcebergDatalakeService.getSqlCapability(id);
+          const capability =
+            await IcebergDatalakeService.getSqlCapabilityFromInstance(instance);
           return {
             id,
             name,
@@ -1477,8 +1491,20 @@ export class IcebergDatalakeService {
     }
   }
 
+  /** Public: look up by id (for callers that don't already have the instance). */
   static async getSqlCapability(id: string): Promise<IcebergSqlCapability> {
     const instance = await IcebergDatalakeService.getInstance(id);
+    return IcebergDatalakeService.getSqlCapabilityFromInstance(instance);
+  }
+
+  /**
+   * Private: compute capability from an already-loaded instance config.
+   * Used by listInstances to avoid redundant readInstances / loadDatabaseFile
+   * and secureStorage.getCredential calls for every item in the list.
+   */
+  private static async getSqlCapabilityFromInstance(
+    instance: IcebergInstanceConfig,
+  ): Promise<IcebergSqlCapability> {
     const runtimeFingerprint =
       IcebergDatalakeService.getSqlRuntimeFingerprint();
     if (!instance.sqlEnabled) {
@@ -1599,11 +1625,18 @@ export class IcebergDatalakeService {
     }
   }
 
+  /**
+   * @param strictCleanup When true (used by verifySqlAccess), any cleanup
+   *   failure throws. When false (default), only instance-closure failure
+   *   throws; DETACH / DROP SECRET failures are logged and the completed
+   *   result is returned so committed mutations are not silently discarded.
+   */
   private static async withAttachedSqlCatalog<T>(
     instanceId: string,
     executionId: string,
     callback: (connection: any, alias: string) => Promise<T>,
     signal?: AbortSignal,
+    strictCleanup = false,
   ): Promise<T> {
     if (!executionId.trim() || executionId.length > 120) {
       throw new Error('ICEBERG_SQL_EXECUTION_ID_INVALID');
@@ -1611,6 +1644,9 @@ export class IcebergDatalakeService {
     if (IcebergDatalakeService.activeSqlExecutions.has(executionId)) {
       throw new Error('ICEBERG_SQL_EXECUTION_ID_DUPLICATE');
     }
+    // Reserve the id synchronously so a concurrent call cannot pass the
+    // duplicate check while the async setup is still in progress.
+    IcebergDatalakeService.activeSqlExecutions.set(executionId, null);
     const instance = await IcebergDatalakeService.getInstance(instanceId);
     const suffix = uuidv4().replace(/-/g, '');
     const names = {
@@ -1633,6 +1669,7 @@ export class IcebergDatalakeService {
     let stage = 'initialize';
     let result!: T;
     let cleanupFailed = false;
+    let instanceCloseFailed = false;
     try {
       checkCancelled();
       duckdbInstance = await DuckDBInstance.create(':memory:');
@@ -1715,9 +1752,27 @@ export class IcebergDatalakeService {
         duckdbInstance?.closeSync?.();
       } catch {
         cleanupFailed = true;
+        instanceCloseFailed = true;
       }
     }
-    if (cleanupFailed) throw new Error('ICEBERG_SQL_CLEANUP_FAILED');
+    // If the instance could not be closed, session + credentials may still
+    // be open: always throw so the caller does not treat this as success.
+    if (instanceCloseFailed) {
+      throw new Error('ICEBERG_SQL_CLEANUP_FAILED');
+    }
+    if (cleanupFailed) {
+      if (strictCleanup) {
+        // verifySqlAccess must not persist verification after any cleanup failure.
+        throw new Error('ICEBERG_SQL_CLEANUP_FAILED');
+      }
+      // DETACH or DROP SECRET failed, but the DuckDB instance is closed.
+      // Session state cannot leak. Log a warning and return the completed
+      // result so committed mutations are not falsely reported as failures.
+      // eslint-disable-next-line no-console
+      console.error(
+        '[IcebergDatalakeService] SQL session partial cleanup failed (DETACH/DROP SECRET)',
+      );
+    }
     return result;
   }
 
@@ -1872,25 +1927,27 @@ export class IcebergDatalakeService {
       });
       // eslint-disable-next-line no-await-in-loop
       const tableNames = await IcebergDatalakeService.listTables(id, namespace);
-      // eslint-disable-next-line no-await-in-loop
-      const tables = await Promise.all(
-        tableNames.map(async (table) => {
-          const schema = await IcebergDatalakeService.getTableSchema(
-            id,
-            namespace,
-            table,
-          );
-          return {
-            name: table,
-            type: 'TABLE',
-            columns: schema.fields.map((field, fieldIndex) => ({
-              name: field.name,
-              type: field.type,
-              position: fieldIndex + 1,
-            })),
-          };
-        }),
-      );
+      // Each bridge call spawns a Python process; keep the fan-out bounded by
+      // loading table schemas sequentially (mirrors the namespace traversal above).
+      const tables: IcebergSqlSchemaInfo['namespaces'][number]['tables'] = [];
+      // eslint-disable-next-line no-restricted-syntax
+      for (const table of tableNames) {
+        // eslint-disable-next-line no-await-in-loop
+        const schema = await IcebergDatalakeService.getTableSchema(
+          id,
+          namespace,
+          table,
+        );
+        tables.push({
+          name: table,
+          type: 'TABLE',
+          columns: schema.fields.map((field, fieldIndex) => ({
+            name: field.name,
+            type: field.type,
+            position: fieldIndex + 1,
+          })),
+        });
+      }
       namespaces.push({ name: namespace.join('.'), tables });
     }
 

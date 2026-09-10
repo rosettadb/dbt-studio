@@ -215,8 +215,9 @@ const operationZodSchema: z.ZodType<SecondBrainRefreshProposal> = z.object({
 // Present a shallow AI SDK Schema to generateObject. Passing the nested Zod
 // type directly makes TypeScript recursively infer the entire provider/schema
 // result graph and can trigger TS2589 in the editor language service.
-const operationSchema: Schema<SecondBrainRefreshProposal> =
-  zodSchema<SecondBrainRefreshProposal>(operationZodSchema);
+const operationSchema: Schema<SecondBrainRefreshProposal> = zodSchema(
+  operationZodSchema as any,
+) as any as Schema<SecondBrainRefreshProposal>;
 
 const stableJson = (value: unknown): string => {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
@@ -1085,9 +1086,10 @@ export default class SecondBrainRefreshService {
         truncated: false,
       });
     }
+    const icebergBudget = Math.max(0, SOURCE_ITEM_LIMIT - items.length);
     for (const instance of icebergInstances
       .filter((candidate) => candidate.sqlAvailable)
-      .slice(0, SOURCE_ITEM_LIMIT - items.length)) {
+      .slice(0, icebergBudget)) {
       assertNotCancelled(abortSignal);
       let schemaSummary: Array<Record<string, unknown>> = [];
       let schemaTruncated = false;
@@ -1133,7 +1135,7 @@ export default class SecondBrainRefreshService {
         projects.length > SOURCE_ITEM_LIMIT ||
         connections.length > SOURCE_ITEM_LIMIT ||
         icebergInstances.filter((instance) => instance.sqlAvailable).length >
-          SOURCE_ITEM_LIMIT - connections.length,
+          icebergBudget,
     };
   }
 
