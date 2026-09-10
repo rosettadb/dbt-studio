@@ -9,7 +9,16 @@
     <header>
       <h1>E2E Runner</h1>
       <div class="trigger">
-        <select id="branch-select"><option>Loading branches…</option></select>
+        <div class="combobox" id="branch-combobox">
+          <input
+            id="branch-search"
+            type="text"
+            placeholder="Loading branches…"
+            autocomplete="off"
+            disabled
+          />
+          <div id="branch-dropdown" class="dropdown-list hidden"></div>
+        </div>
         <button id="run-btn" disabled>Run tests</button>
       </div>
     </header>

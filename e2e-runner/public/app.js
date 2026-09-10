@@ -1,4 +1,6 @@
-const branchSelect = document.getElementById('branch-select');
+const branchSearch = document.getElementById('branch-search');
+const branchDropdown = document.getElementById('branch-dropdown');
+const branchCombobox = document.getElementById('branch-combobox');
 const runBtn = document.getElementById('run-btn');
 const live = document.getElementById('live');
 const liveId = document.getElementById('live-id');
@@ -37,18 +39,60 @@ async function cancelRun(id) {
   loadHistory();
 }
 
+let allBranches = [];
+let selectedBranch = null;
+
 async function loadBranches() {
   const res = await fetch('/api/branches');
   const data = await res.json();
   if (!res.ok) {
-    branchSelect.innerHTML = `<option>Failed to load branches</option>`;
+    branchSearch.placeholder = 'Failed to load branches';
     return;
   }
-  branchSelect.innerHTML = data.branches
-    .map((b) => `<option value="${b}">${b}</option>`)
-    .join('');
+  allBranches = data.branches;
+  branchSearch.placeholder = 'Search branches…';
+  branchSearch.disabled = false;
+}
+
+function renderBranchDropdown(filter) {
+  const query = filter.trim().toLowerCase();
+  const matches = (query ? allBranches.filter((b) => b.toLowerCase().includes(query)) : allBranches).slice(
+    0,
+    50,
+  );
+
+  if (matches.length === 0) {
+    branchDropdown.innerHTML = `<div class="dropdown-empty">No matching branches</div>`;
+  } else {
+    branchDropdown.innerHTML = matches
+      .map((b) => `<div class="dropdown-item" data-branch="${b}">${b}</div>`)
+      .join('');
+  }
+  branchDropdown.classList.remove('hidden');
+}
+
+function selectBranch(branch) {
+  selectedBranch = branch;
+  branchSearch.value = branch;
+  branchDropdown.classList.add('hidden');
   runBtn.disabled = false;
 }
+
+branchSearch.addEventListener('focus', () => renderBranchDropdown(branchSearch.value));
+branchSearch.addEventListener('input', () => {
+  selectedBranch = null;
+  runBtn.disabled = true;
+  renderBranchDropdown(branchSearch.value);
+});
+
+branchDropdown.addEventListener('click', (e) => {
+  const branch = e.target.dataset.branch;
+  if (branch) selectBranch(branch);
+});
+
+document.addEventListener('click', (e) => {
+  if (!branchCombobox.contains(e.target)) branchDropdown.classList.add('hidden');
+});
 
 function setStatusBadge(el, status) {
   el.textContent = status;
@@ -137,7 +181,7 @@ liveStop.addEventListener('click', () => {
 });
 
 runBtn.addEventListener('click', async () => {
-  const branch = branchSelect.value;
+  const branch = selectedBranch;
   if (!branch) return;
   runBtn.disabled = true;
   try {
