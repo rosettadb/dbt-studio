@@ -14,11 +14,14 @@ import {
   ArrowUpward,
   Delete,
   PlayArrow,
+  Stop,
 } from '@mui/icons-material';
 import { v4 as uuidv4 } from 'uuid';
 import { PythonNotebook, PythonNotebookCell } from '../../../types/notebooks';
 import {
   usePythonNotebook,
+  usePythonNotebookExecution,
+  usePythonNotebookRuntimeStatus,
   useSavePythonNotebook,
 } from '../../controllers/notebooks.controller';
 import { MarkdownCell } from './MarkdownCell';
@@ -28,6 +31,12 @@ export const PythonNotebookEditor: React.FC<{ notebookId: string }> = ({
 }) => {
   const { data: notebook, isLoading } = usePythonNotebook(notebookId);
   const save = useSavePythonNotebook();
+  const { data: runtime } = usePythonNotebookRuntimeStatus();
+  const {
+    cells: executionCells,
+    execute,
+    shutdown,
+  } = usePythonNotebookExecution(notebookId);
   const [draft, setDraft] = React.useState<PythonNotebook | null>(null);
   const saveTimer = React.useRef<number | null>(null);
 
@@ -48,6 +57,22 @@ export const PythonNotebookEditor: React.FC<{ notebookId: string }> = ({
     }, 500);
   };
 
+  const runCell = async (cellId: string) => {
+    if (!draft || execute.isLoading) return;
+    if (saveTimer.current) window.clearTimeout(saveTimer.current);
+    const saved = await save.mutateAsync({
+      notebook: draft,
+      expectedRevision: draft.revision,
+    });
+    setDraft(saved);
+    await execute.mutateAsync({
+      notebookId: saved.id,
+      cellId,
+      revision: saved.revision,
+      requestId: uuidv4(),
+    });
+  };
+
   if (isLoading || !draft)
     return <Typography sx={{ p: 2 }}>Loading notebook…</Typography>;
 
@@ -57,8 +82,13 @@ export const PythonNotebookEditor: React.FC<{ notebookId: string }> = ({
         <Typography variant="h6">{draft.name}</Typography>
         <Chip size="small" label="Python" color="primary" />
         <Box sx={{ flex: 1 }} />
-        <Button size="small" disabled startIcon={<PlayArrow />}>
-          Set up packages to run
+        <Button
+          size="small"
+          disabled={shutdown.isLoading || runtime?.activeSessionCount === 0}
+          startIcon={<Stop />}
+          onClick={() => shutdown.mutate()}
+        >
+          Shut Down
         </Button>
         <Button
           size="small"
@@ -102,9 +132,13 @@ export const PythonNotebookEditor: React.FC<{ notebookId: string }> = ({
           Raw cell
         </Button>
       </Box>
-      <Alert severity="info" sx={{ mb: 2 }}>
-        Python execution is available in the next phase. Your edits are saved
-        automatically.
+      <Alert
+        severity={runtime?.state === 'ready' ? 'info' : 'warning'}
+        sx={{ mb: 2 }}
+      >
+        {runtime?.state === 'ready'
+          ? 'Run saves the latest source before executing it in this notebook kernel.'
+          : 'Set up Jupyter packages in Settings → Python before running cells.'}
       </Alert>
       {draft.cells.map((cell, index) => (
         <Box
@@ -130,6 +164,16 @@ export const PythonNotebookEditor: React.FC<{ notebookId: string }> = ({
               {cell.cellType} cell
             </Typography>
             <Box sx={{ flex: 1 }} />
+            {cell.cellType === 'code' && (
+              <Button
+                size="small"
+                startIcon={<PlayArrow fontSize="small" />}
+                disabled={runtime?.state !== 'ready' || execute.isLoading}
+                onClick={() => runCell(cell.id)}
+              >
+                Run
+              </Button>
+            )}
             <IconButton
               size="small"
               aria-label="Move cell up"
@@ -228,6 +272,32 @@ export const PythonNotebookEditor: React.FC<{ notebookId: string }> = ({
                 width: '100%',
               }}
             />
+          )}
+          {executionCells[cell.id] && (
+            <Box
+              component="pre"
+              sx={{
+                m: 0,
+                p: 1,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                bgcolor:
+                  executionCells[cell.id].status === 'error'
+                    ? 'error.dark'
+                    : 'action.hover',
+                color:
+                  executionCells[cell.id].status === 'error'
+                    ? 'error.contrastText'
+                    : 'text.primary',
+              }}
+            >
+              {executionCells[cell.id].error ||
+                executionCells[cell.id].text ||
+                (executionCells[cell.id].status === 'running'
+                  ? 'Running…'
+                  : '')}
+              {executionCells[cell.id].truncated ? '\n[output truncated]' : ''}
+            </Box>
           )}
         </Box>
       ))}

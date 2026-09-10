@@ -3,12 +3,26 @@
  * Thin wrappers that delegate to NotebooksService
  */
 
-import { ipcMain } from 'electron';
+import { app, ipcMain } from 'electron';
 import { NotebooksService } from '../services/notebooks.service';
 import { PythonNotebookService } from '../services/pythonNotebook.service';
-import type { PythonNotebook } from '../../types/notebooks';
+import type {
+  PythonNotebook,
+  PythonNotebookExecuteRequest,
+} from '../../types/notebooks';
+
+let appCleanupRegistered = false;
 
 export function registerNotebooksHandlers() {
+  if (!appCleanupRegistered) {
+    appCleanupRegistered = true;
+    app.on('before-quit', () => {
+      // The global application cleanup owns its quit timing. Request a clean
+      // kernel shutdown here without changing that shared orchestration.
+      PythonNotebookService.shutdownAll().catch(() => undefined);
+    });
+  }
+
   ipcMain.handle('notebooks:python:runtimeStatus', async () => {
     return PythonNotebookService.getRuntimeStatus();
   });
@@ -38,6 +52,18 @@ export function registerNotebooksHandlers() {
     async (_event, notebook: PythonNotebook, expectedRevision: number) => {
       return NotebooksService.savePythonNotebook(notebook, expectedRevision);
     },
+  );
+
+  ipcMain.handle(
+    'notebooks:python:execute',
+    async (_event, request: PythonNotebookExecuteRequest) =>
+      PythonNotebookService.execute(request, _event.sender),
+  );
+
+  ipcMain.handle(
+    'notebooks:python:shutdown',
+    async (_event, notebookId: string) =>
+      PythonNotebookService.shutdown(notebookId, _event.sender),
   );
 
   // List notebooks for a connection

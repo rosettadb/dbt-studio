@@ -62,6 +62,43 @@ export interface PythonNotebook {
   metadata?: Record<string, unknown>;
 }
 
+export type PythonNotebookEvent =
+  | {
+      type: 'status';
+      notebookId: string;
+      cellId: string;
+      executionId: string;
+      status: 'running' | 'success' | 'error';
+    }
+  | {
+      type: 'stream' | 'result';
+      notebookId: string;
+      cellId: string;
+      executionId: string;
+      text: string;
+      truncated?: boolean;
+    }
+  | {
+      type: 'error';
+      notebookId: string;
+      cellId: string;
+      executionId: string;
+      name: string;
+      text: string;
+      truncated?: boolean;
+    };
+
+export interface PythonNotebookExecuteRequest {
+  notebookId: string;
+  cellId: string;
+  revision: number;
+  requestId: string;
+}
+
+export interface PythonNotebookExecuteResponse {
+  executionId: string;
+}
+
 export type PythonNotebookRuntimeState =
   | 'not-installed'
   | 'installing'

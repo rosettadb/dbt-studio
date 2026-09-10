@@ -10,6 +10,9 @@ import {
   NotebookImportPreview,
   PythonNotebookRuntimeStatus,
   PythonNotebook,
+  PythonNotebookEvent,
+  PythonNotebookExecuteRequest,
+  PythonNotebookExecuteResponse,
 } from '../../types/notebooks';
 
 export const notebooksService = {
@@ -49,6 +52,21 @@ export const notebooksService = {
   checkPythonRuntime: async (): Promise<PythonNotebookRuntimeStatus> => {
     return window.electron.ipcRenderer.invoke('notebooks:python:checkRuntime');
   },
+
+  executePythonCell: async (
+    request: PythonNotebookExecuteRequest,
+  ): Promise<PythonNotebookExecuteResponse> =>
+    window.electron.ipcRenderer.invoke('notebooks:python:execute', request),
+
+  shutdownPythonNotebook: async (notebookId: string): Promise<void> =>
+    window.electron.ipcRenderer.invoke('notebooks:python:shutdown', notebookId),
+
+  onPythonNotebookEvent: (
+    callback: (event: PythonNotebookEvent) => void,
+  ): (() => void) =>
+    window.electron.ipcRenderer.on('notebooks:python:event', (...args) =>
+      callback(args[0] as PythonNotebookEvent),
+    ),
 
   /**
    * List all notebooks for a connection

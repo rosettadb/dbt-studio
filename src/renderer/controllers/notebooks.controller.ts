@@ -3,6 +3,7 @@
  * React Query hooks for notebook operations
  */
 
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { toast } from 'react-toastify';
 import {
@@ -10,6 +11,8 @@ import {
   NotebookCell,
   PythonNotebookRuntimeStatus,
   PythonNotebook,
+  PythonNotebookEvent,
+  PythonNotebookExecuteRequest,
   SchemaInfo,
 } from '../../types/notebooks';
 import { notebooksService } from '../services/notebooks.service';
@@ -110,6 +113,63 @@ export function useCheckPythonNotebookRuntime() {
       queryClient.invalidateQueries(notebooksKeys.pythonRuntime());
     },
   });
+}
+
+export type PythonCellExecution = {
+  status: 'idle' | 'running' | 'success' | 'error';
+  text: string;
+  error?: string;
+  truncated?: boolean;
+};
+
+export function usePythonNotebookExecution(notebookId: string) {
+  const [cells, setCells] = useState<Record<string, PythonCellExecution>>({});
+
+  useEffect(
+    () =>
+      notebooksService.onPythonNotebookEvent((event: PythonNotebookEvent) => {
+        if (event.notebookId !== notebookId) return;
+        setCells((current) => {
+          const cell = current[event.cellId] ?? { status: 'idle', text: '' };
+          if (event.type === 'status') {
+            return {
+              ...current,
+              [event.cellId]: { ...cell, status: event.status },
+            };
+          }
+          if (event.type === 'error') {
+            return {
+              ...current,
+              [event.cellId]: {
+                status: 'error',
+                text: cell.text,
+                error: `${event.name}: ${event.text}`,
+                truncated: event.truncated,
+              },
+            };
+          }
+          return {
+            ...current,
+            [event.cellId]: {
+              ...cell,
+              text: `${cell.text}${event.text}`,
+              truncated: cell.truncated || event.truncated,
+            },
+          };
+        });
+      }),
+    [notebookId],
+  );
+
+  const execute = useMutation({
+    mutationFn: (request: PythonNotebookExecuteRequest) =>
+      notebooksService.executePythonCell(request),
+  });
+  const shutdown = useMutation({
+    mutationFn: () => notebooksService.shutdownPythonNotebook(notebookId),
+  });
+
+  return { cells, execute, shutdown };
 }
 
 // List notebooks for a connection
