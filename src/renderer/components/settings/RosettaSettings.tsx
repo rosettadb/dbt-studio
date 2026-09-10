@@ -86,7 +86,6 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
   const checkVersions = useCheckRosettaVersions({
     onSuccess: (data) => {
       setVersionInfo(data);
-      toast.success('Version information updated');
     },
     onError: (error) => {
       toast.error(`Failed to check versions: ${error.message}`);
