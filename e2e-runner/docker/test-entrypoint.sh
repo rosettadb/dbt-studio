@@ -21,6 +21,14 @@ NODE_ENV=production SKIP_NOTARIZATION=true npm run build:renderer
 mkdir -p .erb/renderer
 cp -R release/app/dist/renderer/* .erb/renderer/
 
+# windows/main/index.ts and windows/setup/index.ts load the preload script
+# from .erb/dll/preload.js in dev mode, but webpack's [name].bundle.dev.js
+# output naming actually produces preload.bundle.dev.js. Without this copy,
+# the preload script silently fails to load, ipcRenderer is never exposed,
+# and the renderer's React root never mounts anything (waits forever on
+# IPC calls that can't be made).
+cp .erb/dll/preload.bundle.dev.js .erb/dll/preload.js
+
 Xvfb :99 -screen 0 1920x1080x24 &
 XVFB_PID=$!
 trap 'kill $XVFB_PID 2>/dev/null || true' EXIT
