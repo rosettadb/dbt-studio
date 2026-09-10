@@ -35,6 +35,32 @@ export function usePythonNotebookRuntimeStatus() {
     queryKey: notebooksKeys.pythonRuntime(),
     queryFn: () => notebooksService.getPythonRuntimeStatus(),
     staleTime: 30000,
+    refetchInterval: (data) =>
+      data?.operation.state === 'idle' ? false : 1000,
+  });
+}
+
+export function useInstallPythonNotebookRuntime() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => notebooksService.installPythonRuntime(),
+    onSuccess: (status) => {
+      queryClient.setQueryData(notebooksKeys.pythonRuntime(), status);
+      queryClient.invalidateQueries(notebooksKeys.pythonRuntime());
+    },
+  });
+}
+
+export function useCheckPythonNotebookRuntime() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => notebooksService.checkPythonRuntime(),
+    onSuccess: (status) => {
+      queryClient.setQueryData(notebooksKeys.pythonRuntime(), status);
+      queryClient.invalidateQueries(notebooksKeys.pythonRuntime());
+    },
   });
 }
 

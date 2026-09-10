@@ -1,7 +1,9 @@
 import React from 'react';
 import {
   Alert,
+  Backdrop,
   Box,
+  Button,
   Chip,
   CircularProgress,
   Divider,
@@ -10,8 +12,17 @@ import {
   ListItemText,
   Typography,
 } from '@mui/material';
-import { CheckCircle, Warning } from '@mui/icons-material';
-import { usePythonNotebookRuntimeStatus } from '../../controllers';
+import {
+  CheckCircle,
+  CloudDownload,
+  Refresh,
+  Warning,
+} from '@mui/icons-material';
+import {
+  useCheckPythonNotebookRuntime,
+  useInstallPythonNotebookRuntime,
+  usePythonNotebookRuntimeStatus,
+} from '../../controllers';
 
 const statePresentation = {
   ready: { label: 'Ready', color: 'success' as const, icon: <CheckCircle /> },
@@ -19,6 +30,11 @@ const statePresentation = {
     label: 'Not installed',
     color: 'default' as const,
     icon: <Warning />,
+  },
+  installing: {
+    label: 'Installing',
+    color: 'primary' as const,
+    icon: <CircularProgress size={18} />,
   },
   'needs-attention': {
     label: 'Needs attention',
@@ -29,9 +45,37 @@ const statePresentation = {
 
 export const JupyterNotebookSettings: React.FC = () => {
   const { data: status, isLoading, isError } = usePythonNotebookRuntimeStatus();
+  const installRuntime = useInstallPythonNotebookRuntime();
+  const checkRuntime = useCheckPythonNotebookRuntime();
+  const operationActive = status?.operation.state !== 'idle';
+  const isBusy = Boolean(
+    operationActive || installRuntime.isLoading || checkRuntime.isLoading,
+  );
+  const blockingMessage =
+    status?.operation.message ||
+    (installRuntime.isLoading
+      ? 'Installing Jupyter packages…'
+      : 'Checking the Jupyter runtime…');
 
   return (
     <Box sx={{ pt: 3, mt: 3, borderTop: 1, borderColor: 'divider' }}>
+      <Backdrop
+        open={isBusy}
+        sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, color: '#fff' }}
+      >
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 2,
+          }}
+        >
+          <CircularProgress color="inherit" />
+          <Typography variant="body1">{blockingMessage}</Typography>
+        </Box>
+      </Backdrop>
+
       <Typography variant="h6" gutterBottom>
         Jupyter Notebooks
       </Typography>
@@ -126,6 +170,39 @@ export const JupyterNotebookSettings: React.FC = () => {
           >
             Environment location: {status.environmentPath}
           </Typography>
+
+          <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
+            {status.state !== 'ready' && (
+              <Button
+                variant="contained"
+                onClick={() => installRuntime.mutate()}
+                disabled={!status.managedPython.available || isBusy}
+                startIcon={
+                  installRuntime.isLoading ? (
+                    <CircularProgress size={16} />
+                  ) : (
+                    <CloudDownload />
+                  )
+                }
+              >
+                Install Jupyter Packages
+              </Button>
+            )}
+            <Button
+              variant="outlined"
+              onClick={() => checkRuntime.mutate()}
+              disabled={status.state !== 'ready' || isBusy}
+              startIcon={
+                checkRuntime.isLoading ? (
+                  <CircularProgress size={16} />
+                ) : (
+                  <Refresh />
+                )
+              }
+            >
+              Check Runtime
+            </Button>
+          </Box>
         </>
       )}
     </Box>

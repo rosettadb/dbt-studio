@@ -12,6 +12,14 @@ export function registerNotebooksHandlers() {
     return PythonNotebookService.getRuntimeStatus();
   });
 
+  ipcMain.handle('notebooks:python:installRuntime', async () => {
+    return PythonNotebookService.installRuntime();
+  });
+
+  ipcMain.handle('notebooks:python:checkRuntime', async () => {
+    return PythonNotebookService.checkRuntime();
+  });
+
   // List notebooks for a connection
   ipcMain.handle('notebooks:list', async (_event, connectionId: string) => {
     return NotebooksService.listNotebooks(connectionId);

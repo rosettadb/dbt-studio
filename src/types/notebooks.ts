@@ -38,6 +38,7 @@ export interface Notebook {
 
 export type PythonNotebookRuntimeState =
   | 'not-installed'
+  | 'installing'
   | 'ready'
   | 'needs-attention';
 
@@ -57,6 +58,11 @@ export interface PythonNotebookRuntimeStatus {
   environmentPath: string;
   packages: PythonNotebookPackageStatus[];
   activeSessionCount: number;
+  operation: {
+    state: 'idle' | 'installing' | 'checking';
+    message?: string;
+    error?: string;
+  };
   message?: string;
 }
 

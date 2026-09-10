@@ -433,6 +433,8 @@ export type NotebookChannels =
   | 'notebooks:fetchCellPage'
   | 'notebooks:runAll'
   | 'notebooks:python:runtimeStatus'
+  | 'notebooks:python:installRuntime'
+  | 'notebooks:python:checkRuntime'
   | 'notebooks:archived:list'
   | 'notebooks:archived:restore'
   | 'notebooks:archived:delete'

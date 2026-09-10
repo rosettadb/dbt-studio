@@ -16,6 +16,16 @@ export const notebooksService = {
     return window.electron.ipcRenderer.invoke('notebooks:python:runtimeStatus');
   },
 
+  installPythonRuntime: async (): Promise<PythonNotebookRuntimeStatus> => {
+    return window.electron.ipcRenderer.invoke(
+      'notebooks:python:installRuntime',
+    );
+  },
+
+  checkPythonRuntime: async (): Promise<PythonNotebookRuntimeStatus> => {
+    return window.electron.ipcRenderer.invoke('notebooks:python:checkRuntime');
+  },
+
   /**
    * List all notebooks for a connection
    */
