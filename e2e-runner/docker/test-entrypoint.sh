@@ -33,4 +33,12 @@ export DISABLE_ANALYTICS=1
 export ELECTRON_DISABLE_GPU=1
 export SKIP_NOTARIZATION=true
 
-npm run test:e2e
+# The app's secure-storage service uses `keytar`, which needs a real D-Bus
+# Secret Service to talk to — without one it hangs forever (no error) the
+# instant it's imported, which blocks the splash window from ever being
+# created. gnome-keyring provides a disposable one for this container.
+dbus-run-session -- bash -c '
+  eval "$(printf "\n" | gnome-keyring-daemon --unlock --components=secrets)"
+  export GNOME_KEYRING_CONTROL GNOME_KEYRING_PID
+  npm run test:e2e
+'

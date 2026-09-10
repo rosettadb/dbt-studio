@@ -12,6 +12,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgbm1 libasound2 \
     libgtk-3-0 libgdk-pixbuf-2.0-0 libpango-1.0-0 libcairo2 libglib2.0-0 \
     libx11-xcb1 libxcb-dri3-0 libxshmfence1 \
+    # dbus/gnome-keyring: the app's secure-storage service loads `keytar`,
+    # which hangs indefinitely (no error) waiting for a D-Bus Secret Service
+    # that doesn't exist in a bare container, blocking window creation.
+    dbus dbus-x11 gnome-keyring \
     && rm -rf /var/lib/apt/lists/*
 
 COPY test-entrypoint.sh /usr/local/bin/test-entrypoint.sh
