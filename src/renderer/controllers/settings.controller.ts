@@ -21,6 +21,7 @@ import {
 } from '../../types/backend';
 import { QUERY_KEYS } from '../config/constants';
 import { useApiKey } from './rosettaCloud.controller';
+import { notebooksKeys } from './notebooks.controller';
 
 export const useGetSettings = (
   customOptions?: UseQueryOptions<SettingsType, CustomError, SettingsType>,
@@ -257,6 +258,7 @@ export const useInstallPython = (
     },
     onSuccess: async (...args) => {
       await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
+      await queryClient.invalidateQueries(notebooksKeys.pythonRuntime());
       onCustomSuccess?.(...args);
     },
     onError: (...args) => {
@@ -277,6 +279,7 @@ export const useUninstallPython = (
     },
     onSuccess: async (...args) => {
       await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
+      await queryClient.invalidateQueries(notebooksKeys.pythonRuntime());
       onCustomSuccess?.(...args);
     },
     onError: (...args) => {
@@ -315,6 +318,7 @@ export const useInstallPythonVersion = (
     },
     onSuccess: async (...args) => {
       await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
+      await queryClient.invalidateQueries(notebooksKeys.pythonRuntime());
       onCustomSuccess?.(...args);
     },
     onError: (...args) => {

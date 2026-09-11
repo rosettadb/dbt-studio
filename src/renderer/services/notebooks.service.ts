@@ -13,6 +13,10 @@ import {
   PythonNotebookEvent,
   PythonNotebookExecuteRequest,
   PythonNotebookExecuteResponse,
+  PythonNotebookPackageActionRequest,
+  PythonNotebookPackageInstallRequest,
+  PythonNotebookPackageVersionListResponse,
+  PythonNotebookPackageStatus,
   PythonNotebookRunAllRequest,
   PythonNotebookSessionSnapshot,
 } from '../../types/notebooks';
@@ -85,8 +89,53 @@ export const notebooksService = {
     );
   },
 
+  updatePythonRuntime: async (
+    expectedActiveSessionCount: number,
+  ): Promise<PythonNotebookRuntimeStatus> => {
+    return window.electron.ipcRenderer.invoke(
+      'notebooks:python:updateRuntime',
+      expectedActiveSessionCount,
+    );
+  },
+
+  uninstallPythonRuntime: async (
+    expectedActiveSessionCount: number,
+  ): Promise<PythonNotebookRuntimeStatus> => {
+    return window.electron.ipcRenderer.invoke(
+      'notebooks:python:uninstallRuntime',
+      expectedActiveSessionCount,
+    );
+  },
+
   checkPythonRuntime: async (): Promise<PythonNotebookRuntimeStatus> => {
     return window.electron.ipcRenderer.invoke('notebooks:python:checkRuntime');
+  },
+
+  listPythonPackageVersions: async (
+    packageName: PythonNotebookPackageStatus['name'],
+  ): Promise<PythonNotebookPackageVersionListResponse> => {
+    return window.electron.ipcRenderer.invoke(
+      'notebooks:python:packageVersions',
+      packageName,
+    );
+  },
+
+  installPythonPackage: async (
+    request: PythonNotebookPackageInstallRequest,
+  ): Promise<PythonNotebookRuntimeStatus> => {
+    return window.electron.ipcRenderer.invoke(
+      'notebooks:python:installPackage',
+      request,
+    );
+  },
+
+  uninstallPythonPackage: async (
+    request: PythonNotebookPackageActionRequest,
+  ): Promise<PythonNotebookRuntimeStatus> => {
+    return window.electron.ipcRenderer.invoke(
+      'notebooks:python:uninstallPackage',
+      request,
+    );
   },
 
   executePythonCell: async (

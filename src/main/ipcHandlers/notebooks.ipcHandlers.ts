@@ -8,6 +8,8 @@ import { NotebooksService } from '../services/notebooks.service';
 import { PythonNotebookService } from '../services/pythonNotebook.service';
 import type {
   PythonNotebook,
+  PythonNotebookPackageActionRequest,
+  PythonNotebookPackageInstallRequest,
   PythonNotebookExecuteRequest,
   PythonNotebookRunAllRequest,
 } from '../../types/notebooks';
@@ -32,9 +34,41 @@ export function registerNotebooksHandlers() {
     return PythonNotebookService.installRuntime();
   });
 
+  ipcMain.handle(
+    'notebooks:python:updateRuntime',
+    async (_event, expectedActiveSessionCount?: number) => {
+      return PythonNotebookService.updateRuntime(expectedActiveSessionCount);
+    },
+  );
+
+  ipcMain.handle(
+    'notebooks:python:uninstallRuntime',
+    async (_event, expectedActiveSessionCount?: number) => {
+      return PythonNotebookService.uninstallRuntime(expectedActiveSessionCount);
+    },
+  );
+
   ipcMain.handle('notebooks:python:checkRuntime', async () => {
     return PythonNotebookService.checkRuntime();
   });
+
+  ipcMain.handle(
+    'notebooks:python:packageVersions',
+    async (_event, packageName: string) =>
+      PythonNotebookService.listPackageVersions(packageName),
+  );
+
+  ipcMain.handle(
+    'notebooks:python:installPackage',
+    async (_event, request: PythonNotebookPackageInstallRequest) =>
+      PythonNotebookService.installPackage(request),
+  );
+
+  ipcMain.handle(
+    'notebooks:python:uninstallPackage',
+    async (_event, request: PythonNotebookPackageActionRequest) =>
+      PythonNotebookService.uninstallPackage(request),
+  );
 
   ipcMain.handle('notebooks:python:list', async () => {
     return NotebooksService.listPythonNotebooks();

@@ -1,4 +1,5 @@
 import { app, WebContents } from 'electron';
+import axios from 'axios';
 import fs from 'fs-extra';
 import path from 'path';
 import { ChildProcessWithoutNullStreams, spawn } from 'child_process';
@@ -6,6 +7,9 @@ import type {
   PythonNotebookEvent,
   PythonNotebookExecuteRequest,
   PythonNotebookExecuteResponse,
+  PythonNotebookPackageActionRequest,
+  PythonNotebookPackageInstallRequest,
+  PythonNotebookPackageVersionListResponse,
   PythonNotebookRunAllRequest,
   PythonNotebookSessionSnapshot,
   PythonNotebookPackageStatus,
@@ -23,6 +27,8 @@ const MAX_EVENT_TEXT_LENGTH = 64 * 1024;
 const MAX_OUTPUT_DATA_LENGTH = 5 * 1024 * 1024;
 const MAX_BRIDGE_FRAME_BYTES = 8 * 1024 * 1024;
 const MAX_RETRY_IDS = 100;
+const MAINTENANCE_SHUTDOWN_TIMEOUT_MS = 5000;
+const PACKAGE_VERSION_LIST_LIMIT = 4;
 const REQUIRED_PACKAGES = [
   { name: 'ipykernel', version: '6.30.1' },
   { name: 'jupyter_client', version: '8.6.3' },
@@ -31,11 +37,74 @@ const REQUIRED_PACKAGES = [
 
 type PackageName = (typeof REQUIRED_PACKAGES)[number]['name'];
 type OperationState = PythonNotebookRuntimeStatus['operation']['state'];
+type VersionTriple = {
+  major: number;
+  minor: number;
+  patch: number;
+  preRank: number;
+  preNumber: number;
+};
+type PypiProjectJson = {
+  releases?: Record<string, { yanked?: boolean }[]>;
+};
 type ProcessResult = {
   exitCode: number | null;
   stdout: string;
   stderr: string;
 };
+
+const VERSION_PATTERN =
+  /^[0-9]+(?:\.[0-9]+)*(?:(?:a|b|rc)[0-9]+)?(?:\.post[0-9]+)?(?:\.dev[0-9]+)?$/i;
+
+const normalizeVersion = (version: string): string =>
+  version.trim().replace(/-/g, '').replace(/alpha/i, 'a').replace(/beta/i, 'b');
+
+const parseVersionTriple = (version: string): VersionTriple | null => {
+  const cleaned = normalizeVersion(version);
+  const match = cleaned.match(
+    /^([0-9]+)(?:\.([0-9]+))?(?:\.([0-9]+))?(?:(a|b|rc)([0-9]+))?/,
+  );
+  if (!match) return null;
+
+  const major = Number(match[1] ?? 0);
+  const minor = Number(match[2] ?? 0);
+  const patch = Number(match[3] ?? 0);
+  const preLabel = match[4] ?? null;
+  let preRank = 3;
+  if (preLabel === 'a') preRank = 0;
+  if (preLabel === 'b') preRank = 1;
+  if (preLabel === 'rc') preRank = 2;
+  const preNumber = Number(match[5] ?? 0);
+
+  if (Number.isNaN(major) || Number.isNaN(minor) || Number.isNaN(patch)) {
+    return null;
+  }
+
+  return { major, minor, patch, preRank, preNumber };
+};
+
+const compareVersions = (a: string, b: string): number => {
+  const va = parseVersionTriple(a);
+  const vb = parseVersionTriple(b);
+  if (!va || !vb) return a.localeCompare(b);
+
+  if (va.major !== vb.major) return va.major > vb.major ? 1 : -1;
+  if (va.minor !== vb.minor) return va.minor > vb.minor ? 1 : -1;
+  if (va.patch !== vb.patch) return va.patch > vb.patch ? 1 : -1;
+  if (va.preRank !== vb.preRank) return va.preRank > vb.preRank ? 1 : -1;
+  if (va.preNumber !== vb.preNumber) {
+    return va.preNumber > vb.preNumber ? 1 : -1;
+  }
+  return 0;
+};
+
+const isPrerelease = (version: string): boolean => {
+  const parsed = parseVersionTriple(version);
+  return parsed ? parsed.preRank < 3 : false;
+};
+
+const isValidPackageVersion = (version: string): boolean =>
+  VERSION_PATTERN.test(normalizeVersion(version));
 
 type NotebookSession = {
   notebookId: string;
@@ -88,6 +157,18 @@ export class PythonNotebookService {
       return path.join(process.resourcesPath, 'resources', 'python', filename);
     }
     return path.join(__dirname, '..', '..', 'resources', 'python', filename);
+  }
+
+  private static isNotebookPackageName(value: string): value is PackageName {
+    return REQUIRED_PACKAGES.some((item) => item.name === value);
+  }
+
+  private static async fetchPypiProjectJson(
+    packageName: PackageName,
+  ): Promise<PypiProjectJson> {
+    const url = `https://pypi.org/pypi/${encodeURIComponent(packageName)}/json`;
+    const res = await axios.get(url, { timeout: 15000 });
+    return res.data as PypiProjectJson;
   }
 
   private static isAtLeastMinimumVersion(version: string | null): boolean {
@@ -220,6 +301,15 @@ export class PythonNotebookService {
       );
     }
     return settings.pythonBinary;
+  }
+
+  private static async requireRuntimePython(): Promise<string> {
+    await this.requireManagedPython();
+    const pythonPath = this.getPythonPath();
+    if (!(await fs.pathExists(pythonPath))) {
+      throw new Error('Install Jupyter packages before changing a package.');
+    }
+    return pythonPath;
   }
 
   private static emit(session: NotebookSession, event: PythonNotebookEvent) {
@@ -365,6 +455,12 @@ export class PythonNotebookService {
     notebookId: string,
     sender: WebContents,
   ): Promise<NotebookSession> {
+    if (this.operation.state !== 'idle') {
+      throw new Error(
+        this.operation.message ||
+          'Jupyter runtime maintenance is currently in progress.',
+      );
+    }
     const existing = this.sessions.get(notebookId);
     if (existing) {
       if (existing.ownerWebContentsId !== sender.id) {
@@ -665,6 +761,136 @@ export class PythonNotebookService {
     this.activeSessionCount = 0;
   }
 
+  private static async stopSessionsForMaintenance(
+    expectedActiveSessionCount: number,
+  ): Promise<void> {
+    if (this.sessions.size !== expectedActiveSessionCount) {
+      throw new Error(
+        'Active notebook kernels changed. Review the current session count and try again.',
+      );
+    }
+    if (this.sessions.size === 0) return;
+
+    const sessions = [...this.sessions.values()];
+    const waitForShutdown = sessions.map(
+      (session) =>
+        new Promise<boolean>((resolve) => {
+          let settled = false;
+          let timeout: ReturnType<typeof setTimeout> | undefined;
+          const finish = (value: boolean) => {
+            if (settled) return;
+            settled = true;
+            if (timeout) clearTimeout(timeout);
+            resolve(value);
+          };
+          session.process.once('exit', () => finish(true));
+          timeout = setTimeout(
+            () => finish(false),
+            MAINTENANCE_SHUTDOWN_TIMEOUT_MS,
+          );
+        }),
+    );
+
+    sessions.forEach((session) => {
+      session.runAll = null;
+      session.state = 'stopped';
+      this.emit(session, {
+        type: 'session',
+        notebookId: session.notebookId,
+        status: 'stopped',
+        message: 'Jupyter runtime maintenance stopped this kernel.',
+      });
+      session.process.stdin.end(
+        `${JSON.stringify({ operation: 'shutdown' })}\n`,
+      );
+    });
+
+    const stopped = await Promise.all(waitForShutdown);
+    if (stopped.some((value) => !value)) {
+      throw new Error(
+        'Could not stop every active Python kernel. Shut them down and try again.',
+      );
+    }
+    this.sessions.clear();
+    this.activeSessionCount = 0;
+  }
+
+  private static async installRuntimeIntoStaging(
+    state: Exclude<OperationState, 'idle'>,
+  ): Promise<void> {
+    const basePython = await this.requireManagedPython();
+    const runtimeRoot = this.getRuntimeRoot();
+    const runtimeDirectory = this.getRuntimeDirectory();
+    const timestamp = Date.now();
+    const stageDirectory = path.join(
+      runtimeRoot,
+      `${RUNTIME_VERSION}.staging-${timestamp}`,
+    );
+    const previousDirectory = path.join(
+      runtimeRoot,
+      `${RUNTIME_VERSION}.previous-${timestamp}`,
+    );
+
+    await fs.ensureDir(runtimeRoot);
+    try {
+      let result = await this.runProcess(basePython, [
+        '-m',
+        'venv',
+        stageDirectory,
+      ]);
+      if (result.exitCode !== 0) {
+        throw new Error('Could not create the dedicated Jupyter environment.');
+      }
+
+      this.operation = {
+        state,
+        message: 'Installing Jupyter packages…',
+      };
+      result = await this.runProcess(this.getPythonPath(stageDirectory), [
+        '-m',
+        'pip',
+        'install',
+        '--disable-pip-version-check',
+        '--no-input',
+        '--requirement',
+        this.getResourcePath('notebook-requirements.txt'),
+      ]);
+      if (result.exitCode !== 0) {
+        throw new Error('Could not install the required Jupyter packages.');
+      }
+
+      this.operation = {
+        state,
+        message: 'Verifying the Jupyter kernel…',
+      };
+      const versions = await this.runHealthProbe(
+        this.getPythonPath(stageDirectory),
+      );
+      if (
+        !REQUIRED_PACKAGES.every((item) => versions[item.name] === item.version)
+      ) {
+        throw new Error(
+          'The dedicated Jupyter environment has incompatible package versions.',
+        );
+      }
+
+      if (await fs.pathExists(runtimeDirectory)) {
+        await fs.move(runtimeDirectory, previousDirectory);
+      }
+      try {
+        await fs.move(stageDirectory, runtimeDirectory);
+      } catch (error) {
+        if (await fs.pathExists(previousDirectory)) {
+          await fs.move(previousDirectory, runtimeDirectory);
+        }
+        throw error;
+      }
+      await fs.remove(previousDirectory);
+    } finally {
+      await fs.remove(stageDirectory);
+    }
+  }
+
   static async getRuntimeStatus(): Promise<PythonNotebookRuntimeStatus> {
     const settings = await SettingsService.loadSettings();
     const managedPythonAvailable = Boolean(
@@ -690,10 +916,14 @@ export class PythonNotebookService {
       operation: this.operation,
     };
 
-    if (this.operation.state === 'installing') {
+    if (
+      this.operation.state === 'installing' ||
+      this.operation.state === 'updating' ||
+      this.operation.state === 'uninstalling'
+    ) {
       return {
         ...baseStatus,
-        state: 'installing',
+        state: this.operation.state,
         message: this.operation.message,
       };
     }
@@ -728,18 +958,27 @@ export class PythonNotebookService {
         ...item,
         installedVersion: installed[item.name],
       }));
-      const isReady = resolvedPackages.every(
+      const hasRequiredPackages = resolvedPackages.every(
+        (item) => item.installedVersion,
+      );
+      const usesDefaultVersions = resolvedPackages.every(
         (item) => item.installedVersion === item.requiredVersion,
       );
       return {
         ...baseStatus,
         packages: resolvedPackages,
-        state: isReady && !this.operation.error ? 'ready' : 'needs-attention',
+        state:
+          hasRequiredPackages && !this.operation.error
+            ? 'ready'
+            : 'needs-attention',
         message:
           this.operation.error ||
-          (isReady
+          (hasRequiredPackages
             ? this.operation.message
-            : 'One or more required Jupyter packages are missing or incompatible.'),
+            : 'One or more required Jupyter packages are missing.') ||
+          (!usesDefaultVersions
+            ? 'Jupyter package versions differ from the app-supported defaults. Check Runtime before relying on execution.'
+            : undefined),
       };
     } catch {
       return {
@@ -755,83 +994,196 @@ export class PythonNotebookService {
       'installing',
       'Creating dedicated Jupyter environment…',
       async () => {
-        const basePython = await this.requireManagedPython();
-        const runtimeRoot = this.getRuntimeRoot();
-        const runtimeDirectory = this.getRuntimeDirectory();
-        const timestamp = Date.now();
-        const stageDirectory = path.join(
-          runtimeRoot,
-          `${RUNTIME_VERSION}.staging-${timestamp}`,
-        );
-        const previousDirectory = path.join(
-          runtimeRoot,
-          `${RUNTIME_VERSION}.previous-${timestamp}`,
-        );
+        await this.installRuntimeIntoStaging('installing');
+      },
+    );
+  }
 
-        await fs.ensureDir(runtimeRoot);
-        try {
-          let result = await this.runProcess(basePython, [
-            '-m',
-            'venv',
-            stageDirectory,
-          ]);
-          if (result.exitCode !== 0) {
-            throw new Error(
-              'Could not create the dedicated Jupyter environment.',
-            );
-          }
-
-          this.operation = {
-            state: 'installing',
-            message: 'Installing Jupyter packages…',
-          };
-          result = await this.runProcess(this.getPythonPath(stageDirectory), [
-            '-m',
-            'pip',
-            'install',
-            '--disable-pip-version-check',
-            '--no-input',
-            '--requirement',
-            this.getResourcePath('notebook-requirements.txt'),
-          ]);
-          if (result.exitCode !== 0) {
-            throw new Error('Could not install the required Jupyter packages.');
-          }
-
-          this.operation = {
-            state: 'installing',
-            message: 'Verifying the Jupyter kernel…',
-          };
-          const versions = await this.runHealthProbe(
-            this.getPythonPath(stageDirectory),
+  static async updateRuntime(
+    expectedActiveSessionCount = 0,
+  ): Promise<PythonNotebookRuntimeStatus> {
+    return this.withOperation(
+      'updating',
+      'Preparing to update Jupyter packages…',
+      async () => {
+        await this.stopSessionsForMaintenance(expectedActiveSessionCount);
+        await this.requireManagedPython();
+        const pythonPath = this.getPythonPath();
+        if (await fs.pathExists(pythonPath)) {
+          const installed = await this.readInstalledPackages(pythonPath);
+          const alreadyCurrent = REQUIRED_PACKAGES.every(
+            (item) => installed[item.name] === item.version,
           );
-          if (
-            !REQUIRED_PACKAGES.every(
-              (item) => versions[item.name] === item.version,
-            )
-          ) {
-            throw new Error(
-              'The dedicated Jupyter environment has incompatible package versions.',
-            );
+          if (alreadyCurrent) {
+            this.operation = {
+              state: 'updating',
+              message: 'Verifying the current Jupyter runtime…',
+            };
+            await this.runHealthProbe(pythonPath);
+            return;
           }
+        }
 
-          if (await fs.pathExists(runtimeDirectory)) {
-            await fs.move(runtimeDirectory, previousDirectory);
-          }
-          try {
-            await fs.move(stageDirectory, runtimeDirectory);
-          } catch (error) {
-            if (await fs.pathExists(previousDirectory)) {
-              await fs.move(previousDirectory, runtimeDirectory);
-            }
-            throw error;
-          }
-          await fs.remove(previousDirectory);
-        } finally {
-          await fs.remove(stageDirectory);
+        this.operation = {
+          state: 'updating',
+          message: 'Creating updated Jupyter environment…',
+        };
+        await this.installRuntimeIntoStaging('updating');
+      },
+    );
+  }
+
+  static async uninstallRuntime(
+    expectedActiveSessionCount = 0,
+  ): Promise<PythonNotebookRuntimeStatus> {
+    return this.withOperation(
+      'uninstalling',
+      'Preparing to uninstall Jupyter packages…',
+      async () => {
+        await this.stopSessionsForMaintenance(expectedActiveSessionCount);
+        await fs.remove(this.getRuntimeRoot());
+      },
+    );
+  }
+
+  static async listPackageVersions(
+    packageName: string,
+  ): Promise<PythonNotebookPackageVersionListResponse> {
+    if (!this.isNotebookPackageName(packageName)) {
+      throw new Error('Unsupported Jupyter package.');
+    }
+
+    try {
+      const projectJson = await this.fetchPypiProjectJson(packageName);
+      const versions = Object.entries(projectJson.releases ?? {})
+        .filter(([, files]) =>
+          files.some((releaseFile) => releaseFile.yanked !== true),
+        )
+        .map(([version]) => version)
+        .filter((version) => parseVersionTriple(version) !== null)
+        .filter((version) => !isPrerelease(version))
+        .sort((a, b) => compareVersions(b, a));
+
+      return {
+        packageName,
+        latestStable: versions[0] ?? null,
+        versions: versions
+          .slice(0, PACKAGE_VERSION_LIST_LIMIT)
+          .map((version) => ({ version, isPrerelease: false })),
+      };
+    } catch {
+      return { packageName, latestStable: null, versions: [] };
+    }
+  }
+
+  static async installPackage(
+    request: PythonNotebookPackageInstallRequest,
+  ): Promise<PythonNotebookRuntimeStatus> {
+    const packageName = String(request.packageName ?? '').trim();
+    const version = String(request.version ?? '').trim();
+    if (!this.isNotebookPackageName(packageName)) {
+      throw new Error('Unsupported Jupyter package.');
+    }
+    if (!isValidPackageVersion(version)) {
+      throw new Error('Invalid Jupyter package version.');
+    }
+
+    return this.withOperation(
+      'updating',
+      `Installing ${packageName} ${version}…`,
+      async () => {
+        await this.stopSessionsForMaintenance(
+          request.expectedActiveSessionCount,
+        );
+        const pythonPath = await this.requireRuntimePython();
+        const result = await this.runProcess(pythonPath, [
+          '-m',
+          'pip',
+          'install',
+          '--upgrade',
+          '--force-reinstall',
+          '--no-cache-dir',
+          `${packageName}==${version}`,
+        ]);
+        if (result.exitCode !== 0) {
+          throw new Error(`Could not install ${packageName} ${version}.`);
+        }
+        const installed = await this.readInstalledPackages(pythonPath);
+        if (installed[packageName] !== version) {
+          throw new Error(
+            `Installed package verification failed for ${packageName}.`,
+          );
         }
       },
     );
+  }
+
+  static async uninstallPackage(
+    request: PythonNotebookPackageActionRequest,
+  ): Promise<PythonNotebookRuntimeStatus> {
+    const packageName = String(request.packageName ?? '').trim();
+    if (!this.isNotebookPackageName(packageName)) {
+      throw new Error('Unsupported Jupyter package.');
+    }
+
+    return this.withOperation(
+      'uninstalling',
+      `Uninstalling ${packageName}…`,
+      async () => {
+        await this.stopSessionsForMaintenance(
+          request.expectedActiveSessionCount,
+        );
+        const pythonPath = await this.requireRuntimePython();
+        const result = await this.runProcess(pythonPath, [
+          '-m',
+          'pip',
+          'uninstall',
+          '--yes',
+          packageName,
+        ]);
+        if (result.exitCode !== 0) {
+          throw new Error(`Could not uninstall ${packageName}.`);
+        }
+        const installed = await this.readInstalledPackages(pythonPath);
+        if (installed[packageName]) {
+          throw new Error(
+            `Package uninstall verification failed for ${packageName}.`,
+          );
+        }
+      },
+    );
+  }
+
+  static async handleManagedPythonWillChange(): Promise<void> {
+    if (this.operationPromise) {
+      throw new Error(
+        'Wait for the current Jupyter runtime operation to finish before changing managed Python.',
+      );
+    }
+    this.operation = {
+      state: 'uninstalling',
+      message: 'Stopping Python notebooks before changing managed Python…',
+    };
+    this.operationPromise = (async () => {
+      await this.stopSessionsForMaintenance(this.sessions.size);
+      await fs.remove(this.getRuntimeRoot());
+    })();
+    try {
+      await this.operationPromise;
+      this.operation = { state: 'idle' };
+    } catch (error) {
+      this.operation = {
+        state: 'idle',
+        error: this.sanitizeDiagnostic(
+          error instanceof Error
+            ? error.message
+            : 'Could not prepare notebooks for the managed Python change.',
+        ),
+      };
+      throw error;
+    } finally {
+      this.operationPromise = null;
+    }
   }
 
   static async checkRuntime(): Promise<PythonNotebookRuntimeStatus> {
@@ -846,16 +1198,7 @@ export class PythonNotebookService {
             'Install Jupyter packages before checking the runtime.',
           );
         }
-        const versions = await this.runHealthProbe(pythonPath);
-        if (
-          !REQUIRED_PACKAGES.every(
-            (item) => versions[item.name] === item.version,
-          )
-        ) {
-          throw new Error(
-            'The dedicated Jupyter environment has incompatible package versions.',
-          );
-        }
+        await this.runHealthProbe(pythonPath);
       },
     );
   }

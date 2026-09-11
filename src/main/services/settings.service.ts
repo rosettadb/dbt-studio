@@ -559,6 +559,9 @@ export default class SettingsService {
   private static async clearManagedVenvDependents(
     settings: SettingsType,
   ): Promise<void> {
+    const { PythonNotebookService } = await import('./pythonNotebook.service');
+    await PythonNotebookService.handleManagedPythonWillChange();
+
     try {
       const { FlowfileService } = await import('./flowfile.service');
       await FlowfileService.stop();

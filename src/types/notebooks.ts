@@ -152,6 +152,8 @@ export interface PythonNotebookSessionSnapshot {
 export type PythonNotebookRuntimeState =
   | 'not-installed'
   | 'installing'
+  | 'updating'
+  | 'uninstalling'
   | 'ready'
   | 'needs-attention';
 
@@ -159,6 +161,27 @@ export interface PythonNotebookPackageStatus {
   name: 'ipykernel' | 'jupyter_client' | 'nbformat';
   requiredVersion: string;
   installedVersion: string | null;
+}
+
+export interface PythonNotebookPackageVersionListItem {
+  version: string;
+  isPrerelease?: boolean;
+}
+
+export interface PythonNotebookPackageVersionListResponse {
+  packageName: PythonNotebookPackageStatus['name'];
+  versions: PythonNotebookPackageVersionListItem[];
+  latestStable: string | null;
+}
+
+export interface PythonNotebookPackageActionRequest {
+  packageName: PythonNotebookPackageStatus['name'];
+  expectedActiveSessionCount: number;
+}
+
+export interface PythonNotebookPackageInstallRequest
+  extends PythonNotebookPackageActionRequest {
+  version: string;
 }
 
 export interface PythonNotebookRuntimeStatus {
@@ -172,7 +195,7 @@ export interface PythonNotebookRuntimeStatus {
   packages: PythonNotebookPackageStatus[];
   activeSessionCount: number;
   operation: {
-    state: 'idle' | 'installing' | 'checking';
+    state: 'idle' | 'installing' | 'checking' | 'updating' | 'uninstalling';
     message?: string;
     error?: string;
   };

@@ -13,6 +13,10 @@ import {
   PythonNotebook,
   PythonNotebookEvent,
   PythonNotebookExecuteRequest,
+  PythonNotebookPackageActionRequest,
+  PythonNotebookPackageInstallRequest,
+  PythonNotebookPackageStatus,
+  PythonNotebookPackageVersionListResponse,
   PythonNotebookRunAllRequest,
   PythonNotebookSessionSnapshot,
   PythonCellOutput,
@@ -150,11 +154,72 @@ export function useInstallPythonNotebookRuntime() {
   });
 }
 
+export function useUpdatePythonNotebookRuntime() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (expectedActiveSessionCount: number) =>
+      notebooksService.updatePythonRuntime(expectedActiveSessionCount),
+    onSuccess: (status) => {
+      queryClient.setQueryData(notebooksKeys.pythonRuntime(), status);
+      queryClient.invalidateQueries(notebooksKeys.pythonRuntime());
+    },
+  });
+}
+
+export function useUninstallPythonNotebookRuntime() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (expectedActiveSessionCount: number) =>
+      notebooksService.uninstallPythonRuntime(expectedActiveSessionCount),
+    onSuccess: (status) => {
+      queryClient.setQueryData(notebooksKeys.pythonRuntime(), status);
+      queryClient.invalidateQueries(notebooksKeys.pythonRuntime());
+    },
+  });
+}
+
 export function useCheckPythonNotebookRuntime() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: () => notebooksService.checkPythonRuntime(),
+    onSuccess: (status) => {
+      queryClient.setQueryData(notebooksKeys.pythonRuntime(), status);
+      queryClient.invalidateQueries(notebooksKeys.pythonRuntime());
+    },
+  });
+}
+
+export function useListPythonNotebookPackageVersions() {
+  return useMutation({
+    mutationFn: (
+      packageName: PythonNotebookPackageStatus['name'],
+    ): Promise<PythonNotebookPackageVersionListResponse> =>
+      notebooksService.listPythonPackageVersions(packageName),
+  });
+}
+
+export function useInstallPythonNotebookPackage() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (request: PythonNotebookPackageInstallRequest) =>
+      notebooksService.installPythonPackage(request),
+    onSuccess: (status) => {
+      queryClient.setQueryData(notebooksKeys.pythonRuntime(), status);
+      queryClient.invalidateQueries(notebooksKeys.pythonRuntime());
+    },
+  });
+}
+
+export function useUninstallPythonNotebookPackage() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (request: PythonNotebookPackageActionRequest) =>
+      notebooksService.uninstallPythonPackage(request),
     onSuccess: (status) => {
       queryClient.setQueryData(notebooksKeys.pythonRuntime(), status);
       queryClient.invalidateQueries(notebooksKeys.pythonRuntime());

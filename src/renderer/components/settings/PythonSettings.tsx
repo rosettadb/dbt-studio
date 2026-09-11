@@ -7,6 +7,9 @@ import {
   Alert,
   CircularProgress,
   Backdrop,
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   List,
   ListItem,
   ListItemText,
@@ -17,6 +20,7 @@ import {
   CheckCircle,
   Delete,
   Download,
+  ExpandMore,
   Refresh,
   Warning,
 } from '@mui/icons-material';
@@ -45,6 +49,7 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
   const [showUninstallConfirmation, setShowUninstallConfirmation] =
     useState(false);
   const [isBlocking, setIsBlocking] = useState(false);
+  const [versionsExpanded, setVersionsExpanded] = useState(true);
 
   const checkVersions = useCheckPythonVersions({
     onSuccess: (data) => setVersionInfo(data),
@@ -141,6 +146,9 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
     return 'Install';
   };
 
+  const currentVersion = settings.pythonVersion || versionInfo?.currentVersion;
+  const recommendedVersion = versionInfo?.recommendedVersion;
+
   return (
     <Box sx={{ maxWidth: 800 }}>
       <Backdrop
@@ -179,102 +187,164 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
         </Alert>
       )}
 
-      <Box sx={{ mb: 2 }}>
-        <Button
-          variant="outlined"
-          onClick={() => checkVersions.mutate()}
-          disabled={checkVersions.isLoading}
-          startIcon={
-            checkVersions.isLoading ? (
-              <CircularProgress size={16} />
-            ) : (
-              <Refresh />
-            )
-          }
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h6" gutterBottom>
+          Python versions
+        </Typography>
+        <Accordion
+          expanded={versionsExpanded}
+          onChange={() => setVersionsExpanded((value) => !value)}
+          TransitionProps={{ timeout: 500 }}
         >
-          {checkVersions.isLoading ? 'Refreshing...' : 'Refresh Versions'}
-        </Button>
-      </Box>
-
-      {versionInfo && (
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            Available Versions
-          </Typography>
-          <List
-            sx={{
-              border: 1,
-              borderColor: 'divider',
-              borderRadius: 1,
-            }}
-          >
-            {versionInfo.availableVersions.map((entry, index) => (
-              <React.Fragment key={entry.version}>
-                <ListItem>
-                  <ListItemText
-                    primary={
-                      <Box
-                        sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
-                      >
-                        <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                          {entry.version}
-                        </Typography>
-                        {entry.isRecommended && (
-                          <Chip
-                            label="Recommended"
-                            size="small"
-                            color="primary"
-                          />
-                        )}
-                        {entry.version === settings.pythonVersion && (
-                          <Box
-                            sx={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 0.5,
-                            }}
-                          >
-                            <CheckCircle color="success" fontSize="small" />
-                            <Chip
-                              label="Installed"
-                              size="small"
-                              color="success"
-                            />
-                          </Box>
-                        )}
-                      </Box>
-                    }
+          <AccordionSummary expandIcon={<ExpandMore />}>
+            <Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                  Managed Python
+                </Typography>
+                {currentVersion && (
+                  <Chip
+                    label={`v${currentVersion}`}
+                    size="small"
+                    color="primary"
+                    sx={{
+                      height: 18,
+                      '& .MuiChip-label': {
+                        px: 0.75,
+                        fontSize: '0.7rem',
+                        lineHeight: 1,
+                      },
+                    }}
                   />
-                  <ListItemSecondaryAction>
-                    <Button
-                      size="small"
-                      variant="contained"
-                      onClick={() => requestInstallVersion(entry.version)}
-                      disabled={
-                        entry.version === settings.pythonVersion ||
-                        installingVersion === entry.version ||
-                        installVersion.isLoading
-                      }
-                      startIcon={
-                        installingVersion === entry.version ? (
-                          <CircularProgress size={16} />
-                        ) : (
-                          <Download />
-                        )
-                      }
-                    >
-                      {getButtonLabel(entry.version)}
-                    </Button>
-                  </ListItemSecondaryAction>
-                </ListItem>
-                {index < versionInfo.availableVersions.length - 1 && (
-                  <Divider />
                 )}
-              </React.Fragment>
-            ))}
-          </List>
-        </Box>
-      )}
+              </Box>
+              <Typography variant="body2" color="text.secondary">
+                Embedded interpreter used by dbt Core, Flowfile, sqlglot, and
+                notebook package setup.
+              </Typography>
+            </Box>
+          </AccordionSummary>
+          <AccordionDetails>
+            <Box
+              sx={{
+                mb: 2,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+              }}
+            >
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => checkVersions.mutate()}
+                disabled={checkVersions.isLoading}
+                startIcon={
+                  checkVersions.isLoading ? (
+                    <CircularProgress size={16} />
+                  ) : (
+                    <Refresh />
+                  )
+                }
+              >
+                {checkVersions.isLoading ? 'Loading...' : 'Load Versions'}
+              </Button>
+            </Box>
+
+            {versionInfo ? (
+              <List
+                sx={{
+                  border: 1,
+                  borderColor: 'divider',
+                  borderRadius: 1,
+                }}
+              >
+                {versionInfo.availableVersions.map((entry, index) => {
+                  const isCurrent = entry.version === currentVersion;
+                  return (
+                    <React.Fragment key={entry.version}>
+                      <ListItem>
+                        <ListItemText
+                          primary={
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 1,
+                              }}
+                            >
+                              <Typography
+                                variant="body1"
+                                sx={{ fontWeight: 500 }}
+                              >
+                                {entry.version}
+                              </Typography>
+                              {isCurrent && (
+                                <Box
+                                  sx={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 0.5,
+                                  }}
+                                >
+                                  <CheckCircle
+                                    color="success"
+                                    fontSize="small"
+                                  />
+                                  <Chip
+                                    label="Installed"
+                                    size="small"
+                                    color="success"
+                                  />
+                                </Box>
+                              )}
+                              {entry.version === recommendedVersion && (
+                                <Chip
+                                  label="Recommended"
+                                  size="small"
+                                  color="primary"
+                                />
+                              )}
+                            </Box>
+                          }
+                        />
+                        <ListItemSecondaryAction>
+                          <Button
+                            size="small"
+                            variant="contained"
+                            onClick={() => requestInstallVersion(entry.version)}
+                            disabled={
+                              isCurrent ||
+                              installingVersion === entry.version ||
+                              installVersion.isLoading
+                            }
+                            startIcon={
+                              installingVersion === entry.version ? (
+                                <CircularProgress size={16} />
+                              ) : (
+                                <Download />
+                              )
+                            }
+                          >
+                            {getButtonLabel(entry.version)}
+                          </Button>
+                        </ListItemSecondaryAction>
+                      </ListItem>
+                      {index < versionInfo.availableVersions.length - 1 && (
+                        <Divider />
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </List>
+            ) : (
+              <Alert severity="info">
+                Click &quot;Load Versions&quot; to view available managed Python
+                versions.
+              </Alert>
+            )}
+          </AccordionDetails>
+        </Accordion>
+      </Box>
 
       {isInstalled && (
         <Box sx={{ pt: 2, borderTop: 1, borderColor: 'divider' }}>
