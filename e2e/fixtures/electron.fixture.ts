@@ -58,7 +58,7 @@ export const test = base.extend<ElectronFixtures>({
   },
 
   // Launch Electron app
-  electronApp: async ({ userData, autoSkipSetup }, use) => {
+  electronApp: async ({ userData, autoSkipSetup }, use, testInfo) => {
     // Helper to seed database if skipping setup
     if (autoSkipSetup) {
       // Create projects directory
@@ -142,8 +142,38 @@ export const test = base.extend<ElectronFixtures>({
       },
     });
 
+    // Playwright's config-level `trace: 'on'` only auto-attaches snapshot
+    // and screenshot capture to contexts created through its own built-in
+    // page/context fixtures — it never engages for a context obtained via
+    // _electron.launch(), so trace viewer playback is permanently blank.
+    // Starting tracing manually here fixes that, but is gated behind an env
+    // var so default behavior (existing CI/local runs) is unaffected.
+    const manualTracing = process.env.E2E_FORCE_TRACE_SNAPSHOTS === 'true';
+    if (manualTracing) {
+      try {
+        await electronApp
+          .context()
+          .tracing.start({ screenshots: true, snapshots: true });
+      } catch (e) {
+        console.error('Failed to start manual tracing:', e);
+      }
+    }
+
     // Use the app for the test
     await use(electronApp);
+
+    if (manualTracing) {
+      try {
+        const tracePath = path.join(testInfo.outputDir, 'manual-trace.zip');
+        await electronApp.context().tracing.stop({ path: tracePath });
+        await testInfo.attach('trace', {
+          path: tracePath,
+          contentType: 'application/zip',
+        });
+      } catch (e) {
+        console.error('Failed to stop/attach manual tracing:', e);
+      }
+    }
 
     // Close the app after test
     await electronApp.close();
