@@ -15,6 +15,7 @@ import {
   PythonNotebookExecuteRequest,
   PythonNotebookRunAllRequest,
   PythonNotebookSessionSnapshot,
+  PythonCellOutput,
   SchemaInfo,
 } from '../../types/notebooks';
 import { notebooksService } from '../services/notebooks.service';
@@ -83,6 +84,50 @@ export function useSavePythonNotebook() {
   });
 }
 
+function usePythonNotebookDocumentMutation<T>(
+  mutationFn: (value: T) => Promise<PythonNotebook | void>,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn,
+    onSuccess: (notebook) => {
+      if (notebook)
+        queryClient.setQueryData(
+          notebooksKeys.pythonDocument(notebook.id),
+          notebook,
+        );
+      queryClient.invalidateQueries(notebooksKeys.pythonDocuments());
+    },
+  });
+}
+
+export function useRenamePythonNotebook() {
+  return usePythonNotebookDocumentMutation(
+    ({ id, name }: { id: string; name: string }) =>
+      notebooksService.renamePythonNotebook(id, name),
+  );
+}
+
+export function useDuplicatePythonNotebook() {
+  return usePythonNotebookDocumentMutation(
+    ({ id, name }: { id: string; name?: string }) =>
+      notebooksService.duplicatePythonNotebook(id, name),
+  );
+}
+
+export function useDeletePythonNotebook() {
+  return usePythonNotebookDocumentMutation(({ id }: { id: string }) =>
+    notebooksService.deletePythonNotebook(id),
+  );
+}
+
+export function useClearPythonNotebookOutputs() {
+  return usePythonNotebookDocumentMutation(
+    ({ id, revision }: { id: string; revision: number }) =>
+      notebooksService.clearPythonNotebookOutputs(id, revision),
+  );
+}
+
 export function usePythonNotebookRuntimeStatus() {
   return useQuery<PythonNotebookRuntimeStatus>({
     queryKey: notebooksKeys.pythonRuntime(),
@@ -122,6 +167,7 @@ export type PythonCellExecution = {
   text: string;
   error?: string;
   truncated?: boolean;
+  outputs: PythonCellOutput[];
 };
 
 export function usePythonNotebookExecution(notebookId: string) {
@@ -139,12 +185,16 @@ export function usePythonNotebookExecution(notebookId: string) {
       return;
     }
     setCells((current) => {
-      const cell = current[event.cellId] ?? { status: 'idle', text: '' };
+      const cell = current[event.cellId] ?? {
+        status: 'idle',
+        text: '',
+        outputs: [],
+      };
       if (event.type === 'status') {
         if (event.status === 'running') {
           return {
             ...current,
-            [event.cellId]: { status: 'running', text: '' },
+            [event.cellId]: { status: 'running', text: '', outputs: [] },
           };
         }
         return {
@@ -160,15 +210,49 @@ export function usePythonNotebookExecution(notebookId: string) {
             text: cell.text,
             error: `${event.name}: ${event.text}`,
             truncated: event.truncated,
+            outputs: [
+              ...cell.outputs,
+              {
+                type: 'error',
+                name: event.name,
+                text: event.text,
+                truncated: event.truncated,
+              },
+            ],
           },
         };
       }
+      if (event.type === 'clear-output') {
+        return {
+          ...current,
+          [event.cellId]: event.wait
+            ? cell
+            : { ...cell, text: '', outputs: [] },
+        };
+      }
+      const output: PythonCellOutput =
+        event.type === 'stream'
+          ? { type: 'stream', text: event.text, truncated: event.truncated }
+          : {
+              type: event.type === 'result' ? 'result' : 'display',
+              text: event.text,
+              mime: event.mime,
+              data: event.data,
+              truncated: event.truncated,
+            };
       return {
         ...current,
         [event.cellId]: {
           ...cell,
           text: `${cell.text}${event.text}`,
           truncated: cell.truncated || event.truncated,
+          outputs:
+            event.type === 'display-update'
+              ? [
+                  ...cell.outputs.filter((item) => item.type !== 'display'),
+                  output,
+                ]
+              : [...cell.outputs, output],
         },
       };
     });

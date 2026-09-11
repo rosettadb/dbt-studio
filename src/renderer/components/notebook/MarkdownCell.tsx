@@ -25,6 +25,7 @@ interface MarkdownCellProps {
   /** SQL notebook cell. Use content for a Python notebook markdown cell. */
   cell?: Pick<NotebookCell, 'content'>;
   content?: string;
+  attachmentResolver?: (href: string) => string | null;
   onUpdate: (content: string) => void;
 }
 
@@ -41,7 +42,9 @@ const isSafeImageUrl = (src: string) =>
   src.startsWith('https://') ||
   (/^data:image\/(png|jpe?g);base64,/i.test(src) && src.length <= 4_000_000);
 
-const markdownComponents: Components = {
+const createMarkdownComponents = (
+  attachmentResolver?: (href: string) => string | null,
+): Components => ({
   a: ({ children, href }) => (
     <Link
       component="a"
@@ -73,11 +76,14 @@ const markdownComponents: Components = {
       {children}
     </Link>
   ),
-  img: ({ src, alt }) =>
-    src && isSafeImageUrl(src) ? (
+  img: ({ src, alt }) => {
+    const resolved = src?.startsWith('attachment:')
+      ? (attachmentResolver?.(src) ?? undefined)
+      : src;
+    return resolved && isSafeImageUrl(resolved) ? (
       <Box
         component="img"
-        src={src}
+        src={resolved}
         alt={alt ?? ''}
         sx={{ display: 'block', maxWidth: '100%', borderRadius: 1 }}
       />
@@ -86,7 +92,8 @@ const markdownComponents: Components = {
         Image unavailable: only HTTPS and bounded PNG/JPEG data images are
         supported.
       </Typography>
-    ),
+    );
+  },
   pre: ({ children }) => (
     <Box component="pre" sx={{ m: 0, mb: 1.5, overflow: 'auto' }}>
       {children}
@@ -102,11 +109,12 @@ const markdownComponents: Components = {
       </Box>
     </Box>
   ),
-};
+});
 
 export const MarkdownCell: React.FC<MarkdownCellProps> = ({
   cell,
   content,
+  attachmentResolver,
   onUpdate,
 }) => {
   const value = content ?? cell?.content ?? '';
@@ -209,7 +217,7 @@ export const MarkdownCell: React.FC<MarkdownCellProps> = ({
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               rehypePlugins={[rehypeSanitize, rehypeHighlight]}
-              components={markdownComponents}
+              components={createMarkdownComponents(attachmentResolver)}
             >
               {value}
             </ReactMarkdown>

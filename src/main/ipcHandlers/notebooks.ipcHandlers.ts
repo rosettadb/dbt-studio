@@ -56,6 +56,40 @@ export function registerNotebooksHandlers() {
   );
 
   ipcMain.handle(
+    'notebooks:python:rename',
+    async (_event, notebookId: string, name: string) =>
+      NotebooksService.renamePythonNotebook(notebookId, name),
+  );
+
+  ipcMain.handle(
+    'notebooks:python:duplicate',
+    async (_event, notebookId: string, name?: string) =>
+      NotebooksService.duplicatePythonNotebook(notebookId, name),
+  );
+
+  ipcMain.handle(
+    'notebooks:python:delete',
+    async (_event, notebookId: string) =>
+      PythonNotebookService.deleteDocument(notebookId),
+  );
+
+  ipcMain.handle(
+    'notebooks:python:clearOutputs',
+    async (_event, notebookId: string, revision: number) =>
+      NotebooksService.clearPythonNotebookOutputs(notebookId, revision),
+  );
+
+  ipcMain.handle('notebooks:python:import', async () =>
+    NotebooksService.importPythonNotebook(),
+  );
+
+  ipcMain.handle(
+    'notebooks:python:export',
+    async (_event, notebookId: string, revision: number) =>
+      NotebooksService.exportPythonNotebook(notebookId, revision),
+  );
+
+  ipcMain.handle(
     'notebooks:python:runAll',
     async (_event, request: PythonNotebookRunAllRequest) =>
       PythonNotebookService.runAll(request, _event.sender),

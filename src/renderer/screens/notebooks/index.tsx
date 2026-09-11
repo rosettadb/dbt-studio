@@ -1465,6 +1465,8 @@ const Notebooks = () => {
                       <PythonNotebookEditor
                         key={`python-notebook-${notebookTabManager.activeTab.notebookId}`}
                         notebookId={notebookTabManager.activeTab.notebookId}
+                        onDeleted={notebookTabManager.closeTab}
+                        onImported={notebookTabManager.openPythonNotebook}
                       />
                     ) : notebookTabManager.activeTabId && activeConnectionId ? (
                       <NotebookEditor

@@ -4,7 +4,7 @@
  * Storage: JSON files in userData/notebooks/ directory, scoped by connectionKey
  */
 
-import { app } from 'electron';
+import { app, dialog } from 'electron';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
@@ -14,6 +14,8 @@ import {
   CellOutput,
   NotebookImportPreview,
   PythonNotebook,
+  PythonNotebookCell,
+  PythonCellOutput,
 } from '../../types/notebooks';
 import ConnectorsService from './connectors.service';
 import DuckLakeService from './duckLake.service';
@@ -27,6 +29,7 @@ const PYTHON_NOTEBOOKS_DIR = path.join(
 );
 const MAX_PYTHON_NOTEBOOK_CELLS = 1_000;
 const MAX_PYTHON_CELL_SOURCE_BYTES = 1024 * 1024;
+const MAX_PYTHON_NOTEBOOK_BYTES = 20 * 1024 * 1024;
 
 // Maximum rows to store in notebook output (prevent massive files)
 const MAX_STORED_ROWS = 100;
@@ -310,6 +313,123 @@ function validatePythonNotebook(notebook: PythonNotebook): PythonNotebook {
   return notebook;
 }
 
+function pythonCellFromIpynb(cell: Record<string, any>): PythonNotebookCell {
+  const source = Array.isArray(cell.source)
+    ? cell.source.join('')
+    : (cell.source ?? '');
+  return {
+    id: uuidv4(),
+    cellType: ['code', 'markdown', 'raw'].includes(cell.cell_type)
+      ? cell.cell_type
+      : 'raw',
+    source: String(source),
+    metadata: {
+      ...(cell.metadata && typeof cell.metadata === 'object'
+        ? cell.metadata
+        : {}),
+      ...(cell.attachments && typeof cell.attachments === 'object'
+        ? { attachments: cell.attachments }
+        : {}),
+    },
+    executionCount:
+      typeof cell.execution_count === 'number' ? cell.execution_count : null,
+    outputs: Array.isArray(cell.outputs)
+      ? cell.outputs.slice(0, 200).map((output: Record<string, any>) => {
+          let type: PythonCellOutput['type'] = 'unsupported';
+          if (output.output_type === 'error') type = 'error';
+          if (output.output_type === 'stream') type = 'stream';
+          const data =
+            output.data && typeof output.data === 'object'
+              ? output.data
+              : undefined;
+          const mime =
+            data &&
+            ['image/png', 'image/jpeg', 'text/html', 'text/plain'].find(
+              (key) => key in data,
+            );
+          if (data && mime) type = 'display';
+          return {
+            type,
+            text:
+              typeof output.text === 'string'
+                ? output.text
+                : (output.evalue ?? (mime ? data?.[mime] : undefined)),
+            name: output.ename,
+            mime: mime as PythonCellOutput['mime'],
+            data: mime ? data?.[mime] : JSON.stringify(output),
+          } satisfies PythonCellOutput;
+        })
+      : undefined,
+  };
+}
+
+function ipynbFromPythonNotebook(
+  notebook: PythonNotebook,
+): Record<string, unknown> {
+  return {
+    nbformat: 4,
+    nbformat_minor: 5,
+    metadata: notebook.metadata ?? {
+      kernelspec: { name: 'python3', language: 'python' },
+    },
+    cells: notebook.cells.map((cell) => {
+      const { attachments, ...metadata } = {
+        ...(cell.metadata ?? {}),
+      } as Record<string, unknown>;
+      return {
+        cell_type: cell.cellType,
+        metadata,
+        ...(attachments ? { attachments } : {}),
+        source: cell.source,
+        ...(cell.cellType === 'code'
+          ? {
+              execution_count: cell.executionCount ?? null,
+              outputs: (cell.outputs ?? []).map((output) => {
+                if (output.type === 'error')
+                  return {
+                    output_type: 'error',
+                    ename: output.name ?? 'PythonError',
+                    evalue: output.text ?? '',
+                    traceback: [],
+                  };
+                if (output.type === 'stream')
+                  return {
+                    output_type: 'stream',
+                    name: 'stdout',
+                    text: output.text ?? '',
+                  };
+                if (output.type === 'truncated')
+                  return {
+                    output_type: 'stream',
+                    name: 'stderr',
+                    text: '[output truncated]',
+                  };
+                if (output.type === 'unsupported') {
+                  try {
+                    return JSON.parse(output.data ?? '{}');
+                  } catch {
+                    return {
+                      output_type: 'stream',
+                      name: 'stderr',
+                      text: '[unsupported output omitted]',
+                    };
+                  }
+                }
+                return {
+                  output_type: 'display_data',
+                  metadata: {},
+                  data: output.mime
+                    ? { [output.mime]: output.data ?? output.text ?? '' }
+                    : { 'text/plain': output.text ?? '' },
+                };
+              }),
+            }
+          : {}),
+      };
+    }),
+  };
+}
+
 async function readPythonNotebookFile(
   filePath: string,
 ): Promise<PythonNotebook> {
@@ -424,6 +544,126 @@ export class NotebooksService {
       await writePythonNotebookFile(filePath, updated);
       return updated;
     });
+  }
+
+  static async renamePythonNotebook(
+    notebookId: string,
+    name: string,
+  ): Promise<PythonNotebook> {
+    const current = await this.getPythonNotebook(notebookId);
+    if (!current) throw new Error('Python notebook not found.');
+    return this.savePythonNotebook({ ...current, name }, current.revision);
+  }
+
+  static async duplicatePythonNotebook(
+    notebookId: string,
+    name?: string,
+  ): Promise<PythonNotebook> {
+    const original = await this.getPythonNotebook(notebookId);
+    if (!original) throw new Error('Python notebook not found.');
+    const now = new Date().toISOString();
+    const duplicate: PythonNotebook = {
+      ...original,
+      id: uuidv4(),
+      name: name?.trim() || `${original.name} (Copy)`,
+      cells: original.cells.map((cell) => ({ ...cell, id: uuidv4() })),
+      createdAt: now,
+      updatedAt: now,
+      revision: 1,
+    };
+    await fs.mkdir(PYTHON_NOTEBOOKS_DIR, { recursive: true });
+    await writePythonNotebookFile(
+      getPythonNotebookPath(duplicate.id),
+      duplicate,
+    );
+    return duplicate;
+  }
+
+  static async deletePythonNotebook(notebookId: string): Promise<void> {
+    await fs.rm(getPythonNotebookPath(notebookId), { force: true });
+  }
+
+  static async clearPythonNotebookOutputs(
+    notebookId: string,
+    expectedRevision: number,
+  ): Promise<PythonNotebook> {
+    const current = await this.getPythonNotebook(notebookId);
+    if (!current) throw new Error('Python notebook not found.');
+    return this.savePythonNotebook(
+      {
+        ...current,
+        cells: current.cells.map((cell) => ({
+          ...cell,
+          outputs: undefined,
+          outputProvenance: undefined,
+        })),
+      },
+      expectedRevision,
+    );
+  }
+
+  static async importPythonNotebook(): Promise<PythonNotebook | null> {
+    const selection = await dialog.showOpenDialog({
+      title: 'Import Python Notebook',
+      filters: [{ name: 'Jupyter notebooks', extensions: ['ipynb'] }],
+      properties: ['openFile'],
+    });
+    if (selection.canceled || !selection.filePaths[0]) return null;
+    const filePath = selection.filePaths[0];
+    const stat = await fs.stat(filePath);
+    if (stat.size > MAX_PYTHON_NOTEBOOK_BYTES)
+      throw new Error('Python notebook exceeds the 20 MiB import limit.');
+    const raw = JSON.parse(await fs.readFile(filePath, 'utf8')) as Record<
+      string,
+      any
+    >;
+    const { PythonNotebookService } = await import('./pythonNotebook.service');
+    const validated = await PythonNotebookService.convertIpynb('import', raw);
+    const sourceCells = Array.isArray(validated.cells) ? validated.cells : [];
+    const now = new Date().toISOString();
+    const notebook: PythonNotebook = {
+      id: uuidv4(),
+      name:
+        typeof raw.metadata?.title === 'string'
+          ? raw.metadata.title
+          : path.basename(filePath, '.ipynb'),
+      cells: sourceCells.map((cell) =>
+        pythonCellFromIpynb(cell as Record<string, any>),
+      ),
+      createdAt: now,
+      updatedAt: now,
+      revision: 1,
+      metadata: validated.metadata as Record<string, unknown> | undefined,
+    };
+    await fs.mkdir(PYTHON_NOTEBOOKS_DIR, { recursive: true });
+    await writePythonNotebookFile(getPythonNotebookPath(notebook.id), notebook);
+    return notebook;
+  }
+
+  static async exportPythonNotebook(
+    notebookId: string,
+    revision: number,
+  ): Promise<string | null> {
+    const notebook = await this.getPythonNotebook(notebookId);
+    if (!notebook || notebook.revision !== revision)
+      throw new Error('Save the latest notebook changes before exporting.');
+    const selection = await dialog.showSaveDialog({
+      title: 'Export Python Notebook',
+      defaultPath: `${notebook.name}.ipynb`,
+      filters: [{ name: 'Jupyter notebooks', extensions: ['ipynb'] }],
+    });
+    if (selection.canceled || !selection.filePath) return null;
+    const { PythonNotebookService } = await import('./pythonNotebook.service');
+    const validated = await PythonNotebookService.convertIpynb(
+      'export',
+      ipynbFromPythonNotebook(notebook),
+    );
+    await fs.writeFile(
+      selection.filePath,
+      JSON.stringify(validated, null, 2),
+      'utf8',
+    );
+    return selection.filePath;
   }
 
   /**
@@ -648,9 +888,6 @@ export class NotebooksService {
    */
   static async selectNotebookFile(): Promise<string | null> {
     try {
-      // eslint-disable-next-line global-require
-      const { dialog } = require('electron');
-
       const result = await dialog.showOpenDialog({
         title: 'Import Notebook',
         filters: [

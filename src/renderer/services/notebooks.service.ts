@@ -41,6 +41,40 @@ export const notebooksService = {
     );
   },
 
+  renamePythonNotebook: async (
+    id: string,
+    name: string,
+  ): Promise<PythonNotebook> =>
+    window.electron.ipcRenderer.invoke('notebooks:python:rename', id, name),
+
+  duplicatePythonNotebook: async (
+    id: string,
+    name?: string,
+  ): Promise<PythonNotebook> =>
+    window.electron.ipcRenderer.invoke('notebooks:python:duplicate', id, name),
+
+  deletePythonNotebook: async (id: string): Promise<void> =>
+    window.electron.ipcRenderer.invoke('notebooks:python:delete', id),
+
+  clearPythonNotebookOutputs: async (
+    id: string,
+    revision: number,
+  ): Promise<PythonNotebook> =>
+    window.electron.ipcRenderer.invoke(
+      'notebooks:python:clearOutputs',
+      id,
+      revision,
+    ),
+
+  importPythonNotebook: async (): Promise<PythonNotebook | null> =>
+    window.electron.ipcRenderer.invoke('notebooks:python:import'),
+
+  exportPythonNotebook: async (
+    id: string,
+    revision: number,
+  ): Promise<string | null> =>
+    window.electron.ipcRenderer.invoke('notebooks:python:export', id, revision),
+
   getPythonRuntimeStatus: async (): Promise<PythonNotebookRuntimeStatus> => {
     return window.electron.ipcRenderer.invoke('notebooks:python:runtimeStatus');
   },

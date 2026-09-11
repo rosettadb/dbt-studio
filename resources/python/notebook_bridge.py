@@ -10,12 +10,39 @@ from jupyter_client import KernelManager
 
 REQUIRED_PACKAGES = ("ipykernel", "jupyter_client", "nbformat")
 MAX_TEXT_LENGTH = 64 * 1024
+MAX_OUTPUT_BYTES = 5 * 1024 * 1024
 ANSI_ESCAPE = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
 
 
 def bounded_text(value):
     text = ANSI_ESCAPE.sub("", str(value))
     return text[:MAX_TEXT_LENGTH], len(text) > MAX_TEXT_LENGTH
+
+
+def bounded_data(value):
+    if not isinstance(value, str):
+        return "", False
+    encoded = value.encode("utf-8")
+    if len(encoded) <= MAX_OUTPUT_BYTES:
+        return value, False
+    return encoded[:MAX_OUTPUT_BYTES].decode("utf-8", errors="ignore"), True
+
+
+def emit_display(message_type, content, cell_id, execution_id):
+    data = content.get("data", {})
+    for mime in ("image/png", "image/jpeg", "text/html", "text/plain"):
+        if mime in data:
+            value, truncated = bounded_data(data[mime])
+            emit({
+                "type": "display-update" if message_type == "update_display_data" else "display",
+                "cellId": cell_id,
+                "executionId": execution_id,
+                "mime": mime,
+                "data": value,
+                "text": data.get("text/plain", "") if mime != "text/plain" else value,
+                "truncated": truncated,
+            })
+            return
 
 
 def emit(event):
@@ -45,6 +72,17 @@ def check_runtime():
             client.stop_channels()
         if manager.has_kernel:
             manager.shutdown_kernel(now=True)
+
+
+def convert_ipynb(command):
+    import nbformat
+
+    document = command.get("document")
+    if not isinstance(document, dict):
+        raise ValueError("Notebook document is invalid")
+    notebook = nbformat.from_dict(document)
+    nbformat.validate(notebook)
+    return {"ok": True, "document": json.loads(nbformat.writes(notebook))}
 
 
 def serve():
@@ -131,15 +169,15 @@ def serve():
                         "truncated": truncated,
                     })
                 elif message_type == "execute_result":
-                    text, truncated = bounded_text(
-                        content.get("data", {}).get("text/plain", "")
-                    )
+                    emit_display(message_type, content, cell_id, execution_id)
+                elif message_type in ("display_data", "update_display_data"):
+                    emit_display(message_type, content, cell_id, execution_id)
+                elif message_type == "clear_output":
                     emit({
-                        "type": "result",
+                        "type": "clear-output",
                         "cellId": cell_id,
                         "executionId": execution_id,
-                        "text": text,
-                        "truncated": truncated,
+                        "wait": bool(content.get("wait", False)),
                     })
                 elif message_type == "error":
                     saw_error = True
@@ -180,9 +218,13 @@ def main():
         serve()
         return
     command = json.load(sys.stdin)
-    if command.get("operation") != "check":
-        raise ValueError("Unsupported notebook bridge operation")
-    print(json.dumps(check_runtime()))
+    if command.get("operation") == "check":
+        print(json.dumps(check_runtime()))
+        return
+    if command.get("operation") in ("import", "export"):
+        print(json.dumps(convert_ipynb(command)))
+        return
+    raise ValueError("Unsupported notebook bridge operation")
 
 
 if __name__ == "__main__":

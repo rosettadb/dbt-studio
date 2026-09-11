@@ -40,6 +40,15 @@ export type NotebookRef =
   | { kind: 'sql'; connectionId: string; notebookId: string }
   | { kind: 'python'; notebookId: string };
 
+export interface PythonCellOutput {
+  type: 'stream' | 'result' | 'display' | 'error' | 'truncated' | 'unsupported';
+  text?: string;
+  name?: string;
+  mime?: 'image/png' | 'image/jpeg' | 'text/html' | 'text/plain';
+  data?: string;
+  truncated?: boolean;
+}
+
 export interface PythonNotebookCell {
   id: string;
   cellType: 'code' | 'markdown' | 'raw';
@@ -50,6 +59,7 @@ export interface PythonNotebookCell {
     documentRevision: number;
     executedAt: string;
   };
+  outputs?: PythonCellOutput[];
 }
 
 export interface PythonNotebook {
@@ -71,12 +81,21 @@ export type PythonNotebookEvent =
       status: 'running' | 'success' | 'error';
     }
   | {
-      type: 'stream' | 'result';
+      type: 'stream' | 'result' | 'display' | 'display-update';
       notebookId: string;
       cellId: string;
       executionId: string;
       text: string;
       truncated?: boolean;
+      mime?: PythonCellOutput['mime'];
+      data?: string;
+    }
+  | {
+      type: 'clear-output';
+      notebookId: string;
+      cellId: string;
+      executionId: string;
+      wait: boolean;
     }
   | {
       type: 'error';

@@ -20,6 +20,8 @@ const MAX_DIAGNOSTIC_LENGTH = 500;
 const MAX_LIVE_SESSIONS = 2;
 const MAX_EVENT_LINE_BYTES = 128 * 1024;
 const MAX_EVENT_TEXT_LENGTH = 64 * 1024;
+const MAX_OUTPUT_DATA_LENGTH = 5 * 1024 * 1024;
+const MAX_BRIDGE_FRAME_BYTES = 8 * 1024 * 1024;
 const MAX_RETRY_IDS = 100;
 const REQUIRED_PACKAGES = [
   { name: 'ipykernel', version: '6.30.1' },
@@ -109,13 +111,14 @@ export class PythonNotebookService {
     command: string,
     args: string[],
     input?: string,
+    maxStdoutLength = MAX_DIAGNOSTIC_LENGTH,
   ): Promise<ProcessResult> {
     return new Promise((resolve, reject) => {
       const child = spawn(command, args, { shell: false });
       let stdout = '';
       let stderr = '';
       child.stdout.on('data', (chunk: Buffer) => {
-        stdout = (stdout + chunk.toString()).slice(-MAX_DIAGNOSTIC_LENGTH);
+        stdout = (stdout + chunk.toString()).slice(-maxStdoutLength);
       });
       child.stderr.on('data', (chunk: Buffer) => {
         stderr = (stderr + chunk.toString()).slice(-MAX_DIAGNOSTIC_LENGTH);
@@ -250,7 +253,12 @@ export class PythonNotebookService {
     const cellId = typeof event.cellId === 'string' ? event.cellId : null;
     if (!executionId || !cellId) return null;
 
-    if (event.type === 'stream' || event.type === 'result') {
+    if (
+      event.type === 'stream' ||
+      event.type === 'result' ||
+      event.type === 'display' ||
+      event.type === 'display-update'
+    ) {
       return {
         type: event.type,
         notebookId: session.notebookId,
@@ -258,6 +266,26 @@ export class PythonNotebookService {
         executionId,
         text: String(event.text ?? '').slice(0, MAX_EVENT_TEXT_LENGTH),
         truncated: Boolean(event.truncated),
+        mime:
+          event.mime === 'image/png' ||
+          event.mime === 'image/jpeg' ||
+          event.mime === 'text/html' ||
+          event.mime === 'text/plain'
+            ? event.mime
+            : undefined,
+        data:
+          typeof event.data === 'string'
+            ? event.data.slice(0, MAX_OUTPUT_DATA_LENGTH)
+            : undefined,
+      };
+    }
+    if (event.type === 'clear-output') {
+      return {
+        type: 'clear-output',
+        notebookId: session.notebookId,
+        cellId,
+        executionId,
+        wait: Boolean(event.wait),
       };
     }
     if (event.type === 'error') {
@@ -605,6 +633,18 @@ export class PythonNotebookService {
     session.process.stdin.end(`${JSON.stringify({ operation: 'shutdown' })}\n`);
   }
 
+  static async deleteDocument(notebookId: string): Promise<void> {
+    const session = this.sessions.get(notebookId);
+    if (session) {
+      session.runAll = null;
+      session.state = 'stopped';
+      session.process.stdin.end(
+        `${JSON.stringify({ operation: 'shutdown' })}\n`,
+      );
+    }
+    await NotebooksService.deletePythonNotebook(notebookId);
+  }
+
   static async shutdownAll(): Promise<void> {
     await Promise.all(
       [...this.sessions.values()].map(
@@ -818,5 +858,37 @@ export class PythonNotebookService {
         }
       },
     );
+  }
+
+  /** Validates and normalizes an ipynb payload inside the dedicated runtime. */
+  static async convertIpynb(
+    operation: 'import' | 'export',
+    document: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    const status = await this.getRuntimeStatus();
+    if (status.state !== 'ready') {
+      throw new Error(
+        'Set up Jupyter packages before importing or exporting notebooks.',
+      );
+    }
+    const result = await this.runProcess(
+      this.getPythonPath(),
+      [this.getResourcePath('notebook_bridge.py')],
+      JSON.stringify({ operation, document }),
+      MAX_BRIDGE_FRAME_BYTES,
+    );
+    if (result.exitCode !== 0) {
+      throw new Error('Jupyter could not validate the notebook document.');
+    }
+    try {
+      const response = JSON.parse(result.stdout) as {
+        ok?: boolean;
+        document?: Record<string, unknown>;
+      };
+      if (response.ok && response.document) return response.document;
+    } catch {
+      // Use the same safe setup error below.
+    }
+    throw new Error('Jupyter could not validate the notebook document.');
   }
 }
