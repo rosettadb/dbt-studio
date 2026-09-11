@@ -31,7 +31,7 @@ app.get('/api/runs', (_req, res) => {
 app.get('/api/runs/:id', (req, res) => {
   const run = db.getRun(Number(req.params.id));
   if (!run) return res.status(404).json({ error: 'not found' });
-  res.json({ run });
+  return res.json({ run });
 });
 
 app.post('/api/runs', (req, res) => {
@@ -41,7 +41,7 @@ app.post('/api/runs', (req, res) => {
   }
   const run = db.createRun(branch);
   enqueue(run.id, () => executeRun(run));
-  res.status(201).json({ run });
+  return res.status(201).json({ run });
 });
 
 app.post('/api/runs/:id/cancel', async (req, res) => {
@@ -63,11 +63,13 @@ app.post('/api/runs/:id/cancel', async (req, res) => {
 
   const stopped = await cancelRun(runId);
   if (!stopped) {
-    return res.status(409).json({ error: 'run is finishing up, could not cancel in time' });
+    return res
+      .status(409)
+      .json({ error: 'run is finishing up, could not cancel in time' });
   }
   // executeRun's own finally block updates status to "cancelled" once the
   // container actually stops; the client picks that up over the SSE stream.
-  res.json({ run: db.getRun(runId) });
+  return res.json({ run: db.getRun(runId) });
 });
 
 app.get('/api/runs/:id/stream', (req, res) => {
@@ -96,8 +98,10 @@ app.get('/api/runs/:id/stream', (req, res) => {
   const run = db.getRun(runId);
   if (run) res.write(`event: status\ndata: ${JSON.stringify(run.status)}\n\n`);
 
-  const onLog = (line) => res.write(`event: log\ndata: ${JSON.stringify(line)}\n\n`);
-  const onStatus = (status) => res.write(`event: status\ndata: ${JSON.stringify(status)}\n\n`);
+  const onLog = (line) =>
+    res.write(`event: log\ndata: ${JSON.stringify(line)}\n\n`);
+  const onStatus = (status) =>
+    res.write(`event: status\ndata: ${JSON.stringify(status)}\n\n`);
 
   emitter.on(`log:${runId}`, onLog);
   emitter.on(`status:${runId}`, onStatus);
@@ -109,8 +113,17 @@ app.get('/api/runs/:id/stream', (req, res) => {
 });
 
 app.use('/api/runs/:id/report', (req, res, next) => {
-  const reportDir = path.join(db.dataDir, 'runs', req.params.id, 'report', 'html');
-  if (!fs.existsSync(reportDir)) return res.status(404).send('Report not available for this run');
+  const reportDir = path.join(
+    db.dataDir,
+    'runs',
+    req.params.id,
+    'report',
+    'html',
+  );
+  if (!fs.existsSync(reportDir)) {
+    res.status(404).send('Report not available for this run');
+    return;
+  }
 
   // The trace viewer's service worker (trace/sw.bundle.js) intercepts
   // absolute-root requests like /snapshot to render each step's captured
@@ -127,5 +140,6 @@ app.use('/api/runs/:id/report', (req, res, next) => {
 
 const port = process.env.PORT || 4300;
 app.listen(port, () => {
+  // eslint-disable-next-line no-console -- a server announcing its port is intended output
   console.log(`e2e-runner listening on :${port}`);
 });

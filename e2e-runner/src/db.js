@@ -21,6 +21,22 @@ db.exec(`
   );
 `);
 
+/**
+ * Looks up a single run by id.
+ *
+ * @param {number} id Run id.
+ * @returns {object|undefined} The run row, or undefined if no such run exists.
+ */
+function getRun(id) {
+  return db.prepare('SELECT * FROM runs WHERE id = ?').get(id);
+}
+
+/**
+ * Inserts a new run for a branch in the "queued" state.
+ *
+ * @param {string} branch Branch name to test.
+ * @returns {object} The newly created run row.
+ */
 function createRun(branch) {
   const { lastInsertRowid } = db
     .prepare('INSERT INTO runs (branch, status) VALUES (?, ?)')
@@ -28,16 +44,25 @@ function createRun(branch) {
   return getRun(lastInsertRowid);
 }
 
-function getRun(id) {
-  return db.prepare('SELECT * FROM runs WHERE id = ?').get(id);
-}
-
+/**
+ * Returns runs newest first, for the history table.
+ *
+ * @param {number} [limit=100] Maximum number of runs to return.
+ * @returns {object[]} Run rows, ordered by descending id.
+ */
 function listRuns(limit = 100) {
-  return db
-    .prepare('SELECT * FROM runs ORDER BY id DESC LIMIT ?')
-    .all(limit);
+  return db.prepare('SELECT * FROM runs ORDER BY id DESC LIMIT ?').all(limit);
 }
 
+/**
+ * Updates the given columns on a run. Column names are interpolated into the
+ * SQL, so `fields` keys must only ever come from this codebase — never from
+ * request data.
+ *
+ * @param {number} id Run id.
+ * @param {object} fields Column/value pairs to write; an empty object is a no-op.
+ * @returns {object|undefined} The run row after the update.
+ */
 function updateRun(id, fields) {
   const keys = Object.keys(fields);
   if (keys.length === 0) return getRun(id);

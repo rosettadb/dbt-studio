@@ -28,6 +28,12 @@ npm-debug.log.*
 *.sass.d.ts
 *.scss.d.ts
 
+# Stylesheets aren't JavaScript. ESLint skips them when it walks a directory,
+# but tools that hand it the list of changed files instead will try to parse
+# them as TS and fail on the first selector.
+*.css
+*.scss
+
 # eslint ignores hidden directories by default:
 # https://github.com/eslint/eslint/issues/8429
 !.erb
