@@ -59,7 +59,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        px: 2,
+        px: { xs: 2, md: 5 },
         py: 1,
         bgcolor: theme.palette.background.default,
       }}

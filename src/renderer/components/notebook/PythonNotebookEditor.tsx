@@ -5,20 +5,28 @@ import {
   Box,
   Button,
   Chip,
+  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
   DialogContentText,
   DialogTitle,
   IconButton,
+  Menu,
+  MenuItem,
   TextField,
   Tooltip,
   Typography,
+  useTheme,
 } from '@mui/material';
 import {
+  Add as AddIcon,
   ArrowDownward,
   ArrowUpward,
+  Clear,
   Delete,
+  ExpandLess,
+  ExpandMore,
   Pause,
   PlayArrow,
   RestartAlt,
@@ -30,6 +38,7 @@ import {
   CleaningServices,
   Code,
   Description,
+  MoreVert,
   TextSnippet,
 } from '@mui/icons-material';
 import { v4 as uuidv4 } from 'uuid';
@@ -64,6 +73,8 @@ const toolbarIconSx = {
 };
 
 const toolbarActionSx = (order: number) => ({ ...toolbarIconSx, order });
+
+type PythonCellSection = 'all' | 'code' | 'output';
 
 const safeHtmlDocument = (html: string) => {
   const sanitized = html
@@ -130,11 +141,14 @@ export const PythonNotebookEditor: React.FC<{
   onDeleted?: (notebookId: string) => void;
   onImported?: (notebook: PythonNotebook) => void;
 }> = ({ notebookId, onDeleted, onImported }) => {
+  const muiTheme = useTheme();
   const { data: notebook, isLoading } = usePythonNotebook(notebookId);
   const save = useSavePythonNotebook();
   const { data: runtime } = usePythonNotebookRuntimeStatus();
   const {
     cells: executionCells,
+    clearCellOutput: clearExecutionCellOutput,
+    clearOutputs: clearExecutionOutputs,
     execute,
     hasActiveSession,
     interrupt,
@@ -152,6 +166,20 @@ export const PythonNotebookEditor: React.FC<{
   const [documentName, setDocumentName] = React.useState('');
   const clearOutputs = useClearPythonNotebookOutputs();
   const persistedOutputs = React.useRef<Record<string, string>>({});
+  const [collapsedCells, setCollapsedCells] = React.useState<
+    Record<string, boolean>
+  >({});
+  const [cellSections, setCellSections] = React.useState<
+    Record<string, PythonCellSection>
+  >({});
+  const [cellMenu, setCellMenu] = React.useState<{
+    anchorEl: HTMLElement;
+    cellId: string;
+  } | null>(null);
+  const monacoTheme =
+    muiTheme.palette.mode === 'dark'
+      ? 'sql-enhanced-dark'
+      : 'sql-enhanced-light';
 
   React.useEffect(() => setDraft(notebook ?? null), [notebook]);
 
@@ -250,6 +278,63 @@ export const PythonNotebookEditor: React.FC<{
     });
   };
 
+  const getCellSummary = (cell: PythonNotebookCell): string => {
+    const firstLine = cell.source.split('\n')[0].trim();
+    const preview =
+      firstLine.length > 80 ? `${firstLine.substring(0, 80)}...` : firstLine;
+    if (preview) return preview;
+    return `Empty ${cell.cellType} cell`;
+  };
+
+  const getSourceEditorHeight = (source: string): number => {
+    const lineCount = Math.max(3, source.split('\n').length);
+    return lineCount * 20 + 18;
+  };
+
+  const closeCellMenu = () => setCellMenu(null);
+
+  const duplicateCell = (cellId: string) => {
+    if (!draft) return;
+    const index = draft.cells.findIndex((cell) => cell.id === cellId);
+    if (index < 0) return;
+    const cell = draft.cells[index];
+    const duplicated: PythonNotebookCell = {
+      ...cell,
+      id: uuidv4(),
+      executionCount: cell.cellType === 'code' ? null : cell.executionCount,
+    };
+    updateCells([
+      ...draft.cells.slice(0, index + 1),
+      duplicated,
+      ...draft.cells.slice(index + 1),
+    ]);
+    closeCellMenu();
+  };
+
+  const clearCellOutput = (cellId: string) => {
+    if (!draft) return;
+    clearExecutionCellOutput(cellId);
+    updateCells(
+      draft.cells.map((cell) =>
+        cell.id === cellId
+          ? {
+              ...cell,
+              executionCount: null,
+              outputs: [],
+              outputProvenance: undefined,
+            }
+          : cell,
+      ),
+    );
+    closeCellMenu();
+  };
+
+  const deleteCell = (cellId: string) => {
+    if (!draft) return;
+    updateCells(draft.cells.filter((cell) => cell.id !== cellId));
+    closeCellMenu();
+  };
+
   const isBusy = ['running', 'interrupting', 'restarting'].includes(
     sessionState,
   );
@@ -268,7 +353,14 @@ export const PythonNotebookEditor: React.FC<{
     return <Typography sx={{ p: 2 }}>Loading notebook…</Typography>;
 
   return (
-    <Box sx={{ p: 2, overflow: 'auto', height: '100%' }}>
+    <Box
+      sx={{
+        py: 2,
+        px: { xs: 2, md: 5 },
+        overflow: 'auto',
+        height: '100%',
+      }}
+    >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
         <Typography variant="h6">{draft.name}</Typography>
         <Chip size="small" label="Python" color="primary" />
@@ -355,24 +447,60 @@ export const PythonNotebookEditor: React.FC<{
           </Tooltip>
           <Tooltip title="Clear outputs">
             <span style={{ order: 4 }}>
-              <IconButton
+              <Button
                 size="small"
                 aria-label="Clear outputs"
-                sx={toolbarActionSx(4)}
+                startIcon={<CleaningServices sx={{ fontSize: 14 }} />}
+                variant="outlined"
+                sx={{
+                  textTransform: 'none',
+                  fontSize: '0.8125rem',
+                  height: 28,
+                  px: 1.5,
+                  minWidth: 'auto',
+                  order: 4,
+                  borderColor:
+                    muiTheme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
+                  color:
+                    muiTheme.palette.mode === 'dark' ? 'grey.300' : 'grey.700',
+                  '&:hover': {
+                    borderColor:
+                      muiTheme.palette.mode === 'dark'
+                        ? 'grey.600'
+                        : 'grey.400',
+                    bgcolor:
+                      muiTheme.palette.mode === 'dark'
+                        ? 'grey.800'
+                        : 'grey.100',
+                  },
+                  '&.Mui-disabled': {
+                    borderColor:
+                      muiTheme.palette.mode === 'dark'
+                        ? 'grey.800'
+                        : 'grey.200',
+                    color:
+                      muiTheme.palette.mode === 'dark'
+                        ? 'grey.700'
+                        : 'grey.400',
+                  },
+                }}
                 disabled={clearOutputs.isLoading}
                 onClick={() =>
                   clearOutputs.mutate(
                     { id: draft.id, revision: draft.revision },
                     {
                       onSuccess: (saved) => {
-                        if (saved) setDraft(saved);
+                        if (saved) {
+                          setDraft(saved);
+                          clearExecutionOutputs();
+                        }
                       },
                     },
                   )
                 }
               >
-                <CleaningServices fontSize="small" />
-              </IconButton>
+                Clear
+              </Button>
             </span>
           </Tooltip>
           <Tooltip title="Export notebook">
@@ -497,195 +625,413 @@ export const PythonNotebookEditor: React.FC<{
           </Tooltip>
         </Box>
       </Box>
-      <Alert
-        severity={runtime?.state === 'ready' ? 'info' : 'warning'}
-        sx={{ mb: 2 }}
-      >
-        {runtime?.state === 'ready'
-          ? 'Run saves the latest source before executing it in this notebook kernel.'
-          : 'Set up Jupyter packages in Settings → Python before running cells.'}
-      </Alert>
+      {runtime?.state !== 'ready' && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Set up Jupyter packages in Settings → Python before running cells.
+        </Alert>
+      )}
       {restart.isSuccess && sessionState === 'idle' && (
         <Alert severity="warning" sx={{ mb: 2 }}>
           The kernel was restarted. Existing output may be stale.
         </Alert>
       )}
-      {draft.cells.map((cell, index) => (
-        <Box
-          key={cell.id}
-          sx={{
-            mb: 2,
-            border: 1,
-            borderColor: 'divider',
-            borderRadius: 1,
-            overflow: 'hidden',
-          }}
-        >
+      {draft.cells.map((cell, index) => {
+        const collapsed = collapsedCells[cell.id] ?? false;
+        const section = cellSections[cell.id] ?? 'all';
+        const execution = executionCells[cell.id];
+        const outputs = execution?.outputs ?? cell.outputs ?? [];
+        const hasOutput =
+          outputs.length > 0 ||
+          execution?.status === 'running' ||
+          Boolean(execution?.truncated);
+        const showCode = section === 'all' || section === 'code';
+        const showOutput = section === 'all' || section === 'output';
+        const cellTypeLabel = cell.cellType.toUpperCase();
+
+        return (
           <Box
+            key={cell.id}
             sx={{
-              px: 1,
-              py: 0.5,
-              display: 'flex',
-              alignItems: 'center',
-              bgcolor: 'action.hover',
+              mb: 2,
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 1,
+              overflow: 'hidden',
+              '&:hover': { borderColor: 'primary.main' },
             }}
           >
-            <Typography variant="caption" sx={{ textTransform: 'capitalize' }}>
-              {cell.cellType} cell
-            </Typography>
-            <Box sx={{ flex: 1 }} />
-            {cell.cellType === 'code' && (
-              <Button
-                size="small"
-                startIcon={<PlayArrow fontSize="small" />}
-                disabled={
-                  runtime?.state !== 'ready' || execute.isLoading || isBusy
-                }
-                onClick={() => runCell(cell.id)}
-              >
-                Run
-              </Button>
-            )}
-            <IconButton
-              size="small"
-              aria-label="Move cell up"
-              disabled={index === 0}
-              onClick={() => {
-                const cells = [...draft.cells];
-                [cells[index - 1], cells[index]] = [
-                  cells[index],
-                  cells[index - 1],
-                ];
-                updateCells(cells);
-              }}
-            >
-              <ArrowUpward fontSize="small" />
-            </IconButton>
-            <IconButton
-              size="small"
-              aria-label="Move cell down"
-              disabled={index === draft.cells.length - 1}
-              onClick={() => {
-                const cells = [...draft.cells];
-                [cells[index], cells[index + 1]] = [
-                  cells[index + 1],
-                  cells[index],
-                ];
-                updateCells(cells);
-              }}
-            >
-              <ArrowDownward fontSize="small" />
-            </IconButton>
-            <IconButton
-              size="small"
-              aria-label="Delete cell"
-              onClick={() =>
-                updateCells(
-                  draft.cells.filter((_, cellIndex) => cellIndex !== index),
-                )
-              }
-            >
-              <Delete fontSize="small" />
-            </IconButton>
-          </Box>
-          {cell.cellType === 'code' && (
-            <Editor
-              height="180px"
-              defaultLanguage="python"
-              value={cell.source}
-              onChange={(source) =>
-                updateCells(
-                  draft.cells.map((item) =>
-                    item.id === cell.id
-                      ? { ...item, source: source ?? '' }
-                      : item,
-                  ),
-                )
-              }
-              options={{
-                minimap: { enabled: false },
-                automaticLayout: true,
-                scrollBeyondLastLine: false,
-              }}
-            />
-          )}
-          {cell.cellType === 'markdown' && (
-            <Box sx={{ p: 1 }}>
-              <MarkdownCell
-                content={cell.source}
-                attachmentResolver={(href) => {
-                  const attachmentName = href.slice('attachment:'.length);
-                  const attachments = cell.metadata?.attachments as
-                    | Record<string, Record<string, string>>
-                    | undefined;
-                  const attachment = attachments?.[attachmentName];
-                  const [mime, data] =
-                    Object.entries(attachment ?? {})[0] ?? [];
-                  return mime && data ? `data:${mime};base64,${data}` : null;
-                }}
-                onUpdate={(source) =>
-                  updateCells(
-                    draft.cells.map((item) =>
-                      item.id === cell.id ? { ...item, source } : item,
-                    ),
-                  )
-                }
-              />
-            </Box>
-          )}
-          {cell.cellType === 'raw' && (
-            <textarea
-              value={cell.source}
-              onChange={(event) =>
-                updateCells(
-                  draft.cells.map((item) =>
-                    item.id === cell.id
-                      ? { ...item, source: event.target.value }
-                      : item,
-                  ),
-                )
-              }
-              style={{
-                boxSizing: 'border-box',
-                border: 0,
-                minHeight: 120,
-                padding: 12,
-                resize: 'vertical',
-                width: '100%',
-              }}
-            />
-          )}
-          {(cell.outputs?.length || executionCells[cell.id]) && (
             <Box
               sx={{
-                m: 0,
-                p: 1,
-                bgcolor:
-                  executionCells[cell.id].status === 'error'
-                    ? 'error.dark'
-                    : 'action.hover',
-                color:
-                  executionCells[cell.id].status === 'error'
-                    ? 'error.contrastText'
-                    : 'text.primary',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.5,
+                px: 1,
+                py: 0.5,
+                bgcolor: (theme) =>
+                  theme.palette.mode === 'dark' ? 'grey.900' : 'grey.100',
+                borderBottom: collapsed ? 'none' : '1px solid',
+                borderColor: 'divider',
+                minHeight: '32px',
               }}
             >
-              {(executionCells[cell.id]?.outputs ?? cell.outputs ?? []).map(
-                (output, outputIndex) => (
-                  <PythonOutput
-                    key={`${cell.id}-${outputIndex}`}
-                    output={output}
-                  />
-                ),
+              <IconButton
+                size="small"
+                aria-label={collapsed ? 'Expand cell' : 'Collapse cell'}
+                onClick={() =>
+                  setCollapsedCells((previous) => ({
+                    ...previous,
+                    [cell.id]: !collapsed,
+                  }))
+                }
+                sx={{ p: 0.25 }}
+              >
+                {collapsed ? (
+                  <ExpandMore sx={{ fontSize: 18 }} />
+                ) : (
+                  <ExpandLess sx={{ fontSize: 18 }} />
+                )}
+              </IconButton>
+
+              <Chip
+                label={cellTypeLabel}
+                size="small"
+                color={cell.cellType === 'code' ? 'primary' : 'default'}
+                sx={{
+                  height: '20px',
+                  fontSize: '10px',
+                  '& .MuiChip-label': { px: 0.75, py: 0 },
+                }}
+              />
+
+              {collapsed ? (
+                <Typography
+                  variant="body2"
+                  sx={{
+                    flex: 1,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    fontFamily:
+                      cell.cellType === 'code' || cell.cellType === 'raw'
+                        ? 'monospace'
+                        : 'inherit',
+                    fontSize: 11,
+                  }}
+                >
+                  {getCellSummary(cell)}
+                </Typography>
+              ) : (
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ fontSize: 10 }}
+                >
+                  [{index + 1}]
+                </Typography>
               )}
-              {executionCells[cell.id]?.status === 'running' && 'Running…'}
-              {executionCells[cell.id]?.truncated && (
-                <Alert severity="warning">Output truncated.</Alert>
+
+              {!collapsed && cell.cellType === 'code' && hasOutput && (
+                <Box sx={{ display: 'flex', gap: 0.25 }}>
+                  {(['all', 'code', 'output'] as PythonCellSection[]).map(
+                    (value) => (
+                      <Chip
+                        key={value}
+                        label={value[0].toUpperCase() + value.slice(1)}
+                        size="small"
+                        variant={section === value ? 'filled' : 'outlined'}
+                        onClick={() =>
+                          setCellSections((previous) => ({
+                            ...previous,
+                            [cell.id]: value,
+                          }))
+                        }
+                        sx={{
+                          cursor: 'pointer',
+                          height: '20px',
+                          fontSize: '10px',
+                          '& .MuiChip-label': { px: 0.75, py: 0 },
+                        }}
+                      />
+                    ),
+                  )}
+                </Box>
               )}
+
+              <Box sx={{ flex: 1 }} />
+
+              {!collapsed && (
+                <>
+                  <IconButton
+                    size="small"
+                    aria-label="Move cell up"
+                    disabled={index === 0}
+                    onClick={() => {
+                      const cells = [...draft.cells];
+                      [cells[index - 1], cells[index]] = [
+                        cells[index],
+                        cells[index - 1],
+                      ];
+                      updateCells(cells);
+                    }}
+                    sx={{ p: 0.25 }}
+                  >
+                    <ArrowUpward sx={{ fontSize: 18 }} />
+                  </IconButton>
+                  <IconButton
+                    size="small"
+                    aria-label="Move cell down"
+                    disabled={index === draft.cells.length - 1}
+                    onClick={() => {
+                      const cells = [...draft.cells];
+                      [cells[index], cells[index + 1]] = [
+                        cells[index + 1],
+                        cells[index],
+                      ];
+                      updateCells(cells);
+                    }}
+                    sx={{ p: 0.25 }}
+                  >
+                    <ArrowDownward sx={{ fontSize: 18 }} />
+                  </IconButton>
+                  {cell.cellType === 'code' && (
+                    <Button
+                      size="small"
+                      startIcon={<PlayArrow sx={{ fontSize: 16 }} />}
+                      disabled={
+                        runtime?.state !== 'ready' ||
+                        execute.isLoading ||
+                        isBusy
+                      }
+                      onClick={() => runCell(cell.id)}
+                      sx={{
+                        minWidth: 0,
+                        px: 1,
+                        py: 0,
+                        height: 24,
+                        fontSize: 12,
+                        textTransform: 'none',
+                      }}
+                    >
+                      Run
+                    </Button>
+                  )}
+                </>
+              )}
+
+              <IconButton
+                size="small"
+                aria-label="Cell actions"
+                onClick={(event) =>
+                  setCellMenu({
+                    anchorEl: event.currentTarget,
+                    cellId: cell.id,
+                  })
+                }
+                sx={{ p: 0.25 }}
+              >
+                <MoreVert sx={{ fontSize: 18 }} />
+              </IconButton>
+
+              <Menu
+                anchorEl={cellMenu?.anchorEl ?? null}
+                open={cellMenu?.cellId === cell.id}
+                onClose={closeCellMenu}
+              >
+                <MenuItem
+                  onClick={() => duplicateCell(cell.id)}
+                  sx={{ py: 0.5, fontSize: 13 }}
+                >
+                  <ContentCopy sx={{ fontSize: 16, mr: 1 }} /> Duplicate
+                </MenuItem>
+                {hasOutput && (
+                  <MenuItem
+                    onClick={() => clearCellOutput(cell.id)}
+                    sx={{ py: 0.5, fontSize: 13 }}
+                  >
+                    <Clear sx={{ fontSize: 16, mr: 1 }} /> Clear Output
+                  </MenuItem>
+                )}
+                <MenuItem
+                  onClick={() => deleteCell(cell.id)}
+                  sx={{ py: 0.5, fontSize: 13 }}
+                >
+                  <Delete sx={{ fontSize: 16, mr: 1 }} /> Delete
+                </MenuItem>
+              </Menu>
             </Box>
-          )}
-        </Box>
-      ))}
+
+            <Collapse in={!collapsed}>
+              <Box sx={{ p: 0.75 }}>
+                {showCode && cell.cellType === 'code' && (
+                  <Box sx={{ mb: showOutput && hasOutput ? 0.5 : 0 }}>
+                    <Editor
+                      height={`${getSourceEditorHeight(cell.source)}px`}
+                      defaultLanguage="python"
+                      value={cell.source}
+                      theme={monacoTheme}
+                      onChange={(source) =>
+                        updateCells(
+                          draft.cells.map((item) =>
+                            item.id === cell.id
+                              ? { ...item, source: source ?? '' }
+                              : item,
+                          ),
+                        )
+                      }
+                      options={{
+                        minimap: { enabled: false },
+                        scrollBeyondLastLine: false,
+                        wordWrap: 'on',
+                        fontSize: 13,
+                        tabSize: 2,
+                        automaticLayout: true,
+                        padding: { top: 8, bottom: 12 },
+                        lineHeight: 20,
+                        scrollbar: {
+                          vertical: 'hidden',
+                          horizontal: 'auto',
+                          alwaysConsumeMouseWheel: false,
+                        },
+                        renderLineHighlight: 'all',
+                        cursorBlinking: 'smooth',
+                        cursorSmoothCaretAnimation: 'on',
+                        smoothScrolling: true,
+                        fontLigatures: true,
+                        bracketPairColorization: { enabled: true },
+                        occurrencesHighlight: 'off',
+                      }}
+                    />
+                  </Box>
+                )}
+                {showCode && cell.cellType === 'markdown' && (
+                  <MarkdownCell
+                    content={cell.source}
+                    attachmentResolver={(href) => {
+                      const attachmentName = href.slice('attachment:'.length);
+                      const attachments = cell.metadata?.attachments as
+                        | Record<string, Record<string, string>>
+                        | undefined;
+                      const attachment = attachments?.[attachmentName];
+                      const [mime, data] =
+                        Object.entries(attachment ?? {})[0] ?? [];
+                      return mime && data
+                        ? `data:${mime};base64,${data}`
+                        : null;
+                    }}
+                    onUpdate={(source) =>
+                      updateCells(
+                        draft.cells.map((item) =>
+                          item.id === cell.id ? { ...item, source } : item,
+                        ),
+                      )
+                    }
+                  />
+                )}
+                {showCode && cell.cellType === 'raw' && (
+                  <Box
+                    component="textarea"
+                    value={cell.source}
+                    onChange={(event) =>
+                      updateCells(
+                        draft.cells.map((item) =>
+                          item.id === cell.id
+                            ? { ...item, source: event.target.value }
+                            : item,
+                        ),
+                      )
+                    }
+                    sx={{
+                      boxSizing: 'border-box',
+                      border: 0,
+                      bgcolor:
+                        muiTheme.palette.mode === 'dark'
+                          ? '#121212'
+                          : '#fafafa',
+                      color:
+                        muiTheme.palette.mode === 'dark'
+                          ? '#D4D4D4'
+                          : '#000000',
+                      caretColor:
+                        muiTheme.palette.mode === 'dark'
+                          ? '#AEAFAD'
+                          : '#000000',
+                      fontFamily:
+                        '"Menlo", "Monaco", "Consolas", "Courier New", monospace',
+                      fontSize: 13,
+                      lineHeight: '20px',
+                      height: getSourceEditorHeight(cell.source),
+                      outline: 'none',
+                      px: 2,
+                      py: 1.5,
+                      resize: 'none',
+                      width: '100%',
+                      '&::selection': {
+                        bgcolor:
+                          muiTheme.palette.mode === 'dark'
+                            ? '#264F78'
+                            : '#ADD6FF',
+                      },
+                    }}
+                  />
+                )}
+                {showOutput && hasOutput && (
+                  <Box
+                    sx={{
+                      m: 0,
+                      p: 1,
+                      bgcolor:
+                        execution?.status === 'error'
+                          ? 'error.dark'
+                          : 'action.hover',
+                      color:
+                        execution?.status === 'error'
+                          ? 'error.contrastText'
+                          : 'text.primary',
+                    }}
+                  >
+                    {outputs.map((output, outputIndex) => (
+                      <PythonOutput
+                        key={`${cell.id}-${outputIndex}`}
+                        output={output}
+                      />
+                    ))}
+                    {execution?.status === 'running' && 'Running…'}
+                    {execution?.truncated && (
+                      <Alert severity="warning">Output truncated.</Alert>
+                    )}
+                  </Box>
+                )}
+              </Box>
+            </Collapse>
+          </Box>
+        );
+      })}
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          mt: 2,
+          pb: 4,
+        }}
+      >
+        <Button
+          variant="outlined"
+          startIcon={<AddIcon />}
+          onClick={() =>
+            updateCells([
+              ...draft.cells,
+              {
+                id: uuidv4(),
+                cellType: 'code',
+                source: '',
+                executionCount: null,
+              },
+            ])
+          }
+        >
+          Add Cell
+        </Button>
+      </Box>
       <Dialog open={restartOpen} onClose={() => setRestartOpen(false)}>
         <DialogTitle>Restart Python kernel?</DialogTitle>
         <DialogContent>

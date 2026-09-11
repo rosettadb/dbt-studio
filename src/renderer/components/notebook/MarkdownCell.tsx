@@ -3,14 +3,7 @@
  */
 
 import React, { useState } from 'react';
-import {
-  Box,
-  IconButton,
-  Link,
-  Paper,
-  TextField,
-  Typography,
-} from '@mui/material';
+import { Box, IconButton, Link, Paper, Typography } from '@mui/material';
 import {
   Edit as EditIcon,
   Visibility as PreviewIcon,
@@ -119,10 +112,19 @@ export const MarkdownCell: React.FC<MarkdownCellProps> = ({
 }) => {
   const value = content ?? cell?.content ?? '';
   const [isEditing, setIsEditing] = useState(!value);
+  const lineCount = Math.max(3, value.split('\n').length);
+  const editorHeight = Math.min(400, Math.max(80, lineCount * 20 + 18));
 
   return (
-    <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 0.5 }}>
+    <Box sx={{ position: 'relative' }}>
+      <Box
+        sx={{
+          position: 'absolute',
+          top: 4,
+          right: 4,
+          zIndex: 2,
+        }}
+      >
         <IconButton
           size="small"
           onClick={() => setIsEditing((editing) => !editing)}
@@ -139,35 +141,61 @@ export const MarkdownCell: React.FC<MarkdownCellProps> = ({
       </Box>
 
       {isEditing ? (
-        <TextField
-          multiline
-          fullWidth
-          minRows={3}
-          maxRows={20}
+        <Box
+          component="textarea"
           value={value}
           onChange={(event) => onUpdate(event.target.value)}
           placeholder="Enter markdown content..."
-          variant="outlined"
           sx={{
-            '& .MuiInputBase-root': {
-              fontFamily: 'monospace',
-              fontSize: 12,
-              padding: '6px 8px',
+            boxSizing: 'border-box',
+            bgcolor: (theme) =>
+              theme.palette.mode === 'dark' ? '#121212' : '#fafafa',
+            border: '1px solid',
+            borderColor: 'divider',
+            borderRadius: 1,
+            color: (theme) =>
+              theme.palette.mode === 'dark' ? '#D4D4D4' : '#000000',
+            caretColor: (theme) =>
+              theme.palette.mode === 'dark' ? '#AEAFAD' : '#000000',
+            display: 'block',
+            fontFamily:
+              '"Menlo", "Monaco", "Consolas", "Courier New", monospace',
+            fontSize: 13,
+            height: editorHeight,
+            lineHeight: '20px',
+            outline: 'none',
+            overflow: 'auto',
+            px: 2,
+            py: 1.5,
+            pr: 5,
+            resize: 'none',
+            width: '100%',
+            '&::placeholder': {
+              color: 'text.secondary',
+              opacity: 1,
             },
-            '& .MuiInputBase-input': { padding: 0 },
+            '&:focus': {
+              borderColor: 'primary.main',
+            },
+            '&::selection': {
+              bgcolor: (theme) =>
+                theme.palette.mode === 'dark' ? '#264F78' : '#ADD6FF',
+            },
           }}
         />
       ) : (
         <Paper
           elevation={0}
           sx={{
-            p: 1,
+            px: 2,
+            py: 1.5,
+            pr: 5,
             bgcolor: (theme) =>
               theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
             border: '1px solid',
             borderColor: 'divider',
             minHeight: 40,
-            fontSize: 12,
+            fontSize: 13,
             lineHeight: 1.5,
             overflowWrap: 'anywhere',
             '& h1, & h2, & h3, & h4, & h5, & h6': {

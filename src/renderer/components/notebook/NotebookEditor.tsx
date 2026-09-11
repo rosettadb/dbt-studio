@@ -881,7 +881,13 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
                     ref={droppableProvided.innerRef}
                     // eslint-disable-next-line react/jsx-props-no-spreading
                     {...droppableProvided.droppableProps}
-                    sx={{ overflowY: 'auto', flex: 1, minHeight: 0, p: 3 }}
+                    sx={{
+                      overflowY: 'auto',
+                      flex: 1,
+                      minHeight: 0,
+                      py: 3,
+                      px: { xs: 2, md: 5 },
+                    }}
                   >
                     {[...localCells]
                       .sort((a, b) => a.order - b.order)

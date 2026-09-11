@@ -369,9 +369,22 @@ export function usePythonNotebookExecution(notebookId: string) {
     mutationFn: () => notebooksService.shutdownPythonNotebook(notebookId),
     onSuccess: () => setHasActiveSession(false),
   });
+  const clearOutputs = useCallback(() => {
+    setCells({});
+  }, []);
+  const clearCellOutput = useCallback((cellId: string) => {
+    setCells((current) => {
+      if (!current[cellId]) return current;
+      const next = { ...current };
+      delete next[cellId];
+      return next;
+    });
+  }, []);
 
   return {
     cells,
+    clearCellOutput,
+    clearOutputs,
     execute,
     hasActiveSession,
     interrupt,

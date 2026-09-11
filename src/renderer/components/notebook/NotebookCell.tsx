@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, memo } from 'react';
 import {
+  Button,
   Box,
   IconButton,
   Typography,
@@ -187,7 +188,7 @@ const NotebookCellComponent: React.FC<NotebookCellProps> = ({
   return (
     <Box
       sx={{
-        mb: 1, // Reduced from 2
+        mb: 2,
         border: '1px solid',
         borderColor: 'divider',
         borderRadius: 1,
@@ -242,19 +243,6 @@ const NotebookCellComponent: React.FC<NotebookCellProps> = ({
             <ExpandLess sx={{ fontSize: 18 }} />
           )}
         </IconButton>
-
-        {/* Run Button - Moved to beginning */}
-        {!collapsed && cell.type === 'sql' && (
-          <IconButton
-            size="small"
-            onClick={() => onRun(cell.content)}
-            disabled={isExecuting}
-            color="primary"
-            sx={{ p: 0.25 }}
-          >
-            <PlayArrow sx={{ fontSize: 18 }} />
-          </IconButton>
-        )}
 
         {/* Cell Type Badge */}
         <Chip
@@ -339,6 +327,26 @@ const NotebookCellComponent: React.FC<NotebookCellProps> = ({
         )}
 
         <Box sx={{ flex: 1 }} />
+
+        {/* Run Button */}
+        {!collapsed && cell.type === 'sql' && (
+          <Button
+            size="small"
+            startIcon={<PlayArrow sx={{ fontSize: 16 }} />}
+            onClick={() => onRun(cell.content)}
+            disabled={isExecuting}
+            sx={{
+              minWidth: 0,
+              px: 1,
+              py: 0,
+              height: 24,
+              fontSize: 12,
+              textTransform: 'none',
+            }}
+          >
+            Run
+          </Button>
+        )}
 
         {/* More Menu */}
         <IconButton
