@@ -525,7 +525,7 @@ export default class ProjectsService {
       const dbtRoot = await this.findDbtProjectRoot(projectPath);
       if (!dbtRoot) {
         throw new Error(
-          'No dbt_project.yml found. Please ensure this is a valid dbt project.',
+          `"${path.basename(selectedPath)}" does not contain a dbt_project.yml file. Please select a valid dbt project folder.`,
         );
       }
       projectPath = dbtRoot;
