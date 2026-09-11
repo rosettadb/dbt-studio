@@ -96,6 +96,25 @@ jobs:
       - name: Build project
         run: npm run build
 
+      - name: Import signing certificate
+        id: keychain
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 900 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security default-keychain -s "$KEYCHAIN_PATH"
+          echo "$CSC_LINK" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN_PATH" -P "$CSC_KEY_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          rm "$RUNNER_TEMP/cert.p12"
+          echo "keychain_path=$KEYCHAIN_PATH" >> $GITHUB_OUTPUT
+          echo "keychain_password=$KEYCHAIN_PASSWORD" >> $GITHUB_OUTPUT
+
       - name: Build for macOS ARM64 (no publish yet)
         env:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_ID_PASS }}
@@ -103,6 +122,8 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          CSC_KEYCHAIN: ${{ steps.keychain.outputs.keychain_path }}
+          CSC_KEYCHAIN_PASSWORD: ${{ steps.keychain.outputs.keychain_password }}
         run: |
           npm exec electron-builder -- --publish never --mac --arm64
 
@@ -331,6 +352,25 @@ jobs:
           export PATH="$HOME/node-x64/bin:$PATH"
           arch -x86_64 npm run build
 
+      - name: Import signing certificate (x86_64)
+        id: keychain
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 900 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security default-keychain -s "$KEYCHAIN_PATH"
+          echo "$CSC_LINK" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN_PATH" -P "$CSC_KEY_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          rm "$RUNNER_TEMP/cert.p12"
+          echo "keychain_path=$KEYCHAIN_PATH" >> $GITHUB_OUTPUT
+          echo "keychain_password=$KEYCHAIN_PASSWORD" >> $GITHUB_OUTPUT
+
       - name: Build for macOS x64 (no publish yet)
         env:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_ID_PASS }}
@@ -338,6 +378,8 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          CSC_KEYCHAIN: ${{ steps.keychain.outputs.keychain_path }}
+          CSC_KEYCHAIN_PASSWORD: ${{ steps.keychain.outputs.keychain_password }}
         run: |
           export PATH="$HOME/node-x64/bin:$PATH"
           arch -x86_64 npm exec electron-builder -- --publish never --mac --x64
