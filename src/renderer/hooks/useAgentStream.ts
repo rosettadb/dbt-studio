@@ -13,6 +13,7 @@ import {
   getToolResultError,
   isToolResultFailure,
 } from '../../shared/toolResult';
+import type { ChatImageAttachment } from '../../types/chatAttachments';
 
 // ---------------------------------------------------------------------------
 // Content part types — ordered interleaved stream units (Kiro/Claude style)
@@ -348,8 +349,10 @@ export const useAgentStream = (sessionId: number | undefined) => {
       notebookId?: string,
       pageId?: string,
       includeProjectAiContext?: boolean,
+      imageAttachmentIds?: string[],
+      imageAttachments?: ChatImageAttachment[],
     ) => {
-      if (!sessionId) return;
+      if (!sessionId) return false;
 
       const msgKey = [
         QUERY_KEYS.GET_CHAT_MESSAGES_WITH_CONTEXT,
@@ -368,6 +371,8 @@ export const useAgentStream = (sessionId: number | undefined) => {
         contextItems: contextItems?.length
           ? contextItems.map((ci, i) => ({ id: i, ...ci }))
           : null,
+        // Include image descriptors so the user bubble shows pills immediately
+        imageAttachments: imageAttachments?.length ? imageAttachments : [],
         toolCalls: null,
         thinkingContent: null,
         signature: null,
@@ -397,6 +402,7 @@ export const useAgentStream = (sessionId: number | undefined) => {
           notebookId,
           pageId,
           includeProjectAiContext,
+          imageAttachmentIds,
         });
 
         // Agent completed — replace optimistic message with persisted data
@@ -408,6 +414,7 @@ export const useAgentStream = (sessionId: number | undefined) => {
           contentParts: s.contentParts.filter((p) => p.type === 'tool-call'),
           currentText: '',
         }));
+        return true;
       } catch (error: unknown) {
         await queryClient.invalidateQueries(msgKey);
         setStreamState((s) => ({
@@ -417,6 +424,7 @@ export const useAgentStream = (sessionId: number | undefined) => {
           currentText: '',
           error: parseAgentError(error),
         }));
+        return false;
       }
     },
     [sessionId, queryClient],

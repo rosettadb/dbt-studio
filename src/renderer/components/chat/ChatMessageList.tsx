@@ -429,6 +429,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
                   content={m.content || ''}
                   role={m.role}
                   contextItems={m.contextItems}
+                  imageAttachments={(m as any).imageAttachments}
                   toolCalls={m.toolCalls?.length > 0 ? m.toolCalls : undefined}
                   reasoning={
                     (m as any).reasoning ||

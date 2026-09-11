@@ -8,6 +8,7 @@ import AgentService, {
   saveAISettings,
   getAISettingsFilePath,
 } from '../services/agent.service';
+import ChatImageAttachmentService from '../services/ai/chatImageAttachment.service';
 import {
   AIProvider,
   ChatConversation,
@@ -236,7 +237,7 @@ const registerAIHandlers = () => {
   ipcMain.handle(
     'chat:conversation:delete',
     async (_event, id: number): Promise<void> => {
-      return MainDatabaseService.deleteConversation(id);
+      return ChatImageAttachmentService.deleteForConversation(id);
     },
   );
 
