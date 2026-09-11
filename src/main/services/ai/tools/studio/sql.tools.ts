@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import AgentService from '../../../agent.service';
 import ConnectorsService from '../../../connectors.service';
+import { IcebergDatalakeService } from '../../../icebergDatalake.service';
 import { AgentEditorBridgeService } from '../../agentEditorBridge.service';
 import { truncateToolResult } from '../../tokenEstimator';
 import { TerminalConfirmGate } from '../terminalConfirmGate';
@@ -38,6 +39,34 @@ function filterSchemaTables(tables: any[], tableFilter?: string): any[] {
       fullyQualified.includes(normalized)
     );
   });
+}
+
+function isIcebergConnectionId(connectionId: unknown): boolean {
+  return (
+    typeof connectionId === 'string' && connectionId.startsWith('iceberg-')
+  );
+}
+
+function toAgentIcebergSchema(schema: {
+  namespaces: Array<{
+    name: string;
+    tables: Array<{
+      name: string;
+      type: string;
+      columns: Array<{ name: string; type: string; position: number }>;
+    }>;
+  }>;
+}): { tables: any[] } {
+  return {
+    tables: schema.namespaces.flatMap((namespace) =>
+      namespace.tables.map((table) => ({
+        name: table.name,
+        schema: namespace.name,
+        type: table.type,
+        columns: table.columns,
+      })),
+    ),
+  };
 }
 
 export function getFirstSqlVerb(sql: string): string {
@@ -300,9 +329,15 @@ export function createStudioSqlTools(
             };
           }
 
-          const schema = await ConnectorsService.extractSchemaFromConnection(
-            context.connectionId.toString(),
-          );
+          const schema = isIcebergConnectionId(context.connectionId)
+            ? toAgentIcebergSchema(
+                await IcebergDatalakeService.getSqlSchema(
+                  context.connectionId.slice('iceberg-'.length),
+                ),
+              )
+            : await ConnectorsService.extractSchemaFromConnection(
+                context.connectionId.toString(),
+              );
 
           if ((schema as any)?.error) {
             return {
@@ -408,8 +443,12 @@ export function createStudioSqlTools(
             );
           }
 
-          // Step 2 — For destructive/mutating statements, ask the user before executing
-          if (isMutationSql(sql)) {
+          // Iceberg SQL Editor execution has its own classified confirmation
+          // dialog. Other connections use the existing terminal gate.
+          if (
+            isMutationSql(sql) &&
+            !isIcebergConnectionId(context.connectionId)
+          ) {
             const allowed = await TerminalConfirmGate.request({
               event: context.event,
               conversationId,

@@ -41,6 +41,7 @@ import {
   Add,
   ArrowBack,
   Badge,
+  Cable,
   ChevronRight,
   CheckCircle,
   Close,
@@ -86,6 +87,7 @@ import {
   useListIcebergTables,
   useRenameIcebergTable,
   useTestIcebergInstance,
+  useVerifyIcebergSqlAccess,
 } from '../../../controllers/icebergDatalake.controller';
 import { IcebergIcon } from './IcebergIcon';
 import { IcebergOperationBackdrop } from './IcebergOperationBackdrop';
@@ -890,6 +892,7 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
   const queryClient = useQueryClient();
   const namespacesQuery = useListIcebergNamespaces(instance.id);
   const testInstanceMutation = useTestIcebergInstance();
+  const verifySqlMutation = useVerifyIcebergSqlAccess();
   const importTableMutation = useImportIcebergTable();
   const dropTableMutation = useDropIcebergTable();
   const renameTableMutation = useRenameIcebergTable();
@@ -898,6 +901,7 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
   const [currentTab, setCurrentTab] = React.useState(0);
   const [tableFilter, setTableFilter] = React.useState('');
   const [importWizardOpen, setImportWizardOpen] = React.useState(false);
+  const [sqlSupportInfoOpen, setSqlSupportInfoOpen] = React.useState(false);
   const [tableToDelete, setTableToDelete] =
     React.useState<SelectedTable | null>(null);
   const [tableToRename, setTableToRename] =
@@ -1095,11 +1099,32 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
     }
   };
 
+  const testSqlAccess = async () => {
+    try {
+      const result = await verifySqlMutation.mutateAsync(instance.id);
+      if (result.success) {
+        toast.success(
+          'DuckDB attached to the catalog and cleaned up successfully.',
+        );
+        return;
+      }
+      toast.error(result.error ?? 'DuckDB SQL access test failed.');
+    } catch (error) {
+      toast.error(errorMessage(error));
+    }
+  };
+
   const testResult = testInstanceMutation.data;
   const testIndicatorColor = (() => {
     if (testInstanceMutation.isLoading) return 'warning.main';
     if (!testResult) return 'grey.500';
     return testResult.success ? 'success.main' : 'error.main';
+  })();
+  const sqlTestResult = verifySqlMutation.data;
+  const sqlTestIndicatorColor = (() => {
+    if (verifySqlMutation.isLoading) return 'warning.main';
+    if (!sqlTestResult) return 'grey.500';
+    return sqlTestResult.success ? 'success.main' : 'error.main';
   })();
 
   const connectionStatusIcon = (healthy?: boolean) => {
@@ -1509,42 +1534,131 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
                       <Info color="primary" />
                       Health Status
                     </Typography>
-                    <Button
-                      variant="outlined"
-                      color="inherit"
-                      size="small"
-                      onClick={testConnection}
-                      disabled={testInstanceMutation.isLoading}
+                    <Box
                       sx={{
-                        position: 'relative',
-                        pr: 4,
-                        minWidth: 140,
-                        color: 'text.secondary',
-                        borderColor: 'divider',
-                        '&:hover': {
-                          borderColor: 'primary.main',
-                          backgroundColor: 'action.hover',
-                        },
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'flex-end',
+                        flexWrap: 'wrap',
+                        gap: 1,
                       }}
                     >
-                      {testInstanceMutation.isLoading
-                        ? 'Testing…'
-                        : 'Test Connection'}
-                      <Box
+                      <IconButton
+                        size="small"
+                        aria-label="About DuckDB Iceberg SQL support"
+                        onClick={() => setSqlSupportInfoOpen(true)}
+                      >
+                        <Info fontSize="small" />
+                      </IconButton>
+                      <Button
+                        variant="outlined"
+                        color="inherit"
+                        size="small"
+                        startIcon={
+                          verifySqlMutation.isLoading ? (
+                            <CircularProgress size={16} />
+                          ) : (
+                            <Box
+                              component="span"
+                              sx={{
+                                px: 0.375,
+                                py: 0.125,
+                                border: '1px solid',
+                                borderColor: 'currentColor',
+                                borderRadius: 1,
+                                fontSize: '0.55rem !important',
+                                fontWeight: 700,
+                                lineHeight: 1.1,
+                                letterSpacing: '0.02em',
+                              }}
+                            >
+                              SQL
+                            </Box>
+                          )
+                        }
+                        onClick={testSqlAccess}
+                        disabled={
+                          !instance.sqlEnabled ||
+                          verifySqlMutation.isLoading ||
+                          testInstanceMutation.isLoading
+                        }
                         sx={{
-                          position: 'absolute',
-                          right: 10,
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                          width: 10,
-                          height: 10,
-                          borderRadius: '50%',
-                          backgroundColor: testIndicatorColor,
-                          border: '1px solid',
-                          borderColor: 'background.paper',
+                          position: 'relative',
+                          pr: 4,
+                          minWidth: 140,
+                          color: 'text.secondary',
+                          borderColor: 'divider',
+                          '&:hover': {
+                            borderColor: 'primary.main',
+                            backgroundColor: 'action.hover',
+                          },
                         }}
-                      />
-                    </Button>
+                      >
+                        {verifySqlMutation.isLoading
+                          ? 'Testing…'
+                          : 'Test Access'}
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            right: 10,
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            width: 10,
+                            height: 10,
+                            borderRadius: '50%',
+                            backgroundColor: sqlTestIndicatorColor,
+                            border: '1px solid',
+                            borderColor: 'background.paper',
+                          }}
+                        />
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        color="inherit"
+                        size="small"
+                        startIcon={
+                          testInstanceMutation.isLoading ? (
+                            <CircularProgress size={16} />
+                          ) : (
+                            <Cable fontSize="small" />
+                          )
+                        }
+                        onClick={testConnection}
+                        disabled={
+                          testInstanceMutation.isLoading ||
+                          verifySqlMutation.isLoading
+                        }
+                        sx={{
+                          position: 'relative',
+                          pr: 4,
+                          minWidth: 140,
+                          color: 'text.secondary',
+                          borderColor: 'divider',
+                          '&:hover': {
+                            borderColor: 'primary.main',
+                            backgroundColor: 'action.hover',
+                          },
+                        }}
+                      >
+                        {testInstanceMutation.isLoading
+                          ? 'Testing…'
+                          : 'Test Connection'}
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            right: 10,
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            width: 10,
+                            height: 10,
+                            borderRadius: '50%',
+                            backgroundColor: testIndicatorColor,
+                            border: '1px solid',
+                            borderColor: 'background.paper',
+                          }}
+                        />
+                      </Button>
+                    </Box>
                   </Box>
                   <Grid container spacing={2}>
                     <Grid item xs={12} md={4}>
@@ -1717,6 +1831,124 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
       </Paper>
 
       {renderImportWizard()}
+
+      <Dialog
+        open={sqlSupportInfoOpen}
+        onClose={() => setSqlSupportInfoOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>DuckDB Iceberg SQL support</DialogTitle>
+        <DialogContent>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+            Supported catalogs
+          </Typography>
+          <Box
+            component="ul"
+            sx={{ mt: 1, mb: 2, pl: 3, listStyleType: 'disc' }}
+          >
+            <Typography
+              component="li"
+              variant="body2"
+              sx={{ display: 'list-item' }}
+            >
+              Generic Iceberg REST
+            </Typography>
+            <Typography
+              component="li"
+              variant="body2"
+              sx={{ display: 'list-item' }}
+            >
+              Apache Polaris
+            </Typography>
+            <Typography
+              component="li"
+              variant="body2"
+              sx={{ display: 'list-item' }}
+            >
+              Lakekeeper
+            </Typography>
+            <Typography
+              component="li"
+              variant="body2"
+              sx={{ display: 'list-item' }}
+            >
+              Project Nessie
+            </Typography>
+          </Box>
+
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+            Requirements and verification
+          </Typography>
+          <Box
+            component="ul"
+            sx={{ mt: 1, mb: 2, pl: 3, listStyleType: 'disc' }}
+          >
+            <Typography
+              component="li"
+              variant="body2"
+              sx={{ display: 'list-item' }}
+            >
+              The catalog warehouse must use S3 or S3-compatible storage.
+            </Typography>
+            <Typography
+              component="li"
+              variant="body2"
+              sx={{ display: 'list-item' }}
+            >
+              Rosetta dbt Studio retrieves credentials from secure storage and
+              creates temporary DuckDB secrets.
+            </Typography>
+            <Typography
+              component="li"
+              variant="body2"
+              sx={{ display: 'list-item' }}
+            >
+              The test attaches the REST catalog, verifies metadata access,
+              detaches it, and removes the temporary secrets.
+            </Typography>
+          </Box>
+
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+            Not supported by this SQL integration
+          </Typography>
+          <Box
+            component="ul"
+            sx={{ mt: 1, mb: 0, pl: 3, listStyleType: 'disc' }}
+          >
+            <Typography
+              component="li"
+              variant="body2"
+              sx={{ display: 'list-item' }}
+            >
+              Hive Metastore catalogs
+            </Typography>
+            <Typography
+              component="li"
+              variant="body2"
+              sx={{ display: 'list-item' }}
+            >
+              SQLite catalogs
+            </Typography>
+            <Typography
+              component="li"
+              variant="body2"
+              sx={{ display: 'list-item' }}
+            >
+              PostgreSQL and Neon catalogs
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            variant="contained"
+            startIcon={<Close />}
+            onClick={() => setSqlSupportInfoOpen(false)}
+          >
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Delete table confirmation dialog */}
       <Dialog

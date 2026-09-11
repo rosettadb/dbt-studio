@@ -13,6 +13,8 @@ import * as path from 'path';
 import { pathToFileURL } from 'url';
 import { spawn } from 'child_process';
 import { app } from 'electron';
+import { DuckDBInstance } from '@duckdb/node-api';
+import { parseIcebergSql, validateIcebergSelectAst } from './iceberg/sqlPolicy';
 
 import { loadDatabaseFile, updateDatabase } from '../utils/fileHelper';
 import secureStorage from './secureStorage.service';
@@ -38,15 +40,31 @@ import type {
   IcebergImportFileFormat,
   IcebergTableOperationResult,
   IcebergNamespaceOperationResult,
+  IcebergSqlCapability,
+  IcebergSqlExecutionParams,
+  IcebergSqlExecutionResult,
+  IcebergSqlSchemaInfo,
+  IcebergSqlStatementClass,
 } from '../../types/iceberg';
 import type { CloudConnection, CloudStorageConfig } from '../../types/frontend';
 import type { PostgresConnection } from '../../types/backend';
 
 export class IcebergDatalakeService {
+  private static readonly activeSqlExecutions = new Map<string, any>();
+
   private static readonly cloudProviders = [
     'aws',
     'azure',
     'gcs',
+    'minio',
+    'cloudflare-r2',
+    'backblaze-b2',
+    'rustfs',
+    'garage',
+  ] as const;
+
+  private static readonly duckdbIcebergStorageProviders = [
+    'aws',
     'minio',
     'cloudflare-r2',
     'backblaze-b2',
@@ -460,16 +478,20 @@ export class IcebergDatalakeService {
     const props: Record<string, string> = {};
     const env: Record<string, string> = {};
 
-    if (instance.storageType === 'server-managed') return { props, env };
+    // Server-managed catalogs own the warehouse URI, but DuckDB still needs
+    // the selected SQL storage connection to resolve the catalog's S3 paths.
+    const connectionId =
+      instance.storageConnectionId ??
+      (instance.sqlEnabled ? instance.sqlStorageConnectionId : undefined);
     if (instance.storageType === 'local' && instance.localPath) {
       props.warehouse = pathToFileURL(instance.localPath).href;
     }
 
-    if (instance.storageConnectionId) {
+    if (connectionId) {
       try {
         const db = await loadDatabaseFile();
         const conn: CloudConnection | undefined = (db.sources ?? []).find(
-          (s) => s.id === instance.storageConnectionId,
+          (s) => s.id === connectionId,
         );
         if (conn) {
           const { provider, config, id: connId } = conn;
@@ -713,6 +735,212 @@ export class IcebergDatalakeService {
     }
   }
 
+  private static async validateSqlStorageBinding(
+    config: Pick<
+      IcebergInstanceConfig,
+      | 'catalogType'
+      | 'nessieWarehouse'
+      | 'sqlEnabled'
+      | 'sqlStorageConnectionId'
+      | 'sqlStorageProvider'
+      | 'sqlStorageBucket'
+      | 'sqlWarehouseMatchAcknowledged'
+    >,
+  ): Promise<void> {
+    if (!config.sqlEnabled) return;
+    if (
+      config.catalogType !== 'rest' &&
+      config.catalogType !== 'polaris' &&
+      config.catalogType !== 'lakekeeper' &&
+      config.catalogType !== 'nessie'
+    ) {
+      throw new Error('ICEBERG_SQL_REST_CATALOG_REQUIRED');
+    }
+    if (config.catalogType === 'nessie' && !config.nessieWarehouse?.trim()) {
+      throw new Error('ICEBERG_SQL_NESSIE_WAREHOUSE_REQUIRED');
+    }
+    if (
+      !config.sqlStorageConnectionId?.trim() ||
+      !config.sqlStorageProvider ||
+      !config.sqlStorageBucket?.trim()
+    ) {
+      throw new Error(
+        'ICEBERG_REQUIRED_FIELD: sqlStorageConnectionId/sqlStorageProvider/sqlStorageBucket',
+      );
+    }
+    if (!config.sqlWarehouseMatchAcknowledged) {
+      throw new Error('ICEBERG_SQL_WAREHOUSE_MATCH_REQUIRED');
+    }
+
+    const { connection } =
+      await IcebergDatalakeService.resolveCloudStorageConnection(
+        config.sqlStorageConnectionId,
+      );
+    if (
+      !IcebergDatalakeService.duckdbIcebergStorageProviders.includes(
+        connection.provider as (typeof IcebergDatalakeService.duckdbIcebergStorageProviders)[number],
+      )
+    ) {
+      throw new Error('ICEBERG_SQL_STORAGE_PROVIDER_NOT_SUPPORTED');
+    }
+    if (config.sqlStorageProvider !== connection.provider) {
+      throw new Error('ICEBERG_SQL_STORAGE_PROVIDER_MISMATCH');
+    }
+  }
+
+  private static quoteSqlLiteral(value: string): string {
+    return `'${value.replace(/'/g, "''")}'`;
+  }
+
+  private static quoteSqlIdentifier(value: string): string {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+
+  private static getSqlRuntimeFingerprint(): string {
+    try {
+      // eslint-disable-next-line global-require, @typescript-eslint/no-var-requires
+      const pkg = require('@duckdb/node-api/package.json');
+      return `duckdb-node-api:${String(pkg.version)}:${process.platform}:${process.arch}:iceberg-policy-v2`;
+    } catch {
+      return 'duckdb-node-api:unknown';
+    }
+  }
+
+  private static async buildDuckDbIcebergSql(
+    instance: IcebergInstanceConfig,
+    names: { catalogSecret: string; storageSecret: string; alias: string },
+  ): Promise<{
+    catalogSecretSql: string;
+    storageSecretSql: string;
+    attachSql: string;
+  }> {
+    await IcebergDatalakeService.validateSqlStorageBinding(instance);
+    const connectionId = instance.sqlStorageConnectionId!;
+    const { connection, config } =
+      await IcebergDatalakeService.resolveCloudStorageConnection(connectionId);
+    const cfg = config as Record<string, unknown>;
+    const keyId = String(cfg.accessKeyId ?? cfg.applicationKeyId ?? '').trim();
+    const secret = String(
+      cfg.secretAccessKey ?? cfg.applicationKey ?? '',
+    ).trim();
+    if (!keyId || !secret) {
+      throw new Error('ICEBERG_SQL_STORAGE_CREDENTIALS_MISSING');
+    }
+
+    const storageOptions = [
+      'TYPE S3',
+      `KEY_ID ${IcebergDatalakeService.quoteSqlLiteral(keyId)}`,
+      `SECRET ${IcebergDatalakeService.quoteSqlLiteral(secret)}`,
+      `REGION ${IcebergDatalakeService.quoteSqlLiteral(String(cfg.region ?? 'us-east-1'))}`,
+      `SCOPE ${IcebergDatalakeService.quoteSqlLiteral(
+        `s3://${instance.sqlStorageBucket}/${instance.sqlStoragePrefix?.replace(/^\/+|\/+$/g, '') ?? ''}`,
+      )}`,
+    ];
+    if (cfg.sessionToken) {
+      storageOptions.push(
+        `SESSION_TOKEN ${IcebergDatalakeService.quoteSqlLiteral(String(cfg.sessionToken))}`,
+      );
+    }
+    if (cfg.endpoint) {
+      const endpoint = String(cfg.endpoint);
+      const parsed = new URL(
+        endpoint.includes('://') ? endpoint : `https://${endpoint}`,
+      );
+      storageOptions.push(
+        `ENDPOINT ${IcebergDatalakeService.quoteSqlLiteral(parsed.host)}`,
+        `USE_SSL ${parsed.protocol === 'https:' ? 'true' : 'false'}`,
+      );
+    }
+    if (connection.provider !== 'aws') {
+      storageOptions.push(
+        `URL_STYLE ${IcebergDatalakeService.quoteSqlLiteral(String(cfg.urlStyle ?? 'path'))}`,
+      );
+    }
+
+    const catalogOptions = ['TYPE ICEBERG'];
+    if (instance.catalogAuthMode === 'token') {
+      const token = instance.catalogAccessTokenKey
+        ? await secureStorage.getCredential(instance.catalogAccessTokenKey)
+        : undefined;
+      if (!token) throw new Error('ICEBERG_ACCESS_TOKEN_REQUIRED');
+      catalogOptions.push(
+        `TOKEN ${IcebergDatalakeService.quoteSqlLiteral(token)}`,
+      );
+    } else if (instance.catalogAuthMode === 'oauth-client-credentials') {
+      const clientSecret = instance.oauthClientSecretKey
+        ? await secureStorage.getCredential(instance.oauthClientSecretKey)
+        : undefined;
+      if (
+        !instance.oauthClientId ||
+        !clientSecret ||
+        !instance.oauthServerUri
+      ) {
+        throw new Error('ICEBERG_OAUTH_CLIENT_CREDENTIALS_REQUIRED');
+      }
+      catalogOptions.push(
+        `CLIENT_ID ${IcebergDatalakeService.quoteSqlLiteral(instance.oauthClientId)}`,
+        `CLIENT_SECRET ${IcebergDatalakeService.quoteSqlLiteral(clientSecret)}`,
+        `OAUTH2_SERVER_URI ${IcebergDatalakeService.quoteSqlLiteral(instance.oauthServerUri)}`,
+      );
+      if (instance.oauthScope) {
+        catalogOptions.push(
+          `OAUTH2_SCOPE ${IcebergDatalakeService.quoteSqlLiteral(instance.oauthScope)}`,
+        );
+      } else if (
+        instance.catalogType === 'nessie' ||
+        instance.catalogType === 'lakekeeper'
+      ) {
+        // DuckDB otherwise defaults to PRINCIPAL_ROLE:ALL, which standard
+        // Nessie and Lakekeeper OIDC clients commonly reject. Request the
+        // catalog scope assigned to their service clients.
+        catalogOptions.push(
+          `OAUTH2_SCOPE ${IcebergDatalakeService.quoteSqlLiteral('catalog')}`,
+        );
+      }
+    }
+
+    const configuredEndpoint = instance.endpoint?.trim();
+    if (!configuredEndpoint)
+      throw new Error('ICEBERG_REQUIRED_FIELD: endpoint');
+    const endpoint = configuredEndpoint.replace(/\/+$/, '');
+    const warehouse =
+      instance.catalogType === 'nessie'
+        ? instance.nessieWarehouse?.trim()
+        : instance.catalogName;
+    if (!warehouse) throw new Error('ICEBERG_REQUIRED_FIELD: catalogName');
+
+    // DuckDB's Iceberg ATTACH has no branch/tag selector: honour the configured
+    // reference by rejecting SQL access when a non-default reference is set.
+    if (instance.catalogType === 'nessie') {
+      const ref = instance.nessieReference?.trim();
+      if (ref && ref !== 'main') {
+        throw new Error(
+          'ICEBERG_SQL_NESSIE_REFERENCE_UNSUPPORTED: DuckDB ATTACH does not support Nessie branch or tag selection; configure the main branch or use the catalog API.',
+        );
+      }
+    }
+
+    return {
+      storageSecretSql: `CREATE TEMPORARY SECRET ${IcebergDatalakeService.quoteSqlIdentifier(
+        names.storageSecret,
+      )} (${storageOptions.join(', ')})`,
+      catalogSecretSql: `CREATE TEMPORARY SECRET ${IcebergDatalakeService.quoteSqlIdentifier(
+        names.catalogSecret,
+      )} (${catalogOptions.join(', ')})`,
+      attachSql: `ATTACH ${IcebergDatalakeService.quoteSqlLiteral(
+        warehouse,
+      )} AS ${IcebergDatalakeService.quoteSqlIdentifier(names.alias)} (TYPE ICEBERG, SECRET ${IcebergDatalakeService.quoteSqlIdentifier(
+        names.catalogSecret,
+      )}, ENDPOINT ${IcebergDatalakeService.quoteSqlLiteral(
+        endpoint,
+      )}, ACCESS_DELEGATION_MODE ${IcebergDatalakeService.quoteSqlLiteral('none')}${
+        (instance.catalogAuthMode ?? 'none') === 'none'
+          ? `, AUTHORIZATION_TYPE ${IcebergDatalakeService.quoteSqlLiteral('none')}`
+          : ''
+      })`,
+    };
+  }
+
   static getCapabilities(): IcebergCapabilities {
     return {
       catalogs: IcebergDatalakeService.catalogCapabilities.map((item) => ({
@@ -732,29 +960,38 @@ export class IcebergDatalakeService {
   static async listInstances(): Promise<IcebergInstanceListItem[]> {
     try {
       const instances = await IcebergDatalakeService.readInstances();
-      return instances.map(
-        ({
-          id,
-          name,
-          description,
-          catalogType,
-          storageType,
-          catalogPath,
-          localPath,
-          storageBucket,
-          createdAt,
-          updatedAt,
-        }) => ({
-          id,
-          name,
-          description,
-          catalogType,
-          storageType,
-          catalogPath,
-          localPath,
-          storageBucket,
-          createdAt,
-          updatedAt,
+      // Reuse the already-loaded instances and avoid redundant DB reads +
+      // keychain lookups that getSqlCapability(id) would incur per instance.
+      return Promise.all(
+        instances.map(async (instance) => {
+          const {
+            id,
+            name,
+            description,
+            catalogType,
+            storageType,
+            catalogPath,
+            localPath,
+            storageBucket,
+            createdAt,
+            updatedAt,
+          } = instance;
+          const capability =
+            await IcebergDatalakeService.getSqlCapabilityFromInstance(instance);
+          return {
+            id,
+            name,
+            description,
+            catalogType,
+            storageType,
+            catalogPath,
+            localPath,
+            storageBucket,
+            createdAt,
+            updatedAt,
+            sqlAvailable: capability.available,
+            sqlUnavailableReason: capability.reason,
+          };
         }),
       );
     } catch (error) {
@@ -783,6 +1020,7 @@ export class IcebergDatalakeService {
     try {
       IcebergDatalakeService.validateCatalogWarehousePair(data);
       IcebergDatalakeService.validateCatalogAuthentication(data);
+      await IcebergDatalakeService.validateSqlStorageBinding(data);
       const id = uuidv4();
       const now = new Date().toISOString();
 
@@ -848,8 +1086,34 @@ export class IcebergDatalakeService {
         ...instances[idx],
         ...data,
       };
+      const sqlAttachmentChanged =
+        [
+          'catalogType',
+          'endpoint',
+          'catalogName',
+          'catalogAuthMode',
+          'oauthClientId',
+          'oauthServerUri',
+          'oauthScope',
+          'nessieReference',
+          'nessieWarehouse',
+          'sqlEnabled',
+          'sqlStorageConnectionId',
+          'sqlStorageProvider',
+          'sqlStorageBucket',
+          'sqlStoragePrefix',
+          'sqlWarehouseMatchAcknowledged',
+        ].some(
+          (field) =>
+            data[field as keyof UpdateIcebergInstanceDTO] !== undefined &&
+            data[field as keyof UpdateIcebergInstanceDTO] !==
+              instances[idx][field as keyof IcebergInstanceConfig],
+        ) ||
+        !!data.accessToken ||
+        !!data.oauthClientSecret;
       IcebergDatalakeService.validateCatalogWarehousePair(updatedConfig);
       IcebergDatalakeService.validateCatalogAuthentication(updatedConfig);
+      await IcebergDatalakeService.validateSqlStorageBinding(updatedConfig);
 
       // Handle access token update
       if (data.accessToken) {
@@ -879,6 +1143,12 @@ export class IcebergDatalakeService {
         ...instances[idx],
         ...rest,
         id,
+        ...(sqlAttachmentChanged
+          ? {
+              sqlAccessVerifiedAt: undefined,
+              sqlRuntimeFingerprint: undefined,
+            }
+          : {}),
         updatedAt: new Date().toISOString(),
       };
 
@@ -1219,6 +1489,477 @@ export class IcebergDatalakeService {
         error: String(error),
       };
     }
+  }
+
+  /** Public: look up by id (for callers that don't already have the instance). */
+  static async getSqlCapability(id: string): Promise<IcebergSqlCapability> {
+    const instance = await IcebergDatalakeService.getInstance(id);
+    return IcebergDatalakeService.getSqlCapabilityFromInstance(instance);
+  }
+
+  /**
+   * Private: compute capability from an already-loaded instance config.
+   * Used by listInstances to avoid redundant readInstances / loadDatabaseFile
+   * and secureStorage.getCredential calls for every item in the list.
+   */
+  private static async getSqlCapabilityFromInstance(
+    instance: IcebergInstanceConfig,
+  ): Promise<IcebergSqlCapability> {
+    const runtimeFingerprint =
+      IcebergDatalakeService.getSqlRuntimeFingerprint();
+    if (!instance.sqlEnabled) {
+      return {
+        available: false,
+        reason: 'ICEBERG_SQL_DISABLED',
+        canRead: false,
+        canWrite: false,
+        supportedStatements: [],
+      };
+    }
+    if (
+      !instance.sqlAccessVerifiedAt ||
+      instance.sqlRuntimeFingerprint !== runtimeFingerprint
+    ) {
+      return {
+        available: false,
+        reason: 'ICEBERG_SQL_UNVERIFIED',
+        runtimeFingerprint,
+        canRead: false,
+        canWrite: false,
+        supportedStatements: [],
+      };
+    }
+    try {
+      await IcebergDatalakeService.validateSqlStorageBinding(instance);
+    } catch {
+      return {
+        available: false,
+        reason: 'ICEBERG_SQL_STORAGE_UNAVAILABLE',
+        runtimeFingerprint,
+        canRead: false,
+        canWrite: false,
+        supportedStatements: [],
+      };
+    }
+    return {
+      available: true,
+      runtimeFingerprint,
+      canRead: true,
+      canWrite: true,
+      supportedStatements: [
+        'select',
+        'create',
+        'drop',
+        'insert',
+        'update',
+        'delete',
+      ],
+    };
+  }
+
+  static async verifySqlAccess(id: string): Promise<IcebergTestResult> {
+    try {
+      const verifiedInstance = await IcebergDatalakeService.getInstance(id);
+      const executionId = `verify-${uuidv4()}`;
+      await IcebergDatalakeService.withAttachedSqlCatalog(
+        id,
+        executionId,
+        async (connection, alias) => {
+          const tables = await connection.runAndReadUntil(
+            "SELECT table_schema, table_name FROM information_schema.tables WHERE table_catalog = ? AND table_type = 'BASE TABLE' ORDER BY table_schema, table_name LIMIT 1",
+            1,
+            [alias],
+          );
+          const table = tables.getRowObjectsJson()[0];
+          if (!table) throw new Error('ICEBERG_SQL_NONEMPTY_TABLE_REQUIRED');
+          const qualified = [alias, table.table_schema, table.table_name]
+            .map((part) =>
+              IcebergDatalakeService.quoteSqlIdentifier(String(part)),
+            )
+            .join('.');
+          // Project actual columns: COUNT(*) and catalog metadata can succeed
+          // without opening a warehouse data file.
+          const data = await connection.runAndReadUntil(
+            `SELECT * FROM ${qualified} LIMIT 1`,
+            1,
+          );
+          if (!data.getRowObjectsJson().length) {
+            throw new Error('ICEBERG_SQL_NONEMPTY_TABLE_REQUIRED');
+          }
+        },
+      );
+      const runtimeFingerprint =
+        IcebergDatalakeService.getSqlRuntimeFingerprint();
+      const instances = await IcebergDatalakeService.readInstances();
+      const index = instances.findIndex((instance) => instance.id === id);
+      if (index < 0) throw new Error(`Iceberg instance not found: ${id}`);
+      if (
+        JSON.stringify(instances[index]) !== JSON.stringify(verifiedInstance)
+      ) {
+        throw new Error('ICEBERG_SQL_CONFIGURATION_CHANGED');
+      }
+      const checkedAt = new Date().toISOString();
+      instances[index] = {
+        ...instances[index],
+        sqlAccessVerifiedAt: checkedAt,
+        sqlRuntimeFingerprint: runtimeFingerprint,
+        updatedAt: checkedAt,
+      };
+      await IcebergDatalakeService.writeInstances(instances);
+      return {
+        success: true,
+        catalogConnected: true,
+        warehouseConnected: true,
+        checkedAt,
+      };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[IcebergDatalakeService] verifySqlAccess error');
+      return {
+        success: false,
+        catalogConnected: false,
+        warehouseConnected: false,
+        checkedAt: new Date().toISOString(),
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  /**
+   * @param strictCleanup When true (used by verifySqlAccess), any cleanup
+   *   failure throws. When false (default), only instance-closure failure
+   *   throws; DETACH / DROP SECRET failures are logged and the completed
+   *   result is returned so committed mutations are not silently discarded.
+   */
+  private static async withAttachedSqlCatalog<T>(
+    instanceId: string,
+    executionId: string,
+    callback: (connection: any, alias: string) => Promise<T>,
+    signal?: AbortSignal,
+    strictCleanup = false,
+  ): Promise<T> {
+    if (!executionId.trim() || executionId.length > 120) {
+      throw new Error('ICEBERG_SQL_EXECUTION_ID_INVALID');
+    }
+    if (IcebergDatalakeService.activeSqlExecutions.has(executionId)) {
+      throw new Error('ICEBERG_SQL_EXECUTION_ID_DUPLICATE');
+    }
+    // Reserve the id synchronously so a concurrent call cannot pass the
+    // duplicate check while the async setup is still in progress.
+    IcebergDatalakeService.activeSqlExecutions.set(executionId, null);
+    const instance = await IcebergDatalakeService.getInstance(instanceId);
+    const suffix = uuidv4().replace(/-/g, '');
+    const names = {
+      alias: 'iceberg',
+      catalogSecret: `iceberg_catalog_${suffix}`,
+      storageSecret: `iceberg_storage_${suffix}`,
+    };
+    const sql = await IcebergDatalakeService.buildDuckDbIcebergSql(
+      instance,
+      names,
+    );
+    let duckdbInstance: any;
+    let connection: any;
+    let attached = false;
+    const checkCancelled = () => {
+      if (signal?.aborted) throw new Error('ICEBERG_SQL_CANCELLED');
+    };
+    const interrupt = () => connection?.interrupt();
+    signal?.addEventListener('abort', interrupt);
+    let stage = 'initialize';
+    let result!: T;
+    let cleanupFailed = false;
+    let instanceCloseFailed = false;
+    try {
+      checkCancelled();
+      duckdbInstance = await DuckDBInstance.create(':memory:');
+      connection = await duckdbInstance.connect();
+      checkCancelled();
+      IcebergDatalakeService.activeSqlExecutions.set(executionId, connection);
+      stage = 'install-extensions';
+      await connection.run('INSTALL httpfs');
+      checkCancelled();
+      await connection.run('INSTALL iceberg');
+      checkCancelled();
+      stage = 'load-extensions';
+      await connection.run('LOAD httpfs');
+      checkCancelled();
+      await connection.run('LOAD iceberg');
+      checkCancelled();
+      stage = 'create-storage-secret';
+      await connection.run(sql.storageSecretSql);
+      checkCancelled();
+      stage = 'create-catalog-secret';
+      await connection.run(sql.catalogSecretSql);
+      checkCancelled();
+      stage = 'attach';
+      await connection.run(sql.attachSql);
+      attached = true;
+      stage = 'execute';
+      checkCancelled();
+      result = await callback(connection, names.alias);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.startsWith('ICEBERG_')) throw error;
+      if (stage === 'execute') {
+        const safeReason = message
+          .split('\n')
+          .map((line) => line.trim())
+          .filter(
+            (line) => line && !/^LINE \d+:/i.test(line) && !/^\^+$/.test(line),
+          )
+          .slice(0, 4)
+          .join(' ')
+          .slice(0, 500);
+        throw new Error(`ICEBERG_SQL_EXECUTION_FAILED: ${safeReason}`);
+      }
+      throw new Error(`ICEBERG_SQL_RUNTIME_FAILED: ${stage}`);
+    } finally {
+      signal?.removeEventListener('abort', interrupt);
+      IcebergDatalakeService.activeSqlExecutions.delete(executionId);
+      if (connection) {
+        if (attached) {
+          try {
+            await connection.run(
+              `DETACH ${IcebergDatalakeService.quoteSqlIdentifier(names.alias)}`,
+            );
+          } catch {
+            // Finish remaining cleanup, but never mark failed cleanup verified.
+            cleanupFailed = true;
+          }
+        }
+        await [names.catalogSecret, names.storageSecret].reduce(
+          async (previous, secret) => {
+            await previous;
+            try {
+              await connection.run(
+                `DROP SECRET IF EXISTS ${IcebergDatalakeService.quoteSqlIdentifier(secret)}`,
+              );
+            } catch {
+              // Finish remaining cleanup, but never mark failed cleanup verified.
+              cleanupFailed = true;
+            }
+          },
+          Promise.resolve(),
+        );
+        try {
+          connection.closeSync?.();
+        } catch {
+          cleanupFailed = true;
+        }
+      }
+      try {
+        duckdbInstance?.closeSync?.();
+      } catch {
+        cleanupFailed = true;
+        instanceCloseFailed = true;
+      }
+    }
+    // If the instance could not be closed, session + credentials may still
+    // be open: always throw so the caller does not treat this as success.
+    if (instanceCloseFailed) {
+      throw new Error('ICEBERG_SQL_CLEANUP_FAILED');
+    }
+    if (cleanupFailed) {
+      if (strictCleanup) {
+        // verifySqlAccess must not persist verification after any cleanup failure.
+        throw new Error('ICEBERG_SQL_CLEANUP_FAILED');
+      }
+      // DETACH or DROP SECRET failed, but the DuckDB instance is closed.
+      // Session state cannot leak. Log a warning and return the completed
+      // result so committed mutations are not falsely reported as failures.
+      // eslint-disable-next-line no-console
+      console.error(
+        '[IcebergDatalakeService] SQL session partial cleanup failed (DETACH/DROP SECRET)',
+      );
+    }
+    return result;
+  }
+
+  private static async classifySqlStatement(
+    connection: any,
+    sql: string,
+  ): Promise<IcebergSqlStatementClass> {
+    const parsed = parseIcebergSql(sql);
+    if (parsed.selectSql) {
+      // Serialization parses without binding: no file/table function may run
+      // during policy validation. Parameter values require an explicit cast.
+      const result = await connection.runAndReadAll(
+        'SELECT json_serialize_sql(CAST(? AS VARCHAR)) AS ast',
+        [parsed.selectSql],
+      );
+      const ast = JSON.parse(String(result.getRowObjectsJson()[0]?.ast));
+      validateIcebergSelectAst(ast);
+    }
+    return parsed.statementClass;
+  }
+
+  static async executeSql(
+    params: IcebergSqlExecutionParams,
+    signal?: AbortSignal,
+  ): Promise<IcebergSqlExecutionResult> {
+    if (signal?.aborted) throw new Error('ICEBERG_SQL_CANCELLED');
+    const capability = await IcebergDatalakeService.getSqlCapability(
+      params.instanceId,
+    );
+    if (!capability.available) {
+      throw new Error(capability.reason ?? 'ICEBERG_SQL_UNAVAILABLE');
+    }
+    const parser = await DuckDBInstance.create(':memory:');
+    let statementClass: IcebergSqlStatementClass;
+    try {
+      const connection = await parser.connect();
+      try {
+        statementClass = await IcebergDatalakeService.classifySqlStatement(
+          connection,
+          params.sql,
+        );
+      } finally {
+        connection.closeSync();
+      }
+    } finally {
+      parser.closeSync();
+    }
+    if (signal?.aborted) throw new Error('ICEBERG_SQL_CANCELLED');
+    if (params.validateOnly) {
+      return {
+        executionId: params.executionId,
+        statementClass,
+        columns: [],
+        rows: [],
+        rowsChanged: 0,
+        truncated: false,
+      };
+    }
+    if (statementClass !== 'select' && params.mutationConfirmed !== true) {
+      throw new Error('ICEBERG_SQL_CONFIRMATION_REQUIRED');
+    }
+    // Callers may carry their current result-page settings into an execution.
+    // A mutation has no result set to page, so ignore those settings after the
+    // trusted classifier and confirmation gate have accepted it.
+    const hasPageRequest =
+      statementClass === 'select' &&
+      (params.pageLimit !== undefined || params.pageOffset !== undefined);
+    const pageLimit = params.pageLimit ?? 10;
+    const pageOffset = params.pageOffset ?? 0;
+    if (
+      hasPageRequest &&
+      (!Number.isInteger(pageLimit) ||
+        pageLimit <= 0 ||
+        !Number.isInteger(pageOffset) ||
+        pageOffset < 0)
+    ) {
+      throw new Error('ICEBERG_SQL_PAGINATION_INVALID');
+    }
+    const maxRows = Math.max(1, Math.min(params.maxRows ?? 1000, 5000));
+    return IcebergDatalakeService.withAttachedSqlCatalog(
+      params.instanceId,
+      params.executionId,
+      async (connection) => {
+        if (hasPageRequest) {
+          const boundedLimit = Math.min(pageLimit, 1000);
+          const baseSql = params.sql.trim().replace(/;+$/, '');
+          const pageSql = `SELECT * FROM (${baseSql}) AS iceberg_page LIMIT ${boundedLimit} OFFSET ${pageOffset}`;
+          const countSql = `SELECT COUNT(*) AS count FROM (${baseSql}) AS iceberg_count`;
+          const countReader = await connection.runAndReadAll(countSql);
+          const reader = await connection.runAndReadUntil(
+            pageSql,
+            boundedLimit,
+          );
+          const count = countReader.getRowObjectsJson()[0]?.count;
+          return {
+            executionId: params.executionId,
+            statementClass,
+            columns: reader.columnNames(),
+            rows: reader.getRowObjectsJson() as Array<Record<string, unknown>>,
+            rowsChanged: Number(reader.rowsChanged ?? 0),
+            truncated: false,
+            totalRows:
+              typeof count === 'bigint' ? Number(count) : Number(count ?? 0),
+          };
+        }
+        const reader = await connection.runAndReadUntil(
+          params.sql,
+          maxRows + 1,
+        );
+        const rows = reader.getRowObjectsJson() as Array<
+          Record<string, unknown>
+        >;
+        return {
+          executionId: params.executionId,
+          statementClass,
+          columns: reader.columnNames(),
+          rows: rows.slice(0, maxRows),
+          rowsChanged: Number(reader.rowsChanged ?? 0),
+          truncated: rows.length > maxRows || !reader.done,
+        };
+      },
+      signal,
+    );
+  }
+
+  static async getSqlSchema(id: string): Promise<IcebergSqlSchemaInfo> {
+    const capability = await IcebergDatalakeService.getSqlCapability(id);
+    if (!capability.available) {
+      throw new Error(capability.reason ?? 'ICEBERG_SQL_UNAVAILABLE');
+    }
+
+    const namespaceQueue = await IcebergDatalakeService.listNamespaces(id);
+    const namespaces: IcebergSqlSchemaInfo['namespaces'] = [];
+
+    for (let index = 0; index < namespaceQueue.length; index += 1) {
+      const namespace = namespaceQueue[index];
+      if (namespaceQueue.length > 1_000) {
+        throw new Error('ICEBERG_SQL_SCHEMA_LIMIT_EXCEEDED');
+      }
+      // Catalog traversal is intentionally sequential to keep bridge work bounded.
+      // eslint-disable-next-line no-await-in-loop
+      const children = await IcebergDatalakeService.listNamespaces(
+        id,
+        namespace,
+      );
+      children.forEach((child) => {
+        if (
+          !namespaceQueue.some((item) => item.join('.') === child.join('.'))
+        ) {
+          namespaceQueue.push(child);
+        }
+      });
+      // eslint-disable-next-line no-await-in-loop
+      const tableNames = await IcebergDatalakeService.listTables(id, namespace);
+      // Each bridge call spawns a Python process; keep the fan-out bounded by
+      // loading table schemas sequentially (mirrors the namespace traversal above).
+      const tables: IcebergSqlSchemaInfo['namespaces'][number]['tables'] = [];
+      // eslint-disable-next-line no-restricted-syntax
+      for (const table of tableNames) {
+        // eslint-disable-next-line no-await-in-loop
+        const schema = await IcebergDatalakeService.getTableSchema(
+          id,
+          namespace,
+          table,
+        );
+        tables.push({
+          name: table,
+          type: 'TABLE',
+          columns: schema.fields.map((field, fieldIndex) => ({
+            name: field.name,
+            type: field.type,
+            position: fieldIndex + 1,
+          })),
+        });
+      }
+      namespaces.push({ name: namespace.join('.'), tables });
+    }
+
+    return { catalogName: 'iceberg', namespaces };
+  }
+
+  static cancelSql(executionId: string): boolean {
+    const connection =
+      IcebergDatalakeService.activeSqlExecutions.get(executionId);
+    if (!connection) return false;
+    connection.interrupt();
+    return true;
   }
 
   // ─────────────────────────────────────────────
