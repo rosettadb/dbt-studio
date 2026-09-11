@@ -337,20 +337,17 @@ export default class ConnectorsService {
   }
 
   /**
-   * Save a new connection, allowing reserved names for Getting Started template
+   * Save a new connection
    */
   static async saveNewConnectionForTemplate(
     connection: ConnectionInput,
-    allowReservedNames: boolean = false,
   ): Promise<string> {
     const connections = await this.loadConnections(true); // Include all connections including ducklake
 
-    // Validate connection name with optional allowReservedNames flag
+    // Validate connection name
     const nameValidation = this.validateConnectionName(
       connection.name,
       connections,
-      undefined,
-      allowReservedNames,
     );
 
     if (!nameValidation.isValid) {
@@ -586,10 +583,7 @@ export default class ConnectorsService {
           }
         } else {
           // Create new connection if none exists
-          connectionId = await this.saveNewConnectionForTemplate(
-            connection,
-            true,
-          );
+          connectionId = await this.saveNewConnectionForTemplate(connection);
         }
       } else {
         connectionId = await this.saveNewConnection(connection);
@@ -1750,28 +1744,18 @@ export default class ConnectorsService {
   }
 
   /**
-   * Validate connection name for uniqueness and reserved names
+   * Validate connection name for uniqueness
    */
   private static validateConnectionName(
     name: string,
     existingConnections: ConnectionModel[],
     excludeId?: string,
-    allowReservedNames?: boolean,
   ): { isValid: boolean; message?: string } {
     // Check for empty name
     if (!name.trim()) {
       return {
         isValid: false,
         message: 'Connection name cannot be empty',
-      };
-    }
-
-    // Check for reserved names (case-insensitive) - skip if allowed
-    if (!allowReservedNames && name.toLowerCase().trim() === 'dbt connection') {
-      return {
-        isValid: false,
-        message:
-          'Connection name "DBT Connection" is reserved for the getting started template',
       };
     }
 
