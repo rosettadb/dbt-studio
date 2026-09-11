@@ -123,8 +123,23 @@ const registerRunnerHandlers = (mainWindow: BrowserWindow) => {
       ]
         .filter((toolPath): toolPath is string => Boolean(toolPath))
         .map((toolPath) => path.dirname(toolPath));
-      if (toolDirs.length) {
-        env.PATH = [...toolDirs, process.env.PATH].join(path.delimiter);
+
+      // On macOS, Electron's PATH often omits Homebrew directories because
+      // the app is launched via launchd rather than a login shell. Add the
+      // standard Homebrew prefixes so tools like terraform, git, and aws
+      // that are installed via Homebrew are visible to the runner.
+      const homebrewDirs =
+        process.platform === 'darwin'
+          ? [
+              '/opt/homebrew/bin', // Apple Silicon
+              '/usr/local/bin', // Intel
+            ]
+          : [];
+
+      const basePath = process.env.PATH ?? '';
+      const allDirs = [...toolDirs, ...homebrewDirs];
+      if (allDirs.length) {
+        env.PATH = [...allDirs, basePath].join(path.delimiter);
       }
 
       TaskManagerService.create({
