@@ -192,7 +192,7 @@ const NotebookCellComponent: React.FC<NotebookCellProps> = ({
         border: '1px solid',
         borderColor: 'divider',
         borderRadius: 1,
-        overflow: 'hidden',
+        overflow: collapsed ? 'hidden' : 'visible',
         '&:hover': { borderColor: 'primary.main' },
       }}
     >

@@ -202,6 +202,35 @@ const Notebooks = () => {
     return jupyterTabs[jupyterTabs.length - 1]?.notebookId ?? null;
   }, [notebookTabManager.activeTabId, jupyterTabs]);
 
+  const jupyterAgentUnavailableMessage =
+    'Jupyter Notebooks AI Agent comming soon in next releases';
+
+  const isJupyterChatContext = activePrimaryTab === 1;
+  const chatScreenKey =
+    !isJupyterChatContext && activeSidebarTab === 2 ? 'analytics' : 'notebooks';
+  const chatConnectionId = isJupyterChatContext
+    ? undefined
+    : (activeConnectionId ?? undefined);
+  const chatNotebookId =
+    chatScreenKey === 'notebooks'
+      ? ((isJupyterChatContext ? activeJupyterTabId : activeSqlTabId) ??
+        undefined)
+      : undefined;
+  const chatPageId =
+    chatScreenKey === 'analytics'
+      ? (activeAnalyticsPageId ?? undefined)
+      : undefined;
+  const chatUnavailableMessage = isJupyterChatContext
+    ? jupyterAgentUnavailableMessage
+    : undefined;
+  const chatScopeKey = [
+    chatScreenKey,
+    isJupyterChatContext ? 'jupyter' : 'sql',
+    chatConnectionId ?? 'none',
+    chatNotebookId ?? 'none',
+    chatPageId ?? 'none',
+  ].join('-');
+
   // Wrappers that open a notebook AND switch to the correct sub-screen
   const openSqlNotebook = useCallback(
     (
@@ -223,13 +252,6 @@ const Notebooks = () => {
     },
     [notebookTabManager],
   );
-
-  const isPythonNotebookActive =
-    notebookTabManager.activeTab?.kind === 'python';
-
-  useEffect(() => {
-    if (isPythonNotebookActive && isChatOpen) setIsChatOpen?.(false);
-  }, [isChatOpen, isPythonNotebookActive, setIsChatOpen]);
 
   // Wait for all hydration to complete
   const isFullyHydrated =
@@ -1487,24 +1509,17 @@ const Notebooks = () => {
               flexDirection: 'column',
             }}
           >
-            {isChatOpen && !isNarrow && !isPythonNotebookActive && (
+            {isChatOpen && !isNarrow && (
               <ChatWindow
-                key={`${activeSidebarTab === 2 ? 'analytics' : 'notebooks'}-${activeConnectionId}-${activeSidebarTab === 2 ? (activeAnalyticsPageId ?? 'none') : (notebookTabManager.activeTabId ?? 'none')}`}
-                screenKey={activeSidebarTab === 2 ? 'analytics' : 'notebooks'}
-                connectionId={activeConnectionId ?? undefined}
-                notebookId={
-                  activeSidebarTab === 2
-                    ? undefined
-                    : (notebookTabManager.activeTabId ?? undefined)
-                }
-                pageId={
-                  activeSidebarTab === 2
-                    ? (activeAnalyticsPageId ?? undefined)
-                    : undefined
-                }
+                key={chatScopeKey}
+                screenKey={chatScreenKey}
+                connectionId={chatConnectionId}
+                notebookId={chatNotebookId}
+                pageId={chatPageId}
                 projectId={
                   selectedProject?.id ? Number(selectedProject.id) : null
                 }
+                unavailableMessage={chatUnavailableMessage}
                 onClose={() => setIsChatOpen?.(false)}
               />
             )}
@@ -1516,7 +1531,7 @@ const Notebooks = () => {
       {isNarrow && (
         <Dialog
           fullScreen
-          open={!!isChatOpen && !isPythonNotebookActive}
+          open={!!isChatOpen}
           onClose={() => setIsChatOpen?.(false)}
         >
           <Box
@@ -1527,22 +1542,15 @@ const Notebooks = () => {
             }}
           >
             <ChatWindow
-              key={`${activeSidebarTab === 2 ? 'analytics' : 'notebooks'}-mobile-${activeConnectionId}-${activeSidebarTab === 2 ? (activeAnalyticsPageId ?? 'none') : (notebookTabManager.activeTabId ?? 'none')}`}
-              screenKey={activeSidebarTab === 2 ? 'analytics' : 'notebooks'}
-              connectionId={activeConnectionId ?? undefined}
-              notebookId={
-                activeSidebarTab === 2
-                  ? undefined
-                  : (notebookTabManager.activeTabId ?? undefined)
-              }
-              pageId={
-                activeSidebarTab === 2
-                  ? (activeAnalyticsPageId ?? undefined)
-                  : undefined
-              }
+              key={`${chatScopeKey}-mobile`}
+              screenKey={chatScreenKey}
+              connectionId={chatConnectionId}
+              notebookId={chatNotebookId}
+              pageId={chatPageId}
               projectId={
                 selectedProject?.id ? Number(selectedProject.id) : null
               }
+              unavailableMessage={chatUnavailableMessage}
               onClose={() => setIsChatOpen?.(false)}
             />
           </Box>

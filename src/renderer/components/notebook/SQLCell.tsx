@@ -197,6 +197,7 @@ export const SQLCell: React.FC<SQLCellProps> = ({
             fontSize: 13,
             tabSize: 2,
             automaticLayout: true,
+            fixedOverflowWidgets: true,
             padding: { top: 8, bottom: 12 },
             lineHeight: 20,
             scrollbar: {

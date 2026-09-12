@@ -656,7 +656,7 @@ export const PythonNotebookEditor: React.FC<{
               border: '1px solid',
               borderColor: 'divider',
               borderRadius: 1,
-              overflow: 'hidden',
+              overflow: collapsed ? 'hidden' : 'visible',
               '&:hover': { borderColor: 'primary.main' },
             }}
           >
@@ -866,6 +866,7 @@ export const PythonNotebookEditor: React.FC<{
                   <Box sx={{ mb: showOutput && hasOutput ? 0.5 : 0 }}>
                     <Editor
                       height={`${getSourceEditorHeight(cell.source)}px`}
+                      path={`/__rosetta_python_notebooks__/${notebookId}/${cell.id}.py`}
                       defaultLanguage="python"
                       value={cell.source}
                       theme={monacoTheme}
@@ -885,6 +886,7 @@ export const PythonNotebookEditor: React.FC<{
                         fontSize: 13,
                         tabSize: 2,
                         automaticLayout: true,
+                        fixedOverflowWidgets: true,
                         padding: { top: 8, bottom: 12 },
                         lineHeight: 20,
                         scrollbar: {

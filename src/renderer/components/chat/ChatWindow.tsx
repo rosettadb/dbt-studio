@@ -74,6 +74,7 @@ export interface ChatWindowProps {
   notebookId?: string;
   pageId?: string;
   projectId?: number | null;
+  unavailableMessage?: string;
   onClose?: () => void;
 }
 
@@ -132,6 +133,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   notebookId,
   pageId,
   projectId: propProjectId,
+  unavailableMessage,
   onClose,
 }) => {
   const { setIsChatOpen, openFile, closeFile, refreshFileTree } =
@@ -414,6 +416,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   }, [screenKey, projectId]);
 
   const disabledReason = React.useMemo(() => {
+    if (unavailableMessage) return unavailableMessage;
     if (screenKey === 'analytics') {
       if (!connectionId) return 'Select a connection to start AI Agent';
       if (!pageId) return 'Select an analytics page to start AI Agent';
@@ -423,7 +426,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     if (!connectionId) return 'Select a connection to start AI Agent';
     if (!notebookId) return 'Select a notebook to start AI Agent';
     return null;
-  }, [screenKey, connectionId, notebookId, pageId]);
+  }, [screenKey, connectionId, notebookId, pageId, unavailableMessage]);
 
   const canUseChatScope = React.useMemo(() => {
     if (screenKey === 'notebooks' || screenKey === 'analytics') {

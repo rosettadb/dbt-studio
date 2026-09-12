@@ -5,6 +5,11 @@ import { projectIdFromUri } from '../uri';
 
 type Monaco = typeof monaco;
 
+const PYTHON_NOTEBOOK_MODEL_PATH_PREFIX = '/__rosetta_python_notebooks__/';
+
+const isPythonNotebookModel = (model: monaco.editor.ITextModel): boolean =>
+  model.uri.path.includes(PYTHON_NOTEBOOK_MODEL_PATH_PREFIX);
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Comprehensive Data Engineering & Science Curated Module List
 // Covers stdlib essentials + data warehouse stacks (Spark, Snowpark, BigQuery)
@@ -962,6 +967,7 @@ export const registerPythonCompletions = (monacoNs: Monaco): void => {
     ): Promise<monaco.languages.CompletionList> => {
       try {
         const projectId = projectIdFromUri(model.uri);
+        const notebookModel = isPythonNotebookModel(model);
         const word = model.getWordUntilPosition(position);
         const range: monaco.IRange = {
           startLineNumber: position.lineNumber,
@@ -1032,6 +1038,7 @@ export const registerPythonCompletions = (monacoNs: Monaco): void => {
             };
 
           case 'dbt-ref': {
+            if (notebookModel) return { suggestions: [] };
             const res = await languageIntelligenceService.listModels(projectId);
             const lowerPartial = ctx.partial.toLowerCase();
             return {
@@ -1054,6 +1061,7 @@ export const registerPythonCompletions = (monacoNs: Monaco): void => {
           }
 
           case 'dbt-source-name': {
+            if (notebookModel) return { suggestions: [] };
             const res =
               await languageIntelligenceService.listSources(projectId);
             const names = [...new Set(res.sources.map((s) => s.sourceName))];
@@ -1074,6 +1082,7 @@ export const registerPythonCompletions = (monacoNs: Monaco): void => {
           }
 
           case 'dbt-source-table': {
+            if (notebookModel) return { suggestions: [] };
             const res =
               await languageIntelligenceService.listSources(projectId);
             const lowerPartial = ctx.partial.toLowerCase();
@@ -1101,7 +1110,7 @@ export const registerPythonCompletions = (monacoNs: Monaco): void => {
             return {
               suggestions: [
                 ...buildScopeVariableItems(monacoNs, range, model.getValue()),
-                ...buildDbtSnippets(monacoNs, range),
+                ...(notebookModel ? [] : buildDbtSnippets(monacoNs, range)),
                 ...buildKeywordItems(monacoNs, range),
                 ...buildBuiltinItems(monacoNs, range),
                 ...buildExceptionItems(monacoNs, range),
