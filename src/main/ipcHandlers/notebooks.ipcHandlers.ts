@@ -8,8 +8,13 @@ import { NotebooksService } from '../services/notebooks.service';
 import { PythonNotebookService } from '../services/pythonNotebook.service';
 import type {
   PythonNotebook,
+  PythonNotebookCustomInterpreterRequest,
   PythonNotebookPackageActionRequest,
   PythonNotebookPackageInstallRequest,
+  PythonNotebookRemoveEnvironmentRequest,
+  PythonNotebookSelectEnvironmentRequest,
+  PythonNotebookUserPackageActionRequest,
+  PythonNotebookUserPackageRequest,
   PythonNotebookExecuteRequest,
   PythonNotebookRunAllRequest,
 } from '../../types/notebooks';
@@ -26,9 +31,12 @@ export function registerNotebooksHandlers() {
     });
   }
 
-  ipcMain.handle('notebooks:python:runtimeStatus', async () => {
-    return PythonNotebookService.getRuntimeStatus();
-  });
+  ipcMain.handle(
+    'notebooks:python:runtimeStatus',
+    async (_event, projectPath?: string) => {
+      return PythonNotebookService.getRuntimeStatus(projectPath);
+    },
+  );
 
   ipcMain.handle('notebooks:python:installRuntime', async () => {
     return PythonNotebookService.installRuntime();
@@ -68,6 +76,55 @@ export function registerNotebooksHandlers() {
     'notebooks:python:uninstallPackage',
     async (_event, request: PythonNotebookPackageActionRequest) =>
       PythonNotebookService.uninstallPackage(request),
+  );
+
+  // Phase 11: IDE-style environment selection and package management.
+  ipcMain.handle(
+    'notebooks:python:selectEnvironment',
+    async (_event, request: PythonNotebookSelectEnvironmentRequest) =>
+      PythonNotebookService.selectEnvironment(request),
+  );
+
+  ipcMain.handle(
+    'notebooks:python:addCustomInterpreter',
+    async (_event, request: PythonNotebookCustomInterpreterRequest) =>
+      PythonNotebookService.addCustomInterpreter(request),
+  );
+
+  ipcMain.handle(
+    'notebooks:python:removeEnvironment',
+    async (_event, request: PythonNotebookRemoveEnvironmentRequest) =>
+      PythonNotebookService.removeEnvironment(request),
+  );
+
+  ipcMain.handle(
+    'notebooks:python:installDataProfile',
+    async (_event, expectedActiveSessionCount?: number) =>
+      PythonNotebookService.installDataProfile(expectedActiveSessionCount),
+  );
+
+  ipcMain.handle(
+    'notebooks:python:installUserPackage',
+    async (_event, request: PythonNotebookUserPackageRequest) =>
+      PythonNotebookService.installUserPackage(request),
+  );
+
+  ipcMain.handle(
+    'notebooks:python:uninstallUserPackage',
+    async (_event, request: PythonNotebookUserPackageActionRequest) =>
+      PythonNotebookService.uninstallUserPackage(request),
+  );
+
+  ipcMain.handle(
+    'notebooks:python:ensureKernelSupport',
+    async (_event, expectedActiveSessionCount?: number) =>
+      PythonNotebookService.ensureKernelSupport(expectedActiveSessionCount),
+  );
+
+  ipcMain.handle(
+    'notebooks:python:listUserPackageVersions',
+    async (_event, packageName: string) =>
+      PythonNotebookService.listUserPackageVersions(packageName),
   );
 
   ipcMain.handle('notebooks:python:list', async () => {

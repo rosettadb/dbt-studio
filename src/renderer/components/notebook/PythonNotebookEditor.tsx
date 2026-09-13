@@ -1,5 +1,6 @@
 import React from 'react';
 import Editor from '@monaco-editor/react';
+import { useNavigate } from 'react-router-dom';
 import {
   Alert,
   Box,
@@ -55,6 +56,8 @@ import {
   useClearPythonNotebookOutputs,
 } from '../../controllers/notebooks.controller';
 import { notebooksService } from '../../services/notebooks.service';
+import { JupyterBridgeHandlers } from '../../services/notebookBridge.service';
+import { useJupyterBridge } from '../../hooks/useNotebookBridge';
 import { MarkdownCell } from './MarkdownCell';
 
 const pythonNotebookSaveFlushers = new Map<
@@ -278,6 +281,7 @@ export const PythonNotebookEditor: React.FC<{
     });
   };
 
+  const navigate = useNavigate();
   const getCellSummary = (cell: PythonNotebookCell): string => {
     const firstLine = cell.source.split('\n')[0].trim();
     const preview =
@@ -285,6 +289,122 @@ export const PythonNotebookEditor: React.FC<{
     if (preview) return preview;
     return `Empty ${cell.cellType} cell`;
   };
+
+  // Phase 11: surface the first missing third-party import so the user can
+  // install it from Settings instead of re-running a failing cell.
+  const missingPackageName = React.useMemo(() => {
+    const fromExecution = Object.values(executionCells).flatMap((cell) => [
+      cell.text,
+      cell.error ?? '',
+      ...(cell.outputs ?? []).map((output) => output.text ?? ''),
+    ]);
+    const fromDraft = (draft?.cells ?? []).flatMap((cell) =>
+      (cell.outputs ?? []).map((output) => output.text ?? ''),
+    );
+    const found = [...fromExecution, ...fromDraft]
+      .map(
+        (text) =>
+          text
+            .match(
+              /ModuleNotFoundError:\s*No module named ['"]([^'"]+)['"]/,
+            )?.[1]
+            ?.split('.')[0],
+      )
+      .find((name): name is string => Boolean(name));
+    return found ?? null;
+  }, [executionCells, draft]);
+
+  // Phase 10 — Jupyter AI Agent bridge (read/edit only, no execution).
+  // Edits flow through updateCells so they persist via the normal debounced
+  // revision-aware save path. Result snapshots are bounded and never expose
+  // live kernel variables.
+  const jupyterBridgeHandlers = React.useMemo<JupyterBridgeHandlers>(
+    () => ({
+      getJupyterState: () => {
+        if (!draft) throw new Error('Python notebook is not available.');
+        return {
+          notebookId: draft.id,
+          notebookName: draft.name,
+          cells: draft.cells.map((cell, order) => ({
+            id: cell.id,
+            cellType: cell.cellType,
+            order,
+            sourcePreview: cell.source.split('\n')[0].slice(0, 100),
+            hasOutput:
+              (executionCells[cell.id]?.outputs ?? cell.outputs ?? []).length >
+              0,
+          })),
+        };
+      },
+      getCellSource: (cellId: string) => {
+        const cell = draft?.cells.find((c) => c.id === cellId);
+        if (!cell) {
+          throw new Error(`Cell "${cellId}" was not found in this notebook.`);
+        }
+        return { source: cell.source, cellType: cell.cellType };
+      },
+      addCell: (cellType: 'code' | 'markdown', source: string) => {
+        if (!draft) throw new Error('Python notebook is not available.');
+        const cellId = uuidv4();
+        updateCells([
+          ...draft.cells,
+          { id: cellId, cellType, source, executionCount: null },
+        ]);
+        return cellId;
+      },
+      setCellSource: (cellId: string, source: string) => {
+        if (!draft) throw new Error('Python notebook is not available.');
+        if (!draft.cells.some((c) => c.id === cellId)) {
+          throw new Error(`Cell "${cellId}" was not found in this notebook.`);
+        }
+        clearExecutionCellOutput(cellId);
+        updateCells(
+          draft.cells.map((cell) =>
+            cell.id === cellId
+              ? {
+                  ...cell,
+                  source,
+                  executionCount:
+                    cell.cellType === 'code' ? null : cell.executionCount,
+                  outputs: cell.cellType === 'code' ? [] : cell.outputs,
+                }
+              : cell,
+          ),
+        );
+      },
+      getCellResultSnapshot: (cellId: string) => {
+        const execution = executionCells[cellId];
+        const cell = draft?.cells.find((c) => c.id === cellId);
+        if (!execution && !cell) {
+          throw new Error(`Cell "${cellId}" was not found in this notebook.`);
+        }
+        const outputs = execution?.outputs ?? cell?.outputs ?? [];
+        const text = outputs
+          .map((output) => output.text ?? '')
+          .join('')
+          .slice(0, 4000);
+        return {
+          status:
+            execution?.status ?? (outputs.length > 0 ? 'success' : 'not-run'),
+          executionCount: cell?.executionCount ?? null,
+          truncated: Boolean(execution?.truncated),
+          text,
+          error: execution?.error,
+          hasImage: outputs.some(
+            (output) =>
+              output.mime === 'image/png' || output.mime === 'image/jpeg',
+          ),
+          hasHtml: outputs.some((output) => output.mime === 'text/html'),
+          outputCount: outputs.length,
+        };
+      },
+    }),
+    // updateCells closes over the current draft, so draft in deps is enough.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [draft, executionCells],
+  );
+
+  useJupyterBridge(jupyterBridgeHandlers, Boolean(draft));
 
   const getSourceEditorHeight = (source: string): number => {
     const lineCount = Math.max(3, source.split('\n').length);
@@ -628,6 +748,38 @@ export const PythonNotebookEditor: React.FC<{
       {runtime?.state !== 'ready' && (
         <Alert severity="warning" sx={{ mb: 2 }}>
           Set up Jupyter packages in Settings → Python before running cells.
+        </Alert>
+      )}
+      {runtime?.selectedEnvironment && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+          <Chip
+            size="small"
+            label={runtime.selectedEnvironment.label}
+            color="default"
+          />
+          <Typography variant="caption" color="text.secondary">
+            Python {runtime.selectedEnvironment.pythonVersion ?? 'unknown'}
+            {sessionState !== 'stopped' ? ` · kernel ${sessionState}` : ''}
+            {!runtime.selectedEnvironment.writable ? ' · read-only' : ''}
+          </Typography>
+        </Box>
+      )}
+      {missingPackageName && (
+        <Alert
+          severity="warning"
+          sx={{ mb: 2 }}
+          action={
+            <Button
+              size="small"
+              onClick={() => navigate('/app/settings/python')}
+            >
+              Open package settings
+            </Button>
+          }
+        >
+          Python package &quot;{missingPackageName}&quot; is not installed in
+          the active notebook environment. Install it from Settings → Python →
+          Jupyter Notebooks instead of re-running this cell.
         </Alert>
       )}
       {restart.isSuccess && sessionState === 'idle' && (

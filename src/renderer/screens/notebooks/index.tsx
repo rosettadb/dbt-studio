@@ -202,9 +202,6 @@ const Notebooks = () => {
     return jupyterTabs[jupyterTabs.length - 1]?.notebookId ?? null;
   }, [notebookTabManager.activeTabId, jupyterTabs]);
 
-  const jupyterAgentUnavailableMessage =
-    'Jupyter Notebooks AI Agent comming soon in next releases';
-
   const isJupyterChatContext = activePrimaryTab === 1;
   const chatScreenKey =
     !isJupyterChatContext && activeSidebarTab === 2 ? 'analytics' : 'notebooks';
@@ -220,9 +217,12 @@ const Notebooks = () => {
     chatScreenKey === 'analytics'
       ? (activeAnalyticsPageId ?? undefined)
       : undefined;
-  const chatUnavailableMessage = isJupyterChatContext
-    ? jupyterAgentUnavailableMessage
-    : undefined;
+  // Phase 10: the Jupyter agent is fully wired (jupyter_* tools), so there is
+  // no placeholder unavailable message on Jupyter tabs.
+  const chatUnavailableMessage = undefined;
+  const chatNotebookKind: 'sql' | 'jupyter' = isJupyterChatContext
+    ? 'jupyter'
+    : 'sql';
   const chatScopeKey = [
     chatScreenKey,
     isJupyterChatContext ? 'jupyter' : 'sql',
@@ -1515,6 +1515,7 @@ const Notebooks = () => {
                 screenKey={chatScreenKey}
                 connectionId={chatConnectionId}
                 notebookId={chatNotebookId}
+                notebookKind={chatNotebookKind}
                 pageId={chatPageId}
                 projectId={
                   selectedProject?.id ? Number(selectedProject.id) : null
@@ -1546,6 +1547,7 @@ const Notebooks = () => {
               screenKey={chatScreenKey}
               connectionId={chatConnectionId}
               notebookId={chatNotebookId}
+              notebookKind={chatNotebookKind}
               pageId={chatPageId}
               projectId={
                 selectedProject?.id ? Number(selectedProject.id) : null

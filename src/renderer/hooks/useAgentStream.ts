@@ -348,6 +348,7 @@ export const useAgentStream = (sessionId: number | undefined) => {
       notebookId?: string,
       pageId?: string,
       includeProjectAiContext?: boolean,
+      notebookKind?: 'sql' | 'jupyter',
     ) => {
       if (!sessionId) return;
 
@@ -395,6 +396,7 @@ export const useAgentStream = (sessionId: number | undefined) => {
           screenKey: screenKey as any,
           connectionId,
           notebookId,
+          notebookKind,
           pageId,
           includeProjectAiContext,
         });

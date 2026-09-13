@@ -18,6 +18,12 @@ import {
   PythonNotebookPackageStatus,
   PythonNotebookPackageVersionListResponse,
   PythonNotebookRunAllRequest,
+  PythonNotebookSelectEnvironmentRequest,
+  PythonNotebookCustomInterpreterRequest,
+  PythonNotebookRemoveEnvironmentRequest,
+  PythonNotebookUserPackageActionRequest,
+  PythonNotebookUserPackageRequest,
+  PythonNotebookUserPackageVersionListResponse,
   PythonNotebookSessionSnapshot,
   PythonCellOutput,
   SchemaInfo,
@@ -38,7 +44,8 @@ export const notebooksKeys = {
   schema: (connectionId: string) =>
     [...notebooksKeys.all, 'schema', connectionId] as const,
   archived: () => [...notebooksKeys.all, 'archived'] as const,
-  pythonRuntime: () => [...notebooksKeys.all, 'python', 'runtime'] as const,
+  pythonRuntime: (projectPath?: string) =>
+    [...notebooksKeys.all, 'python', 'runtime', projectPath ?? ''] as const,
   pythonDocuments: () => [...notebooksKeys.all, 'python', 'documents'] as const,
   pythonDocument: (id: string) =>
     [...notebooksKeys.pythonDocuments(), id] as const,
@@ -132,62 +139,66 @@ export function useClearPythonNotebookOutputs() {
   );
 }
 
-export function usePythonNotebookRuntimeStatus() {
+export function usePythonNotebookRuntimeStatus(projectPath?: string) {
   return useQuery<PythonNotebookRuntimeStatus>({
-    queryKey: notebooksKeys.pythonRuntime(),
-    queryFn: () => notebooksService.getPythonRuntimeStatus(),
+    queryKey: notebooksKeys.pythonRuntime(projectPath),
+    queryFn: () => notebooksService.getPythonRuntimeStatus(projectPath),
     staleTime: 30000,
     refetchInterval: (data) =>
       data?.operation.state === 'idle' ? false : 1000,
   });
 }
 
-export function useInstallPythonNotebookRuntime() {
+/** Phase 11: refreshes every project-qualified runtime status query. */
+function useRefreshPythonRuntimeStatus() {
   const queryClient = useQueryClient();
+  return useCallback(() => {
+    queryClient.invalidateQueries([...notebooksKeys.all, 'python', 'runtime']);
+  }, [queryClient]);
+}
+
+export function useInstallPythonNotebookRuntime() {
+  const refreshRuntimeStatus = useRefreshPythonRuntimeStatus();
 
   return useMutation({
     mutationFn: () => notebooksService.installPythonRuntime(),
-    onSuccess: (status) => {
-      queryClient.setQueryData(notebooksKeys.pythonRuntime(), status);
-      queryClient.invalidateQueries(notebooksKeys.pythonRuntime());
+    onSuccess: () => {
+      refreshRuntimeStatus();
     },
   });
 }
 
 export function useUpdatePythonNotebookRuntime() {
-  const queryClient = useQueryClient();
+  const refreshRuntimeStatus = useRefreshPythonRuntimeStatus();
 
   return useMutation({
     mutationFn: (expectedActiveSessionCount: number) =>
       notebooksService.updatePythonRuntime(expectedActiveSessionCount),
-    onSuccess: (status) => {
-      queryClient.setQueryData(notebooksKeys.pythonRuntime(), status);
-      queryClient.invalidateQueries(notebooksKeys.pythonRuntime());
+    onSuccess: () => {
+      refreshRuntimeStatus();
     },
   });
 }
 
 export function useUninstallPythonNotebookRuntime() {
-  const queryClient = useQueryClient();
+  const refreshRuntimeStatus = useRefreshPythonRuntimeStatus();
 
   return useMutation({
     mutationFn: (expectedActiveSessionCount: number) =>
       notebooksService.uninstallPythonRuntime(expectedActiveSessionCount),
-    onSuccess: (status) => {
-      queryClient.setQueryData(notebooksKeys.pythonRuntime(), status);
-      queryClient.invalidateQueries(notebooksKeys.pythonRuntime());
+    onSuccess: () => {
+      refreshRuntimeStatus();
     },
   });
 }
 
 export function useCheckPythonNotebookRuntime() {
-  const queryClient = useQueryClient();
+  const refreshRuntimeStatus = useRefreshPythonRuntimeStatus();
 
   return useMutation({
     mutationFn: () => notebooksService.checkPythonRuntime(),
-    onSuccess: (status) => {
-      queryClient.setQueryData(notebooksKeys.pythonRuntime(), status);
-      queryClient.invalidateQueries(notebooksKeys.pythonRuntime());
+    onSuccess: () => {
+      refreshRuntimeStatus();
     },
   });
 }
@@ -202,28 +213,121 @@ export function useListPythonNotebookPackageVersions() {
 }
 
 export function useInstallPythonNotebookPackage() {
-  const queryClient = useQueryClient();
+  const refreshRuntimeStatus = useRefreshPythonRuntimeStatus();
 
   return useMutation({
     mutationFn: (request: PythonNotebookPackageInstallRequest) =>
       notebooksService.installPythonPackage(request),
-    onSuccess: (status) => {
-      queryClient.setQueryData(notebooksKeys.pythonRuntime(), status);
-      queryClient.invalidateQueries(notebooksKeys.pythonRuntime());
+    onSuccess: () => {
+      refreshRuntimeStatus();
     },
   });
 }
 
 export function useUninstallPythonNotebookPackage() {
-  const queryClient = useQueryClient();
+  const refreshRuntimeStatus = useRefreshPythonRuntimeStatus();
 
   return useMutation({
     mutationFn: (request: PythonNotebookPackageActionRequest) =>
       notebooksService.uninstallPythonPackage(request),
-    onSuccess: (status) => {
-      queryClient.setQueryData(notebooksKeys.pythonRuntime(), status);
-      queryClient.invalidateQueries(notebooksKeys.pythonRuntime());
+    onSuccess: () => {
+      refreshRuntimeStatus();
     },
+  });
+}
+
+// ─── Phase 11: environment selection and package management ────────────────
+
+export function useSelectPythonNotebookEnvironment() {
+  const refreshRuntimeStatus = useRefreshPythonRuntimeStatus();
+
+  return useMutation({
+    mutationFn: (request: PythonNotebookSelectEnvironmentRequest) =>
+      notebooksService.selectPythonEnvironment(request),
+    onSuccess: () => {
+      refreshRuntimeStatus();
+    },
+  });
+}
+
+export function useAddCustomPythonInterpreter() {
+  const refreshRuntimeStatus = useRefreshPythonRuntimeStatus();
+
+  return useMutation({
+    mutationFn: (request: PythonNotebookCustomInterpreterRequest) =>
+      notebooksService.addCustomPythonInterpreter(request),
+    onSuccess: () => {
+      refreshRuntimeStatus();
+    },
+  });
+}
+
+export function useRemovePythonNotebookEnvironment() {
+  const refreshRuntimeStatus = useRefreshPythonRuntimeStatus();
+
+  return useMutation({
+    mutationFn: (request: PythonNotebookRemoveEnvironmentRequest) =>
+      notebooksService.removePythonEnvironment(request),
+    onSuccess: () => {
+      refreshRuntimeStatus();
+    },
+  });
+}
+
+export function useInstallPythonDataProfile() {
+  const refreshRuntimeStatus = useRefreshPythonRuntimeStatus();
+
+  return useMutation({
+    mutationFn: (expectedActiveSessionCount: number) =>
+      notebooksService.installPythonDataProfile(expectedActiveSessionCount),
+    onSuccess: () => {
+      refreshRuntimeStatus();
+    },
+  });
+}
+
+export function useEnsurePythonKernelSupport() {
+  const refreshRuntimeStatus = useRefreshPythonRuntimeStatus();
+
+  return useMutation({
+    mutationFn: (expectedActiveSessionCount: number) =>
+      notebooksService.ensurePythonKernelSupport(expectedActiveSessionCount),
+    onSuccess: () => {
+      refreshRuntimeStatus();
+    },
+  });
+}
+
+export function useInstallPythonUserPackage() {
+  const refreshRuntimeStatus = useRefreshPythonRuntimeStatus();
+
+  return useMutation({
+    mutationFn: (request: PythonNotebookUserPackageRequest) =>
+      notebooksService.installPythonUserPackage(request),
+    onSuccess: () => {
+      refreshRuntimeStatus();
+    },
+  });
+}
+
+export function useUninstallPythonUserPackage() {
+  const refreshRuntimeStatus = useRefreshPythonRuntimeStatus();
+
+  return useMutation({
+    mutationFn: (request: PythonNotebookUserPackageActionRequest) =>
+      notebooksService.uninstallPythonUserPackage(request),
+    onSuccess: () => {
+      refreshRuntimeStatus();
+    },
+  });
+}
+
+export function useListPythonUserPackageVersions() {
+  return useMutation({
+    mutationFn: (
+      packageName: string,
+    ): Promise<PythonNotebookUserPackageVersionListResponse> =>
+      notebooksService.listPythonUserPackageVersions(packageName),
   });
 }
 

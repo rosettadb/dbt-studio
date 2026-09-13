@@ -238,6 +238,8 @@ const agentContexts = new Map<
     screenKey: 'project' | 'sql' | 'notebooks' | 'analytics';
     connectionId?: string;
     notebookId?: string;
+    /** Phase 10: distinguishes SQL-connection notebooks from Jupyter notebooks. */
+    notebookKind?: 'sql' | 'jupyter';
     pageId?: string;
     projectPath?: string;
   }
@@ -309,6 +311,8 @@ export interface AgentRunRequest {
   screenKey?: import('../../types/agentEvents').AgentScreenKey;
   connectionId?: string;
   notebookId?: string;
+  /** Phase 10: 'sql' for connection notebooks, 'jupyter' for Python notebooks. */
+  notebookKind?: 'sql' | 'jupyter';
   pageId?: string; // Analytics: currently open page ID
   includeProjectAiContext?: boolean;
 }
@@ -746,6 +750,102 @@ class AgentService {
     );
   }
 
+  // ─── Jupyter Agent Bridge (Phase 10) ────────────────────────────────────
+  // Read/edit bridge for Python notebooks. Uses the same pending-request map
+  // and renderer sender as the SQL notebook bridge, but distinct channels so
+  // SQL and Jupyter traffic can never be confused. No execution tool: the
+  // agent proposes cell changes and the user runs them in the notebook UI.
+
+  private static requireJupyterContext(conversationId: number): void {
+    const context = this.getAgentContext(conversationId);
+    if (!context) {
+      throw new Error(`No active context for conversation ${conversationId}`);
+    }
+    if (context.notebookKind !== 'jupyter' || !context.notebookId) {
+      throw new Error(
+        'Jupyter notebook tools require an active Jupyter notebook context.',
+      );
+    }
+  }
+
+  public static resolveJupyterBridgeResponse(payload: {
+    requestId: string;
+    success: boolean;
+    [key: string]: any;
+  }): void {
+    // Shares the pending map with the SQL notebook bridge; requestIds are
+    // unique per bridge call so responses route to the correct waiter.
+    this.resolveNotebookBridgeResponse(payload);
+  }
+
+  public static async requestJupyterState(conversationId: number) {
+    this.requireJupyterContext(conversationId);
+    return this.requestNotebookBridge(
+      conversationId,
+      'jupyter-state',
+      'agent:jupyter:state-request',
+      'agent:jupyter:state-response',
+    );
+  }
+
+  public static async requestJupyterCellRead(
+    conversationId: number,
+    cellId: string,
+  ) {
+    this.requireJupyterContext(conversationId);
+    return this.requestNotebookBridge(
+      conversationId,
+      'jupyter-cell-read',
+      'agent:jupyter:cell-read-request',
+      'agent:jupyter:cell-read-response',
+      { cellId },
+    );
+  }
+
+  public static async requestJupyterCellAdd(
+    conversationId: number,
+    cellType: 'code' | 'markdown',
+    source: string,
+  ): Promise<{ cellId: string }> {
+    this.requireJupyterContext(conversationId);
+    return this.requestNotebookBridge(
+      conversationId,
+      `jupyter-cell-add-${Date.now()}`,
+      'agent:jupyter:cell-add-request',
+      'agent:jupyter:cell-add-response',
+      { cellType, source },
+    );
+  }
+
+  public static async requestJupyterCellUpdate(
+    conversationId: number,
+    cellId: string,
+    source: string,
+  ) {
+    this.requireJupyterContext(conversationId);
+    return this.requestNotebookBridge(
+      conversationId,
+      'jupyter-cell-update',
+      'agent:jupyter:cell-update-request',
+      'agent:jupyter:cell-update-response',
+      { cellId, source },
+    );
+  }
+
+  public static async requestJupyterCellResult(
+    conversationId: number,
+    cellId: string,
+  ) {
+    this.requireJupyterContext(conversationId);
+    return this.requestNotebookBridge(
+      conversationId,
+      'jupyter-cell-result',
+      'agent:jupyter:cell-result-request',
+      'agent:jupyter:cell-result-response',
+      { cellId },
+    );
+  }
+
   // ─── Analytics Agent Bridge ───────────────────────────────────────────────
 
   private static async requestAnalyticsBridge(
@@ -1166,6 +1266,7 @@ COMBINED SUMMARY:`,
               screenKey: request.screenKey ?? 'project',
               connectionId: request.connectionId,
               notebookId: request.notebookId,
+              notebookKind: request.notebookKind,
               pageId: request.pageId,
               projectPath,
             },
@@ -1303,12 +1404,21 @@ COMBINED SUMMARY:`,
 
     try {
       // Register per-conversation context (fixes race condition on concurrent runs)
+      // Phase 10: notebookKind distinguishes SQL-connection notebooks from
+      // Jupyter notebooks. When the renderer does not send it explicitly,
+      // a notebooks-screen run without a connection is a Jupyter run.
+      const notebookKind =
+        request.notebookKind ??
+        (screenKey === 'notebooks' && !connectionId && request.notebookId
+          ? 'jupyter'
+          : 'sql');
       agentContexts.set(conversationId, {
         event,
         conversationId,
         screenKey,
         connectionId,
         notebookId: request.notebookId,
+        notebookKind,
         pageId: request.pageId,
         projectPath,
       });
@@ -1490,6 +1600,7 @@ COMBINED SUMMARY:`,
           agent = await createNotebooksAgent(base, {
             connectionMeta,
             notebookId: request.notebookId,
+            notebookKind,
             connectionId: request.connectionId,
             enabledTools: agentEnabledTools,
             skills: base.skillsPrompt,
@@ -1803,7 +1914,11 @@ COMBINED SUMMARY:`,
             (request.screenKey ?? 'project') === 'notebooks'
               ? [...collectedToolCalls]
                   .reverse()
-                  .find((tc) => tc.toolName === 'notebooks_get_state')
+                  .find(
+                    (tc) =>
+                      tc.toolName === 'notebooks_get_state' ||
+                      tc.toolName === 'jupyter_notebook_get_state',
+                  )
               : undefined;
           const notebookState = (notebookStateCall?.output as any)?.data;
           const notebookCells = Array.isArray(notebookState?.cells)
@@ -1818,11 +1933,14 @@ COMBINED SUMMARY:`,
                     .slice(0, 3)
                     .map((cell: any, index: number) => {
                       const preview =
-                        cell.contentPreview || cell.content || '(empty cell)';
+                        cell.contentPreview ||
+                        cell.sourcePreview ||
+                        cell.content ||
+                        '(empty cell)';
                       const outputText = cell.hasOutput
                         ? ` Output is available${typeof cell.outputRowCount === 'number' ? ` (${cell.outputRowCount} rows loaded)` : ''}.`
                         : ' No output is currently available.';
-                      return `Cell ${index + 1} is ${cell.type || 'unknown'}: \`${String(preview).trim()}\`.${outputText}`;
+                      return `Cell ${index + 1} is ${cell.type || cell.cellType || 'unknown'}: \`${String(preview).trim()}\`.${outputText}`;
                     }),
                   'I do not see a notebook execution error in the state returned by the tool.',
                 ].join(' ')

@@ -29,6 +29,8 @@ export interface AgentRunRequest {
   screenKey?: 'project' | 'sql' | 'notebooks' | 'analytics';
   connectionId?: string;
   notebookId?: string;
+  /** Phase 10: 'sql' for connection notebooks, 'jupyter' for Python notebooks. */
+  notebookKind?: 'sql' | 'jupyter';
   pageId?: string;
   includeProjectAiContext?: boolean;
 }

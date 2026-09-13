@@ -8,6 +8,8 @@ import {
   NotebookCell,
   CellOutput,
   NotebookImportPreview,
+  PythonNotebookCustomInterpreterRequest,
+  PythonNotebookRemoveEnvironmentRequest,
   PythonNotebookRuntimeStatus,
   PythonNotebook,
   PythonNotebookEvent,
@@ -18,7 +20,11 @@ import {
   PythonNotebookPackageVersionListResponse,
   PythonNotebookPackageStatus,
   PythonNotebookRunAllRequest,
+  PythonNotebookSelectEnvironmentRequest,
   PythonNotebookSessionSnapshot,
+  PythonNotebookUserPackageActionRequest,
+  PythonNotebookUserPackageRequest,
+  PythonNotebookUserPackageVersionListResponse,
 } from '../../types/notebooks';
 
 export const notebooksService = {
@@ -79,8 +85,13 @@ export const notebooksService = {
   ): Promise<string | null> =>
     window.electron.ipcRenderer.invoke('notebooks:python:export', id, revision),
 
-  getPythonRuntimeStatus: async (): Promise<PythonNotebookRuntimeStatus> => {
-    return window.electron.ipcRenderer.invoke('notebooks:python:runtimeStatus');
+  getPythonRuntimeStatus: async (
+    projectPath?: string,
+  ): Promise<PythonNotebookRuntimeStatus> => {
+    return window.electron.ipcRenderer.invoke(
+      'notebooks:python:runtimeStatus',
+      projectPath,
+    );
   },
 
   installPythonRuntime: async (): Promise<PythonNotebookRuntimeStatus> => {
@@ -137,6 +148,71 @@ export const notebooksService = {
       request,
     );
   },
+
+  // Phase 11: IDE-style environment selection and package management.
+  selectPythonEnvironment: async (
+    request: PythonNotebookSelectEnvironmentRequest,
+  ): Promise<PythonNotebookRuntimeStatus> =>
+    window.electron.ipcRenderer.invoke(
+      'notebooks:python:selectEnvironment',
+      request,
+    ),
+
+  addCustomPythonInterpreter: async (
+    request: PythonNotebookCustomInterpreterRequest,
+  ): Promise<PythonNotebookRuntimeStatus> =>
+    window.electron.ipcRenderer.invoke(
+      'notebooks:python:addCustomInterpreter',
+      request,
+    ),
+
+  removePythonEnvironment: async (
+    request: PythonNotebookRemoveEnvironmentRequest,
+  ): Promise<PythonNotebookRuntimeStatus> =>
+    window.electron.ipcRenderer.invoke(
+      'notebooks:python:removeEnvironment',
+      request,
+    ),
+
+  installPythonDataProfile: async (
+    expectedActiveSessionCount: number,
+  ): Promise<PythonNotebookRuntimeStatus> =>
+    window.electron.ipcRenderer.invoke(
+      'notebooks:python:installDataProfile',
+      expectedActiveSessionCount,
+    ),
+
+  installPythonUserPackage: async (
+    request: PythonNotebookUserPackageRequest,
+  ): Promise<PythonNotebookRuntimeStatus> =>
+    window.electron.ipcRenderer.invoke(
+      'notebooks:python:installUserPackage',
+      request,
+    ),
+
+  uninstallPythonUserPackage: async (
+    request: PythonNotebookUserPackageActionRequest,
+  ): Promise<PythonNotebookRuntimeStatus> =>
+    window.electron.ipcRenderer.invoke(
+      'notebooks:python:uninstallUserPackage',
+      request,
+    ),
+
+  ensurePythonKernelSupport: async (
+    expectedActiveSessionCount: number,
+  ): Promise<PythonNotebookRuntimeStatus> =>
+    window.electron.ipcRenderer.invoke(
+      'notebooks:python:ensureKernelSupport',
+      expectedActiveSessionCount,
+    ),
+
+  listPythonUserPackageVersions: async (
+    packageName: string,
+  ): Promise<PythonNotebookUserPackageVersionListResponse> =>
+    window.electron.ipcRenderer.invoke(
+      'notebooks:python:listUserPackageVersions',
+      packageName,
+    ),
 
   executePythonCell: async (
     request: PythonNotebookExecuteRequest,

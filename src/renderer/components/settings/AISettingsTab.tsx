@@ -199,6 +199,44 @@ const TOOLS: ToolItem[] = [
     description: 'Inspect the last execution result of a cell',
     icon: <StorageIcon sx={{ fontSize: 16 }} />,
   },
+  // ── Jupyter (Python notebooks, Phase 10/11) ────────────────────────────
+  {
+    id: 'jupyter_environment_status',
+    label: 'jupyter_environment_status',
+    description: 'Read the active Jupyter environment and installed packages',
+    icon: <SearchIcon sx={{ fontSize: 16 }} />,
+  },
+  {
+    id: 'jupyter_notebook_get_state',
+    label: 'jupyter_notebook_get_state',
+    description:
+      'List all cells in the active Jupyter notebook and their types',
+    icon: <SearchIcon sx={{ fontSize: 16 }} />,
+  },
+  {
+    id: 'jupyter_cell_read',
+    label: 'jupyter_cell_read',
+    description: 'Read the Python/Markdown source of a Jupyter cell',
+    icon: <ArticleIcon sx={{ fontSize: 16 }} />,
+  },
+  {
+    id: 'jupyter_cell_add',
+    label: 'jupyter_cell_add',
+    description: 'Create a Python or Markdown cell in the Jupyter notebook',
+    icon: <EditIcon sx={{ fontSize: 16 }} />,
+  },
+  {
+    id: 'jupyter_cell_update',
+    label: 'jupyter_cell_update',
+    description: 'Update the source of a Jupyter notebook cell',
+    icon: <EditIcon sx={{ fontSize: 16 }} />,
+  },
+  {
+    id: 'jupyter_cell_result',
+    label: 'jupyter_cell_result',
+    description: 'Inspect the bounded result snapshot of a Jupyter cell',
+    icon: <StorageIcon sx={{ fontSize: 16 }} />,
+  },
 ];
 
 // ─── Sub-components ───────────────────────────────────────────────────────────

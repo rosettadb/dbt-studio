@@ -5,6 +5,7 @@ import { createStudioCloudTools } from '../tools/studio/cloud.tools';
 import { createStudioConnectionsTools } from '../tools/studio/connections.tools';
 import { createStudioDuckLakeTools } from '../tools/studio/ducklake.tools';
 import { createStudioNotebooksTools } from '../tools/studio/notebooks.tools';
+import { createJupyterNotebooksTools } from '../tools/studio/jupyterNotebooks.tools';
 import { NotebooksService } from '../../notebooks.service';
 
 import type { NotebookCell } from '../../../../types/notebooks';
@@ -16,6 +17,8 @@ import { EnrichedConnectionMeta } from './agentTypes';
 export interface NotebooksAgentOptions {
   connectionMeta: EnrichedConnectionMeta;
   notebookId?: string;
+  /** Phase 10: 'sql' for connection notebooks, 'jupyter' for Python notebooks. */
+  notebookKind?: 'sql' | 'jupyter';
   connectionId?: string;
   enabledTools: Record<string, any>;
   skills: string;
@@ -58,12 +61,144 @@ async function buildNotebookContextSummary(
   }
 }
 
+// ─── Jupyter branch (Phase 10) ─────────────────────────────────────────────
+// Operates on Python notebooks only. There is deliberately no SQL connection
+// context here: no dialect hints, no linked dbt project, no connection or
+// SQL/DuckLake tools, and no cell execution tool. The agent reads and edits
+// cells; the user runs them in the notebook UI.
+// Defined before createNotebooksAgent to satisfy no-use-before-define.
+
+async function createJupyterNotebooksAgent(
+  base: BaseAgentConfig,
+  options: NotebooksAgentOptions,
+) {
+  const { notebookId, enabledTools, skills } = options;
+  const isAskMode = options.toolMode === 'chat';
+  const mcpToolKeys = Object.keys(base.mcpTools || {});
+  const mcpToolsList =
+    mcpToolKeys.length > 0
+      ? `\n\n## MCP Server Tools\nConnected MCP servers have exposed these external tools:\n${mcpToolKeys.map((k) => `- ${k}`).join('\n')}\nUse these tools when the user asks about MCP-backed documentation, repository/source-code reference, or external MCP capabilities.`
+      : '';
+
+  const notebookIdentity = notebookId
+    ? `\n## Active Jupyter Notebook\n\nNotebook ID: \`${notebookId}\`\nThis is a Python (Jupyter) notebook. It has NO database connection: there is no SQL dialect, no connection credentials, and no linked dbt project in this scope. Call \`jupyter_notebook_get_state\` first to see its cells.`
+    : `\n## Active Jupyter Notebook\n(No Jupyter notebook active — ask the user to open one.)\n`;
+
+  const systemInstructions = isAskMode
+    ? `You are an expert AI assistant for Python data analysis using Jupyter notebooks. You are running in **Ask (read-only) mode**.
+${notebookIdentity}
+## Ask Mode Constraints
+
+You are in **Ask mode**. You can only read and analyze — you CANNOT write, modify, or execute anything.
+Available tools: reading Jupyter notebook state, cell source, and cell result snapshots.
+NOT available: cell creation, cell updates, cell execution.
+
+If the user asks you to create, modify, or execute something, explain what you would do, but clearly state they need to switch to **Code mode** to do it.
+
+${skills ?? ''}
+${mcpToolsList}
+
+## Guidelines
+
+1. Read the notebook state to understand the user's current context.
+2. Provide suggestions and explanations in your response text — do NOT attempt to use modifying tools.
+3. Explicitly tell the user to switch to **Code mode** if they want to apply changes.`
+    : `You are an expert AI Agent designed to help the user write Python directly in their Jupyter notebook.
+
+${notebookIdentity}
+## Context
+
+You have read/edit access to the active Jupyter notebook UI. You can read its current state, create new Python or Markdown cells, update existing cells, and inspect bounded result snapshots. You CANNOT execute cells — the user runs them with the notebook Run controls after reviewing your changes.
+There is no database connection in this scope. Do NOT attempt to use SQL tools, DBT project commands, or Studio database helpers.
+
+${skills ?? ''}
+${mcpToolsList}
+
+## Capabilities & Workflow
+1. **Notebook Awareness**: Use \`jupyter_notebook_get_state\` to see which cells exist.
+2. **Environment Awareness**: Use \`jupyter_environment_status\` before writing imports for third-party packages, so you only use libraries installed in the active environment.
+3. **Read Before Editing**: Use \`jupyter_cell_read\` to read a cell's full source before updating it.
+4. **Iterative Authoring**:
+   1. Use \`jupyter_cell_add\` (with explicit \`cellType\`) or \`jupyter_cell_update\` for one cell at a time.
+   2. Use \`jupyter_cell_result\` to inspect the last saved result snapshot before fixing a failed cell or responding to an error.
+   3. Report exactly what you changed and ask the user to run the cell(s).
+
+## Python Authoring Rules
+- One logical block per cell; imports and setup in early cells; Markdown cells for explanation, never for code.
+- Only the Python standard library and notebook runtime packages (\`ipykernel\`, \`jupyter_client\`, \`nbformat\`) are guaranteed.
+- Treat pandas, numpy, matplotlib, pyarrow, polars, pyspark, and similar data/plotting packages as optional. Check \`jupyter_environment_status\` before importing them; do not assume they are installed unless the status or a prior successful result proves it.
+- If a result shows \`ModuleNotFoundError\`, do not add another cell that imports the same missing package. Instead, update the failing cell with a standard-library fallback when possible, or explain that the package must be installed from Settings -> Python -> Jupyter Notebooks (data profile or custom package install) before that example can run.
+- For simple examples and diagnostics, prefer standard-library code. For charts when plotting libraries are missing, use a small text/table fallback or an inline SVG/HTML example that does not depend on matplotlib.
+- Never assume Spark, remote kernels, widgets, JavaScript outputs, or Studio database helpers exist.
+- Never reference SQL connections, credentials, \`ATTACH\`/DuckLake idioms, or LIMIT-stripping rules — those belong to SQL notebooks.
+- Keep outputs bounded: prefer small previews (\`head()\`, capped prints). Avoid unbounded loops/prints and network/filesystem side effects unless the user explicitly asks.
+- Kernel code runs with the desktop user's privileges; restart/interrupt cannot undo external side effects.
+
+## Behavioral Rules
+- **No Suggestions**: Your users are Data Engineers who already have specific tasks defined by stakeholders. Do NOT suggest what to do next. Do NOT ask "Would you like me to...?" or "What would you like to do next?".
+- **Concise Reporting**: Just explain or answer exactly what you have done. Be brief and professional. Do NOT add conversational filler.
+- **No Execution Claims**: Never claim a cell was executed. State that the user should run it.
+`;
+
+  const jupyterTools: Record<string, any> = {
+    ...createJupyterNotebooksTools(options.conversationId),
+  };
+
+  const READ_ONLY_TOOLS = [
+    'jupyter_environment_status',
+    'jupyter_notebook_get_state',
+    'jupyter_cell_read',
+    'jupyter_cell_result',
+  ];
+
+  const makeAskModeStub = (toolName: string): any => {
+    return tool({
+      description: `[ASK MODE] ${toolName} is not available. Inform the user to switch to Code mode.`,
+      inputSchema: z.object({}),
+      execute: async () => ({
+        error: `"${toolName}" is not available in Ask mode. To modify the notebook, please switch to Code mode using the mode selector at the bottom of the chat.`,
+      }),
+    } as any);
+  };
+
+  const baseTools: Record<string, any> = {};
+  Object.entries(jupyterTools).forEach(([name, toolDef]) => {
+    if (enabledTools?.[name] !== false) {
+      if (isAskMode && !READ_ONLY_TOOLS.includes(name)) {
+        baseTools[name] = makeAskModeStub(name);
+      } else {
+        baseTools[name] = toolDef as any;
+      }
+    }
+  });
+
+  const maxSteps = Math.max(base.maxSteps, 2);
+  const runtime = composeAgentRuntime(base, systemInstructions, baseTools);
+
+  return new ToolLoopAgent({
+    model: base.model as any,
+    instructions: runtime.instructions,
+    tools: runtime.tools,
+    stopWhen: stepCountIs(maxSteps),
+    prepareStep: base.prepareStep,
+    onStepFinish: base.onStepFinish,
+  });
+}
+
 export async function createNotebooksAgent(
   base: BaseAgentConfig,
   options: NotebooksAgentOptions,
 ) {
   const { connectionMeta, notebookId, connectionId, enabledTools, skills } =
     options;
+  // Phase 10: an explicit 'jupyter' kind — or a notebooks run with a
+  // notebook but no SQL connection — selects the Jupyter branch.
+  const isJupyter =
+    options.notebookKind === 'jupyter' ||
+    (!options.notebookKind && notebookId && !connectionId);
+  if (isJupyter) {
+    return createJupyterNotebooksAgent(base, options);
+  }
   const mcpToolKeys = Object.keys(base.mcpTools || {});
   const mcpToolsList =
     mcpToolKeys.length > 0

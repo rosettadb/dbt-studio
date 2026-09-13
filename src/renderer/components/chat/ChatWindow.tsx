@@ -72,6 +72,8 @@ export interface ChatWindowProps {
   screenKey?: 'project' | 'sql' | 'notebooks' | 'analytics';
   connectionId?: string;
   notebookId?: string;
+  /** Phase 10: distinguishes SQL-connection notebooks from Jupyter notebooks. */
+  notebookKind?: 'sql' | 'jupyter';
   pageId?: string;
   projectId?: number | null;
   unavailableMessage?: string;
@@ -131,6 +133,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   screenKey = 'project',
   connectionId,
   notebookId,
+  notebookKind,
   pageId,
   projectId: propProjectId,
   unavailableMessage,
@@ -146,8 +149,8 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   const navigate = useNavigate();
   const sessionScopeKey = React.useMemo(
     () =>
-      `${screenKey}|${projectId ?? 'none'}|${connectionId ?? 'none'}|${notebookId ?? 'none'}|${pageId ?? 'none'}`,
-    [screenKey, projectId, connectionId, notebookId, pageId],
+      `${screenKey}|${notebookKind ?? 'none'}|${projectId ?? 'none'}|${connectionId ?? 'none'}|${notebookId ?? 'none'}|${pageId ?? 'none'}`,
+    [screenKey, notebookKind, projectId, connectionId, notebookId, pageId],
   );
   const [selectedSessionId, setSelectedSessionId] = React.useState<number>();
   const previousScopeKeyRef = React.useRef<string | null>(null);
@@ -285,6 +288,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
             screenKey,
             connectionId,
             notebookId,
+            notebookKind,
             pageId,
           }
         : undefined,
@@ -296,6 +300,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       screenKey,
       connectionId,
       notebookId,
+      notebookKind,
       pageId,
     ],
   );
@@ -423,10 +428,22 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       return null;
     }
     if (screenKey !== 'notebooks') return null;
+    // Phase 10: Jupyter notebooks are connection-independent.
+    if (notebookKind === 'jupyter') {
+      if (!notebookId) return 'Select a notebook to start AI Agent';
+      return null;
+    }
     if (!connectionId) return 'Select a connection to start AI Agent';
     if (!notebookId) return 'Select a notebook to start AI Agent';
     return null;
-  }, [screenKey, connectionId, notebookId, pageId, unavailableMessage]);
+  }, [
+    screenKey,
+    notebookKind,
+    connectionId,
+    notebookId,
+    pageId,
+    unavailableMessage,
+  ]);
 
   const canUseChatScope = React.useMemo(() => {
     if (screenKey === 'notebooks' || screenKey === 'analytics') {
@@ -1285,6 +1302,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
                 notebookId,
                 pageId,
                 projectMemoryEnabled,
+                notebookKind,
               )
             }
             onCancelStream={cancelStream}

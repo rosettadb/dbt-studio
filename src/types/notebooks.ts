@@ -184,6 +184,47 @@ export interface PythonNotebookPackageInstallRequest
   version: string;
 }
 
+export type PythonNotebookEnvironmentKind =
+  | 'managed'
+  | 'base'
+  | 'project'
+  | 'custom';
+
+export interface PythonNotebookEnvironmentStatus {
+  id: string;
+  kind: PythonNotebookEnvironmentKind;
+  label: string;
+  pythonPath: string | null;
+  pythonVersion: string | null;
+  rootPath: string | null;
+  exists: boolean;
+  writable: boolean;
+  kernelReady: boolean | null;
+  isSelected: boolean;
+}
+
+export interface PythonNotebookSelectedEnvironment {
+  id: string;
+  kind: PythonNotebookEnvironmentKind;
+  label: string;
+  pythonPath: string;
+  pythonVersion: string | null;
+  rootPath: string | null;
+  writable: boolean;
+}
+
+export interface PythonNotebookDataPackageStatus {
+  name: string;
+  installedVersion: string | null;
+}
+
+export interface PythonNotebookUserPackageStatus {
+  name: string;
+  extras: string[];
+  requestedVersion: string | null;
+  installedVersion: string | null;
+}
+
 export interface PythonNotebookRuntimeStatus {
   state: PythonNotebookRuntimeState;
   managedPython: {
@@ -200,6 +241,58 @@ export interface PythonNotebookRuntimeStatus {
     error?: string;
   };
   message?: string;
+  /** Phase 11: IDE-style environment selection and package management. */
+  selectedEnvironment: PythonNotebookSelectedEnvironment | null;
+  environments: PythonNotebookEnvironmentStatus[];
+  dataPackages: PythonNotebookDataPackageStatus[];
+  userPackages: PythonNotebookUserPackageStatus[];
+  requirementsSnippet: string;
+  kernelReady: boolean;
+}
+
+export interface PythonNotebookSelectEnvironmentRequest {
+  environmentId: string;
+  expectedActiveSessionCount: number;
+  /** Active project path, used to resolve project-local environments. */
+  projectPath?: string;
+}
+
+export interface PythonNotebookCustomInterpreterRequest {
+  path: string;
+}
+
+export interface PythonNotebookRemoveEnvironmentRequest {
+  environmentId: string;
+}
+
+export interface PythonNotebookUserPackageRequest {
+  name: string;
+  extras?: string[];
+  version?: string;
+  expectedActiveSessionCount: number;
+}
+
+export interface PythonNotebookUserPackageActionRequest {
+  name: string;
+  expectedActiveSessionCount: number;
+}
+
+export interface PythonNotebookUserPackageVersionListResponse {
+  packageName: string;
+  latestStable: string | null;
+  versions: PythonNotebookPackageVersionListItem[];
+}
+
+export interface PythonNotebookEnvironmentSummary {
+  environmentId: string;
+  environmentKind: PythonNotebookEnvironmentKind;
+  environmentLabel: string;
+  pythonVersion: string | null;
+  kernelReady: boolean;
+  requiredPackages: Array<{ name: string; installedVersion: string | null }>;
+  dataPackages: PythonNotebookDataPackageStatus[];
+  userPackages: PythonNotebookUserPackageStatus[];
+  installHint: string;
 }
 
 /** Preview of a notebook JSON export file, returned before the file is actually imported. */

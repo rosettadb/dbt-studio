@@ -1053,6 +1053,8 @@ export type SecondBrainScope = {
   projectPath?: string | null;
   connectionId?: string | null;
   notebookId?: string | null;
+  /** Phase 10: distinguishes SQL-connection notebooks from Jupyter notebooks. */
+  notebookKind?: 'sql' | 'jupyter' | null;
   pageId?: string | null;
 };
 

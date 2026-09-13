@@ -500,7 +500,25 @@ export type AgentChannels =
   | 'agent:notebook:cell-run-response' // renderer → main
   | 'agent:notebook:cell-result-request' // main → renderer
   | 'agent:notebook:cell-result-response' // renderer → main
+  | 'agent:jupyter:state-request' // main → renderer (Phase 10)
+  | 'agent:jupyter:state-response' // renderer → main (Phase 10)
+  | 'agent:jupyter:cell-read-request' // main → renderer (Phase 10)
+  | 'agent:jupyter:cell-read-response' // renderer → main (Phase 10)
+  | 'agent:jupyter:cell-add-request' // main → renderer (Phase 10)
+  | 'agent:jupyter:cell-add-response' // renderer → main (Phase 10)
+  | 'agent:jupyter:cell-update-request' // main → renderer (Phase 10)
+  | 'agent:jupyter:cell-update-response' // renderer → main (Phase 10)
+  | 'agent:jupyter:cell-result-request' // main → renderer (Phase 10)
+  | 'agent:jupyter:cell-result-response' // renderer → main (Phase 10)
   | 'agent:context-usage'
+  | 'notebooks:python:selectEnvironment' // renderer → main (Phase 11)
+  | 'notebooks:python:addCustomInterpreter' // renderer → main (Phase 11)
+  | 'notebooks:python:removeEnvironment' // renderer → main (Phase 11)
+  | 'notebooks:python:installDataProfile' // renderer → main (Phase 11)
+  | 'notebooks:python:installUserPackage' // renderer → main (Phase 11)
+  | 'notebooks:python:uninstallUserPackage' // renderer → main (Phase 11)
+  | 'notebooks:python:ensureKernelSupport' // renderer → main (Phase 11)
+  | 'notebooks:python:listUserPackageVersions' // renderer → main (Phase 11)
   | 'agent:context-compacted'
   | 'agent:tools:list'
   | 'agent:file-mutation:restore'

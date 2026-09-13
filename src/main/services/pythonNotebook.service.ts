@@ -1,19 +1,33 @@
 import { app, WebContents } from 'electron';
 import axios from 'axios';
+import { createHash } from 'crypto';
 import fs from 'fs-extra';
 import path from 'path';
 import { ChildProcessWithoutNullStreams, spawn } from 'child_process';
 import type {
+  PythonNotebookDataPackageStatus,
+  PythonNotebookEnvironmentKind,
+  PythonNotebookEnvironmentStatus,
+  PythonNotebookEnvironmentSummary,
   PythonNotebookEvent,
   PythonNotebookExecuteRequest,
   PythonNotebookExecuteResponse,
   PythonNotebookPackageActionRequest,
   PythonNotebookPackageInstallRequest,
   PythonNotebookPackageVersionListResponse,
+  PythonNotebookRemoveEnvironmentRequest,
   PythonNotebookRunAllRequest,
+  PythonNotebookRuntimeState,
+  PythonNotebookSelectEnvironmentRequest,
+  PythonNotebookSelectedEnvironment,
   PythonNotebookSessionSnapshot,
+  PythonNotebookCustomInterpreterRequest,
   PythonNotebookPackageStatus,
   PythonNotebookRuntimeStatus,
+  PythonNotebookUserPackageActionRequest,
+  PythonNotebookUserPackageRequest,
+  PythonNotebookUserPackageStatus,
+  PythonNotebookUserPackageVersionListResponse,
 } from '../../types/notebooks';
 import SettingsService from './settings.service';
 import { NotebooksService } from './notebooks.service';
@@ -34,6 +48,23 @@ const REQUIRED_PACKAGES = [
   { name: 'jupyter_client', version: '8.6.3' },
   { name: 'nbformat', version: '5.10.4' },
 ] as const;
+// Phase 11: curated quick-install profile for common notebook/data packages.
+// A convenience selection, not an allowlist boundary.
+const DATA_PROFILE_PACKAGES = [
+  'numpy',
+  'pandas',
+  'matplotlib',
+  'polars',
+  'pyarrow',
+  'pyspark',
+] as const;
+const ENVIRONMENT_METADATA_FILENAME = 'environment.json';
+const USER_PACKAGES_FILENAME = 'user-packages.json';
+const MAX_CUSTOM_INTERPRETERS = 10;
+const MAX_TRACKED_USER_PACKAGES = 100;
+const MAX_ENVIRONMENT_LABEL_LENGTH = 120;
+const PACKAGE_NAME_MAX_LENGTH = 128;
+const USER_PACKAGE_NAME_PATTERN = /^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$/;
 
 type PackageName = (typeof REQUIRED_PACKAGES)[number]['name'];
 type OperationState = PythonNotebookRuntimeStatus['operation']['state'];
@@ -121,6 +152,29 @@ type NotebookSession = {
     revision: number;
     cells: Array<{ cellId: string; code: string }>;
   } | null;
+  /** Phase 11: environment backing this kernel; selection cannot change while set. */
+  environmentId: string;
+};
+
+type EnvironmentSelection = {
+  selectedId: string;
+  /** Absolute project path backing a selected project environment. */
+  selectedProjectPath?: string;
+  customPaths: string[];
+};
+
+type TrackedUserPackage = {
+  name: string;
+  extras: string[];
+  version: string | null;
+};
+
+type ResolvedEnvironment = {
+  selection: EnvironmentSelection;
+  environments: PythonNotebookEnvironmentStatus[];
+  selected: PythonNotebookSelectedEnvironment | null;
+  /** Present when the stored selection cannot be resolved to a live interpreter. */
+  unavailableReason: string | null;
 };
 
 export class PythonNotebookService {
@@ -159,12 +213,557 @@ export class PythonNotebookService {
     return path.join(__dirname, '..', '..', 'resources', 'python', filename);
   }
 
+  // ─── Phase 11: IDE-style environment selection ──────────────────────────
+
+  private static getNotebooksRoot(): string {
+    return path.join(app.getPath('userData'), 'python-notebooks');
+  }
+
+  private static environmentMetadataPath(): string {
+    return path.join(this.getNotebooksRoot(), ENVIRONMENT_METADATA_FILENAME);
+  }
+
+  private static userPackagesPath(): string {
+    return path.join(this.getNotebooksRoot(), USER_PACKAGES_FILENAME);
+  }
+
+  private static hashSegment(value: string): string {
+    return createHash('sha1').update(value).digest('hex').slice(0, 10);
+  }
+
+  private static async loadEnvironmentSelection(): Promise<EnvironmentSelection> {
+    const fallback: EnvironmentSelection = {
+      selectedId: 'managed',
+      customPaths: [],
+    };
+    try {
+      const raw = (await fs.readJson(
+        this.environmentMetadataPath(),
+      )) as Partial<EnvironmentSelection> | null;
+      if (!raw || typeof raw !== 'object') return fallback;
+      const selectedId =
+        typeof raw.selectedId === 'string' && raw.selectedId.length > 0
+          ? raw.selectedId
+          : 'managed';
+      const customPaths = Array.isArray(raw.customPaths)
+        ? raw.customPaths
+            .filter(
+              (item): item is string =>
+                typeof item === 'string' && item.length > 0,
+            )
+            .slice(0, MAX_CUSTOM_INTERPRETERS)
+        : [];
+      const selectedProjectPath =
+        typeof raw.selectedProjectPath === 'string' &&
+        raw.selectedProjectPath.length > 0
+          ? raw.selectedProjectPath
+          : undefined;
+      return { selectedId, selectedProjectPath, customPaths };
+    } catch {
+      return fallback;
+    }
+  }
+
+  private static async saveEnvironmentSelection(
+    selection: EnvironmentSelection,
+  ): Promise<void> {
+    await fs.ensureDir(this.getNotebooksRoot());
+    await fs.writeJson(this.environmentMetadataPath(), selection, {
+      spaces: 2,
+    });
+  }
+
+  private static async loadTrackedUserPackages(): Promise<
+    Record<string, TrackedUserPackage[]>
+  > {
+    try {
+      const raw = (await fs.readJson(this.userPackagesPath())) as Record<
+        string,
+        unknown
+      > | null;
+      if (!raw || typeof raw !== 'object') return {};
+      const result: Record<string, TrackedUserPackage[]> = {};
+      Object.entries(raw).forEach(([key, value]) => {
+        if (!Array.isArray(value)) return;
+        result[key] = value
+          .filter(
+            (item): item is TrackedUserPackage =>
+              Boolean(item) &&
+              typeof (item as TrackedUserPackage).name === 'string',
+          )
+          .map((item) => ({
+            name: item.name,
+            extras: Array.isArray(item.extras)
+              ? item.extras.filter(
+                  (extra): extra is string => typeof extra === 'string',
+                )
+              : [],
+            version:
+              typeof item.version === 'string' && item.version.length > 0
+                ? item.version
+                : null,
+          }))
+          .slice(0, MAX_TRACKED_USER_PACKAGES);
+      });
+      return result;
+    } catch {
+      return {};
+    }
+  }
+
+  private static async saveTrackedUserPackages(
+    tracked: Record<string, TrackedUserPackage[]>,
+  ): Promise<void> {
+    await fs.ensureDir(this.getNotebooksRoot());
+    await fs.writeJson(this.userPackagesPath(), tracked, { spaces: 2 });
+  }
+
+  private static async resolvePythonVersion(
+    pythonPath: string,
+  ): Promise<string | null> {
+    try {
+      const result = await this.runProcess(
+        pythonPath,
+        [
+          '-c',
+          'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}.{sys.version_info[2]}")',
+        ],
+        undefined,
+        64,
+      );
+      if (result.exitCode !== 0) return null;
+      const version = result.stdout.trim();
+      return /^\d+\.\d+\.\d+$/.test(version) ? version : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private static async checkEnvironmentWritable(
+    pythonPath: string,
+  ): Promise<boolean> {
+    try {
+      const result = await this.runProcess(
+        pythonPath,
+        [
+          '-c',
+          'import os, sys, sysconfig; print(os.access(sysconfig.get_paths().get("purelib", sys.prefix), os.W_OK))',
+        ],
+        undefined,
+        16,
+      );
+      return result.exitCode === 0 && result.stdout.trim() === 'True';
+    } catch {
+      return false;
+    }
+  }
+
+  private static async checkKernelReady(pythonPath: string): Promise<boolean> {
+    try {
+      const result = await this.runProcess(
+        pythonPath,
+        ['-c', 'import ipykernel, jupyter_client'],
+        undefined,
+        64,
+      );
+      return result.exitCode === 0;
+    } catch {
+      return false;
+    }
+  }
+
+  private static async readNamedPackageVersions(
+    pythonPath: string,
+    names: string[],
+  ): Promise<Record<string, string | null>> {
+    const unique = [...new Set(names)].slice(0, 32);
+    const script = [
+      'import importlib.metadata as metadata',
+      'import json',
+      `names = ${JSON.stringify(unique)}`,
+      'def version(name):',
+      '    try:',
+      '        return metadata.version(name)',
+      '    except metadata.PackageNotFoundError:',
+      '        return None',
+      'print(json.dumps({name: version(name) for name in names}))',
+    ].join('\n');
+    const result = await this.runProcess(
+      pythonPath,
+      ['-c', script],
+      undefined,
+      8192,
+    );
+    if (result.exitCode !== 0) {
+      throw new Error('Unable to inspect packages in the Python environment.');
+    }
+    const parsed = JSON.parse(result.stdout) as Record<string, unknown>;
+    const versions: Record<string, string | null> = {};
+    unique.forEach((name) => {
+      const value = parsed[name];
+      versions[name] = typeof value === 'string' ? value : null;
+    });
+    return versions;
+  }
+
+  private static async venvPythonPath(
+    environmentDir: string,
+  ): Promise<string | null> {
+    const candidate = path.join(
+      environmentDir,
+      process.platform === 'win32' ? 'Scripts' : 'bin',
+      process.platform === 'win32' ? 'python.exe' : 'python',
+    );
+    try {
+      const stat = await fs.stat(candidate);
+      return stat.isFile() ? candidate : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private static normalizeUserPackageName(value: unknown): string {
+    const name = String(value ?? '').trim();
+    if (
+      !name ||
+      name.length > PACKAGE_NAME_MAX_LENGTH ||
+      !USER_PACKAGE_NAME_PATTERN.test(name)
+    ) {
+      throw new Error(
+        `Invalid Python package name "${this.sanitizeDiagnostic(name || String(value ?? ''))}".`,
+      );
+    }
+    if (
+      REQUIRED_PACKAGES.some(
+        (item) => item.name.toLowerCase() === name.toLowerCase(),
+      )
+    ) {
+      throw new Error(
+        `${name} is a required Jupyter package. Change its version from the required package controls instead.`,
+      );
+    }
+    return name;
+  }
+
+  private static normalizeUserPackageExtras(value: unknown): string[] {
+    if (value === undefined || value === null) return [];
+    const list = Array.isArray(value) ? value : [value];
+    const extras = list
+      .map((item) =>
+        String(item ?? '')
+          .trim()
+          .toLowerCase(),
+      )
+      .filter(
+        (item) =>
+          item.length > 0 &&
+          item.length <= PACKAGE_NAME_MAX_LENGTH &&
+          USER_PACKAGE_NAME_PATTERN.test(item),
+      );
+    if (extras.length !== list.length) {
+      throw new Error('Invalid Python package extras.');
+    }
+    return [...new Set(extras)].slice(0, 5);
+  }
+
+  private static normalizeUserPackageVersion(value: unknown): string | null {
+    if (value === undefined || value === null) return null;
+    const version = String(value).trim();
+    if (!version) return null;
+    if (!isValidPackageVersion(version)) {
+      throw new Error(`Invalid Python package version "${version}".`);
+    }
+    return version;
+  }
+
+  private static buildUserPackageSpec(
+    name: string,
+    extras: string[],
+    version: string | null,
+  ): string {
+    const extrasPart = extras.length > 0 ? `[${extras.join(',')}]` : '';
+    const versionPart = version ? `==${version}` : '';
+    return `${name}${extrasPart}${versionPart}`;
+  }
+
+  private static requireNoActiveOperation(): void {
+    if (this.operationPromise) {
+      throw new Error(
+        'Wait for the current Jupyter runtime operation to finish and try again.',
+      );
+    }
+  }
+
+  private static describeEnvironmentKind(
+    kind: PythonNotebookEnvironmentKind,
+  ): string {
+    switch (kind) {
+      case 'managed':
+        return 'Studio managed environment';
+      case 'base':
+        return 'Managed Python (base interpreter)';
+      case 'project':
+        return 'Project environment';
+      case 'custom':
+        return 'Custom interpreter';
+      default:
+        return 'Python environment';
+    }
+  }
+
+  private static async buildEnvironmentEntry(
+    id: string,
+    kind: PythonNotebookEnvironmentKind,
+    label: string,
+    pythonPath: string | null,
+    rootPath: string | null,
+    isSelected: boolean,
+    probeKernel: boolean,
+  ): Promise<PythonNotebookEnvironmentStatus> {
+    if (!pythonPath) {
+      return {
+        id,
+        kind,
+        label,
+        pythonPath: null,
+        pythonVersion: null,
+        rootPath,
+        exists: false,
+        writable: false,
+        kernelReady: null,
+        isSelected,
+      };
+    }
+    const [pythonVersion, writable, kernelReady] = await Promise.all([
+      this.resolvePythonVersion(pythonPath),
+      this.checkEnvironmentWritable(pythonPath),
+      probeKernel ? this.checkKernelReady(pythonPath) : Promise.resolve(null),
+    ]);
+    return {
+      id,
+      kind,
+      label:
+        label.length > MAX_ENVIRONMENT_LABEL_LENGTH
+          ? `${label.slice(0, MAX_ENVIRONMENT_LABEL_LENGTH - 1)}…`
+          : label,
+      pythonPath,
+      pythonVersion,
+      rootPath,
+      exists: pythonVersion !== null,
+      writable,
+      kernelReady,
+      isSelected,
+    };
+  }
+
+  private static async resolveEnvironments(
+    projectPath?: string,
+  ): Promise<ResolvedEnvironment> {
+    const selection = await this.loadEnvironmentSelection();
+    const settings = await SettingsService.loadSettings();
+    const runtimeDirectory = this.getRuntimeDirectory();
+    const { selectedId } = selection;
+
+    type PendingEntry = {
+      id: string;
+      kind: PythonNotebookEnvironmentKind;
+      label: string;
+      pythonPath: string | null;
+      rootPath: string | null;
+    };
+    const pending: PendingEntry[] = [];
+    const seenPythonPaths = new Set<string>();
+
+    const managedPythonPath = (await fs.pathExists(
+      this.getPythonPath(runtimeDirectory),
+    ))
+      ? this.getPythonPath(runtimeDirectory)
+      : null;
+    pending.push({
+      id: 'managed',
+      kind: 'managed',
+      label: this.describeEnvironmentKind('managed'),
+      pythonPath: managedPythonPath,
+      rootPath: runtimeDirectory,
+    });
+    if (managedPythonPath) {
+      seenPythonPaths.add(path.normalize(managedPythonPath).toLowerCase());
+    }
+
+    if (settings.pythonBinary && (await fs.pathExists(settings.pythonBinary))) {
+      pending.push({
+        id: 'base',
+        kind: 'base',
+        label: this.describeEnvironmentKind('base'),
+        pythonPath: settings.pythonBinary,
+        rootPath: path.dirname(settings.pythonBinary),
+      });
+      seenPythonPaths.add(path.normalize(settings.pythonBinary).toLowerCase());
+    }
+
+    const projectRoots = [
+      ...(projectPath ? [projectPath] : []),
+      ...(selection.selectedProjectPath &&
+      selection.selectedProjectPath !== projectPath
+        ? [selection.selectedProjectPath]
+        : []),
+    ];
+    type DiscoveredProjectEnv = {
+      root: string;
+      dirname: string;
+      environmentDir: string;
+      venvPython: string;
+    };
+    const discoveredProjectEnvs = (
+      await Promise.all(
+        projectRoots.slice(0, 3).map(async (root) => {
+          let stat: { isDirectory(): boolean } | null = null;
+          try {
+            stat = await fs.stat(root);
+          } catch {
+            stat = null;
+          }
+          if (!stat || !stat.isDirectory()) return [];
+          const found = await Promise.all(
+            ['.venv', 'venv'].map(async (dirname) => {
+              const environmentDir = path.join(root, dirname);
+              const venvPython = await this.venvPythonPath(environmentDir);
+              if (!venvPython) return null;
+              const discovered: DiscoveredProjectEnv = {
+                root,
+                dirname,
+                environmentDir,
+                venvPython,
+              };
+              return discovered;
+            }),
+          );
+          return found.filter(
+            (item): item is DiscoveredProjectEnv => item !== null,
+          );
+        }),
+      )
+    ).flat();
+    discoveredProjectEnvs.forEach(
+      ({ root, dirname, environmentDir, venvPython }) => {
+        const normalized = path.normalize(venvPython).toLowerCase();
+        if (seenPythonPaths.has(normalized)) return;
+        seenPythonPaths.add(normalized);
+        pending.push({
+          id: `project:${this.hashSegment(root)}:${dirname}`,
+          kind: 'project',
+          label: `Project environment (${dirname})`,
+          pythonPath: venvPython,
+          rootPath: environmentDir,
+        });
+      },
+    );
+
+    const customPathStats = await Promise.all(
+      selection.customPaths.map(async (customPath) => {
+        try {
+          return {
+            customPath,
+            isFile: (await fs.stat(customPath)).isFile(),
+          };
+        } catch {
+          return { customPath, isFile: false };
+        }
+      }),
+    );
+    customPathStats.forEach(({ customPath, isFile }) => {
+      const normalized = path.normalize(customPath);
+      if (seenPythonPaths.has(normalized.toLowerCase())) return;
+      seenPythonPaths.add(normalized.toLowerCase());
+      pending.push({
+        id: `custom:${this.hashSegment(normalized.toLowerCase())}`,
+        kind: 'custom',
+        label: `Custom interpreter (${path.basename(path.dirname(normalized)) || normalized})`,
+        pythonPath: isFile ? customPath : null,
+        rootPath: isFile ? path.dirname(customPath) : null,
+      });
+    });
+
+    const environments = await Promise.all(
+      pending
+        .slice(0, 13)
+        .map((entry) =>
+          this.buildEnvironmentEntry(
+            entry.id,
+            entry.kind,
+            entry.label,
+            entry.pythonPath,
+            entry.rootPath,
+            entry.id === selectedId,
+            entry.id === selectedId,
+          ),
+        ),
+    );
+
+    const selectedEntry =
+      environments.find((entry) => entry.id === selectedId) ?? null;
+    if (!selectedEntry || !selectedEntry.exists || !selectedEntry.pythonPath) {
+      const reason =
+        selectedId === 'managed'
+          ? null
+          : 'The selected Python environment is no longer available. Choose another environment to run notebooks.';
+      return {
+        selection,
+        environments,
+        selected: null,
+        unavailableReason: reason,
+      };
+    }
+    return {
+      selection,
+      environments,
+      selected: {
+        id: selectedEntry.id,
+        kind: selectedEntry.kind,
+        label: selectedEntry.label,
+        pythonPath: selectedEntry.pythonPath,
+        pythonVersion: selectedEntry.pythonVersion,
+        rootPath: selectedEntry.rootPath,
+        writable: selectedEntry.writable,
+      },
+      unavailableReason: null,
+    };
+  }
+
+  private static buildRequirementsSnippet(
+    dataPackages: PythonNotebookDataPackageStatus[],
+    userPackages: PythonNotebookUserPackageStatus[],
+  ): string {
+    const specs: string[] = [];
+    userPackages.forEach((pkg) => {
+      if (!pkg.installedVersion && !pkg.requestedVersion) return;
+      const version = pkg.requestedVersion ?? pkg.installedVersion;
+      const extras = pkg.extras.length > 0 ? `[${pkg.extras.join(',')}]` : '';
+      specs.push(`${pkg.name}${extras}${version ? `==${version}` : ''}`);
+    });
+    dataPackages.forEach((pkg) => {
+      if (!pkg.installedVersion) return;
+      if (
+        specs.some((spec) =>
+          spec.toLowerCase().startsWith(pkg.name.toLowerCase()),
+        )
+      ) {
+        return;
+      }
+      specs.push(`${pkg.name}==${pkg.installedVersion}`);
+    });
+    if (specs.length === 0) {
+      return '# No Studio-tracked data packages in this environment yet.';
+    }
+    return `pip install ${specs.join(' ')}`;
+  }
+
   private static isNotebookPackageName(value: string): value is PackageName {
     return REQUIRED_PACKAGES.some((item) => item.name === value);
   }
 
   private static async fetchPypiProjectJson(
-    packageName: PackageName,
+    packageName: string,
   ): Promise<PypiProjectJson> {
     const url = `https://pypi.org/pypi/${encodeURIComponent(packageName)}/json`;
     const res = await axios.get(url, { timeout: 15000 });
@@ -479,9 +1078,15 @@ export class PythonNotebookService {
         status.message || 'Set up Jupyter packages before running Python.',
       );
     }
+    const selected = status.selectedEnvironment;
+    if (!selected) {
+      throw new Error(
+        'Select a Python environment before running notebook cells.',
+      );
+    }
 
     const child = spawn(
-      this.getPythonPath(),
+      selected.pythonPath,
       [this.getResourcePath('notebook_bridge.py'), '--serve'],
       {
         shell: false,
@@ -500,6 +1105,7 @@ export class PythonNotebookService {
       events: [],
       activeExecution: null,
       runAll: null,
+      environmentId: selected.id,
     };
     child.stdout.on('data', (chunk: Buffer) =>
       this.consumeBridgeOutput(session, chunk),
@@ -891,7 +1497,81 @@ export class PythonNotebookService {
     }
   }
 
-  static async getRuntimeStatus(): Promise<PythonNotebookRuntimeStatus> {
+  private static async buildStatusEnvironmentBlock(
+    projectPath?: string,
+  ): Promise<{
+    selectedEnvironment: PythonNotebookSelectedEnvironment | null;
+    environments: PythonNotebookEnvironmentStatus[];
+    requiredVersions: Record<string, string | null>;
+    dataPackages: PythonNotebookDataPackageStatus[];
+    userPackages: PythonNotebookUserPackageStatus[];
+    requirementsSnippet: string;
+    kernelReady: boolean;
+  }> {
+    const env = await this.resolveEnvironments(projectPath);
+    const { selected } = env;
+    const tracked = await this.loadTrackedUserPackages();
+    const selectedTracked = selected ? (tracked[selected.id] ?? []) : [];
+    const inspectedNames = [
+      ...REQUIRED_PACKAGES.map((item) => item.name),
+      ...DATA_PROFILE_PACKAGES,
+      ...selectedTracked.map((item) => item.name),
+    ];
+    let inspected: Record<string, string | null> = {};
+    if (selected) {
+      try {
+        inspected = await this.readNamedPackageVersions(
+          selected.pythonPath,
+          inspectedNames,
+        );
+      } catch {
+        inspected = {};
+      }
+    }
+    const dataPackages: PythonNotebookDataPackageStatus[] =
+      DATA_PROFILE_PACKAGES.map((name) => ({
+        name,
+        installedVersion: inspected[name] ?? null,
+      }));
+    const userPackages: PythonNotebookUserPackageStatus[] = selectedTracked.map(
+      (item) => ({
+        name: item.name,
+        extras: item.extras,
+        requestedVersion: item.version,
+        installedVersion: inspected[item.name] ?? null,
+      }),
+    );
+    const selectedEntry = selected
+      ? (env.environments.find((entry) => entry.id === selected.id) ?? null)
+      : null;
+    return {
+      selectedEnvironment: selected,
+      environments: env.environments,
+      requiredVersions: Object.fromEntries(
+        REQUIRED_PACKAGES.map((item) => [
+          item.name,
+          inspected[item.name] ?? null,
+        ]),
+      ),
+      dataPackages,
+      userPackages,
+      requirementsSnippet: this.buildRequirementsSnippet(
+        dataPackages,
+        userPackages,
+      ),
+      kernelReady: selectedEntry?.kernelReady ?? false,
+    };
+  }
+
+  static async getRuntimeStatus(
+    projectPath?: string,
+  ): Promise<PythonNotebookRuntimeStatus> {
+    const safeProjectPath =
+      typeof projectPath === 'string' &&
+      projectPath.length > 0 &&
+      projectPath.length <= 1024
+        ? projectPath
+        : undefined;
     const settings = await SettingsService.loadSettings();
     const managedPythonAvailable = Boolean(
       settings.pythonBinary && (await fs.pathExists(settings.pythonBinary)),
@@ -904,16 +1584,24 @@ export class PythonNotebookService {
         installedVersion: null,
       }),
     );
+    const envBlock = await this.buildStatusEnvironmentBlock(safeProjectPath);
+    const selected = envBlock.selectedEnvironment;
     const baseStatus = {
       managedPython: {
         available: managedPythonAvailable,
         version: settings.pythonVersion || null,
         minimumVersion: MINIMUM_PYTHON_VERSION,
       },
-      environmentPath: runtimeDirectory,
+      environmentPath: selected?.rootPath ?? runtimeDirectory,
       packages,
       activeSessionCount: this.activeSessionCount,
       operation: this.operation,
+      selectedEnvironment: envBlock.selectedEnvironment,
+      environments: envBlock.environments,
+      dataPackages: envBlock.dataPackages,
+      userPackages: envBlock.userPackages,
+      requirementsSnippet: envBlock.requirementsSnippet,
+      kernelReady: envBlock.kernelReady,
     };
 
     if (
@@ -927,66 +1615,110 @@ export class PythonNotebookService {
         message: this.operation.message,
       };
     }
-    if (!managedPythonAvailable) {
-      return {
-        ...baseStatus,
-        state: 'not-installed',
-        message: 'Install managed Python before setting up Jupyter packages.',
-      };
+    if (!selected) {
+      const selectedEntry = envBlock.environments.find(
+        (entry) => entry.isSelected,
+      );
+      if (!selectedEntry || selectedEntry.id !== 'managed') {
+        return {
+          ...baseStatus,
+          state: 'needs-attention',
+          message:
+            'The selected Python environment is no longer available. Choose another environment to run notebooks.',
+        };
+      }
     }
-    if (!this.isAtLeastMinimumVersion(settings.pythonVersion || null)) {
-      return {
-        ...baseStatus,
-        state: 'needs-attention',
-        message: `Jupyter packages require Python ${MINIMUM_PYTHON_VERSION} or later.`,
-      };
-    }
-    if (!(await fs.pathExists(this.getPythonPath(runtimeDirectory)))) {
-      return {
-        ...baseStatus,
-        state: 'not-installed',
-        message:
-          this.operation.error || 'Jupyter packages have not been installed.',
-      };
+    if (!selected || selected.kind === 'managed') {
+      if (!managedPythonAvailable) {
+        return {
+          ...baseStatus,
+          state: 'not-installed',
+          message: 'Install managed Python before setting up Jupyter packages.',
+        };
+      }
+      if (!this.isAtLeastMinimumVersion(settings.pythonVersion || null)) {
+        return {
+          ...baseStatus,
+          state: 'needs-attention',
+          message: `Jupyter packages require Python ${MINIMUM_PYTHON_VERSION} or later.`,
+        };
+      }
+      if (!(await fs.pathExists(this.getPythonPath(runtimeDirectory)))) {
+        return {
+          ...baseStatus,
+          state: 'not-installed',
+          message:
+            this.operation.error || 'Jupyter packages have not been installed.',
+        };
+      }
+    } else {
+      return this.describeExternalEnvironmentStatus(baseStatus, selected);
     }
 
-    try {
-      const installed = await this.readInstalledPackages(
-        this.getPythonPath(runtimeDirectory),
-      );
-      const resolvedPackages = packages.map((item) => ({
-        ...item,
-        installedVersion: installed[item.name],
-      }));
-      const hasRequiredPackages = resolvedPackages.every(
-        (item) => item.installedVersion,
-      );
-      const usesDefaultVersions = resolvedPackages.every(
-        (item) => item.installedVersion === item.requiredVersion,
-      );
-      return {
-        ...baseStatus,
-        packages: resolvedPackages,
-        state:
-          hasRequiredPackages && !this.operation.error
-            ? 'ready'
-            : 'needs-attention',
-        message:
-          this.operation.error ||
-          (hasRequiredPackages
-            ? this.operation.message
-            : 'One or more required Jupyter packages are missing.') ||
-          (!usesDefaultVersions
-            ? 'Jupyter package versions differ from the app-supported defaults. Check Runtime before relying on execution.'
-            : undefined),
-      };
-    } catch {
+    const resolvedPackages = packages.map((item) => ({
+      ...item,
+      installedVersion: envBlock.requiredVersions[item.name] ?? null,
+    }));
+    const hasRequiredPackages = resolvedPackages.every(
+      (item) => item.installedVersion,
+    );
+    const usesDefaultVersions = resolvedPackages.every(
+      (item) => item.installedVersion === item.requiredVersion,
+    );
+    return {
+      ...baseStatus,
+      packages: resolvedPackages,
+      state:
+        hasRequiredPackages && !this.operation.error
+          ? 'ready'
+          : 'needs-attention',
+      message:
+        this.operation.error ||
+        (hasRequiredPackages
+          ? this.operation.message
+          : 'One or more required Jupyter packages are missing.') ||
+        (!usesDefaultVersions
+          ? 'Jupyter package versions differ from the app-supported defaults. Check Runtime before relying on execution.'
+          : undefined),
+    };
+  }
+
+  private static describeExternalEnvironmentStatus(
+    baseStatus: Omit<PythonNotebookRuntimeStatus, 'state' | 'message'> & {
+      state?: PythonNotebookRuntimeState;
+      message?: string;
+    },
+    selected: PythonNotebookSelectedEnvironment,
+  ): PythonNotebookRuntimeStatus {
+    if (!selected.pythonVersion) {
       return {
         ...baseStatus,
         state: 'needs-attention',
-        message: 'The Jupyter runtime could not be inspected.',
+        message:
+          'The selected Python environment could not be inspected. Choose another environment.',
       };
     }
+    if (!this.isAtLeastMinimumVersion(selected.pythonVersion)) {
+      return {
+        ...baseStatus,
+        state: 'needs-attention',
+        message: `Jupyter notebooks require Python ${MINIMUM_PYTHON_VERSION} or later in the selected environment.`,
+      };
+    }
+    if (!baseStatus.kernelReady) {
+      return {
+        ...baseStatus,
+        state: 'needs-attention',
+        message:
+          this.operation.error ||
+          `"${selected.label}" is missing kernel support. Install kernel support to run notebooks.`,
+      };
+    }
+    return {
+      ...baseStatus,
+      state: this.operation.error ? 'needs-attention' : 'ready',
+      message: this.operation.error || this.operation.message,
+    };
   }
 
   static async installRuntime(): Promise<PythonNotebookRuntimeStatus> {
@@ -1152,6 +1884,400 @@ export class PythonNotebookService {
         }
       },
     );
+  }
+
+  private static async runPip(
+    pythonPath: string,
+    pipArgs: string[],
+    action: string,
+  ): Promise<void> {
+    const result = await this.runProcess(
+      pythonPath,
+      ['-m', 'pip', ...pipArgs],
+      undefined,
+      8192,
+    );
+    if (result.exitCode !== 0) {
+      const detail = this.sanitizeDiagnostic(
+        result.stderr.trim() ||
+          result.stdout.trim() ||
+          'No additional details.',
+      );
+      throw new Error(`${action} ${detail}`);
+    }
+  }
+
+  private static async trackUserPackages(
+    environmentId: string,
+    items: TrackedUserPackage[],
+  ): Promise<void> {
+    const tracked = await this.loadTrackedUserPackages();
+    const current = tracked[environmentId] ?? [];
+    const merged = [...current];
+    items.forEach((item) => {
+      const index = merged.findIndex(
+        (entry) => entry.name.toLowerCase() === item.name.toLowerCase(),
+      );
+      if (index >= 0) {
+        merged[index] = item;
+      } else {
+        merged.push(item);
+      }
+    });
+    tracked[environmentId] = merged.slice(0, MAX_TRACKED_USER_PACKAGES);
+    await this.saveTrackedUserPackages(tracked);
+  }
+
+  private static async untrackUserPackage(
+    environmentId: string,
+    name: string,
+  ): Promise<void> {
+    const tracked = await this.loadTrackedUserPackages();
+    const current = tracked[environmentId];
+    if (!current) return;
+    tracked[environmentId] = current.filter(
+      (entry) => entry.name.toLowerCase() !== name.toLowerCase(),
+    );
+    await this.saveTrackedUserPackages(tracked);
+  }
+
+  private static async requireSelectedWritableEnvironment(): Promise<PythonNotebookSelectedEnvironment> {
+    const env = await this.resolveEnvironments();
+    if (!env.selected) {
+      throw new Error(
+        env.unavailableReason ?? 'Select a Python environment first.',
+      );
+    }
+    if (!env.selected.writable) {
+      throw new Error(
+        `"${env.selected.label}" is read-only. Install packages manually with ${env.selected.pythonPath} -m pip install <package>, or switch to a writable environment.`,
+      );
+    }
+    return env.selected;
+  }
+
+  static async selectEnvironment(
+    request: PythonNotebookSelectEnvironmentRequest,
+  ): Promise<PythonNotebookRuntimeStatus> {
+    const environmentId = String(request.environmentId ?? '')
+      .trim()
+      .slice(0, 256);
+    if (!environmentId) {
+      throw new Error('Select a Python environment.');
+    }
+    this.requireNoActiveOperation();
+    if (this.sessions.size !== request.expectedActiveSessionCount) {
+      throw new Error(
+        'Active notebook kernels changed. Review the current session count and try again.',
+      );
+    }
+    if (this.sessions.size > 0) {
+      throw new Error(
+        'Shut down all running Python notebook kernels before switching environments. Saved notebooks are preserved.',
+      );
+    }
+    const projectPath =
+      typeof request.projectPath === 'string' ? request.projectPath : undefined;
+    const env = await this.resolveEnvironments(projectPath);
+    const entry = env.environments.find((item) => item.id === environmentId);
+    if (!entry || !entry.exists || !entry.pythonPath) {
+      throw new Error('The selected Python environment is not available.');
+    }
+    const selection = await this.loadEnvironmentSelection();
+    await this.saveEnvironmentSelection({
+      selectedId: environmentId,
+      selectedProjectPath:
+        entry.kind === 'project' && projectPath
+          ? projectPath
+          : selection.selectedProjectPath,
+      customPaths: selection.customPaths,
+    });
+    return this.getRuntimeStatus(projectPath);
+  }
+
+  static async addCustomInterpreter(
+    request: PythonNotebookCustomInterpreterRequest,
+  ): Promise<PythonNotebookRuntimeStatus> {
+    const rawPath = String(request.path ?? '').trim();
+    if (!rawPath || rawPath.length > 1024) {
+      throw new Error('Enter the full path to a Python executable.');
+    }
+    if (!path.isAbsolute(rawPath)) {
+      throw new Error('Use an absolute path to a Python executable.');
+    }
+    // eslint-disable-next-line no-control-regex
+    if (/[;\0`$&|<>]/.test(rawPath)) {
+      throw new Error('The interpreter path contains unsupported characters.');
+    }
+    let stat: { isFile(): boolean };
+    try {
+      stat = await fs.stat(rawPath);
+    } catch {
+      throw new Error('No file exists at the provided interpreter path.');
+    }
+    if (!stat.isFile()) {
+      throw new Error('The interpreter path must point to a file.');
+    }
+    if (!/^python(\d(\.\d+)?)?(\.exe)?$/i.test(path.basename(rawPath))) {
+      throw new Error(
+        'The selected file does not look like a Python executable.',
+      );
+    }
+    const version = await this.resolvePythonVersion(rawPath);
+    if (!version) {
+      throw new Error('Could not run the selected Python executable.');
+    }
+    if (!this.isAtLeastMinimumVersion(version)) {
+      throw new Error(
+        `Notebook environments require Python ${MINIMUM_PYTHON_VERSION} or later (found ${version}).`,
+      );
+    }
+    this.requireNoActiveOperation();
+    const selection = await this.loadEnvironmentSelection();
+    const normalized = path.normalize(rawPath);
+    const customPaths = [
+      normalized,
+      ...selection.customPaths.filter(
+        (item) =>
+          path.normalize(item).toLowerCase() !== normalized.toLowerCase(),
+      ),
+    ].slice(0, MAX_CUSTOM_INTERPRETERS);
+    await this.saveEnvironmentSelection({ ...selection, customPaths });
+    return this.getRuntimeStatus();
+  }
+
+  static async removeEnvironment(
+    request: PythonNotebookRemoveEnvironmentRequest,
+  ): Promise<PythonNotebookRuntimeStatus> {
+    const environmentId = String(request.environmentId ?? '')
+      .trim()
+      .slice(0, 256);
+    this.requireNoActiveOperation();
+    const env = await this.resolveEnvironments();
+    const entry = env.environments.find((item) => item.id === environmentId);
+    if (!entry || entry.kind !== 'custom' || !entry.pythonPath) {
+      throw new Error('Only custom interpreters can be removed.');
+    }
+    if (
+      [...this.sessions.values()].some(
+        (session) => session.environmentId === environmentId,
+      )
+    ) {
+      throw new Error(
+        'Shut down notebook kernels using this environment before removing it.',
+      );
+    }
+    const selection = await this.loadEnvironmentSelection();
+    const normalized = path.normalize(entry.pythonPath);
+    await this.saveEnvironmentSelection({
+      selectedId:
+        selection.selectedId === environmentId
+          ? 'managed'
+          : selection.selectedId,
+      selectedProjectPath: selection.selectedProjectPath,
+      customPaths: selection.customPaths.filter(
+        (item) =>
+          path.normalize(item).toLowerCase() !== normalized.toLowerCase(),
+      ),
+    });
+    return this.getRuntimeStatus();
+  }
+
+  static async ensureKernelSupport(
+    expectedActiveSessionCount = 0,
+  ): Promise<PythonNotebookRuntimeStatus> {
+    return this.withOperation(
+      'updating',
+      'Installing kernel support…',
+      async () => {
+        await this.stopSessionsForMaintenance(expectedActiveSessionCount);
+        const selected = await this.requireSelectedWritableEnvironment();
+        this.operation = {
+          state: 'updating',
+          message: `Installing kernel support into "${selected.label}"…`,
+        };
+        await this.runPip(
+          selected.pythonPath,
+          [
+            'install',
+            '--disable-pip-version-check',
+            '--no-input',
+            'ipykernel',
+            'nbformat',
+          ],
+          'Could not install kernel support.',
+        );
+        if (!(await this.checkKernelReady(selected.pythonPath))) {
+          throw new Error(
+            'Kernel support verification failed. Check the environment and try again.',
+          );
+        }
+      },
+    );
+  }
+
+  static async installDataProfile(
+    expectedActiveSessionCount = 0,
+  ): Promise<PythonNotebookRuntimeStatus> {
+    return this.withOperation(
+      'updating',
+      'Installing data packages…',
+      async () => {
+        await this.stopSessionsForMaintenance(expectedActiveSessionCount);
+        const selected = await this.requireSelectedWritableEnvironment();
+        this.operation = {
+          state: 'updating',
+          message: `Installing data packages into "${selected.label}"…`,
+        };
+        await this.runPip(
+          selected.pythonPath,
+          [
+            'install',
+            '--disable-pip-version-check',
+            '--no-input',
+            ...DATA_PROFILE_PACKAGES,
+          ],
+          'Could not install data packages.',
+        );
+        const installed = await this.readNamedPackageVersions(
+          selected.pythonPath,
+          [...DATA_PROFILE_PACKAGES],
+        );
+        const missing = DATA_PROFILE_PACKAGES.filter(
+          (name) => !installed[name],
+        );
+        if (missing.length > 0) {
+          throw new Error(
+            `Installed package verification failed for ${missing.join(', ')}.`,
+          );
+        }
+        await this.trackUserPackages(
+          selected.id,
+          DATA_PROFILE_PACKAGES.map((name) => ({
+            name,
+            extras: [],
+            version: null,
+          })),
+        );
+      },
+    );
+  }
+
+  static async installUserPackage(
+    request: PythonNotebookUserPackageRequest,
+  ): Promise<PythonNotebookRuntimeStatus> {
+    const name = this.normalizeUserPackageName(request.name);
+    const extras = this.normalizeUserPackageExtras(request.extras);
+    const version = this.normalizeUserPackageVersion(request.version);
+    const spec = this.buildUserPackageSpec(name, extras, version);
+    return this.withOperation('updating', `Installing ${spec}…`, async () => {
+      await this.stopSessionsForMaintenance(request.expectedActiveSessionCount);
+      const selected = await this.requireSelectedWritableEnvironment();
+      this.operation = {
+        state: 'updating',
+        message: `Installing ${spec} into "${selected.label}"…`,
+      };
+      await this.runPip(
+        selected.pythonPath,
+        ['install', '--disable-pip-version-check', '--no-input', spec],
+        `Could not install ${spec}.`,
+      );
+      const installed = await this.readNamedPackageVersions(
+        selected.pythonPath,
+        [name],
+      );
+      if (!installed[name]) {
+        throw new Error(`Installed package verification failed for ${name}.`);
+      }
+      if (version && installed[name] !== version) {
+        throw new Error(
+          `Installed package verification failed for ${name}: expected ${version}, found ${installed[name]}.`,
+        );
+      }
+      await this.trackUserPackages(selected.id, [{ name, extras, version }]);
+    });
+  }
+
+  static async uninstallUserPackage(
+    request: PythonNotebookUserPackageActionRequest,
+  ): Promise<PythonNotebookRuntimeStatus> {
+    const name = this.normalizeUserPackageName(request.name);
+    return this.withOperation(
+      'uninstalling',
+      `Uninstalling ${name}…`,
+      async () => {
+        await this.stopSessionsForMaintenance(
+          request.expectedActiveSessionCount,
+        );
+        const selected = await this.requireSelectedWritableEnvironment();
+        await this.runPip(
+          selected.pythonPath,
+          ['uninstall', '--yes', name],
+          `Could not uninstall ${name}.`,
+        );
+        const installed = await this.readNamedPackageVersions(
+          selected.pythonPath,
+          [name],
+        );
+        if (installed[name]) {
+          throw new Error(`Package uninstall verification failed for ${name}.`);
+        }
+        await this.untrackUserPackage(selected.id, name);
+      },
+    );
+  }
+
+  static async listUserPackageVersions(
+    packageName: string,
+  ): Promise<PythonNotebookUserPackageVersionListResponse> {
+    const name = String(packageName ?? '').trim();
+    if (
+      !name ||
+      name.length > PACKAGE_NAME_MAX_LENGTH ||
+      !USER_PACKAGE_NAME_PATTERN.test(name)
+    ) {
+      throw new Error('Invalid Python package name.');
+    }
+    try {
+      const projectJson = await this.fetchPypiProjectJson(name);
+      const versions = Object.entries(projectJson.releases ?? {})
+        .filter(([, files]) =>
+          files.some((releaseFile) => releaseFile.yanked !== true),
+        )
+        .map(([version]) => version)
+        .filter((version) => parseVersionTriple(version) !== null)
+        .filter((version) => !isPrerelease(version))
+        .sort((a, b) => compareVersions(b, a));
+      return {
+        packageName: name,
+        latestStable: versions[0] ?? null,
+        versions: versions
+          .slice(0, PACKAGE_VERSION_LIST_LIMIT)
+          .map((version) => ({ version, isPrerelease: false })),
+      };
+    } catch {
+      return { packageName: name, latestStable: null, versions: [] };
+    }
+  }
+
+  static async getEnvironmentSummary(): Promise<PythonNotebookEnvironmentSummary> {
+    const status = await this.getRuntimeStatus();
+    const selected = status.selectedEnvironment;
+    return {
+      environmentId: selected?.id ?? 'none',
+      environmentKind: selected?.kind ?? 'managed',
+      environmentLabel: selected?.label ?? 'No Python environment selected',
+      pythonVersion: selected?.pythonVersion ?? null,
+      kernelReady: status.kernelReady,
+      requiredPackages: status.packages.map((item) => ({
+        name: item.name,
+        installedVersion: item.installedVersion,
+      })),
+      dataPackages: status.dataPackages,
+      userPackages: status.userPackages,
+      installHint:
+        'Install missing packages from Settings → Python → Jupyter Notebooks (data profile or custom package install), or switch the notebook environment there.',
+    };
   }
 
   static async handleManagedPythonWillChange(): Promise<void> {

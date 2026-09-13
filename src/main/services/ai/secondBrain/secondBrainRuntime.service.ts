@@ -16,6 +16,8 @@ export type SecondBrainRuntimeContext = {
   screenKey: SecondBrainScope['screenKey'];
   connectionId?: string;
   notebookId?: string;
+  /** Phase 10: explicit notebook kind; inferred from connectionId when absent. */
+  notebookKind?: 'sql' | 'jupyter';
   pageId?: string;
   projectPath?: string;
 };
@@ -248,6 +250,17 @@ export const getSecondBrainScopePrefixes = (
         `analytics/${connectionKey}/${toSecondBrainScopeKey(scope.pageId)}.md`,
       );
     }
+  } else if (
+    scope.screenKey === 'notebooks' &&
+    scope.notebookId &&
+    (scope.notebookKind === 'jupyter' || !scope.notebookKind)
+  ) {
+    // Phase 10: Jupyter notebooks are connection-independent. Their memory
+    // family is notebooks/jupyter/<notebook-key>.md — never the SQL
+    // connections/<conn-key>/ families above.
+    prefixes.push(
+      `notebooks/jupyter/${toSecondBrainScopeKey(scope.notebookId)}.md`,
+    );
   }
   return prefixes;
 };
@@ -353,12 +366,22 @@ export default class SecondBrainRuntimeService {
       runtime.notebookId,
     );
     assertMatchingRuntimeValue('pageId', conversation.pageId, runtime.pageId);
+    // Phase 10: notebook kind comes from the trusted runtime request when
+    // present; otherwise a connection-independent notebooks scope is Jupyter.
+    const notebookKind =
+      runtime.notebookKind ??
+      (screenKey === 'notebooks' &&
+      conversation.notebookId &&
+      !conversation.connectionId
+        ? 'jupyter'
+        : 'sql');
     return {
       screenKey,
       projectId: conversation.projectId,
       projectPath: runtime.projectPath ?? null,
       connectionId: conversation.connectionId,
       notebookId: conversation.notebookId,
+      notebookKind,
       pageId: conversation.pageId,
     };
   }

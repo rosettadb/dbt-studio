@@ -258,7 +258,11 @@ export const useInstallPython = (
     },
     onSuccess: async (...args) => {
       await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
-      await queryClient.invalidateQueries(notebooksKeys.pythonRuntime());
+      await queryClient.invalidateQueries([
+        ...notebooksKeys.all,
+        'python',
+        'runtime',
+      ]);
       onCustomSuccess?.(...args);
     },
     onError: (...args) => {
@@ -279,7 +283,11 @@ export const useUninstallPython = (
     },
     onSuccess: async (...args) => {
       await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
-      await queryClient.invalidateQueries(notebooksKeys.pythonRuntime());
+      await queryClient.invalidateQueries([
+        ...notebooksKeys.all,
+        'python',
+        'runtime',
+      ]);
       onCustomSuccess?.(...args);
     },
     onError: (...args) => {
@@ -318,7 +326,11 @@ export const useInstallPythonVersion = (
     },
     onSuccess: async (...args) => {
       await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
-      await queryClient.invalidateQueries(notebooksKeys.pythonRuntime());
+      await queryClient.invalidateQueries([
+        ...notebooksKeys.all,
+        'python',
+        'runtime',
+      ]);
       onCustomSuccess?.(...args);
     },
     onError: (...args) => {

@@ -96,6 +96,32 @@ export const registerAgentHandlers = () => {
       AgentService.resolveNotebookBridgeResponse(payload),
   );
 
+  // Phase 10: Jupyter (Python) notebook bridge responses share the same
+  // pending-request map as the SQL notebook bridge.
+  ipcMain.handle('agent:jupyter:state-response', async (_event, payload) =>
+    AgentService.resolveJupyterBridgeResponse(payload),
+  );
+
+  ipcMain.handle('agent:jupyter:cell-read-response', async (_event, payload) =>
+    AgentService.resolveJupyterBridgeResponse(payload),
+  );
+
+  ipcMain.handle('agent:jupyter:cell-add-response', async (_event, payload) =>
+    AgentService.resolveJupyterBridgeResponse(payload),
+  );
+
+  ipcMain.handle(
+    'agent:jupyter:cell-update-response',
+    async (_event, payload) =>
+      AgentService.resolveJupyterBridgeResponse(payload),
+  );
+
+  ipcMain.handle(
+    'agent:jupyter:cell-result-response',
+    async (_event, payload) =>
+      AgentService.resolveJupyterBridgeResponse(payload),
+  );
+
   ipcMain.handle('agent:analytics:read-response', async (_event, payload) =>
     AgentService.resolveAnalyticsBridgeResponse(payload),
   );
