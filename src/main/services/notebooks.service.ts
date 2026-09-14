@@ -8,7 +8,12 @@ import { app } from 'electron';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import { Notebook, NotebookCell, CellOutput } from '../../types/notebooks';
+import {
+  Notebook,
+  NotebookCell,
+  CellOutput,
+  NotebookImportPreview,
+} from '../../types/notebooks';
 import ConnectorsService from './connectors.service';
 import DuckLakeService from './duckLake.service';
 
@@ -66,6 +71,29 @@ function limitCellOutputData(output: CellOutput): CellOutput {
     };
   }
   return output;
+}
+
+// Serialize all reads-then-writes to a given notebook file. Without this,
+// concurrent saves (content debounce, add/delete/duplicate cell, run-cell
+// output) each read the file, compute an update, and write back — if two
+// overlap, whichever write lands last wins and silently discards the other's
+// change (e.g. a newly added cell, or a just-typed edit).
+const notebookWriteQueues = new Map<string, Promise<unknown>>();
+
+function withNotebookWriteLock<T>(
+  notebookPath: string,
+  task: () => Promise<T>,
+): Promise<T> {
+  const previous = notebookWriteQueues.get(notebookPath) ?? Promise.resolve();
+  const run = previous.then(task, task);
+  notebookWriteQueues.set(
+    notebookPath,
+    run.then(
+      () => undefined,
+      () => undefined,
+    ),
+  );
+  return run;
 }
 
 // Validate and sanitize pagination inputs
@@ -363,35 +391,38 @@ export class NotebooksService {
       cells?: NotebookCell[];
     },
   ): Promise<Notebook> {
-    try {
-      const connectionKey = normalizeConnectionKey(connectionId);
-      const notebook = await this.getNotebook(connectionId, notebookId);
+    const connectionKey = normalizeConnectionKey(connectionId);
+    const notebookPath = getNotebookPath(connectionKey, notebookId);
 
-      if (!notebook) {
-        throw new Error(`Notebook ${notebookId} not found`);
+    return withNotebookWriteLock(notebookPath, async () => {
+      try {
+        const notebook = await this.getNotebook(connectionId, notebookId);
+
+        if (!notebook) {
+          throw new Error(`Notebook ${notebookId} not found`);
+        }
+
+        // Only include defined properties in the update
+        const updatedNotebook: Notebook = {
+          ...notebook,
+          ...(updates.name !== undefined && { name: updates.name }),
+          ...(updates.description !== undefined && {
+            description: updates.description,
+          }),
+          ...(updates.cells !== undefined && { cells: updates.cells }),
+          updatedAt: new Date().toISOString(),
+          cellCount: updates.cells?.length ?? notebook.cellCount,
+        };
+
+        await writeNotebookFile(notebookPath, updatedNotebook);
+
+        return updatedNotebook;
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error(error);
+        throw error;
       }
-
-      // Only include defined properties in the update
-      const updatedNotebook: Notebook = {
-        ...notebook,
-        ...(updates.name !== undefined && { name: updates.name }),
-        ...(updates.description !== undefined && {
-          description: updates.description,
-        }),
-        ...(updates.cells !== undefined && { cells: updates.cells }),
-        updatedAt: new Date().toISOString(),
-        cellCount: updates.cells?.length ?? notebook.cellCount,
-      };
-
-      const notebookPath = getNotebookPath(connectionKey, notebookId);
-      await writeNotebookFile(notebookPath, updatedNotebook);
-
-      return updatedNotebook;
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error(error);
-      throw error;
-    }
+    });
   }
 
   /**
@@ -485,6 +516,63 @@ export class NotebooksService {
       // eslint-disable-next-line no-console
       console.error(error);
       throw error;
+    }
+  }
+
+  /**
+   * Peek at a notebook export JSON file without importing it, so the
+   * renderer can ask the user whether to also import the embedded
+   * connection details (if any) before committing to the import.
+   */
+  static async peekImportFile(
+    filePath: string,
+  ): Promise<NotebookImportPreview> {
+    try {
+      const fileContent = await fs.readFile(filePath, 'utf-8');
+
+      const fileSizeInMB =
+        Buffer.byteLength(fileContent, 'utf-8') / (1024 * 1024);
+      if (fileSizeInMB > 100) {
+        throw new Error(
+          `File is too large (${fileSizeInMB.toFixed(1)}MB). Maximum size is 100MB.`,
+        );
+      }
+
+      let importedData: any;
+      try {
+        importedData = JSON.parse(fileContent);
+      } catch (parseError) {
+        throw new Error(
+          'Invalid JSON file - unable to parse. The file may be corrupted or too large.',
+        );
+      }
+
+      if (!importedData) {
+        throw new Error('Empty JSON file');
+      }
+
+      const isBulk =
+        Array.isArray(importedData.notebooks) &&
+        importedData.notebooks.length > 0;
+
+      const hasValidConnection =
+        importedData.connection &&
+        typeof importedData.connection === 'object' &&
+        typeof importedData.connection.type === 'string' &&
+        typeof importedData.connection.name === 'string';
+
+      return {
+        isBulk,
+        notebookCount: isBulk ? importedData.notebooks.length : 1,
+        connection: hasValidConnection ? importedData.connection : undefined,
+        connectionName: hasValidConnection
+          ? importedData.connection.name
+          : importedData.connectionName,
+      };
+    } catch (error) {
+      throw new Error(
+        `Failed to read import file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
   }
 
@@ -1109,24 +1197,37 @@ export class NotebooksService {
     cellId: string,
     output: CellOutput,
   ): Promise<void> {
-    try {
-      const notebook = await this.getNotebook(connectionId, notebookId);
-      if (!notebook) return;
+    const connectionKey = normalizeConnectionKey(connectionId);
+    const notebookPath = getNotebookPath(connectionKey, notebookId);
 
-      // Limit output data size to prevent massive files
-      const limitedOutput = limitCellOutputData(output);
+    // Read, merge, and write inside the same lock updateNotebook uses for
+    // this file (rather than delegating to updateNotebook, which would try
+    // to re-acquire the lock this call already holds and deadlock).
+    await withNotebookWriteLock(notebookPath, async () => {
+      try {
+        const notebook = await this.getNotebook(connectionId, notebookId);
+        if (!notebook) return;
 
-      const updatedCells = notebook.cells.map((cell) =>
-        cell.id === cellId ? { ...cell, output: limitedOutput } : cell,
-      );
+        // Limit output data size to prevent massive files
+        const limitedOutput = limitCellOutputData(output);
 
-      await this.updateNotebook(connectionId, notebookId, {
-        cells: updatedCells,
-      });
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error(error);
-    }
+        const updatedCells = notebook.cells.map((cell) =>
+          cell.id === cellId ? { ...cell, output: limitedOutput } : cell,
+        );
+
+        const updatedNotebook: Notebook = {
+          ...notebook,
+          cells: updatedCells,
+          updatedAt: new Date().toISOString(),
+          cellCount: updatedCells.length,
+        };
+
+        await writeNotebookFile(notebookPath, updatedNotebook);
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error(error);
+      }
+    });
   }
 
   /**

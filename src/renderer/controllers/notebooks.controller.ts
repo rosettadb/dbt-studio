@@ -220,6 +220,32 @@ export function useImportAllNotebooks() {
   });
 }
 
+// Import all notebooks from a bulk export, given an already-selected file
+// path (used when the caller needs to inspect the file, e.g. for embedded
+// connection details, before committing to the import).
+export function useImportAllNotebooksFromPath() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      connectionId,
+      filePath,
+    }: {
+      connectionId: string;
+      filePath: string;
+    }) => notebooksService.importAllNotebooks(connectionId, filePath),
+    onSuccess: (notebooks, { connectionId }) => {
+      queryClient.invalidateQueries(notebooksKeys.list(connectionId));
+      toast.success(
+        `Successfully imported ${notebooks.length} notebook${notebooks.length > 1 ? 's' : ''}`,
+      );
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to import notebooks: ${error.message}`);
+    },
+  });
+}
+
 // Delete a notebook
 export function useDeleteNotebook() {
   const queryClient = useQueryClient();

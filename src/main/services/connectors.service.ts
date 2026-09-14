@@ -337,11 +337,11 @@ export default class ConnectorsService {
   }
 
   /**
-   * Save a new connection, allowing reserved names for Getting Started template
+   * Save a new connection
    */
   static async saveNewConnectionForTemplate(
     connection: ConnectionInput,
-    allowReservedNames: boolean = false,
+    allowReservedNames = true,
   ): Promise<string> {
     const connectionId = uuidV4();
     const newConnection: ConnectionModel = {
@@ -585,10 +585,7 @@ export default class ConnectorsService {
           }
         } else {
           // Create new connection if none exists
-          connectionId = await this.saveNewConnectionForTemplate(
-            connection,
-            true,
-          );
+          connectionId = await this.saveNewConnectionForTemplate(connection);
         }
       } else {
         connectionId = await this.saveNewConnection(connection);
@@ -1748,7 +1745,7 @@ export default class ConnectorsService {
   }
 
   /**
-   * Validate connection name for uniqueness and reserved names
+   * Validate connection name for uniqueness
    */
   private static validateConnectionName(
     name: string,
@@ -1764,21 +1761,15 @@ export default class ConnectorsService {
       };
     }
 
-    // Check for reserved names (case-insensitive) - skip if allowed
-    if (!allowReservedNames && name.toLowerCase().trim() === 'dbt connection') {
-      return {
-        isValid: false,
-        message:
-          'Connection name "DBT Connection" is reserved for the getting started template',
-      };
-    }
-
-    // Check for uniqueness (case-insensitive)
-    const duplicateExists = existingConnections.some(
-      (conn) =>
-        conn.connection.name.toLowerCase().trim() ===
-          name.toLowerCase().trim() && conn.id !== excludeId,
-    );
+    // Check for uniqueness (case-insensitive). Template connections pass
+    // allowReservedNames so the reserved "DBT Connection" name is exempt.
+    const duplicateExists =
+      !allowReservedNames &&
+      existingConnections.some(
+        (conn) =>
+          conn.connection.name.toLowerCase().trim() ===
+            name.toLowerCase().trim() && conn.id !== excludeId,
+      );
 
     if (duplicateExists) {
       return {

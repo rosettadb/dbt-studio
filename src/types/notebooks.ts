@@ -3,6 +3,8 @@
  * Type definitions for notebook functionality
  */
 
+import { ConnectionInput } from './backend';
+
 export interface CellOutput {
   type: 'table' | 'error' | 'empty';
   data?: any[];
@@ -32,6 +34,15 @@ export interface Notebook {
   updatedAt: string;
   lastExecutedAt?: string;
   cellCount: number;
+}
+
+/** Preview of a notebook JSON export file, returned before the file is actually imported. */
+export interface NotebookImportPreview {
+  isBulk: boolean;
+  notebookCount: number;
+  /** Present only if the export included full connection details (see "Include connection details" export option). */
+  connection?: ConnectionInput;
+  connectionName?: string;
 }
 
 export interface CompletionItem {

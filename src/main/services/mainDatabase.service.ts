@@ -2057,6 +2057,19 @@ export default class MainDatabaseService {
   }
 
   // Analytics Pages Management
+  static async getAllAnalyticsPages(): Promise<AnalyticsPage[]> {
+    const db = await this.getDatabase();
+    try {
+      const results = await db
+        .select()
+        .from(schema.analyticsPages)
+        .orderBy(desc(schema.analyticsPages.updatedAt));
+      return results as AnalyticsPage[];
+    } catch (error) {
+      throw error;
+    }
+  }
+
   static async getAnalyticsPages(
     connectionId: string,
   ): Promise<AnalyticsPage[]> {
@@ -2092,6 +2105,29 @@ export default class MainDatabaseService {
         throw new Error(`Analytics page not found: ${pageId}`);
       }
       return results[0] as AnalyticsPage;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  static async importAnalyticsPage(
+    data: AnalyticsPage,
+  ): Promise<AnalyticsPage> {
+    const db = await this.getDatabase();
+    try {
+      const results = await db
+        .insert(schema.analyticsPages)
+        .values({
+          ...data,
+        })
+        .returning();
+
+      const [result] = Array.isArray(results) ? results : [results];
+      if (!result) {
+        throw new Error('Failed to import analytics page');
+      }
+
+      return result as AnalyticsPage;
     } catch (error) {
       throw error;
     }

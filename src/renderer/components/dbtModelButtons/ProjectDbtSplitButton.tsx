@@ -15,7 +15,8 @@ import {
   Project,
 } from '../../../types/backend';
 import { useDbt, useProcess, useRunner } from '../../hooks';
-import { useGetSettings } from '../../controllers';
+import { useCloudActionStatus, useGetSettings } from '../../controllers';
+import { isTerminalActionStatus } from '../../../types/cloudAction';
 import {
   StagingModal,
   IncrementalModal,
@@ -39,6 +40,7 @@ interface ProjectDbtSplitButtonProps {
   // from onBeforeExecute, which switches to the plain terminal tab) so the
   // terminal panel can expand to the runner logs tab instead.
   onLocalRunStarted?: () => void;
+  onLocalPipelineSelected?: (pipelineRelativePath: string) => void;
   // Function handlers that are used elsewhere in ProjectDetails
   rosettaDbt: (project: Project, command: Command) => Promise<void>;
 }
@@ -54,6 +56,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
   environment = 'local',
   onBeforeExecute,
   onLocalRunStarted,
+  onLocalPipelineSelected,
   rosettaDbt,
 }) => {
   // Functions that are only used in this component - moved inside
@@ -78,6 +81,14 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
   const { data: settings } = useGetSettings();
   const isDbtV2 = !!settings?.dbtVersion?.startsWith('2.');
   const cloudV2Blocked = environment === 'cloud' && isDbtV2;
+
+  const lastCloudActionId =
+    environment === 'cloud' ? (project.lastCloudActionId ?? null) : null;
+  const { data: cloudActionStatus } = useCloudActionStatus(lastCloudActionId);
+  const isCloudRunActive =
+    !!lastCloudActionId &&
+    !!cloudActionStatus?.status &&
+    !isTerminalActionStatus(cloudActionStatus.status);
   const [stagingPath, setStagingPath] = React.useState('');
   const [rawPath, setRawPath] = React.useState('');
   const [incrementalPath, setIncrementalPath] = React.useState('');
@@ -399,6 +410,8 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
   if (cloudV2Blocked) {
     projectTooltipTitle =
       'dbt Core v2 is in alpha and not yet supported for cloud runs. Support will be added after the first official v2 release.';
+  } else if (isCloudRunActive) {
+    projectTooltipTitle = 'A cloud run is already in progress';
   } else if (!isDbtConfigured) {
     projectTooltipTitle = 'Please configure dbt path in settings';
   }
@@ -408,8 +421,13 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
       <SplitButton
         title="Project"
         tooltipTitle={projectTooltipTitle}
-        disabled={isRunningDbt || isRunningRosettaDbt || cloudV2Blocked}
-        isLoading={isRunningDbt || isRunningRosettaDbt}
+        disabled={
+          isRunningDbt ||
+          isRunningRosettaDbt ||
+          isCloudRunActive ||
+          cloudV2Blocked
+        }
+        isLoading={isRunningDbt || isRunningRosettaDbt || isCloudRunActive}
         leftIcon={<PlayCircleOutline />}
         height={24}
         menuItems={filteredMenuItems.map((item) => {
@@ -534,25 +552,34 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           onClose={() => setLocalPipelineModal(false)}
           mode="local"
           project={project}
-          onSelect={async (pipeline) => {
+          onSelect={(pipeline) => {
             setLocalPipelineModal(false);
             if (!settings?.runnerPath) {
               toast.error('Local runner is not installed.');
               return;
             }
             const ext = pipeline.path.slice(pipeline.path.lastIndexOf('.'));
-            const result = await runPipelineLocally({
-              workspaceDir: project.path,
-              pipelineFile: `${pipeline.name}${ext}`,
-              connectionName: connection?.connection?.name,
-            });
-            if (result.success) {
-              onLocalRunStarted?.();
-              toast.success(
-                'Pipeline run started. Track progress in Task Manager.',
-              );
+            const pipelineRelativePath = `${pipeline.name}${ext}`;
+            if (onLocalPipelineSelected) {
+              onLocalPipelineSelected(pipelineRelativePath);
             } else {
-              toast.error(result.error || 'Failed to start the pipeline run');
+              runPipelineLocally({
+                workspaceDir: project.path,
+                pipelineFile: pipelineRelativePath,
+                connectionName: connection?.connection?.name,
+              })
+                .then((result) => {
+                  if (result.success) {
+                    onLocalRunStarted?.();
+                    return toast.success(
+                      'Pipeline run started. Track progress in Task Manager.',
+                    );
+                  }
+                  return toast.error(
+                    result.error || 'Failed to start the pipeline run',
+                  );
+                })
+                .catch(() => {});
             }
           }}
         />

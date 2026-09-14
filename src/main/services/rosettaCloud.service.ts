@@ -94,16 +94,11 @@ export default class RosettaCloudService {
     }
     const runResult = await postJson(runEndpoint, runBody);
 
-    await ProjectsService.updateProject({
-      ...project,
-      externalId,
-      lastRun: new Date().toISOString(),
-    });
+    const actionId = runResult?.data?.id ?? runResult?.id ?? null;
 
     // Persist the action id returned by the run endpoint. If the cloud API
     // doesn't return one, throw so the caller knows the run was incomplete.
     if (body.EXECUTION_MODE === 'pipeline' && body.PIPELINE_FILE) {
-      const actionId = runResult?.data?.id ?? runResult?.id ?? null;
       if (!actionId) {
         throw new Error(
           'Cloud run did not return an action id. The run may not have started.',
@@ -113,10 +108,21 @@ export default class RosettaCloudService {
       const base = fresh ?? project;
       await ProjectsService.updateProject({
         ...base,
+        externalId,
+        lastRun: new Date().toISOString(),
         pipelineRuns: {
           ...(base.pipelineRuns ?? {}),
           [body.PIPELINE_FILE]: actionId,
         },
+      });
+    } else {
+      const fresh = await ProjectsService.getProject(id);
+      const base = fresh ?? project;
+      await ProjectsService.updateProject({
+        ...base,
+        externalId,
+        lastRun: new Date().toISOString(),
+        ...(actionId ? { lastCloudActionId: actionId } : {}),
       });
     }
   }

@@ -250,6 +250,7 @@ export type Project = {
   createTemplateFolders?: boolean;
   externalId?: string;
   lastRun?: string;
+  lastCloudActionId?: string;
   /**
    * Maps a pipeline file name (e.g. "pipeline.yml") to the cloud action id of
    * the last run we triggered for it. Used to drive the CI/CD view — runs are

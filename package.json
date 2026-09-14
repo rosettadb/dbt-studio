@@ -1,5 +1,5 @@
 {
-  "version": "1.6.71",
+  "version": "1.6.80",
   "name": "rosetta-dbt-studio",
   "description": "Turn Raw Data into Business Insights—Faster with RosettaDB",
   "keywords": [
@@ -137,6 +137,7 @@
     "ai-sdk-ollama": "^3.8.4",
     "ansi-to-html": "^0.7.2",
     "archiver": "^7.0.1",
+    "archiver-zip-encrypted": "^2.0.0",
     "axios": "^1.8.4",
     "dagre": "^0.8.5",
     "diff": "^7.0.0",
