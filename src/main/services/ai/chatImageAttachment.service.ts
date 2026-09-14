@@ -94,8 +94,8 @@ const readImageInfo = (bytes: Buffer): ImageInfo => {
     const bits = bytes.readUInt32LE(21);
     return {
       mediaType: 'image/webp',
-      width: (bits & 0x3fff) + 1,
-      height: ((bits >> 14) & 0x3fff) + 1,
+      width: (bits % 0x4000) + 1,
+      height: (Math.floor(bits / 0x4000) % 0x4000) + 1,
     };
   }
 
@@ -137,7 +137,8 @@ export default class ChatImageAttachmentService {
       ? await dialog.showOpenDialog(parent, dialogOptions)
       : await dialog.showOpenDialog(dialogOptions);
     if (result.canceled) return [];
-    const rawMax = typeof maxImages === 'number' ? maxImages : Number(maxImages);
+    const rawMax =
+      typeof maxImages === 'number' ? maxImages : Number(maxImages);
     const allowedImages = Number.isFinite(rawMax)
       ? Math.max(0, Math.min(MAX_CHAT_IMAGES_PER_MESSAGE, Math.trunc(rawMax)))
       : 0;
