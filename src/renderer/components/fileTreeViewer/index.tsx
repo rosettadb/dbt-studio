@@ -118,6 +118,8 @@ const FileTreeViewer: React.FC<Props> = ({
     return () => clearTimeout(timeout);
   }, [searchKeyword, node]);
 
+  if (!project) return null;
+
   return (
     <Container>
       <Box
@@ -174,7 +176,7 @@ const FileTreeViewer: React.FC<Props> = ({
         onDeleteSuccess={onDeleteFileCallback}
         onRenameSuccess={onRenameCallback}
         selectedPath={selectedPath}
-        projectPath={project!.path}
+        projectPath={project.path}
         copyPath={copyPath}
         onRunPipeline={
           settings?.env === 'cloud' && !settings?.dbtVersion?.startsWith('2.')

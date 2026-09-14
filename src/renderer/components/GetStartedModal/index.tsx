@@ -52,7 +52,7 @@ export const GetStartedModal: React.FC<GetStartedModalProps> = ({
   onClose,
 }) => {
   const navigate = useNavigate();
-  const { mutate: selectProject } = useSelectProject();
+  const { mutateAsync: selectProject } = useSelectProject();
   const [isCreatingProject, setIsCreatingProject] = React.useState(false);
 
   const handleCreateProject = async () => {
@@ -84,7 +84,7 @@ export const GetStartedModal: React.FC<GetStartedModalProps> = ({
         connectionId,
       });
 
-      selectProject({
+      await selectProject({
         projectId: project.id,
       });
       toast.success('Getting started project created successfully!');
