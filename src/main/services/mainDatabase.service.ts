@@ -1809,7 +1809,13 @@ export default class MainDatabaseService {
     await db
       .update(schema.chatImageAttachments)
       .set({ messageId })
-      .where(inArray(schema.chatImageAttachments.id, attachmentIds));
+      .where(
+        and(
+          eq(schema.chatImageAttachments.conversationId, conversationId),
+          isNull(schema.chatImageAttachments.messageId),
+          inArray(schema.chatImageAttachments.id, attachmentIds),
+        ),
+      );
     return attachments.map((attachment) => ({ ...attachment, messageId }));
   }
 
@@ -1875,9 +1881,13 @@ export default class MainDatabaseService {
 
     if (attachments.length > 0) {
       await db.delete(schema.chatImageAttachments).where(
-        inArray(
-          schema.chatImageAttachments.id,
-          attachments.map((attachment) => attachment.id),
+        and(
+          eq(schema.chatImageAttachments.conversationId, conversationId),
+          isNull(schema.chatImageAttachments.messageId),
+          inArray(
+            schema.chatImageAttachments.id,
+            attachments.map((attachment) => attachment.id),
+          ),
         ),
       );
     }

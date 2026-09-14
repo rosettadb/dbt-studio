@@ -82,6 +82,23 @@ const readImageInfo = (bytes: Buffer): ImageInfo => {
     };
   }
 
+  // VP8L (lossless WebP): signature at byte 20 is 0x2f; width/height packed at bytes 21-24.
+  // Width = (bits 0-13) + 1, Height = (bits 14-27) + 1.
+  if (
+    bytes.length >= 26 &&
+    bytes.subarray(0, 4).toString('ascii') === 'RIFF' &&
+    bytes.subarray(8, 12).toString('ascii') === 'WEBP' &&
+    bytes.subarray(12, 16).toString('ascii') === 'VP8L' &&
+    bytes[20] === 0x2f
+  ) {
+    const bits = bytes.readUInt32LE(21);
+    return {
+      mediaType: 'image/webp',
+      width: (bits & 0x3fff) + 1,
+      height: ((bits >> 14) & 0x3fff) + 1,
+    };
+  }
+
   throw new Error('Only PNG, JPEG, and WebP images are supported.');
 };
 
@@ -120,10 +137,10 @@ export default class ChatImageAttachmentService {
       ? await dialog.showOpenDialog(parent, dialogOptions)
       : await dialog.showOpenDialog(dialogOptions);
     if (result.canceled) return [];
-    const allowedImages = Math.max(
-      0,
-      Math.min(MAX_CHAT_IMAGES_PER_MESSAGE, Math.trunc(maxImages)),
-    );
+    const rawMax = typeof maxImages === 'number' ? maxImages : Number(maxImages);
+    const allowedImages = Number.isFinite(rawMax)
+      ? Math.max(0, Math.min(MAX_CHAT_IMAGES_PER_MESSAGE, Math.trunc(rawMax)))
+      : 0;
     if (result.filePaths.length > allowedImages) {
       throw new Error(
         `Attach at most ${allowedImages} more image${allowedImages === 1 ? '' : 's'}.`,
@@ -156,37 +173,43 @@ export default class ChatImageAttachmentService {
       })) as StagedAttachment;
     };
 
-    const staged: StagedAttachment[] = [];
-    try {
-      await Promise.all(
-        result.filePaths.map(async (sourcePath) => {
-          staged.push(await stageSource(sourcePath));
-        }),
-      );
-      return staged.map((image) => ({
-        id: image.id,
-        conversationId: image.conversationId,
-        messageId: image.messageId,
-        name: image.name,
-        mediaType: image.mediaType,
-        byteSize: image.byteSize,
-        width: image.width,
-        height: image.height,
-        createdAt: image.createdAt,
-      }));
-    } catch (error) {
-      await MainDatabaseService.releaseStagedChatImageAttachments(
-        conversationId,
-        staged.map((image) => image.id),
-      );
-      throw error;
+    const results = await Promise.allSettled(
+      result.filePaths.map((sourcePath) => stageSource(sourcePath)),
+    );
+    const fulfilled = results.filter(
+      (r): r is PromiseFulfilledResult<StagedAttachment> =>
+        r.status === 'fulfilled',
+    );
+    const firstRejection = results.find((r) => r.status === 'rejected') as
+      | PromiseRejectedResult
+      | undefined;
+    if (firstRejection) {
+      if (fulfilled.length > 0) {
+        await MainDatabaseService.releaseStagedChatImageAttachments(
+          conversationId,
+          fulfilled.map((r) => r.value.id),
+        );
+      }
+      throw firstRejection.reason;
     }
+    const staged = fulfilled.map((r) => r.value);
+    return staged.map((image) => ({
+      id: image.id,
+      conversationId: image.conversationId,
+      messageId: image.messageId,
+      name: image.name,
+      mediaType: image.mediaType,
+      byteSize: image.byteSize,
+      width: image.width,
+      height: image.height,
+      createdAt: image.createdAt,
+    }));
   }
 
   static async readForModel(attachment: {
     dataUrl: string | null;
     mediaType: string;
-  }): Promise<Uint8Array> {
+  }): Promise<Buffer> {
     if (!attachment.dataUrl) throw new Error('Image attachment not found.');
     const base64 = attachment.dataUrl.split(',', 2)[1];
     if (!base64) throw new Error('Image attachment not found.');

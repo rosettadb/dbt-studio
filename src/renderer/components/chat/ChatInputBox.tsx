@@ -353,6 +353,23 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
     }
   };
 
+  // Release staged images when the session changes so prior-session
+  // attachments are never sent in the new conversation.
+  React.useEffect(() => {
+    return () => {
+      // Capture the current snapshot before teardown.
+      setImages((current) => {
+        if (current.length > 0 && sessionId) {
+          releaseChatImages(
+            sessionId,
+            current.map((img) => img.id),
+          ).catch(() => {});
+        }
+        return [];
+      });
+    };
+  }, [sessionId]);
+
   React.useEffect(() => {
     if (
       pendingMessage &&
