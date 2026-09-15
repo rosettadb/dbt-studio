@@ -341,7 +341,6 @@ export default class ConnectorsService {
    */
   static async saveNewConnectionForTemplate(
     connection: ConnectionInput,
-    allowReservedNames = true,
   ): Promise<string> {
     const connectionId = uuidV4();
     const newConnection: ConnectionModel = {
@@ -351,12 +350,9 @@ export default class ConnectorsService {
 
     await databaseStore.updateField('connections', (current) => {
       const connections = current ?? [];
-      // Validate connection name with optional allowReservedNames flag
       const nameValidation = this.validateConnectionName(
         connection.name,
         connections,
-        undefined,
-        allowReservedNames,
       );
       if (!nameValidation.isValid) {
         throw new Error(nameValidation.message);
@@ -1751,7 +1747,6 @@ export default class ConnectorsService {
     name: string,
     existingConnections: ConnectionModel[],
     excludeId?: string,
-    allowReservedNames?: boolean,
   ): { isValid: boolean; message?: string } {
     // Check for empty name
     if (!name.trim()) {
@@ -1761,15 +1756,12 @@ export default class ConnectorsService {
       };
     }
 
-    // Check for uniqueness (case-insensitive). Template connections pass
-    // allowReservedNames so the reserved "DBT Connection" name is exempt.
-    const duplicateExists =
-      !allowReservedNames &&
-      existingConnections.some(
-        (conn) =>
-          conn.connection.name.toLowerCase().trim() ===
-            name.toLowerCase().trim() && conn.id !== excludeId,
-      );
+    // Check for uniqueness (case-insensitive)
+    const duplicateExists = existingConnections.some(
+      (conn) =>
+        conn.connection.name.toLowerCase().trim() ===
+          name.toLowerCase().trim() && conn.id !== excludeId,
+    );
 
     if (duplicateExists) {
       return {
