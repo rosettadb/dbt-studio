@@ -3,7 +3,11 @@ import { toast } from 'react-toastify';
 import type * as monacoType from 'monaco-editor';
 import { Box } from '@mui/material';
 import { Inputs, RelativeContainer } from './styles';
-import { connectorsServices, projectsServices } from '../../services';
+import {
+  connectorsServices,
+  projectsServices,
+  icebergService,
+} from '../../services';
 import { DuckLakeService } from '../../services/duckLake.service';
 import { QueryHistoryType } from '../../../types/frontend';
 import { ConnectionInput, Project } from '../../../types/backend';
@@ -62,10 +66,14 @@ export const SqlEditor: React.FC<Props> = ({
     connectionInput?.type === 'ducklake' &&
     'instanceId' in connectionInput &&
     !!connectionInput.instanceId;
+  const isIcebergConnection = connectionId?.startsWith('iceberg-') ?? false;
 
   // Get instanceId for DuckLake queries
   const instanceId = isDuckLakeConnection
     ? (connectionInput as any).instanceId
+    : undefined;
+  const icebergInstanceId = isIcebergConnection
+    ? connectionId?.replace('iceberg-', '')
     : undefined;
 
   // Helper function to detect DDL operations that modify schema
@@ -117,6 +125,8 @@ export const SqlEditor: React.FC<Props> = ({
       return;
     }
 
+    let commandType = getCommandType(selectedQuery);
+
     // Generate semi-unique ID for query cancellation
     const queryId = `query-${Date.now()}-${Math.random()
       .toString(36)
@@ -132,10 +142,39 @@ export const SqlEditor: React.FC<Props> = ({
     try {
       let result;
 
-      if (isDuckLakeConnection && instanceId) {
+      if (isIcebergConnection && icebergInstanceId) {
+        const icebergResult = await icebergService.executeConfirmedIcebergSql(
+          {
+            instanceId: icebergInstanceId,
+            executionId: queryId,
+            sql: selectedQuery,
+            pageLimit: 10,
+            pageOffset: 0,
+          },
+          (statementClass) => {
+            // eslint-disable-next-line no-alert
+            return window.confirm(
+              `Run ${statementClass.toUpperCase()} on Iceberg "${connectionInput?.name ?? icebergInstanceId}"? This will modify the catalog or its data.`,
+            );
+          },
+        );
+        if (!icebergResult) return;
+        if (icebergResult.statementClass === 'select') commandType = 'SELECT';
+        else if (['create', 'drop'].includes(icebergResult.statementClass))
+          commandType = 'DDL';
+        else commandType = 'DML';
+        result = {
+          success: true,
+          data: icebergResult.rows,
+          truncated: icebergResult.truncated,
+          fields: icebergResult.columns.map((name) => ({ name, type: 0 })),
+          rowCount:
+            icebergResult.statementClass === 'select'
+              ? (icebergResult.totalRows ?? icebergResult.rows.length)
+              : icebergResult.rowsChanged,
+        };
+      } else if (isDuckLakeConnection && instanceId) {
         const duckLakeQueryLimit = 10;
-        const commandType = getCommandType(selectedQuery);
-
         const duckLakeResult = await DuckLakeService.executeQuery({
           instanceId,
           query: selectedQuery,
@@ -185,9 +224,9 @@ export const SqlEditor: React.FC<Props> = ({
       }
 
       // Check if this was a DDL operation
-      const wasDDL = isDDLOperation(selectedQuery);
-      const commandType = getCommandType(selectedQuery);
-
+      const wasDDL = isIcebergConnection
+        ? commandType === 'DDL'
+        : isDDLOperation(selectedQuery);
       const enrichedResult = {
         ...result,
         isCommand: commandType === 'DDL' || commandType === 'DML',
@@ -239,7 +278,7 @@ export const SqlEditor: React.FC<Props> = ({
       }
     } catch (error) {
       toast.error('An unexpected error occurred while executing the query');
-      setError(error);
+      setError(error instanceof Error ? error.message : String(error));
     } finally {
       setLoadingQuery(false);
     }

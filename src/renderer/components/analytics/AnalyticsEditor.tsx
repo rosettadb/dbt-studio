@@ -15,7 +15,14 @@ import React, {
   useRef,
   useMemo,
 } from 'react';
-import { Box, Typography, IconButton, Tooltip, useTheme } from '@mui/material';
+import {
+  Alert,
+  Box,
+  Typography,
+  IconButton,
+  Tooltip,
+  useTheme,
+} from '@mui/material';
 import {
   InsertChart,
   PlayArrow,
@@ -29,11 +36,14 @@ import MonacoEditor from '@monaco-editor/react';
 import SplitPane, { Pane } from 'split-pane-react';
 import 'split-pane-react/esm/themes/default.css';
 import * as monaco from 'monaco-editor';
+import { MonacoAutocompleteSQLKeywords } from '../../config/constants';
 import {
   useGetAnalyticsPages,
   useUpdateAnalyticsPage,
 } from '../../controllers/analyticsPages.controller';
+import { useListIcebergInstances } from '../../controllers/icebergDatalake.controller';
 import { useSchemaForConnection, useMonacoAutocomplete } from '../../hooks';
+import { icebergQualifiedName } from '../../services/iceberg.service';
 import {
   executeAnalyticsQuery,
   resolveQueryDependencies,
@@ -124,6 +134,19 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
     [pages, pageId],
   );
   const updateAnalyticsPage = useUpdateAnalyticsPage();
+  const isIcebergConnection = connectionId.startsWith('iceberg-');
+  const icebergInstanceId = isIcebergConnection
+    ? connectionId.replace('iceberg-', '')
+    : '';
+  const { data: icebergInstances = [], isLoading: icebergLoading } =
+    useListIcebergInstances();
+  const icebergInstance = icebergInstances.find(
+    (instance) => instance.id === icebergInstanceId,
+  );
+  const icebergUnavailable =
+    isIcebergConnection && !icebergLoading && !icebergInstance?.sqlAvailable;
+  const icebergUnavailableReason =
+    icebergInstance?.sqlUnavailableReason ?? 'ICEBERG_SQL_UNAVAILABLE';
 
   // ── Editor state ──────────────────────────────────────────────────────
   const [markdownContent, setMarkdownContent] = useState('');
@@ -193,10 +216,40 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
 
   // ── Schema for SQL autocomplete ───────────────────────────────────────
   const { data: schemaData } = useSchemaForConnection(connectionId);
-  const completions = useMonacoAutocomplete(
+  const baseCompletions = useMonacoAutocomplete(
     schemaData?.tables || null,
     schemaData?.duckLakeSchema || null,
   );
+  const completions = useMemo(() => {
+    if (!isIcebergConnection) return baseCompletions;
+
+    return [
+      ...MonacoAutocompleteSQLKeywords.map((keyword) => ({
+        label: keyword,
+        insertText: keyword,
+        kind: monaco.languages.CompletionItemKind.Keyword,
+        detail: 'SQL keyword',
+      })),
+      ...(schemaData?.tables ?? []).flatMap((table) => [
+        {
+          label: `iceberg.${table.schema}.${table.name}`,
+          insertText: icebergQualifiedName(table.schema, table.name),
+          kind: monaco.languages.CompletionItemKind.Class,
+          detail: 'Iceberg table',
+        },
+        ...table.columns.map((column) => ({
+          label: `iceberg.${table.schema}.${table.name}.${column.name}`,
+          insertText: icebergQualifiedName(
+            table.schema,
+            table.name,
+            column.name,
+          ),
+          kind: monaco.languages.CompletionItemKind.Field,
+          detail: 'Iceberg column',
+        })),
+      ]),
+    ];
+  }, [baseCompletions, isIcebergConnection, schemaData]);
 
   // Keep the singleton ref updated so the provider always uses fresh completions
   useEffect(() => {
@@ -719,7 +772,7 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
             <IconButton
               size="small"
               onClick={handleRunAllQueries}
-              disabled={isRunningQueries}
+              disabled={isRunningQueries || icebergUnavailable}
               color={isRunningQueries ? 'primary' : 'default'}
             >
               <PlayArrow sx={{ fontSize: 18 }} />
@@ -766,6 +819,11 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
       </Box>
 
       {/* ── Editor + Preview Split ───────────────────────────────────── */}
+      {icebergUnavailable && (
+        <Alert severity="warning" sx={{ mx: 2, mt: 1, flexShrink: 0 }}>
+          Iceberg analytics queries are unavailable: {icebergUnavailableReason}
+        </Alert>
+      )}
       <Box
         sx={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}
       >

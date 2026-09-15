@@ -86,6 +86,16 @@ export interface IcebergInstanceConfig {
   storageConnectionId?: string; // Cloud Explorer connectionId for data files
   storageBucket?: string;
   storagePrefix?: string;
+  // DuckDB Iceberg SQL access for REST catalogs. Secrets remain owned by the
+  // referenced Cloud Explorer connection and are never copied here.
+  sqlEnabled?: boolean;
+  sqlStorageConnectionId?: string;
+  sqlStorageProvider?: IcebergCloudProvider;
+  sqlStorageBucket?: string;
+  sqlStoragePrefix?: string;
+  sqlWarehouseMatchAcknowledged?: boolean;
+  sqlAccessVerifiedAt?: string;
+  sqlRuntimeFingerprint?: string;
   // Metadata
   createdAt: string;
   updatedAt: string;
@@ -100,6 +110,8 @@ export interface IcebergInstanceListItem {
   catalogPath?: string;
   localPath?: string;
   storageBucket?: string;
+  sqlAvailable: boolean;
+  sqlUnavailableReason?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -173,6 +185,57 @@ export interface IcebergTestStorageParams {
   connectionId: string;
   bucket: string;
   prefix?: string;
+}
+
+export type IcebergSqlStatementClass =
+  | 'select'
+  | 'create'
+  | 'drop'
+  | 'insert'
+  | 'update'
+  | 'delete';
+
+export interface IcebergSqlCapability {
+  available: boolean;
+  reason?: string;
+  runtimeFingerprint?: string;
+  canRead: boolean;
+  canWrite: boolean;
+  supportedStatements: IcebergSqlStatementClass[];
+}
+
+export interface IcebergSqlExecutionParams {
+  instanceId: string;
+  executionId: string;
+  sql: string;
+  maxRows?: number;
+  /** Bounded server-side page for a read query. */
+  pageLimit?: number;
+  pageOffset?: number;
+  validateOnly?: boolean;
+  mutationConfirmed?: boolean;
+}
+
+export interface IcebergSqlExecutionResult {
+  executionId: string;
+  statementClass: IcebergSqlStatementClass;
+  columns: string[];
+  rows: Array<Record<string, unknown>>;
+  rowsChanged: number;
+  truncated: boolean;
+  totalRows?: number;
+}
+
+export interface IcebergSqlSchemaInfo {
+  catalogName: string;
+  namespaces: Array<{
+    name: string;
+    tables: Array<{
+      name: string;
+      type: string;
+      columns: Array<{ name: string; type: string; position: number }>;
+    }>;
+  }>;
 }
 
 export interface IcebergListStorageBucketsParams {

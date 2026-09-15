@@ -1,3 +1,4 @@
+import type { Table } from '../../types/backend';
 /**
  * Iceberg renderer service
  * Named exports wrapping window.electron.ipcRenderer.invoke — no default exports.
@@ -21,6 +22,10 @@ import type {
   IcebergImportFileFormat,
   IcebergTableOperationResult,
   IcebergNamespaceOperationResult,
+  IcebergSqlCapability,
+  IcebergSqlExecutionParams,
+  IcebergSqlExecutionResult,
+  IcebergSqlSchemaInfo,
 } from '../../types/iceberg';
 
 export const getIcebergCapabilities = (): Promise<IcebergCapabilities> =>
@@ -65,6 +70,29 @@ export const listIcebergStorageBuckets = (
 
 export const testIcebergInstance = (id: string): Promise<IcebergTestResult> =>
   window.electron.ipcRenderer.invoke('iceberg:testInstance', id);
+
+export const getIcebergSqlCapability = (
+  id: string,
+): Promise<IcebergSqlCapability> =>
+  window.electron.ipcRenderer.invoke('iceberg:sqlCapability', id);
+
+export const getIcebergSqlSchema = (
+  id: string,
+): Promise<IcebergSqlSchemaInfo> =>
+  window.electron.ipcRenderer.invoke('iceberg:sqlSchema', id);
+
+export const verifyIcebergSqlAccess = (
+  id: string,
+): Promise<IcebergTestResult> =>
+  window.electron.ipcRenderer.invoke('iceberg:verifySqlAccess', id);
+
+export const executeIcebergSql = (
+  params: IcebergSqlExecutionParams,
+): Promise<IcebergSqlExecutionResult> =>
+  window.electron.ipcRenderer.invoke('iceberg:executeSql', params);
+
+export const cancelIcebergSql = (executionId: string): Promise<boolean> =>
+  window.electron.ipcRenderer.invoke('iceberg:cancelSql', executionId);
 
 export const listIcebergNamespaces = (
   id: string,
@@ -174,3 +202,73 @@ export const ensureIcebergInstalled = (): Promise<{
   installed: boolean;
   version?: string;
 }> => window.electron.ipcRenderer.invoke('iceberg:ensureInstalled');
+
+/** Preflight and execution use the same main-process policy. Capture SQL once
+ * so confirmation cannot accidentally authorize a subsequently edited query. */
+export const executeConfirmedIcebergSql = async (
+  params: IcebergSqlExecutionParams,
+  confirmMutation: (
+    statementClass: IcebergSqlExecutionResult['statementClass'],
+  ) => boolean,
+): Promise<IcebergSqlExecutionResult | undefined> => {
+  const request = { ...params };
+  const classification = await executeIcebergSql({
+    ...request,
+    validateOnly: true,
+  });
+  const mutating = classification.statementClass !== 'select';
+  if (mutating && !confirmMutation(classification.statementClass))
+    return undefined;
+  // Pagination belongs exclusively to result-producing reads. Do not let a
+  // SQL Editor page request turn an already-confirmed mutation into a rejected
+  // operation in the main process.
+  const executionParams = mutating
+    ? {
+        instanceId: request.instanceId,
+        executionId: request.executionId,
+        sql: request.sql,
+        maxRows: request.maxRows,
+      }
+    : request;
+  return executeIcebergSql({
+    ...executionParams,
+    validateOnly: false,
+    mutationConfirmed: mutating,
+  });
+};
+
+/** Shared Notebook schema adapter; identifiers stay separate until SQL insertion. */
+export const getIcebergNotebookTables = async (
+  connectionId: string,
+): Promise<Table[]> => {
+  const schema = await getIcebergSqlSchema(connectionId.slice(8));
+  return schema.namespaces.flatMap((namespace) =>
+    namespace.tables.map((table) => ({
+      name: table.name,
+      schema: namespace.name,
+      type: table.type,
+      columns: table.columns.map((column) => ({
+        name: column.name,
+        typeName: column.type,
+        type: column.type,
+        nullable: true,
+        ordinalPosition: column.position,
+        primaryKeySequenceId: 0,
+        columnDisplaySize: 0,
+        scale: 0,
+        precision: 0,
+        columnProperties: [],
+        autoincrement: false,
+        primaryKey: false,
+      })),
+    })),
+  );
+};
+export const icebergQualifiedName = (...parts: string[]) =>
+  ['iceberg', ...parts]
+    .map((part) =>
+      /^[A-Za-z_][A-Za-z0-9_]*$/.test(part)
+        ? part
+        : `"${part.replace(/"/g, '""')}"`,
+    )
+    .join('.');
