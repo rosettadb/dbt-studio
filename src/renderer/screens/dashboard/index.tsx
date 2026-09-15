@@ -163,7 +163,7 @@ const features = [
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const theme = useTheme();
-  const { setIsSidebarOpen } = useAppContext();
+  const { setIsSidebarOpen, selectedProject } = useAppContext();
   const { data: projects = [] } = useGetProjects();
   const { data: connections = [] } = useGetConnections();
   const { mutateAsync: selectProject } = useSelectProject();
@@ -175,6 +175,10 @@ const Dashboard: React.FC = () => {
 
   const handleCardClick = (feature: (typeof features)[number]) => {
     if (feature.id === 'pipeline') {
+      if (!selectedProject) {
+        navigate('/app/select-project');
+        return;
+      }
       setIsSidebarOpen(true);
       navigate('/app/dbt-project', { state: { openCreatePipeline: true } });
       return;
