@@ -7,6 +7,8 @@ export interface RemotePipelineTemplate {
   steps: string[];
   fileName: string;
   url: string;
+  // 'zip' templates are extracted into the project root; defaults to 'yaml'
+  type?: 'yaml' | 'zip';
 }
 
 export const listPipelineTemplates = async (): Promise<
@@ -21,5 +23,18 @@ export const fetchPipelineTemplateContent = async (
   return window.electron.ipcRenderer.invoke(
     'pipeline-templates:fetch-content',
     url,
+  );
+};
+
+export const applyZipTemplate = async (
+  projectPath: string,
+  url: string,
+  mode: 'check' | 'replace' | 'skip',
+): Promise<string[]> => {
+  return window.electron.ipcRenderer.invoke(
+    'pipeline-templates:apply-zip',
+    projectPath,
+    url,
+    mode,
   );
 };

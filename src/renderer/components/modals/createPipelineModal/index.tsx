@@ -37,6 +37,7 @@ import { Project } from '../../../../types/backend';
 import {
   listPipelineTemplates,
   fetchPipelineTemplateContent,
+  applyZipTemplate,
   RemotePipelineTemplate,
 } from '../../../services/pipelineTemplates.service';
 import { PipelineFolderTree } from './PipelineFolderTree';
@@ -103,6 +104,7 @@ interface CreatePipelineModalProps {
   onClose: () => void;
   project: Project;
   onCreated: (filePath: string) => void;
+  onApplied?: () => void;
 }
 
 type ModalView = 'menu' | 'browse' | 'location';
@@ -112,6 +114,7 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
   onClose,
   project,
   onCreated,
+  onApplied,
 }) => {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
@@ -135,6 +138,10 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
     getContent: () => Promise<string>;
     subdir: string;
   } | null>(null);
+  const [pendingZip, setPendingZip] = React.useState<{
+    url: string;
+    conflicts: string[];
+  } | null>(null);
 
   // Which view to return to when backing out of the location step.
   const [locationOrigin, setLocationOrigin] = React.useState<'menu' | 'browse'>(
@@ -151,6 +158,7 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
       setSelectedTemplateId(null);
       setSelectedRemoteId(null);
       setPendingCreate(null);
+      setPendingZip(null);
       setRemoteTemplates([]);
       setRemoteError(null);
       setLocationOrigin('menu');
@@ -245,6 +253,53 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
     }
   };
 
+  const finishZipApply = async (url: string, mode: 'replace' | 'skip') => {
+    await applyZipTemplate(project.path, url, mode);
+    toast.success('Template applied successfully.');
+    onApplied?.();
+    onClose();
+  };
+
+  const applyZip = async (url: string) => {
+    setIsCreating(true);
+    try {
+      const conflicts = await applyZipTemplate(project.path, url, 'check');
+      if (conflicts.length > 0) {
+        setPendingZip({ url, conflicts });
+        return;
+      }
+      await finishZipApply(url, 'replace');
+    } catch (error) {
+      const msg =
+        error instanceof Error ? error.message : 'Failed to apply template';
+      toast.error(msg);
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const handleZipConflict = async (mode: 'replace' | 'skip') => {
+    if (!pendingZip) return;
+    setIsCreating(true);
+    try {
+      await finishZipApply(pendingZip.url, mode);
+      setPendingZip(null);
+    } catch (error) {
+      const msg =
+        error instanceof Error ? error.message : 'Failed to apply template';
+      toast.error(msg);
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const selectedRemoteTemplate = remoteTemplates.find(
+    (t) => t.id === selectedRemoteId,
+  );
+  // Zip templates are extracted into the project root, so no location step
+  const isZipSelected =
+    view === 'browse' && selectedRemoteTemplate?.type === 'zip';
+
   // Selected template info (from whichever list it came from), used by the
   // location step to know what to create once a directory is chosen.
   const selectedTemplateInfo = React.useMemo(() => {
@@ -269,6 +324,10 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
   const handleContinueToLocation = () => {
     if (view === 'menu' && !selectedTemplateId) return;
     if (view === 'browse' && !selectedRemoteId) return;
+    if (isZipSelected && selectedRemoteTemplate) {
+      applyZip(selectedRemoteTemplate.url);
+      return;
+    }
     setLocationOrigin(view === 'browse' ? 'browse' : 'menu');
     setSelectedSubdir('');
     setFolderTreeReloadToken((prev) => prev + 1);
@@ -329,7 +388,8 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
     ? isCreating
     : (isBrowseView ? !selectedRemoteId : !selectedTemplateId) || isCreating;
   const hasSelection = isBrowseView ? !!selectedRemoteId : !!selectedTemplateId;
-  const actionLabel = isLocationView ? 'Create Pipeline' : 'Next';
+  let actionLabel = isLocationView ? 'Create Pipeline' : 'Next';
+  if (isZipSelected) actionLabel = 'Apply Template';
   const primaryAction = isLocationView
     ? handleCreate
     : handleContinueToLocation;
@@ -1037,7 +1097,9 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
                               opacity: 0.8,
                             }}
                           >
-                            rosetta/pipelines/{template.fileName}
+                            {template.type === 'zip'
+                              ? 'project root'
+                              : `rosetta/pipelines/${template.fileName}`}
                           </Typography>
                         </Box>
                       );
@@ -1214,6 +1276,82 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
             sx={{ minWidth: 110, fontWeight: 600 }}
           >
             {isCreating ? 'Overriding…' : 'Override'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Zip template conflict dialog */}
+      <Dialog
+        open={!!pendingZip}
+        onClose={() => !isCreating && setPendingZip(null)}
+        fullWidth
+        maxWidth="sm"
+        PaperProps={{
+          sx: {
+            borderRadius: 2.5,
+            backgroundImage: 'none',
+            boxShadow: isDark
+              ? '0 24px 48px rgba(0,0,0,0.6)'
+              : '0 24px 48px rgba(0,0,0,0.16)',
+          },
+        }}
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <WarningAmber color="warning" />
+          Files Already Exist
+        </DialogTitle>
+        <DialogContent>
+          <Typography gutterBottom>
+            {pendingZip?.conflicts.length} file(s) from this template already
+            exist in this project:
+          </Typography>
+          <Box
+            component="ul"
+            sx={{
+              maxHeight: 240,
+              overflowY: 'auto',
+              m: 0,
+              pl: 2.5,
+              fontFamily: 'monospace',
+              fontSize: '0.75rem',
+            }}
+          >
+            {pendingZip?.conflicts.map((file) => <li key={file}>{file}</li>)}
+          </Box>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
+            Replace overrides the existing files. Skip keeps them and only adds
+            new files.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setPendingZip(null)}
+            disabled={isCreating}
+            sx={{ minWidth: 90 }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="outlined"
+            onClick={() => handleZipConflict('skip')}
+            disabled={isCreating}
+            sx={{ minWidth: 90 }}
+          >
+            Skip
+          </Button>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={() => handleZipConflict('replace')}
+            disabled={isCreating}
+            startIcon={
+              isCreating ? (
+                <CircularProgress size={16} color="inherit" />
+              ) : undefined
+            }
+            sx={{ minWidth: 110, fontWeight: 600 }}
+          >
+            Replace
           </Button>
         </DialogActions>
       </Dialog>
