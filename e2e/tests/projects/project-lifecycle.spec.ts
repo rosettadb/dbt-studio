@@ -1,6 +1,4 @@
 import { Page, ElectronApplication } from '@playwright/test';
-import * as fs from 'fs';
-import * as path from 'path';
 import { test, expect } from '../../fixtures/electron.fixture';
 import { ProjectSelectionPage } from '../../page-objects/screens/ProjectSelection';
 import { AppHelper } from '../../helpers/app.helper';
@@ -68,119 +66,53 @@ test.describe('Project Lifecycle', () => {
     await expect(sidebar).toBeVisible();
   });
 
-  test('should open existing project', async ({ electronApp, userData }) => {
-    // Seed project manually since tests run in isolation
-    const projectPath = path.join(userData, 'projects', 'Test_Project');
-    const dbPath = path.join(userData, 'database.json');
+  test.describe('with an existing project seeded', () => {
+    // Seeded into database.json before the app launches (see
+    // electron.fixture.ts) rather than written to the file mid-test — the
+    // app only re-reads database.json on its own operations, so a write
+    // made to it while the app is already running has no defined way to be
+    // observed short of restarting the app.
+    test.use({ extraProjects: ['Test_Project'] });
 
-    // Create project directory and minimal dbt_project.yml
-    if (!fs.existsSync(projectPath)) {
-      fs.mkdirSync(projectPath, { recursive: true });
-      fs.writeFileSync(
-        path.join(projectPath, 'dbt_project.yml'),
-        'name: Test_Project\nversion: 1.0.0\nconfig-version: 2\n',
-      );
-    }
+    test('should open existing project', async ({ electronApp }) => {
+      const stableWindow = await findStableWindow(electronApp);
+      const projectSelection = new ProjectSelectionPage(stableWindow);
 
-    // Update database.json
-    const db = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
-    // Avoid duplicate seeding
-    if (!db.projects.some((p: any) => p.name === 'Test_Project')) {
-      db.projects.push({
-        id: 'test-project-id',
-        name: 'Test_Project',
-        path: projectPath,
-        createdAt: new Date().toISOString(),
-        isExtracted: false,
-      });
-      fs.writeFileSync(dbPath, JSON.stringify(db, null, 2));
-    }
+      await projectSelection.selectProject('Test_Project');
 
-    const stableWindow = await findStableWindow(electronApp);
-    // Reload window to ensure renderer picks up the DB changes
-    await stableWindow.reload();
-    await stableWindow.waitForLoadState('domcontentloaded');
-
-    // Wait for project selection screen again
-    await stableWindow.waitForSelector('[data-testid="project-selection"]', {
-      timeout: 10000,
+      // Verify project details screen is shown (or main app)
+      const sidebar = stableWindow.locator('[data-testid="sidebar"]');
+      await expect(sidebar).toBeVisible();
     });
 
-    // Re-attach console listener after reload if needed (Playwright usually keeps it on Page, but handle might change?)
-    // Actually finding stableWindow again might return same page object.
+    test('should delete a project', async ({ electronApp }) => {
+      const stableWindow = await findStableWindow(electronApp);
 
-    const projectSelection = new ProjectSelectionPage(stableWindow);
-
-    // Verify and Select
-    await projectSelection.selectProject('Test_Project');
-
-    // Verify project details screen is shown (or main app)
-    const sidebar = stableWindow.locator('[data-testid="sidebar"]');
-    await expect(sidebar).toBeVisible();
-  });
-
-  test('should delete a project', async ({ electronApp, userData }) => {
-    // Seed project manually since tests run in isolation
-    const projectPath = path.join(userData, 'projects', 'Test_Project');
-    const dbPath = path.join(userData, 'database.json');
-
-    // Create project directory and minimal dbt_project.yml
-    if (!fs.existsSync(projectPath)) {
-      fs.mkdirSync(projectPath, { recursive: true });
-      fs.writeFileSync(
-        path.join(projectPath, 'dbt_project.yml'),
-        'name: Test_Project\nversion: 1.0.0\nconfig-version: 2\n',
+      // Get project card for verification
+      const projectCard = stableWindow.locator(
+        '[data-testid="project-card-Test_Project"]',
       );
-    }
 
-    // Update database.json
-    const db = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
-    // Avoid duplicate seeding
-    if (!db.projects.some((p: any) => p.name === 'Test_Project')) {
-      db.projects.push({
-        id: 'test-project-id',
-        name: 'Test_Project',
-        path: projectPath,
-        createdAt: new Date().toISOString(),
-        isExtracted: false,
-      });
-      fs.writeFileSync(dbPath, JSON.stringify(db, null, 2));
-    }
+      // Click options button
+      const optionsBtn = stableWindow.locator(
+        '[data-testid="project-options-Test_Project"]',
+      );
+      await optionsBtn.click();
 
-    const stableWindow = await findStableWindow(electronApp);
-    // Reload window to ensure renderer picks up the DB changes
-    await stableWindow.reload();
-    await stableWindow.waitForLoadState('domcontentloaded');
+      // Click delete option
+      const deleteOption = stableWindow.locator(
+        '[data-testid="context-menu-delete"]',
+      );
+      await deleteOption.click();
 
-    // Wait for project selection screen again
-    await stableWindow.waitForSelector('[data-testid="project-selection"]', {
-      timeout: 10000,
+      // Confirm deletion
+      const confirmBtn = stableWindow.locator(
+        '[data-testid="confirm-delete-btn"]',
+      );
+      await confirmBtn.click();
+
+      // Verify project is removed
+      await expect(projectCard).not.toBeVisible();
     });
-
-    // Get project card for verification
-    const projectCard = stableWindow.locator(
-      '[data-testid="project-card-Test_Project"]',
-    );
-
-    // Click options button
-    const optionsBtn = stableWindow.locator(
-      '[data-testid="project-options-Test_Project"]',
-    );
-    await optionsBtn.click();
-
-    // Click delete option
-    const deleteOption = stableWindow.locator(
-      '[data-testid="context-menu-delete"]',
-    );
-    await deleteOption.click();
-
-    // Confirm deletion
-    const confirmBtn = stableWindow.locator(
-      '[data-testid="confirm-delete-btn"]',
-    );
-    await confirmBtn.click();
-
-    // Verify project is removed
-    await expect(projectCard).not.toBeVisible();
   });
 });

@@ -4,13 +4,12 @@ import { app, dialog } from 'electron';
 import archiver from 'archiver';
 import os from 'os';
 import {
-  DataBase,
   FileNode,
   FileSearchMatch,
   FileSearchResult,
   SettingsType,
 } from '../../types/backend';
-import { DATA_DIR, DB_FILE } from './setupHelpers';
+import { DATA_DIR } from './setupHelpers';
 
 export const getDirectoryStructure = (dirPath: string): FileNode => {
   const result: FileNode = {
@@ -250,72 +249,6 @@ export const loadDefaultSettings = (): SettingsType => {
     flowfilePort: '63578',
     flowfileAutoStart: 'false',
   };
-};
-
-export const loadDatabaseFile = async (): Promise<DataBase> => {
-  try {
-    const data = await fs.promises.readFile(DB_FILE, 'utf8');
-    const parsed = JSON.parse(data) as Partial<DataBase>;
-    return {
-      ...parsed,
-      projects: parsed.projects ?? [],
-      settings: parsed.settings ?? loadDefaultSettings(),
-      queries: parsed.queries ?? {},
-      connections: parsed.connections ?? [],
-      sources: parsed.sources ?? [],
-      recentItems: parsed.recentItems ?? [],
-    };
-  } catch (error) {
-    return {
-      projects: [],
-      settings: loadDefaultSettings(),
-      queries: {},
-      connections: [],
-      sources: [],
-      recentItems: [],
-    };
-  }
-};
-
-// Simple async mutex to prevent concurrent read-modify-write races
-let dbLockPromise: Promise<void> = Promise.resolve();
-
-export const updateDatabase = async <K extends keyof DataBase>(
-  key: K,
-  value: DataBase[K],
-) => {
-  // Chain writes so they execute sequentially
-  const previousLock = dbLockPromise;
-  let releaseLock: () => void;
-  dbLockPromise = new Promise<void>((resolve) => {
-    releaseLock = resolve;
-  });
-
-  try {
-    await previousLock;
-
-    // Patch: For connections array, ensure BigQuery keyfile is only the key name
-    if (key === 'connections' && Array.isArray(value)) {
-      value.forEach((conn) => {
-        if (
-          conn &&
-          typeof conn === 'object' &&
-          'connection' in conn &&
-          conn.connection &&
-          conn.connection.type === 'bigquery' &&
-          conn.connection.keyfile &&
-          conn.connection.keyfile.startsWith('{')
-        ) {
-          conn.connection.keyfile = `db-bigquery-${conn.connection.name}`;
-        }
-      });
-    }
-    const data = await loadDatabaseFile();
-    data[key] = value;
-    await saveFileContent(DB_FILE, JSON.stringify(data, null, 2));
-  } finally {
-    releaseLock!();
-  }
 };
 
 export const createNewFolder = (parentPath: string, folderName: string) => {

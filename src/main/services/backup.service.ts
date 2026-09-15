@@ -21,7 +21,7 @@ import os from 'os';
 import { app } from 'electron';
 import AdmZip from 'adm-zip';
 import archiver from 'archiver';
-import { loadDatabaseFile, updateDatabase } from '../utils/fileHelper';
+import databaseStore from '../database';
 import SecureStorageService from './secureStorage.service';
 import MainDatabaseService from './mainDatabase.service';
 
@@ -255,7 +255,7 @@ export default class BackupService {
 
     archive.pipe(output);
 
-    const db = await loadDatabaseFile();
+    const db = await databaseStore.getSnapshot();
 
     // ── Export Individual JSON files (clean layout, non-destructive import) ────
     if (categories.includes('projects')) {
@@ -452,9 +452,6 @@ export default class BackupService {
       onProgress?.(doneSections, totalSections);
     };
 
-    // ── Load current state ───────────────────────────────────────────────────
-    const currentDb = await loadDatabaseFile();
-
     // ── Helper to read JSON entry from ZIP (handles individual or legacy snapshot) ──
     const dbSnapshotEntry = zip.getEntry(DB_SNAPSHOT_ENTRY);
     let legacySnapshot: Record<string, any> | null = null;
@@ -497,17 +494,14 @@ export default class BackupService {
         'connections.json',
       );
       if (Array.isArray(connectionsData)) {
-        const existing = new Set(
-          (currentDb.connections || []).map((c: any) => c.id),
-        );
-        const toAdd = connectionsData.filter((c: any) => !existing.has(c.id));
-        if (toAdd.length > 0) {
-          await updateDatabase('connections', [
-            ...(currentDb.connections || []),
-            ...toAdd,
-          ]);
-        }
-        result.imported.connections = toAdd.length;
+        let importedCount = 0;
+        await databaseStore.updateField('connections', (current) => {
+          const existing = new Set((current || []).map((c: any) => c.id));
+          const toAdd = connectionsData.filter((c: any) => !existing.has(c.id));
+          importedCount = toAdd.length;
+          return [...(current || []), ...toAdd];
+        });
+        result.imported.connections = importedCount;
       }
       reportProgress();
     }
@@ -516,17 +510,14 @@ export default class BackupService {
     if (manifest.categories.includes('sources')) {
       const sourcesData = readCategoryJson('sources', 'sources.json');
       if (Array.isArray(sourcesData)) {
-        const existing = new Set(
-          (currentDb.sources || []).map((s: any) => s.id),
-        );
-        const toAdd = sourcesData.filter((s: any) => !existing.has(s.id));
-        if (toAdd.length > 0) {
-          await updateDatabase('sources', [
-            ...(currentDb.sources || []),
-            ...toAdd,
-          ]);
-        }
-        result.imported.sources = toAdd.length;
+        let importedCount = 0;
+        await databaseStore.updateField('sources', (current) => {
+          const existing = new Set((current || []).map((s: any) => s.id));
+          const toAdd = sourcesData.filter((s: any) => !existing.has(s.id));
+          importedCount = toAdd.length;
+          return [...(current || []), ...toAdd];
+        });
+        result.imported.sources = importedCount;
       }
       reportProgress();
     }
@@ -538,23 +529,25 @@ export default class BackupService {
         'savedQueries.json',
       );
       if (savedQueriesData && typeof savedQueriesData === 'object') {
-        const mergedSavedQueries = { ...(currentDb.savedQueries || {}) };
         let importedCount = 0;
-
-        for (const [connId, queries] of Object.entries(savedQueriesData)) {
-          if (Array.isArray(queries)) {
-            const existing = mergedSavedQueries[connId] || [];
-            const existingIds = new Set(existing.map((q: any) => q.id));
-            const toAdd = queries.filter((q: any) => !existingIds.has(q.id));
-            if (toAdd.length > 0) {
-              mergedSavedQueries[connId] = [...existing, ...toAdd];
-              importedCount += toAdd.length;
+        await databaseStore.updateField('savedQueries', (current) => {
+          const merged = { ...(current || {}) };
+          importedCount = 0;
+          for (const [connId, queries] of Object.entries(savedQueriesData)) {
+            if (Array.isArray(queries)) {
+              const existing = merged[connId] || [];
+              const existingIds = new Set(existing.map((q: any) => q.id));
+              const toAdd = queries.filter((q: any) => !existingIds.has(q.id));
+              if (toAdd.length > 0) {
+                merged[connId] = [...existing, ...toAdd];
+                importedCount += toAdd.length;
+              }
             }
           }
-        }
+          return merged;
+        });
 
         if (importedCount > 0) {
-          await updateDatabase('savedQueries', mergedSavedQueries);
           result.imported.savedQueries = importedCount;
         }
       }
@@ -635,17 +628,14 @@ export default class BackupService {
       // 1. Iceberg
       const icebergData = readCategoryJson('datalake', 'icebergInstances.json');
       if (Array.isArray(icebergData)) {
-        const existing = new Set(
-          (currentDb.icebergInstances || []).map((i: any) => i.id),
-        );
-        const toAdd = icebergData.filter((i: any) => !existing.has(i.id));
-        if (toAdd.length > 0) {
-          await updateDatabase('icebergInstances', [
-            ...(currentDb.icebergInstances || []),
-            ...toAdd,
-          ]);
-        }
-        importedCount += toAdd.length;
+        let icebergCount = 0;
+        await databaseStore.updateField('icebergInstances', (current) => {
+          const existing = new Set((current || []).map((i: any) => i.id));
+          const toAdd = icebergData.filter((i: any) => !existing.has(i.id));
+          icebergCount = toAdd.length;
+          return [...(current || []), ...toAdd];
+        });
+        importedCount += icebergCount;
       }
 
       // 2. DuckLake
@@ -712,14 +702,12 @@ export default class BackupService {
     if (manifest.categories.includes('projects')) {
       const projectsData = readCategoryJson('projects', 'projects.json');
       if (Array.isArray(projectsData)) {
+        const currentSettings = await databaseStore.getField('settings');
         const targetBaseDir =
-          currentDb.settings?.projectsDirectory ||
+          currentSettings?.projectsDirectory ||
           path.join(os.homedir(), 'rosetta-dbt-studio-projects');
 
-        const existingNames = new Set(
-          (currentDb.projects || []).map((p: any) => p.name),
-        );
-        const newProjects: any[] = [];
+        const restoredProjects: any[] = [];
 
         for (const proj of projectsData) {
           // ZIP entry prefix always uses forward slashes (ZIP spec)
@@ -791,18 +779,23 @@ export default class BackupService {
 
           // Always update the path in the restored metadata to the local destination
           proj.path = path.normalize(projectDest);
-
-          if (!existingNames.has(proj.name)) {
-            newProjects.push(proj);
-          }
+          restoredProjects.push(proj);
         }
 
-        if (newProjects.length > 0) {
-          await updateDatabase('projects', [
-            ...(currentDb.projects || []),
-            ...newProjects,
-          ]);
-          result.imported.projects = newProjects.length;
+        let importedCount = 0;
+        await databaseStore.updateField('projects', (current) => {
+          const existingNames = new Set(
+            (current || []).map((p: any) => p.name),
+          );
+          const toAdd = restoredProjects.filter(
+            (p: any) => !existingNames.has(p.name),
+          );
+          importedCount = toAdd.length;
+          return [...(current || []), ...toAdd];
+        });
+
+        if (importedCount > 0) {
+          result.imported.projects = importedCount;
         }
       }
       reportProgress();
@@ -812,10 +805,10 @@ export default class BackupService {
     if (manifest.categories.includes('settings')) {
       const settingsData = readCategoryJson('settings', 'settings.json');
       if (settingsData && typeof settingsData === 'object') {
-        await updateDatabase('settings', {
-          ...(currentDb.settings || {}),
+        await databaseStore.updateField('settings', (current) => ({
+          ...(current || {}),
           ...settingsData,
-        });
+        }));
         result.imported.settings = 1;
       }
       reportProgress();

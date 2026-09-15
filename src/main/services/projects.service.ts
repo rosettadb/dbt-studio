@@ -9,6 +9,7 @@ import * as tar from 'tar';
 import {
   BigQueryConnection,
   DatabricksConnection,
+  DataBase,
   DuckDBConnection,
   KineticaConnection,
   PostgresConnection,
@@ -26,12 +27,12 @@ import {
   deleteDirectory,
   deleteItem,
   getDirectoryStructure,
-  loadDatabaseFile,
   readFileContent,
   saveFileContent,
   searchInFiles,
-  updateDatabase,
 } from '../utils/fileHelper';
+import databaseStore from '../database';
+import { sanitizeBigQueryKeyfile } from '../utils/sanitizeBigQueryKeyfile';
 import SettingsService from './settings.service';
 import {
   BigQueryExtractor,
@@ -51,10 +52,20 @@ import {
 } from '../utils/pipelineEnvVars';
 
 export default class ProjectsService {
+  // Mirrors loadProjects()'s join against raw store state — used inside
+  // transactions where the raw (un-joined) DataBase is all that's available.
+  private static joinProjects(
+    db: Pick<DataBase, 'projects' | 'connections'>,
+  ): Project[] {
+    return db.projects.map((p) => ({
+      ...p,
+      connection: db.connections.find((c) => c.id === p.connectionId)
+        ?.connection,
+    }));
+  }
+
   static async loadProjects(): Promise<Project[]> {
-    const db = await loadDatabaseFile();
-    const { connections } = db;
-    const { projects } = db;
+    const { projects, connections } = await databaseStore.getSnapshot();
 
     return projects.map((project) => ({
       ...project,
@@ -91,35 +102,24 @@ export default class ProjectsService {
   }
 
   static async getSelectedProject(): Promise<Project | undefined> {
-    const db = await loadDatabaseFile();
-    const selected = db.selectedProject;
+    const selected = await databaseStore.getField('selectedProject');
     try {
       const project = await this.getProject(selected?.id);
       if (!project) {
-        await updateDatabase<'selectedProject'>('selectedProject', undefined);
+        await databaseStore.updateField('selectedProject', () => undefined);
         return undefined;
       }
       return project;
     } catch (err) {
       // If loading the project or its configuration fails, clear selection
-      await updateDatabase<'selectedProject'>('selectedProject', undefined);
+      await databaseStore.updateField('selectedProject', () => undefined);
       return undefined;
     }
   }
 
   static async saveProjects(projects: Project[]) {
-    // Patch: For all projects, if the connection is bigquery and keyfile is a JSON string, store only the key name
-    for (const project of projects) {
-      if (
-        project.connection &&
-        project.connection.type === 'bigquery' &&
-        project.connection.keyfile &&
-        project.connection.keyfile.startsWith('{')
-      ) {
-        project.connection.keyfile = `db-bigquery-${project.connection.name}`;
-      }
-    }
-    await updateDatabase<'projects'>('projects', projects);
+    projects.forEach((project) => sanitizeBigQueryKeyfile(project));
+    await databaseStore.updateField('projects', () => projects);
   }
 
   static async addProject(
@@ -140,15 +140,7 @@ export default class ProjectsService {
       createTemplateFolders,
     };
 
-    // Patch: If the project has a bigquery connection, store only the key name
-    if (project.connection && project.connection.type === 'bigquery') {
-      if (
-        project.connection.keyfile &&
-        project.connection.keyfile.startsWith('{')
-      ) {
-        project.connection.keyfile = `db-bigquery-${project.connection.name}`;
-      }
-    }
+    sanitizeBigQueryKeyfile(project);
     await this.copyDbtTemplateFiles(project.path, project.name);
     // Always copy main.conf template (rosetta requires it), but profiles.yml is excluded from template
     await this.copyRosettaMainConf(project.path);
@@ -231,15 +223,7 @@ export default class ProjectsService {
       connectionId,
     };
 
-    // Patch: If the project has a bigquery connection, store only the key name
-    if (project.connection && project.connection.type === 'bigquery') {
-      if (
-        project.connection.keyfile &&
-        project.connection.keyfile.startsWith('{')
-      ) {
-        project.connection.keyfile = `db-bigquery-${project.connection.name}`;
-      }
-    }
+    sanitizeBigQueryKeyfile(project);
 
     const rosettaPath = path.join(projectPath, 'rosetta');
 
@@ -647,37 +631,59 @@ export default class ProjectsService {
   }
 
   static async updateProject(project: Project) {
-    const projects = await this.loadProjects();
-    const index = projects.findIndex((p) => p.id === project.id);
-    if (index === -1) return null;
+    // `projects` (the full list) and `selectedProject` (a denormalized copy
+    // of one entry) must move together — updating them as two separate
+    // writes could leave selectedProject pointing at data inconsistent with
+    // the list if anything failed or interleaved in between.
+    const { updatedProject, connectionChanged, projects } =
+      await databaseStore.transaction<{
+        updatedProject: Project | null;
+        connectionChanged: boolean;
+        projects: Project[] | null;
+      }>((db) => {
+        // Mirrors loadProjects()'s join so the persisted array keeps the
+        // same (denormalized but harmless — always re-derived on next
+        // read) shape it always has.
+        const joinedProjects = this.joinProjects(db);
+        const index = joinedProjects.findIndex((p) => p.id === project.id);
+        if (index === -1) {
+          return {
+            db,
+            result: {
+              updatedProject: null,
+              connectionChanged: false,
+              projects: null,
+            },
+          };
+        }
 
-    // Check if connectionId is changing
-    const oldConnectionId = projects[index].connectionId;
-    const newConnectionId = project.connectionId;
-    const connectionChanged = oldConnectionId !== newConnectionId;
+        const oldConnectionId = joinedProjects[index].connectionId;
+        const newConnectionId = project.connectionId;
+        const merged = sanitizeBigQueryKeyfile({
+          ...joinedProjects[index],
+          ...project,
+        });
+        joinedProjects[index] = merged;
 
-    const updatedProject = { ...projects[index], ...project };
+        return {
+          db: {
+            ...db,
+            projects: joinedProjects,
+            selectedProject: merged,
+          },
+          result: {
+            updatedProject: merged,
+            connectionChanged: oldConnectionId !== newConnectionId,
+            projects: joinedProjects,
+          },
+        };
+      });
 
-    // Patch: If the project has a bigquery connection, store only the key name
-    if (
-      updatedProject.connection &&
-      updatedProject.connection.type === 'bigquery'
-    ) {
-      if (
-        updatedProject.connection.keyfile &&
-        updatedProject.connection.keyfile.startsWith('{')
-      ) {
-        updatedProject.connection.keyfile = `db-bigquery-${updatedProject.connection.name}`;
-      }
-    }
-
-    projects[index] = updatedProject;
-    await updateDatabase<'selectedProject'>('selectedProject', updatedProject);
-    await this.saveProjects(projects);
+    if (!updatedProject) return null;
 
     // Only regenerate config files if the connection changed
     // This is a full regeneration because it's switching to a different connection
-    if (connectionChanged && newConnectionId) {
+    if (connectionChanged && project.connectionId) {
       await ConnectorsService.loadConfigurations(project.id);
     }
 
@@ -687,34 +693,40 @@ export default class ProjectsService {
   static async deleteProject(id: string) {
     const projects = await this.loadProjects();
     const projectToDelete = projects.find((p) => p.id === id);
-    if (projectToDelete) {
-      if (projectToDelete.path) {
-        deleteDirectory(projectToDelete.path);
-      }
-      const selectedProject = await this.getSelectedProject();
-      if (selectedProject) {
-        if (selectedProject.id === id) {
-          await updateDatabase('selectedProject', undefined);
-        }
-      }
+    if (!projectToDelete) return false;
 
-      const filteredProjects = projects.filter((p) => p.id !== id);
-      await this.saveProjects(filteredProjects);
-
-      // Only clean up AI chats after the project deletion is persisted.
-      try {
-        const projectIdNum = parseInt(id, 10);
-        if (!Number.isNaN(projectIdNum)) {
-          await MainDatabaseService.deleteConversationsByProject(projectIdNum);
-        }
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error('[ProjectsService] Failed to clean up AI chats:', error);
-      }
-
-      return true;
+    if (projectToDelete.path) {
+      deleteDirectory(projectToDelete.path);
     }
-    return false;
+
+    // Both the list and the (possibly now-dangling) selection move together
+    // in one write — see updateProject for why that matters.
+    await databaseStore.transaction((db) => {
+      const remaining = this.joinProjects(db).filter((p) => p.id !== id);
+      remaining.forEach((p) => sanitizeBigQueryKeyfile(p));
+      return {
+        db: {
+          ...db,
+          projects: remaining,
+          selectedProject:
+            db.selectedProject?.id === id ? undefined : db.selectedProject,
+        },
+        result: undefined,
+      };
+    });
+
+    // Only clean up AI chats after the project deletion is persisted.
+    try {
+      const projectIdNum = parseInt(id, 10);
+      if (!Number.isNaN(projectIdNum)) {
+        await MainDatabaseService.deleteConversationsByProject(projectIdNum);
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[ProjectsService] Failed to clean up AI chats:', error);
+    }
+
+    return true;
   }
 
   // Removes a project from Studio's known-projects list without touching
@@ -723,18 +735,23 @@ export default class ProjectsService {
   static async removeProjectFromList(id: string) {
     const projects = await this.loadProjects();
     const projectToRemove = projects.find((p) => p.id === id);
-    if (projectToRemove) {
-      const selectedProject = await this.getSelectedProject();
-      if (selectedProject && selectedProject.id === id) {
-        await updateDatabase('selectedProject', undefined);
-      }
+    if (!projectToRemove) return false;
 
-      const filteredProjects = projects.filter((p) => p.id !== id);
-      await this.saveProjects(filteredProjects);
+    await databaseStore.transaction((db) => {
+      const remaining = this.joinProjects(db).filter((p) => p.id !== id);
+      remaining.forEach((p) => sanitizeBigQueryKeyfile(p));
+      return {
+        db: {
+          ...db,
+          projects: remaining,
+          selectedProject:
+            db.selectedProject?.id === id ? undefined : db.selectedProject,
+        },
+        result: undefined,
+      };
+    });
 
-      return true;
-    }
-    return false;
+    return true;
   }
 
   static async getProjectPath(name: string) {
@@ -1018,7 +1035,7 @@ export default class ProjectsService {
 
   static async selectProject({ projectId }: { projectId: string }) {
     const project = await this.getProject(projectId);
-    await updateDatabase<'selectedProject'>('selectedProject', project);
+    await databaseStore.updateField('selectedProject', () => project);
   }
 
   static async extractPgSchema(connection: PostgresConnection) {
@@ -1233,15 +1250,15 @@ export default class ProjectsService {
     projectId: string;
     query: string;
   }): Promise<void> {
-    const db = await loadDatabaseFile();
-    const queries = db.queries ?? {};
-    queries[projectId] = query;
-    await updateDatabase('queries', queries);
+    await databaseStore.updateField('queries', (current) => ({
+      ...(current ?? {}),
+      [projectId]: query,
+    }));
   }
 
   static async getQuery(project: Project): Promise<string> {
-    const db = await loadDatabaseFile();
-    return db.queries?.[project.id] ?? '';
+    const queries = await databaseStore.getField('queries');
+    return queries?.[project.id] ?? '';
   }
 
   static async extractSchemaFromModelYaml(project: Project): Promise<Table[]> {
