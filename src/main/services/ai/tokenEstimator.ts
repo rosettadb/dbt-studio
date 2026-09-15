@@ -1,4 +1,6 @@
 /* eslint-disable no-console */
+import { CHAT_IMAGE_TOKEN_ESTIMATE } from '../../../types/chatAttachments';
+
 /**
  * Token Estimator Service
  * Provides fast approximate token counts and context window sizes per model.
@@ -190,15 +192,25 @@ export function estimateMessagesTokens(
     content: any;
     contextItems?: any[];
     toolCalls?: any[];
+    imageAttachments?: any[];
   }>,
 ): number {
   return messages.reduce((sum, msg) => {
-    const contentStr =
-      typeof msg.content === 'string'
-        ? msg.content
-        : JSON.stringify(msg.content);
-
-    let tokens = estimateTokens(contentStr);
+    let tokens: number;
+    if (typeof msg.content === 'string') {
+      tokens = estimateTokens(msg.content);
+    } else if (Array.isArray(msg.content)) {
+      // Multimodal content array: estimate text parts, count image/binary parts flat.
+      tokens = (msg.content as Array<{ type?: string; text?: string }>).reduce(
+        (cSum, part) =>
+          part.type === 'text'
+            ? cSum + estimateTokens(part.text ?? '')
+            : cSum + CHAT_IMAGE_TOKEN_ESTIMATE,
+        0,
+      );
+    } else {
+      tokens = estimateTokens(msg.content);
+    }
 
     if (msg.contextItems?.length) {
       tokens += msg.contextItems.reduce(
@@ -220,6 +232,8 @@ export function estimateMessagesTokens(
         return tcSum + estimateTokens(inputStr) + estimateTokens(outputStr);
       }, 0);
     }
+
+    tokens += (msg.imageAttachments?.length ?? 0) * CHAT_IMAGE_TOKEN_ESTIMATE;
 
     // ~4 tokens overhead per message (role, separators)
     return sum + tokens + 4;
