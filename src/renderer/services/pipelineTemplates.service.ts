@@ -27,13 +27,13 @@ export const fetchPipelineTemplateContent = async (
 };
 
 export const applyZipTemplate = async (
-  projectPath: string,
+  projectId: string,
   url: string,
   mode: 'check' | 'replace' | 'skip',
 ): Promise<string[]> => {
   return window.electron.ipcRenderer.invoke(
     'pipeline-templates:apply-zip',
-    projectPath,
+    projectId,
     url,
     mode,
   );

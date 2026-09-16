@@ -104,7 +104,7 @@ interface CreatePipelineModalProps {
   onClose: () => void;
   project: Project;
   onCreated: (filePath: string) => void;
-  onApplied?: () => void;
+  onApplied?: () => void | Promise<void>;
 }
 
 type ModalView = 'menu' | 'browse' | 'location';
@@ -254,16 +254,24 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
   };
 
   const finishZipApply = async (url: string, mode: 'replace' | 'skip') => {
-    await applyZipTemplate(project.path, url, mode);
+    await applyZipTemplate(project.id, url, mode);
     toast.success('Template applied successfully.');
-    onApplied?.();
+    // The template is already on disk at this point, so a failed refresh is
+    // reported on its own and must not block closing the modal.
+    try {
+      await onApplied?.();
+    } catch (error) {
+      const msg =
+        error instanceof Error ? error.message : 'Failed to refresh files';
+      toast.error(`Template applied, but refresh failed: ${msg}`);
+    }
     onClose();
   };
 
   const applyZip = async (url: string) => {
     setIsCreating(true);
     try {
-      const conflicts = await applyZipTemplate(project.path, url, 'check');
+      const conflicts = await applyZipTemplate(project.id, url, 'check');
       if (conflicts.length > 0) {
         setPendingZip({ url, conflicts });
         return;
