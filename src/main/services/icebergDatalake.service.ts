@@ -50,7 +50,10 @@ import type { CloudConnection, CloudStorageConfig } from '../../types/frontend';
 import type { PostgresConnection } from '../../types/backend';
 
 export class IcebergDatalakeService {
-  private static readonly activeSqlExecutions = new Map<string, any>();
+  private static readonly activeSqlExecutions = new Map<
+    string,
+    { cancelled: boolean; connection?: any }
+  >();
 
   private static readonly cloudProviders = [
     'aws',
@@ -807,7 +810,10 @@ export class IcebergDatalakeService {
   }
 
   private static async buildDuckDbIcebergSql(
-    instance: IcebergInstanceConfig,
+    instance: IcebergInstanceConfig & {
+      accessToken?: string;
+      oauthClientSecret?: string;
+    },
     names: { catalogSecret: string; storageSecret: string; alias: string },
   ): Promise<{
     catalogSecretSql: string;
@@ -859,17 +865,21 @@ export class IcebergDatalakeService {
 
     const catalogOptions = ['TYPE ICEBERG'];
     if (instance.catalogAuthMode === 'token') {
-      const token = instance.catalogAccessTokenKey
-        ? await secureStorage.getCredential(instance.catalogAccessTokenKey)
-        : undefined;
+      const token =
+        instance.accessToken ||
+        (instance.catalogAccessTokenKey
+          ? await secureStorage.getCredential(instance.catalogAccessTokenKey)
+          : undefined);
       if (!token) throw new Error('ICEBERG_ACCESS_TOKEN_REQUIRED');
       catalogOptions.push(
         `TOKEN ${IcebergDatalakeService.quoteSqlLiteral(token)}`,
       );
     } else if (instance.catalogAuthMode === 'oauth-client-credentials') {
-      const clientSecret = instance.oauthClientSecretKey
-        ? await secureStorage.getCredential(instance.oauthClientSecretKey)
-        : undefined;
+      const clientSecret =
+        instance.oauthClientSecret ||
+        (instance.oauthClientSecretKey
+          ? await secureStorage.getCredential(instance.oauthClientSecretKey)
+          : undefined);
       if (
         !instance.oauthClientId ||
         !clientSecret ||
@@ -1557,15 +1567,139 @@ export class IcebergDatalakeService {
     };
   }
 
+  static validateSqlVerificationPayload(
+    id: unknown,
+    draft: unknown,
+  ): Partial<CreateIcebergInstanceDTO> | undefined {
+    if (typeof id !== 'string' || !id.trim() || id.length > 200) {
+      throw new Error('ICEBERG_SQL_VERIFICATION_PAYLOAD_INVALID');
+    }
+    if (draft === undefined) return undefined;
+    if (!draft || typeof draft !== 'object' || Array.isArray(draft)) {
+      throw new Error('ICEBERG_SQL_VERIFICATION_PAYLOAD_INVALID');
+    }
+    const strings = new Set([
+      'catalogType',
+      'catalogPath',
+      'endpoint',
+      'catalogName',
+      'catalogAuthMode',
+      'databaseConnectionId',
+      'storageType',
+      'localPath',
+      'cloudProvider',
+      'storageConnectionId',
+      'storageBucket',
+      'storagePrefix',
+      'sqlStorageConnectionId',
+      'sqlStorageProvider',
+      'sqlStorageBucket',
+      'sqlStoragePrefix',
+      'nessieReference',
+      'nessieWarehouse',
+      'oauthClientId',
+      'oauthServerUri',
+      'oauthScope',
+      'accessToken',
+      'oauthClientSecret',
+    ]);
+    const booleans = new Set(['sqlEnabled', 'sqlWarehouseMatchAcknowledged']);
+    const providers = [
+      'aws',
+      'azure',
+      'gcs',
+      'minio',
+      'cloudflare-r2',
+      'backblaze-b2',
+      'rustfs',
+      'garage',
+    ];
+    const enums: Record<string, string[]> = {
+      catalogType: [
+        'sqlite',
+        'sql',
+        'rest',
+        'polaris',
+        'lakekeeper',
+        'hive',
+        'glue',
+        'biglake',
+        'onelake',
+        'unity',
+        'snowflake',
+        'cloudflare',
+        'nessie',
+      ],
+      catalogAuthMode: ['none', 'token', 'oauth-client-credentials'],
+      storageType: ['server-managed', 'local', 'nfs', 'cloud'],
+      cloudProvider: providers,
+      sqlStorageProvider: providers,
+    };
+    const clean: Record<string, unknown> = {};
+    Object.entries(draft).forEach(([key, value]) => {
+      if (
+        (!strings.has(key) && !booleans.has(key)) ||
+        (value !== undefined &&
+          (strings.has(key)
+            ? typeof value !== 'string'
+            : typeof value !== 'boolean'))
+      ) {
+        throw new Error('ICEBERG_SQL_VERIFICATION_PAYLOAD_INVALID');
+      }
+      if (
+        value !== undefined &&
+        enums[key] &&
+        !enums[key].includes(value as string)
+      ) {
+        throw new Error('ICEBERG_SQL_VERIFICATION_PAYLOAD_INVALID');
+      }
+      clean[key] = value;
+    });
+    return clean;
+  }
+
   static async verifySqlAccess(
     id: string,
     draft?: Partial<CreateIcebergInstanceDTO>,
   ): Promise<IcebergTestResult> {
     try {
+      const validatedDraft =
+        IcebergDatalakeService.validateSqlVerificationPayload(id, draft);
       const savedInstance = await IcebergDatalakeService.getInstance(id);
-      const verifiedInstance = draft
-        ? ({ ...savedInstance, ...draft } as IcebergInstanceConfig)
+      const verifiedInstance = validatedDraft
+        ? ({ ...savedInstance, ...validatedDraft } as IcebergInstanceConfig)
         : savedInstance;
+      const targets = [
+        'catalogType',
+        'endpoint',
+        'catalogName',
+        'catalogAuthMode',
+        'oauthClientId',
+        'oauthServerUri',
+        'oauthScope',
+        'nessieReference',
+        'nessieWarehouse',
+        'catalogConnectionId',
+        'databaseConnectionId',
+      ] as const;
+      if (
+        validatedDraft &&
+        targets.some((key) => verifiedInstance[key] !== savedInstance[key])
+      ) {
+        if (
+          (verifiedInstance.catalogAuthMode === 'token' &&
+            savedInstance.catalogAccessTokenKey &&
+            !validatedDraft.accessToken?.trim()) ||
+          (verifiedInstance.catalogAuthMode === 'oauth-client-credentials' &&
+            savedInstance.oauthClientSecretKey &&
+            !validatedDraft.oauthClientSecret?.trim())
+        ) {
+          throw new Error('ICEBERG_SQL_REPLACEMENT_CREDENTIALS_REQUIRED');
+        }
+        // Changed targets must never fall back to saved secrets.
+        delete verifiedInstance.catalogAccessTokenKey;
+        delete verifiedInstance.oauthClientSecretKey;
+      }
       const executionId = `verify-${uuidv4()}`;
       await IcebergDatalakeService.withAttachedSqlCatalog(
         id,
@@ -1597,7 +1731,7 @@ export class IcebergDatalakeService {
         verifiedInstance,
         true,
       );
-      if (draft) {
+      if (validatedDraft) {
         return {
           success: true,
           catalogConnected: true,
@@ -1664,27 +1798,25 @@ export class IcebergDatalakeService {
     }
     // Reserve the id synchronously so a concurrent call cannot pass the
     // duplicate check while the async setup is still in progress.
-    IcebergDatalakeService.activeSqlExecutions.set(executionId, null);
-    const instance =
-      instanceOverride ??
-      (await IcebergDatalakeService.getInstance(instanceId));
+    const execution = { cancelled: false, connection: undefined as any };
+    IcebergDatalakeService.activeSqlExecutions.set(executionId, execution);
+    let duckdbInstance: any;
+    let connection: any;
+    let attached = false;
     const suffix = uuidv4().replace(/-/g, '');
     const names = {
       alias: 'iceberg',
       catalogSecret: `iceberg_catalog_${suffix}`,
       storageSecret: `iceberg_storage_${suffix}`,
     };
-    const sql = await IcebergDatalakeService.buildDuckDbIcebergSql(
-      instance,
-      names,
-    );
-    let duckdbInstance: any;
-    let connection: any;
-    let attached = false;
     const checkCancelled = () => {
-      if (signal?.aborted) throw new Error('ICEBERG_SQL_CANCELLED');
+      if (execution.cancelled || signal?.aborted)
+        throw new Error('ICEBERG_SQL_CANCELLED');
     };
-    const interrupt = () => connection?.interrupt();
+    const interrupt = () => {
+      execution.cancelled = true;
+      connection?.interrupt();
+    };
     signal?.addEventListener('abort', interrupt);
     let stage = 'initialize';
     let result!: T;
@@ -1692,10 +1824,19 @@ export class IcebergDatalakeService {
     let instanceCloseFailed = false;
     try {
       checkCancelled();
+      const instance =
+        instanceOverride ??
+        (await IcebergDatalakeService.getInstance(instanceId));
+      checkCancelled();
+      const sql = await IcebergDatalakeService.buildDuckDbIcebergSql(
+        instance,
+        names,
+      );
+      checkCancelled();
       duckdbInstance = await DuckDBInstance.create(':memory:');
       connection = await duckdbInstance.connect();
+      execution.connection = connection;
       checkCancelled();
-      IcebergDatalakeService.activeSqlExecutions.set(executionId, connection);
       stage = 'install-extensions';
       await connection.run('INSTALL httpfs');
       checkCancelled();
@@ -1718,7 +1859,9 @@ export class IcebergDatalakeService {
       stage = 'execute';
       checkCancelled();
       result = await callback(connection, names.alias);
+      checkCancelled();
     } catch (error) {
+      checkCancelled();
       const message = error instanceof Error ? error.message : String(error);
       if (message.startsWith('ICEBERG_')) throw error;
       if (stage === 'execute') {
@@ -1975,10 +2118,11 @@ export class IcebergDatalakeService {
   }
 
   static cancelSql(executionId: string): boolean {
-    const connection =
+    const execution =
       IcebergDatalakeService.activeSqlExecutions.get(executionId);
-    if (!connection) return false;
-    connection.interrupt();
+    if (!execution) return false;
+    execution.cancelled = true;
+    execution.connection?.interrupt();
     return true;
   }
 

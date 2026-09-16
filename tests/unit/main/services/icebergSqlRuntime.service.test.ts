@@ -439,12 +439,136 @@ describe('IcebergDatalakeService DuckDB Iceberg lifecycle', () => {
     expect(mockRunAndReadAll).not.toHaveBeenCalled();
   });
 
+  it.each([
+    'endpoint',
+    'oauthServerUri',
+    'oauthClientId',
+    'oauthScope',
+    'catalogName',
+    'nessieReference',
+    'nessieWarehouse',
+  ])('rejects changed %s before reading saved credentials', async (field) => {
+    const result = await IcebergDatalakeService.verifySqlAccess(instance.id, {
+      [field]: 'changed',
+    });
+    expect(result.error).toBe('ICEBERG_SQL_REPLACEMENT_CREDENTIALS_REQUIRED');
+    expect(mockedSecureStorage.getCredential).not.toHaveBeenCalled();
+    expect(mockRun).not.toHaveBeenCalled();
+  });
+
+  it('uses replacement credentials without falling back to the saved OAuth secret', async () => {
+    const result = await IcebergDatalakeService.verifySqlAccess(instance.id, {
+      endpoint: 'http://localhost:8182/catalog',
+      oauthClientSecret: 'replacement-secret',
+    });
+    expect(result.success).toBe(true);
+    expect(mockedSecureStorage.getCredential).not.toHaveBeenCalledWith(
+      instance.oauthClientSecretKey,
+    );
+    expect(
+      mockRun.mock.calls.some(([sql]) =>
+        String(sql).includes("CLIENT_SECRET 'replacement-secret'"),
+      ),
+    ).toBe(true);
+    expect(mockedUpdateDatabase).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    null,
+    [],
+    { endpoint: 42 },
+    { sqlEnabled: 'yes' },
+    { oauthClientSecretKey: 'stolen' },
+    { id: 'other' },
+  ])('rejects invalid verification drafts', (draft) => {
+    expect(() =>
+      IcebergDatalakeService.validateSqlVerificationPayload(instance.id, draft),
+    ).toThrow('ICEBERG_SQL_VERIFICATION_PAYLOAD_INVALID');
+  });
+
+  it('rejects redirecting a saved bearer token', async () => {
+    mockedLoadDatabase.mockResolvedValue({
+      ...database,
+      icebergInstances: [
+        {
+          ...instance,
+          catalogAuthMode: 'token',
+          catalogAccessTokenKey: 'iceberg-catalog-token-saved',
+        },
+      ],
+    });
+    const result = await IcebergDatalakeService.verifySqlAccess(instance.id, {
+      endpoint: 'https://other.example/catalog',
+    });
+    expect(result.error).toBe('ICEBERG_SQL_REPLACEMENT_CREDENTIALS_REQUIRED');
+    expect(mockedSecureStorage.getCredential).not.toHaveBeenCalled();
+  });
+
+  it('releases the execution id when setup fails', async () => {
+    const getInstance = jest
+      .spyOn(IcebergDatalakeService, 'getInstance')
+      .mockRejectedValueOnce(new Error('failed'));
+    await expect(
+      (IcebergDatalakeService as any).withAttachedSqlCatalog(
+        instance.id,
+        'failed-setup',
+        jest.fn(),
+      ),
+    ).rejects.toThrow();
+    expect(IcebergDatalakeService.cancelSql('failed-setup')).toBe(false);
+    getInstance.mockRestore();
+  });
+
+  it('preserves cancellation while the instance is being loaded', async () => {
+    let release!: (value: any) => void;
+    const pending = new Promise<any>((resolve) => {
+      release = resolve;
+    });
+    const getInstance = jest
+      .spyOn(IcebergDatalakeService, 'getInstance')
+      .mockReturnValueOnce(pending);
+    const callback = jest.fn();
+    const run = (IcebergDatalakeService as any).withAttachedSqlCatalog(
+      instance.id,
+      'pending-query',
+      callback,
+    );
+    expect(IcebergDatalakeService.cancelSql('pending-query')).toBe(true);
+    release(instance);
+    await expect(run).rejects.toThrow('ICEBERG_SQL_CANCELLED');
+    expect(callback).not.toHaveBeenCalled();
+    expect(IcebergDatalakeService.cancelSql('pending-query')).toBe(false);
+    getInstance.mockRestore();
+  });
+
+  it('preserves cancellation during attachment even if interrupt does not reject', async () => {
+    mockRun.mockImplementation(async (sql: string) => {
+      if (sql.startsWith('ATTACH '))
+        expect(IcebergDatalakeService.cancelSql('attaching-query')).toBe(true);
+    });
+    const callback = jest.fn();
+    await expect(
+      (IcebergDatalakeService as any).withAttachedSqlCatalog(
+        instance.id,
+        'attaching-query',
+        callback,
+      ),
+    ).rejects.toThrow('ICEBERG_SQL_CANCELLED');
+    expect(mockInterrupt).toHaveBeenCalled();
+    expect(callback).not.toHaveBeenCalled();
+    expect(mockCloseConnection).toHaveBeenCalled();
+    expect(IcebergDatalakeService.cancelSql('attaching-query')).toBe(false);
+  });
+
   it('interrupts only a registered active execution', () => {
     const active = (IcebergDatalakeService as any).activeSqlExecutions as Map<
       string,
       unknown
     >;
-    active.set('running-query', { interrupt: mockInterrupt });
+    active.set('running-query', {
+      cancelled: false,
+      connection: { interrupt: mockInterrupt },
+    });
 
     expect(IcebergDatalakeService.cancelSql('running-query')).toBe(true);
     expect(mockInterrupt).toHaveBeenCalled();
