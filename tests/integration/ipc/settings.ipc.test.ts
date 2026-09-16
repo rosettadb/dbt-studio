@@ -4,6 +4,7 @@ import * as fs from 'fs';
 
 // Import handlers after mocks
 import registerSettingsHandlers from '../../../src/main/ipcHandlers/settings.ipcHandlers';
+import { CURRENT_SCHEMA_VERSION } from '../../../src/main/database/migrations';
 
 // Define path constants
 const TEST_DIR_NAME = 'dbt-studio-settings-ipc-test';
@@ -96,6 +97,7 @@ describe('Settings IPC Integration', () => {
     // Create database.json file with default settings
     const dbPath = path.join(MOCK_USER_DATA, 'database.json');
     const defaultDb = {
+      schemaVersion: CURRENT_SCHEMA_VERSION,
       projects: [],
       settings: {
         dbtVersion: '1.0.0',

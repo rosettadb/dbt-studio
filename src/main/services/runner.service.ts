@@ -391,11 +391,30 @@ export default class RunnerService {
     command: string,
     versionArgs: string[] = ['--version'],
   ): Promise<{ available: boolean; version?: string; path?: string }> {
+    // On macOS, Electron's PATH often omits Homebrew directories because
+    // the app is launched via launchd rather than a login shell.  Ensure
+    // the standard Homebrew prefixes are present so that tools installed
+    // via Homebrew (terraform, git, aws, etc.) are discoverable.
+    const homebrewDirs =
+      process.platform === 'darwin'
+        ? ['/opt/homebrew/bin', '/usr/local/bin']
+        : [];
+    const extraPath =
+      homebrewDirs.length > 0 ? homebrewDirs.join(path.delimiter) : undefined;
+
     return new Promise((resolve) => {
       execFile(
         command,
         versionArgs,
-        { timeout: 5000 },
+        {
+          timeout: 5000,
+          env: {
+            ...process.env,
+            ...(extraPath
+              ? { PATH: `${extraPath}:${process.env.PATH ?? ''}` }
+              : {}),
+          },
+        },
         (error, stdout, stderr) => {
           if (error) {
             resolve({ available: false });
