@@ -536,9 +536,25 @@ export default class ProjectsService {
 
       const projects = await this.loadProjects();
 
-      // Check if project is already imported (by path)
-      if (projects.find((p) => p.path === projectPath)) {
-        throw new Error('This project is already imported.');
+      const resolvedProjectPath = (() => {
+        try {
+          return fs.realpathSync(projectPath);
+        } catch {
+          return projectPath;
+        }
+      })();
+      const alreadyImported = projects.find((p) => {
+        if (!p.path || !fs.existsSync(p.path)) return false;
+        try {
+          return fs.realpathSync(p.path) === resolvedProjectPath;
+        } catch {
+          return p.path === projectPath;
+        }
+      });
+      if (alreadyImported) {
+        throw new Error(
+          `This project is already imported as "${alreadyImported.name}". Remove it from Studio first before re-importing.`,
+        );
       }
 
       // Check if project name already exists and make it unique if needed
@@ -696,7 +712,15 @@ export default class ProjectsService {
     if (!projectToDelete) return false;
 
     if (projectToDelete.path) {
-      deleteDirectory(projectToDelete.path);
+      try {
+        deleteDirectory(projectToDelete.path);
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error(
+          '[ProjectsService] Failed to delete project directory:',
+          error,
+        );
+      }
     }
 
     // Both the list and the (possibly now-dangling) selection move together
