@@ -144,8 +144,9 @@ test.describe('Settings', () => {
 
     // Snapshot every localStorage entry so the theme key can be found by what
     // changes, rather than by guessing MUI's storage key name.
+    // `window` here is the Playwright Page, so use the bare browser global
     const readStorage = () =>
-      window.evaluate(() => ({ ...window.localStorage }));
+      window.evaluate(() => ({ ...localStorage }) as Record<string, string>);
     const changedEntries = (
       before: Record<string, string>,
       after: Record<string, string>,
