@@ -926,7 +926,7 @@ const Sql = () => {
                   >
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <img
-                        src={connectionIcons.images.duckdb || defaultIcon}
+                        src={connectionIcons.images.ducklake || defaultIcon}
                         alt=""
                         style={{
                           width: 14,
