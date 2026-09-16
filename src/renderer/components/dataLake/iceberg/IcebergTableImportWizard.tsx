@@ -216,7 +216,11 @@ export const IcebergTableImportWizard: React.FC<
         fullWidth
         disableClearable
         value={selectedNamespace}
-        options={namespaces.includes('default') ? namespaces : ['default', ...namespaces]}
+        options={
+          namespaces.includes('default')
+            ? namespaces
+            : ['default', ...namespaces]
+        }
         onChange={(_event, value) => setSelectedNamespace(value ?? 'default')}
         getOptionLabel={(option) => option}
         isOptionEqualToValue={(option, value) => option === value}
