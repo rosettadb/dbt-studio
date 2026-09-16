@@ -19,6 +19,8 @@ export class SetupWizardPage extends BasePage {
 
   readonly pythonSetupStep: Locator;
 
+  readonly runnerSetupStep: Locator;
+
   readonly completionStep: Locator;
 
   // Navigation buttons
@@ -36,6 +38,7 @@ export class SetupWizardPage extends BasePage {
     this.welcomeStep = this.getByTestId('setup-step-welcome');
     this.cliInstallStep = this.getByTestId('setup-step-cli');
     this.pythonSetupStep = this.getByTestId('setup-step-python');
+    this.runnerSetupStep = this.getByTestId('setup-step-runner');
     this.completionStep = this.getByTestId('setup-step-complete');
     this.nextButton = this.getByTestId('setup-next-btn');
     this.backButton = this.getByTestId('setup-back-btn');
@@ -168,12 +171,13 @@ export class SetupWizardPage extends BasePage {
    * Expect a specific step to be the current/visible step
    */
   async expectCurrentStep(
-    step: 'welcome' | 'cli' | 'python' | 'complete',
+    step: 'welcome' | 'cli' | 'python' | 'runner' | 'complete',
   ): Promise<void> {
     const stepMap = {
       welcome: this.welcomeStep,
       cli: this.cliInstallStep,
       python: this.pythonSetupStep,
+      runner: this.runnerSetupStep,
       complete: this.completionStep,
     };
     await expect(stepMap[step]).toBeVisible();
