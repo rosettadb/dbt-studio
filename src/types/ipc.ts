@@ -542,7 +542,8 @@ export type FlowfileChannels =
 
 export type PipelineTemplatesChannels =
   | 'pipeline-templates:list'
-  | 'pipeline-templates:fetch-content';
+  | 'pipeline-templates:fetch-content'
+  | 'pipeline-templates:apply-zip';
 
 export type SecondBrainChannels =
   | 'second-brain:status'

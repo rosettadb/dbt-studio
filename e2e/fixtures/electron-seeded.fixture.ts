@@ -3,6 +3,7 @@ import { test as base, ElectronApplication, Page } from '@playwright/test';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
+import { CURRENT_SCHEMA_VERSION } from '../../src/main/database/migrations';
 
 export type TestFixtures = {
   electronApp: ElectronApplication;
@@ -47,6 +48,7 @@ export const test = base.extend<TestFixtures>({
 
     // Seed database.json with test project and connection
     const databaseJson = {
+      schemaVersion: CURRENT_SCHEMA_VERSION,
       settings: {
         isSetup: 'true',
         pythonPath:
@@ -91,7 +93,7 @@ export const test = base.extend<TestFixtures>({
     fs.rmSync(userDataDir, { recursive: true, force: true });
   },
 
-  electronApp: async ({ userData }, use) => {
+  electronApp: async ({ userData }, use, testInfo) => {
     const electronApp = await electron.launch({
       args: [
         path.join(__dirname, '../../.erb/dll/main.bundle.dev.js'),
@@ -107,7 +109,33 @@ export const test = base.extend<TestFixtures>({
       },
     });
 
+    // See electron.fixture.ts for why this is needed and env-gated.
+    const manualTracing = process.env.E2E_FORCE_TRACE_SNAPSHOTS === 'true';
+    if (manualTracing) {
+      try {
+        await electronApp
+          .context()
+          .tracing.start({ screenshots: true, snapshots: true });
+      } catch (e) {
+        console.error('Failed to start manual tracing:', e);
+      }
+    }
+
     await use(electronApp);
+
+    if (manualTracing) {
+      try {
+        const tracePath = path.join(testInfo.outputDir, 'manual-trace.zip');
+        await electronApp.context().tracing.stop({ path: tracePath });
+        await testInfo.attach('trace', {
+          path: tracePath,
+          contentType: 'application/zip',
+        });
+      } catch (e) {
+        console.error('Failed to stop/attach manual tracing:', e);
+      }
+    }
+
     await electronApp.close();
   },
 

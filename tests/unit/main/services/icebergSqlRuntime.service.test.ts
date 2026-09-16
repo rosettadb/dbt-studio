@@ -1,9 +1,8 @@
 import { IcebergDatalakeService } from '../../../../src/main/services/icebergDatalake.service';
 import secureStorage from '../../../../src/main/services/secureStorage.service';
-import {
-  loadDatabaseFile,
-  updateDatabase,
-} from '../../../../src/main/utils/fileHelper';
+import databaseStore from '../../../../src/main/database';
+
+const mockDatabaseSnapshot = jest.fn();
 
 const mockRun = jest.fn();
 const mockRunAndReadUntil = jest.fn();
@@ -37,9 +36,9 @@ jest.mock('@duckdb/node-api', () => ({
   },
 }));
 
-jest.mock('../../../../src/main/utils/fileHelper', () => ({
-  loadDatabaseFile: jest.fn(),
-  updateDatabase: jest.fn(),
+jest.mock('../../../../src/main/database', () => ({
+  __esModule: true,
+  default: { getField: jest.fn(), updateField: jest.fn() },
 }));
 
 jest.mock('../../../../src/main/services/secureStorage.service', () => ({
@@ -56,8 +55,8 @@ jest.mock('../../../../src/main/services/settings.service', () => ({
   default: { loadSettings: jest.fn() },
 }));
 
-const mockedLoadDatabase = loadDatabaseFile as jest.Mock;
-const mockedUpdateDatabase = updateDatabase as jest.Mock;
+const mockedGetField = databaseStore.getField as jest.Mock;
+const mockedUpdateField = databaseStore.updateField as jest.Mock;
 const mockedSecureStorage = secureStorage as jest.Mocked<typeof secureStorage>;
 
 const instance = {
@@ -110,8 +109,14 @@ describe('IcebergDatalakeService DuckDB Iceberg lifecycle', () => {
         },
       ],
     });
-    mockedLoadDatabase.mockResolvedValue(database);
-    mockedUpdateDatabase.mockResolvedValue(undefined);
+    mockDatabaseSnapshot.mockResolvedValue(database);
+    mockedGetField.mockImplementation(
+      async (key: string) => (await mockDatabaseSnapshot())[key],
+    );
+    mockedUpdateField.mockImplementation(
+      async (key: string, updater: (value: any) => any) =>
+        updater((await mockDatabaseSnapshot())[key]),
+    );
     mockedSecureStorage.getCredential.mockImplementation(async (key) => {
       if (key === 'cloud-minio-minio-connection') return 'minio-secret';
       if (key === 'iceberg-oauth-secret-iceberg-instance') {
@@ -153,7 +158,7 @@ describe('IcebergDatalakeService DuckDB Iceberg lifecycle', () => {
   });
 
   it('returns DuckDB row objects keyed for the SQL result table', async () => {
-    mockedLoadDatabase.mockResolvedValue({
+    mockDatabaseSnapshot.mockResolvedValue({
       ...database,
       icebergInstances: [
         {
@@ -183,7 +188,7 @@ describe('IcebergDatalakeService DuckDB Iceberg lifecycle', () => {
   });
 
   it('pages Iceberg reads in DuckDB and returns the total row count', async () => {
-    mockedLoadDatabase.mockResolvedValue({
+    mockDatabaseSnapshot.mockResolvedValue({
       ...database,
       icebergInstances: [
         {
@@ -234,7 +239,7 @@ describe('IcebergDatalakeService DuckDB Iceberg lifecycle', () => {
   });
 
   it('ignores read pagination for a confirmed mutation', async () => {
-    mockedLoadDatabase.mockResolvedValue({
+    mockDatabaseSnapshot.mockResolvedValue({
       ...database,
       icebergInstances: [
         {
@@ -308,8 +313,11 @@ describe('IcebergDatalakeService DuckDB Iceberg lifecycle', () => {
     ).toHaveLength(2);
     expect(mockCloseConnection).toHaveBeenCalled();
     expect(mockCloseInstance).toHaveBeenCalled();
-    expect(mockedUpdateDatabase).toHaveBeenCalledWith(
+    expect(mockedUpdateField).toHaveBeenCalledWith(
       'icebergInstances',
+      expect.any(Function),
+    );
+    await expect(mockedUpdateField.mock.results[0].value).resolves.toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           id: instance.id,
@@ -318,6 +326,16 @@ describe('IcebergDatalakeService DuckDB Iceberg lifecycle', () => {
         }),
       ]),
     );
+  });
+
+  it('does not verify a configuration changed before the atomic store update', async () => {
+    mockedUpdateField.mockImplementationOnce(
+      async (_key: string, updater: (current: any[]) => any[]) =>
+        updater([{ ...instance, endpoint: 'https://changed.example/catalog' }]),
+    );
+    const result = await IcebergDatalakeService.verifySqlAccess(instance.id);
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('ICEBERG_SQL_CONFIGURATION_CHANGED');
   });
 
   it('cleans up secrets and closes handles when attach fails', async () => {
@@ -336,11 +354,11 @@ describe('IcebergDatalakeService DuckDB Iceberg lifecycle', () => {
     ).toHaveLength(2);
     expect(mockCloseConnection).toHaveBeenCalled();
     expect(mockCloseInstance).toHaveBeenCalled();
-    expect(mockedUpdateDatabase).not.toHaveBeenCalled();
+    expect(mockedUpdateField).not.toHaveBeenCalled();
   });
 
   it('maps PyIceberg catalog metadata into SQL Editor schema metadata', async () => {
-    mockedLoadDatabase.mockResolvedValue({
+    mockDatabaseSnapshot.mockResolvedValue({
       ...database,
       icebergInstances: [
         {
@@ -394,7 +412,7 @@ describe('IcebergDatalakeService DuckDB Iceberg lifecycle', () => {
       nessieWarehouse: 'warehouse',
       oauthClientSecretKey: 'iceberg-oauth-secret-nessie-instance',
     };
-    mockedLoadDatabase.mockResolvedValue({
+    mockDatabaseSnapshot.mockResolvedValue({
       ...database,
       icebergInstances: [nessieInstance],
     });
@@ -470,7 +488,7 @@ describe('IcebergDatalakeService DuckDB Iceberg lifecycle', () => {
         String(sql).includes("CLIENT_SECRET 'replacement-secret'"),
       ),
     ).toBe(true);
-    expect(mockedUpdateDatabase).not.toHaveBeenCalled();
+    expect(mockedUpdateField).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -487,7 +505,7 @@ describe('IcebergDatalakeService DuckDB Iceberg lifecycle', () => {
   });
 
   it('rejects redirecting a saved bearer token', async () => {
-    mockedLoadDatabase.mockResolvedValue({
+    mockDatabaseSnapshot.mockResolvedValue({
       ...database,
       icebergInstances: [
         {
@@ -617,13 +635,13 @@ describe('IcebergDatalakeService DuckDB Iceberg lifecycle', () => {
     expect(
       (await IcebergDatalakeService.verifySqlAccess(instance.id)).success,
     ).toBe(false);
-    expect(mockedUpdateDatabase).not.toHaveBeenCalled();
+    expect(mockedUpdateField).not.toHaveBeenCalled();
     expect(mockCloseConnection).toHaveBeenCalled();
     expect(mockCloseInstance).toHaveBeenCalled();
   });
 
   it('enables SQL for a verified connection without a combination registry', async () => {
-    mockedLoadDatabase.mockResolvedValue({
+    mockDatabaseSnapshot.mockResolvedValue({
       ...database,
       icebergInstances: [
         {
@@ -648,7 +666,7 @@ describe('IcebergDatalakeService DuckDB Iceberg lifecycle', () => {
   });
 
   it('requires explicit confirmation for parsed mutations before attaching', async () => {
-    mockedLoadDatabase.mockResolvedValue({
+    mockDatabaseSnapshot.mockResolvedValue({
       ...database,
       icebergInstances: [
         {

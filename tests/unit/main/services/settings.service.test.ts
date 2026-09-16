@@ -7,6 +7,7 @@ import MainDatabaseService from '../../../../src/main/services/mainDatabase.serv
 import { TaskManagerService } from '../../../../src/main/services/taskManager.service';
 import { FlowfileService } from '../../../../src/main/services/flowfile.service';
 import * as fileHelper from '../../../../src/main/utils/fileHelper';
+import databaseStore from '../../../../src/main/database';
 
 jest.mock('openai', () => ({
   OpenAI: jest.fn(),
@@ -77,10 +78,16 @@ jest.mock('../../../../src/main/services/mainDatabase.service', () => ({
 }));
 
 jest.mock('../../../../src/main/utils/fileHelper', () => ({
-  loadDatabaseFile: jest.fn(),
-  updateDatabase: jest.fn(),
   loadDefaultSettings: jest.fn(),
   deleteDirectory: jest.fn(),
+}));
+
+jest.mock('../../../../src/main/database', () => ({
+  __esModule: true,
+  default: {
+    getField: jest.fn(),
+    updateField: jest.fn(),
+  },
 }));
 
 jest.mock('../../../../src/main/utils/setupHelpers', () => ({
@@ -94,9 +101,17 @@ jest.mock('../../../../src/main/adapters', () => ({
   })),
 }));
 
-const loadDatabaseFile = fileHelper.loadDatabaseFile as jest.Mock;
-const updateDatabase = fileHelper.updateDatabase as jest.Mock;
+const mockedGetField = databaseStore.getField as jest.Mock;
+const mockedUpdateField = databaseStore.updateField as jest.Mock;
 const loadDefaultSettings = fileHelper.loadDefaultSettings as jest.Mock;
+
+// Stubs databaseStore.getField to serve fixed values per key, mirroring
+// what a real DatabaseStore would hand back for the given fields.
+const stubDb = (fields: Record<string, unknown>) => {
+  mockedGetField.mockImplementation((key: string) =>
+    Promise.resolve(fields[key]),
+  );
+};
 
 describe('SettingsService (main)', () => {
   beforeEach(() => {
@@ -119,26 +134,48 @@ describe('SettingsService (main)', () => {
 
   describe('loadSettings', () => {
     it('returns existing settings when present in database', async () => {
-      loadDatabaseFile.mockResolvedValue({
-        settings: { pythonPath: '/x/python' },
-      });
+      stubDb({ settings: { pythonPath: '/x/python' } });
       loadDefaultSettings.mockReturnValue({ pythonPath: '/default/python' });
 
       await expect(SettingsService.loadSettings()).resolves.toEqual({
         pythonPath: '/x/python',
       });
       expect(loadDefaultSettings).toHaveBeenCalled();
-      expect(updateDatabase).not.toHaveBeenCalled();
+      expect(mockedUpdateField).not.toHaveBeenCalled();
     });
 
     it('returns default settings when persisted settings are missing', async () => {
-      loadDatabaseFile.mockResolvedValue({ settings: {} });
+      stubDb({ settings: {} });
       loadDefaultSettings.mockReturnValue({ pythonPath: '/default/python' });
 
       await expect(SettingsService.loadSettings()).resolves.toEqual({
         pythonPath: '/default/python',
       });
-      expect(updateDatabase).not.toHaveBeenCalled();
+      expect(mockedUpdateField).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('saveSettings', () => {
+    it('merges the partial update onto the current settings instead of replacing them', async () => {
+      await SettingsService.saveSettings({ rosettaVersion: '2.0.0' });
+
+      expect(mockedUpdateField).toHaveBeenCalledWith(
+        'settings',
+        expect.any(Function),
+      );
+      const updater = mockedUpdateField.mock.calls[0][1];
+      const current = {
+        rosettaVersion: '1.0.0',
+        pythonPath: '/usr/bin/python3',
+      };
+
+      // This is the actual regression guard: a concurrent caller changing
+      // an unrelated field (pythonPath) must survive this save untouched —
+      // the old full-object saveSettings would have silently dropped it.
+      expect(updater(current)).toEqual({
+        rosettaVersion: '2.0.0',
+        pythonPath: '/usr/bin/python3',
+      });
     });
   });
 
@@ -151,7 +188,7 @@ describe('SettingsService (main)', () => {
 
     it('stops resources, clears browser data and credentials, deletes owned state, and schedules restart', async () => {
       jest.useFakeTimers();
-      loadDatabaseFile.mockResolvedValue({
+      stubDb({
         projects: [{ path: '/tmp/dbt-studio-project' }],
         settings: {
           rosettaPath:
@@ -189,7 +226,7 @@ describe('SettingsService (main)', () => {
     });
 
     it('does not restart when browser cleanup fails', async () => {
-      loadDatabaseFile.mockResolvedValue({ projects: [], settings: {} });
+      stubDb({ projects: [], settings: {} });
       const session = makeSession();
       session.clearCache.mockRejectedValue(new Error('/secret/cache/path'));
 
@@ -206,7 +243,7 @@ describe('SettingsService (main)', () => {
     });
 
     it('rejects an unsafe registered project before cleanup starts', async () => {
-      loadDatabaseFile.mockResolvedValue({
+      stubDb({
         projects: [{ path: '/tmp/dbt-studio-home' }],
         settings: {},
       });
@@ -221,7 +258,7 @@ describe('SettingsService (main)', () => {
     });
 
     it('preserves the macOS credential verification detail and requires restart', async () => {
-      loadDatabaseFile.mockResolvedValue({ projects: [], settings: {} });
+      stubDb({ projects: [], settings: {} });
       (
         SecureStorageService.clearAllCredentials as jest.Mock
       ).mockRejectedValueOnce(
@@ -239,7 +276,7 @@ describe('SettingsService (main)', () => {
     });
 
     it('fails when a running task cannot be cancelled', async () => {
-      loadDatabaseFile.mockResolvedValue({ projects: [], settings: {} });
+      stubDb({ projects: [], settings: {} });
       (TaskManagerService.cancelAll as jest.Mock).mockReturnValueOnce(1);
 
       await expect(
@@ -251,7 +288,7 @@ describe('SettingsService (main)', () => {
 
     it('times out a shutdown operation instead of waiting indefinitely', async () => {
       jest.useFakeTimers();
-      loadDatabaseFile.mockResolvedValue({ projects: [], settings: {} });
+      stubDb({ projects: [], settings: {} });
       (FlowfileService.stop as jest.Mock).mockReturnValueOnce(
         new Promise(() => {
           // Simulate a shutdown operation that never settles.
