@@ -84,7 +84,7 @@ export class IcebergDatalakeService {
     },
     {
       type: 'sql',
-      label: 'PostgreSQL / Neon',
+      label: 'PostgreSQL',
       pyicebergType: 'sql',
       enabled: true,
       requiredFields: ['databaseConnectionId', 'catalogName'],
@@ -1557,9 +1557,15 @@ export class IcebergDatalakeService {
     };
   }
 
-  static async verifySqlAccess(id: string): Promise<IcebergTestResult> {
+  static async verifySqlAccess(
+    id: string,
+    draft?: Partial<CreateIcebergInstanceDTO>,
+  ): Promise<IcebergTestResult> {
     try {
-      const verifiedInstance = await IcebergDatalakeService.getInstance(id);
+      const savedInstance = await IcebergDatalakeService.getInstance(id);
+      const verifiedInstance = draft
+        ? ({ ...savedInstance, ...draft } as IcebergInstanceConfig)
+        : savedInstance;
       const executionId = `verify-${uuidv4()}`;
       await IcebergDatalakeService.withAttachedSqlCatalog(
         id,
@@ -1587,7 +1593,18 @@ export class IcebergDatalakeService {
             throw new Error('ICEBERG_SQL_NONEMPTY_TABLE_REQUIRED');
           }
         },
+        undefined,
+        verifiedInstance,
+        true,
       );
+      if (draft) {
+        return {
+          success: true,
+          catalogConnected: true,
+          warehouseConnected: true,
+          checkedAt: new Date().toISOString(),
+        };
+      }
       const runtimeFingerprint =
         IcebergDatalakeService.getSqlRuntimeFingerprint();
       const instances = await IcebergDatalakeService.readInstances();
@@ -1636,6 +1653,7 @@ export class IcebergDatalakeService {
     executionId: string,
     callback: (connection: any, alias: string) => Promise<T>,
     signal?: AbortSignal,
+    instanceOverride?: IcebergInstanceConfig,
     strictCleanup = false,
   ): Promise<T> {
     if (!executionId.trim() || executionId.length > 120) {
@@ -1647,7 +1665,9 @@ export class IcebergDatalakeService {
     // Reserve the id synchronously so a concurrent call cannot pass the
     // duplicate check while the async setup is still in progress.
     IcebergDatalakeService.activeSqlExecutions.set(executionId, null);
-    const instance = await IcebergDatalakeService.getInstance(instanceId);
+    const instance =
+      instanceOverride ??
+      (await IcebergDatalakeService.getInstance(instanceId));
     const suffix = uuidv4().replace(/-/g, '');
     const names = {
       alias: 'iceberg',

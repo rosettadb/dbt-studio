@@ -74,7 +74,7 @@ export interface IcebergInstanceConfig {
   nessieWarehouse?: string; // optional named Nessie warehouse
   hiveUri?: string; // Hive Metastore Thrift URI, e.g. thrift://localhost:9083
   hiveUgi?: string; // optional Hive user:group identity for non-Kerberos HMS
-  databaseConnectionId?: string; // Existing PostgreSQL/Neon connection
+  databaseConnectionId?: string; // Existing PostgreSQL connection
   catalogAccessTokenKey?: `iceberg-catalog-token-${string}`;
   catalogConnectionId?: string; // Cloud Explorer connectionId for vended credentials
   catalogBucket?: string;

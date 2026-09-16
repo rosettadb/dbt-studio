@@ -162,9 +162,18 @@ export const useIcebergSqlCapability = (id: string) =>
 export const useVerifyIcebergSqlAccess = () => {
   const qc = useQueryClient();
   return useMutation(
-    (id: string) => icebergService.verifyIcebergSqlAccess(id),
+    (
+      variables:
+        | string
+        | { id: string; draft?: Partial<CreateIcebergInstanceDTO> },
+    ) => {
+      const id = typeof variables === 'string' ? variables : variables.id;
+      const draft = typeof variables === 'string' ? undefined : variables.draft;
+      return icebergService.verifyIcebergSqlAccess(id, draft);
+    },
     {
-      onSuccess: (_result, id) => {
+      onSuccess: (_result, variables) => {
+        const id = typeof variables === 'string' ? variables : variables.id;
         qc.invalidateQueries(['iceberg', 'instance', id]);
         qc.invalidateQueries(['iceberg', 'sql-capability', id]);
       },

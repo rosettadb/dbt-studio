@@ -83,8 +83,9 @@ export const getIcebergSqlSchema = (
 
 export const verifyIcebergSqlAccess = (
   id: string,
+  draft?: Partial<CreateIcebergInstanceDTO>,
 ): Promise<IcebergTestResult> =>
-  window.electron.ipcRenderer.invoke('iceberg:verifySqlAccess', id);
+  window.electron.ipcRenderer.invoke('iceberg:verifySqlAccess', id, draft);
 
 export const executeIcebergSql = (
   params: IcebergSqlExecutionParams,

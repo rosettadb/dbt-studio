@@ -47,7 +47,11 @@ import type {
   IcebergInstanceConfig,
   IcebergStorageType,
 } from '../../../types/iceberg';
-import { useFilePicker, useGetConnections } from '../../controllers';
+import {
+  useFilePicker,
+  useGetConnections,
+  useGetSettings,
+} from '../../controllers';
 import {
   useCreateIcebergMetadataFile,
   useIcebergCapabilities,
@@ -58,7 +62,10 @@ import {
 } from '../../controllers/icebergDatalake.controller';
 import { DataLakeConnectionSelector } from './DataLakeConnectionSelector';
 import { secureStorageService } from '../../services/secureStorage.service';
-import { icebergCatalogImages } from '../../../../assets/connectionIcons';
+import {
+  databaseIcons,
+  icebergCatalogImages,
+} from '../../../../assets/connectionIcons';
 
 // ─── Wizard Data ─────────────────────────────────────────────────────────────
 
@@ -205,7 +212,7 @@ function validateStep(
       data.catalog.catalogType === 'sql' &&
       !data.catalog.databaseConnectionId
     ) {
-      return 'A PostgreSQL or Neon connection is required.';
+      return 'A PostgreSQL connection is required.';
     }
     if (data.catalog.catalogType === 'sql' && !data.catalog.catalogName) {
       return 'SQL catalog name is required.';
@@ -323,6 +330,8 @@ export const IcebergConnectionWizard: React.FC<
     message: string;
   } | null>(null);
   const initializedInstanceIdRef = useRef<string | null>(null);
+  const { data: settings } = useGetSettings();
+  const defaultProjectPath = settings?.projectsDirectory?.trim() || '';
 
   useEffect(() => {
     if (!initialData || initializedInstanceIdRef.current === initialData.id) {
@@ -422,7 +431,7 @@ export const IcebergConnectionWizard: React.FC<
 
   const pickFolder = (setter: (path: string) => void) => {
     getFiles(
-      { properties: ['openDirectory'] },
+      { properties: ['openDirectory'], defaultPath: defaultProjectPath },
       {
         onSuccess: (filePaths) => {
           if (filePaths && filePaths.length > 0) {
@@ -478,10 +487,29 @@ export const IcebergConnectionWizard: React.FC<
   const patchCatalog = (patch: Partial<IcebergWizardData['catalog']>) =>
     setData((d) => ({ ...d, catalog: { ...d.catalog, ...patch } }));
 
+  useEffect(() => {
+    if (
+      mode === 'create' &&
+      activeStep === 1 &&
+      data.catalog.catalogType === 'sqlite' &&
+      !data.catalog.catalogPath &&
+      defaultProjectPath
+    ) {
+      patchCatalog({ catalogPath: defaultProjectPath });
+    }
+  }, [
+    activeStep,
+    data.catalog.catalogPath,
+    data.catalog.catalogType,
+    defaultProjectPath,
+    mode,
+  ]);
+
   const patchStorage = (patch: Partial<IcebergWizardData['storage']>) =>
     setData((d) => ({ ...d, storage: { ...d.storage, ...patch } }));
 
-  const patchSql = (patch: Partial<IcebergWizardData['sql']>) =>
+  const patchSql = (patch: Partial<IcebergWizardData['sql']>) => {
+    setSqlTestResult(null);
     setData((d) => ({
       ...d,
       sql: {
@@ -491,6 +519,7 @@ export const IcebergConnectionWizard: React.FC<
         runtimeFingerprint: undefined,
       },
     }));
+  };
 
   const handleSelectCloudStorage = useCallback(
     (
@@ -673,7 +702,7 @@ export const IcebergConnectionWizard: React.FC<
       setStorageTestResult({
         success: result.success,
         message: result.success
-          ? 'The matching object-store location is accessible. Use "Test SQL Access" on the Review step to verify DuckDB attachment.'
+          ? 'The matching object-store location is accessible. Use "Test SQL Access" below to verify DuckDB attachment.'
           : (result.error ?? 'Object-store access test failed.'),
       });
     } catch (error: any) {
@@ -690,7 +719,29 @@ export const IcebergConnectionWizard: React.FC<
     if (!initialData?.id) return;
     setSqlTestResult(null);
     try {
-      const result = await verifySqlMutation.mutateAsync(initialData.id);
+      const result = await verifySqlMutation.mutateAsync({
+        id: initialData.id,
+        draft: {
+          catalogType: data.catalog.catalogType,
+          catalogPath: data.catalog.catalogPath,
+          endpoint: data.catalog.endpoint,
+          catalogName: data.catalog.catalogName,
+          catalogAuthMode: data.catalog.authMode,
+          databaseConnectionId: data.catalog.databaseConnectionId,
+          storageType: data.storage.storageType,
+          localPath: data.storage.localPath,
+          cloudProvider: data.storage.cloudProvider,
+          storageConnectionId: data.storage.connectionId,
+          storageBucket: data.storage.bucket,
+          storagePrefix: data.storage.prefix,
+          sqlEnabled: data.sql.enabled,
+          sqlStorageConnectionId: data.sql.connectionId,
+          sqlStorageProvider: data.sql.provider,
+          sqlStorageBucket: data.sql.bucket,
+          sqlStoragePrefix: data.sql.prefix,
+          sqlWarehouseMatchAcknowledged: data.sql.warehouseMatchAcknowledged,
+        },
+      });
       setSqlTestResult({
         success: result.success,
         message: result.success
@@ -723,14 +774,11 @@ export const IcebergConnectionWizard: React.FC<
         helperText="A unique name to identify this Iceberg instance (max 80 chars)"
       />
       <TextField
-        label="Description (optional)"
-        placeholder="Production Iceberg catalog for analytics"
+        label="Description (Optional)"
+        placeholder="Describe the purpose of this Iceberg instance..."
         value={data.basics.description ?? ''}
         onChange={(e) => patchBasics({ description: e.target.value })}
         fullWidth
-        multiline
-        rows={2}
-        helperText="Optional human-readable description"
       />
     </Box>
   );
@@ -855,8 +903,8 @@ export const IcebergConnectionWizard: React.FC<
           onChange={(e) => patchCatalog({ catalogPath: e.target.value })}
           fullWidth
           required
-          placeholder="/data/my-catalog/pyiceberg_catalog.db"
-          helperText="Choose a folder to initialize a SQLite catalog and local warehouse"
+          placeholder="Local project folder path"
+          helperText="Defaults to the current project folder"
           slotProps={{
             input: {
               endAdornment: (
@@ -884,10 +932,10 @@ export const IcebergConnectionWizard: React.FC<
       {data.catalog.catalogType === 'sql' && (
         <>
           <FormControl fullWidth required>
-            <InputLabel>PostgreSQL / Neon Connection</InputLabel>
+            <InputLabel>PostgreSQL Connection</InputLabel>
             <Select
               value={data.catalog.databaseConnectionId ?? ''}
-              label="PostgreSQL / Neon Connection"
+              label="PostgreSQL Connection"
               onChange={(event) =>
                 patchCatalog({ databaseConnectionId: event.target.value })
               }
@@ -905,7 +953,7 @@ export const IcebergConnectionWizard: React.FC<
                 sx={{ mt: 1 }}
               >
                 Create and test a PostgreSQL connection in Connections first.
-                Neon uses the same PostgreSQL connection type with SSL enabled.
+                Use a PostgreSQL connection with SSL enabled when required.
               </Typography>
             )}
           </FormControl>
@@ -1169,6 +1217,34 @@ export const IcebergConnectionWizard: React.FC<
     </Box>
   );
 
+  const hasUnsavedSqlAttachmentChanges =
+    mode === 'edit' &&
+    !!initialData &&
+    [
+      [data.catalog.catalogType, initialData.catalogType],
+      [data.catalog.endpoint, initialData.endpoint],
+      [data.catalog.catalogName, initialData.catalogName],
+      [data.catalog.authMode, initialData.catalogAuthMode ?? 'none'],
+      [data.catalog.oauthClientId, initialData.oauthClientId],
+      [data.catalog.oauthServerUri, initialData.oauthServerUri],
+      [data.catalog.oauthScope, initialData.oauthScope],
+      [data.catalog.nessieReference, initialData.nessieReference],
+      [data.catalog.nessieWarehouse, initialData.nessieWarehouse],
+      [data.sql.enabled, initialData.sqlEnabled ?? false],
+      [data.sql.connectionId, initialData.sqlStorageConnectionId],
+      [data.sql.provider, initialData.sqlStorageProvider],
+      [data.sql.bucket, initialData.sqlStorageBucket],
+      [data.sql.prefix, initialData.sqlStoragePrefix],
+      [
+        data.sql.warehouseMatchAcknowledged,
+        initialData.sqlWarehouseMatchAcknowledged ?? false,
+      ],
+    ].some(
+      ([draftValue, savedValue]) =>
+        (typeof draftValue === 'string' ? draftValue.trim() : draftValue) !==
+        (typeof savedValue === 'string' ? savedValue.trim() : savedValue),
+    );
+
   const renderStorageStep = () => {
     const isRestCatalog =
       data.catalog.catalogType === 'rest' ||
@@ -1284,6 +1360,50 @@ export const IcebergConnectionWizard: React.FC<
                 </Box>
               </>
             )}
+            <Box
+              sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mt: 1 }}
+            >
+              <Button
+                variant="outlined"
+                startIcon={
+                  verifySqlMutation.isLoading ? (
+                    <CircularProgress size={16} />
+                  ) : (
+                    <img
+                      src={databaseIcons.duckdb}
+                      alt=""
+                      style={{ width: 18, height: 18, objectFit: 'contain' }}
+                    />
+                  )
+                }
+                onClick={handleVerifySqlAccess}
+                disabled={verifySqlMutation.isLoading || !initialData?.id}
+                size="small"
+                sx={{ flexShrink: 0 }}
+              >
+                {verifySqlMutation.isLoading ? 'Testing…' : 'Test SQL Access'}
+              </Button>
+              {mode === 'create' && !initialData?.id && (
+                <Typography variant="caption" color="text.secondary">
+                  Save the instance before testing SQL access.
+                </Typography>
+              )}
+              {sqlTestResult && (
+                <Alert
+                  severity={sqlTestResult.success ? 'success' : 'error'}
+                  sx={{
+                    py: 0,
+                    flex: 1,
+                    minWidth: 0,
+                    overflowWrap: 'anywhere',
+                    wordBreak: 'break-word',
+                  }}
+                  icon={sqlTestResult.success ? <CheckCircle /> : undefined}
+                >
+                  {sqlTestResult.message}
+                </Alert>
+              )}
+            </Box>
           </Paper>
         </Box>
       );
@@ -1400,6 +1520,49 @@ export const IcebergConnectionWizard: React.FC<
             </Box>
           </>
         )}
+        {data.sql.enabled && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Button
+              variant="outlined"
+              startIcon={
+                verifySqlMutation.isLoading ? (
+                  <CircularProgress size={16} />
+                ) : (
+                  <img
+                    src={databaseIcons.duckdb}
+                    alt=""
+                    style={{ width: 18, height: 18, objectFit: 'contain' }}
+                  />
+                )
+              }
+              onClick={handleVerifySqlAccess}
+              disabled={verifySqlMutation.isLoading || !initialData?.id}
+              size="small"
+            >
+              {verifySqlMutation.isLoading ? 'Testing…' : 'Test SQL Access'}
+            </Button>
+            {sqlTestResult && (
+              <Alert
+                severity={sqlTestResult.success ? 'success' : 'error'}
+                sx={{ py: 0, flex: 1 }}
+                icon={sqlTestResult.success ? <CheckCircle /> : undefined}
+              >
+                {sqlTestResult.message}
+              </Alert>
+            )}
+            {hasUnsavedSqlAttachmentChanges && (
+              <Alert severity="warning" sx={{ py: 0, flex: 1 }}>
+                Save these attachment changes, reopen the instance, then test
+                SQL access.
+              </Alert>
+            )}
+            {mode === 'create' && !initialData?.id && (
+              <Alert severity="info" sx={{ py: 0, flex: 1 }}>
+                Save the instance before testing SQL access.
+              </Alert>
+            )}
+          </Box>
+        )}
       </Box>
     );
   };
@@ -1408,34 +1571,6 @@ export const IcebergConnectionWizard: React.FC<
     const hasToken =
       !!data.catalog.accessToken ||
       (mode === 'edit' && !!initialData?.catalogAccessTokenKey);
-    const normalizeDraftValue = (value: unknown) =>
-      typeof value === 'string' ? value.trim() : value;
-    const hasUnsavedSqlAttachmentChanges =
-      mode === 'edit' &&
-      !!initialData &&
-      [
-        [data.catalog.catalogType, initialData.catalogType],
-        [data.catalog.endpoint, initialData.endpoint],
-        [data.catalog.catalogName, initialData.catalogName],
-        [data.catalog.authMode, initialData.catalogAuthMode ?? 'none'],
-        [data.catalog.oauthClientId, initialData.oauthClientId],
-        [data.catalog.oauthServerUri, initialData.oauthServerUri],
-        [data.catalog.oauthScope, initialData.oauthScope],
-        [data.catalog.nessieReference, initialData.nessieReference],
-        [data.catalog.nessieWarehouse, initialData.nessieWarehouse],
-        [data.sql.enabled, initialData.sqlEnabled ?? false],
-        [data.sql.connectionId, initialData.sqlStorageConnectionId],
-        [data.sql.provider, initialData.sqlStorageProvider],
-        [data.sql.bucket, initialData.sqlStorageBucket],
-        [data.sql.prefix, initialData.sqlStoragePrefix],
-        [
-          data.sql.warehouseMatchAcknowledged,
-          initialData.sqlWarehouseMatchAcknowledged ?? false,
-        ],
-      ].some(
-        ([draftValue, savedValue]) =>
-          normalizeDraftValue(draftValue) !== normalizeDraftValue(savedValue),
-      );
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <Typography variant="subtitle1" fontWeight={600}>
@@ -1660,42 +1795,6 @@ export const IcebergConnectionWizard: React.FC<
             )}
           </List>
         </Paper>
-        {data.sql.enabled && mode === 'edit' && initialData?.id && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Button
-              variant="outlined"
-              startIcon={
-                verifySqlMutation.isLoading ? (
-                  <CircularProgress size={16} />
-                ) : (
-                  <Speed />
-                )
-              }
-              onClick={handleVerifySqlAccess}
-              disabled={
-                verifySqlMutation.isLoading || hasUnsavedSqlAttachmentChanges
-              }
-              size="small"
-            >
-              {verifySqlMutation.isLoading ? 'Testing…' : 'Test SQL Access'}
-            </Button>
-            {sqlTestResult && (
-              <Alert
-                severity={sqlTestResult.success ? 'success' : 'error'}
-                sx={{ py: 0, flex: 1 }}
-                icon={sqlTestResult.success ? <CheckCircle /> : undefined}
-              >
-                {sqlTestResult.message}
-              </Alert>
-            )}
-            {hasUnsavedSqlAttachmentChanges && (
-              <Alert severity="warning" sx={{ py: 0, flex: 1 }}>
-                Save these attachment changes, reopen the instance, then test
-                SQL access.
-              </Alert>
-            )}
-          </Box>
-        )}
         <Alert severity="info" icon={<IcebergIcon size={20} />}>
           {mode === 'create'
             ? 'Clicking "Create Instance" will save these settings and register the Iceberg catalog. No data files will be modified.'

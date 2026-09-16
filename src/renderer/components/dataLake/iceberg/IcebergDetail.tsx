@@ -66,6 +66,7 @@ import { toast } from 'react-toastify';
 import moment from 'moment';
 import {
   cloudStorageImages,
+  databaseIcons,
   genericCatalogImage,
   icebergCatalogImages,
 } from '../../../../../assets/connectionIcons';
@@ -1210,6 +1211,24 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
               New Namespace
             </Button>
             <Button
+              variant="outlined"
+              size="small"
+              startIcon={<TableChart />}
+              disabled
+              sx={{ height: '32px' }}
+            >
+              Create Table
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<Inventory2 />}
+              disabled
+              sx={{ height: '32px' }}
+            >
+              Register Table
+            </Button>
+            <Button
               variant="contained"
               size="small"
               startIcon={<Add />}
@@ -1289,6 +1308,24 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
               sx={{ height: '32px' }}
             >
               New Namespace
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<TableChart />}
+              disabled
+              sx={{ height: '32px' }}
+            >
+              Create Table
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<Inventory2 />}
+              disabled
+              sx={{ height: '32px' }}
+            >
+              Register Table
             </Button>
             <Button
               variant="contained"
@@ -1558,22 +1595,15 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
                           verifySqlMutation.isLoading ? (
                             <CircularProgress size={16} />
                           ) : (
-                            <Box
-                              component="span"
-                              sx={{
-                                px: 0.375,
-                                py: 0.125,
-                                border: '1px solid',
-                                borderColor: 'currentColor',
-                                borderRadius: 1,
-                                fontSize: '0.55rem !important',
-                                fontWeight: 700,
-                                lineHeight: 1.1,
-                                letterSpacing: '0.02em',
+                            <img
+                              src={databaseIcons.duckdb}
+                              alt=""
+                              style={{
+                                width: 18,
+                                height: 18,
+                                objectFit: 'contain',
                               }}
-                            >
-                              SQL
-                            </Box>
+                            />
                           )
                         }
                         onClick={testSqlAccess}
@@ -1838,7 +1868,14 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>DuckDB Iceberg SQL support</DialogTitle>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <img
+            src={databaseIcons.duckdb}
+            alt=""
+            style={{ width: 24, height: 24, objectFit: 'contain' }}
+          />
+          DuckDB Iceberg SQL support
+        </DialogTitle>
         <DialogContent>
           <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
             Supported catalogs
@@ -1935,7 +1972,7 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
               variant="body2"
               sx={{ display: 'list-item' }}
             >
-              PostgreSQL and Neon catalogs
+              PostgreSQL catalogs
             </Typography>
           </Box>
         </DialogContent>
