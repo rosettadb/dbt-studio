@@ -7,11 +7,8 @@ import type { Session } from 'electron';
 import os from 'os';
 import AdmZip from 'adm-zip';
 import * as tar from 'tar';
-import {
-  loadDatabaseFile,
-  loadDefaultSettings,
-  updateDatabase,
-} from '../utils/fileHelper';
+import { loadDefaultSettings } from '../utils/fileHelper';
+import databaseStore from '../database';
 import {
   CliUpdateResponseType,
   SettingsType,
@@ -68,18 +65,16 @@ export default class SettingsService {
   private static factoryResetPromise: Promise<void> | null = null;
 
   static async loadSettings(): Promise<SettingsType> {
-    const dataBase = await loadDatabaseFile();
+    const settings = await databaseStore.getField('settings');
     const defaultSettings = loadDefaultSettings();
 
     return {
       ...defaultSettings,
-      ...dataBase.settings,
+      ...settings,
       projectsDirectory:
-        dataBase.settings.projectsDirectory ||
-        defaultSettings.projectsDirectory,
+        settings.projectsDirectory || defaultSettings.projectsDirectory,
       sampleRosettaMainConf:
-        dataBase.settings.sampleRosettaMainConf ||
-        defaultSettings.sampleRosettaMainConf,
+        settings.sampleRosettaMainConf || defaultSettings.sampleRosettaMainConf,
     };
   }
 
@@ -144,8 +139,16 @@ export default class SettingsService {
     return DuckDBBootstrap.diagnose();
   }
 
-  static async saveSettings(settings: SettingsType) {
-    await updateDatabase<'settings'>('settings', settings);
+  // Takes a partial update, merged against the current settings inside the
+  // store's atomic write — not a full object read earlier by the caller.
+  // Two install/uninstall flows running concurrently (e.g. installing
+  // Python while installing Rosetta) now each only touch their own fields
+  // instead of one clobbering the other's change with a stale full copy.
+  static async saveSettings(partialSettings: Partial<SettingsType>) {
+    await databaseStore.updateField('settings', (current) => ({
+      ...current,
+      ...partialSettings,
+    }));
   }
 
   static async getDbtExePath(): Promise<string> {
@@ -218,7 +221,6 @@ export default class SettingsService {
 
   static async updateRosetta() {
     if (process.env.E2E_TESTING === 'true') {
-      const settings = await this.loadSettings();
       const dummyName =
         process.platform === 'win32' ? 'dummy-rosetta.exe' : 'dummy-rosetta';
       const dummyPath = path.join(os.tmpdir(), dummyName);
@@ -228,9 +230,10 @@ export default class SettingsService {
         fs.chmodSync(dummyPath, 0o755);
       }
 
-      settings.rosettaVersion = '0.0.0-test';
-      settings.rosettaPath = dummyPath;
-      await this.saveSettings(settings);
+      await this.saveSettings({
+        rosettaVersion: '0.0.0-test',
+        rosettaPath: dummyPath,
+      });
 
       return {
         binaryPath: dummyPath,
@@ -330,9 +333,10 @@ export default class SettingsService {
       }),
     );
 
-    settings.rosettaVersion = version;
-    settings.rosettaPath = binaryPath;
-    await this.saveSettings(settings);
+    await this.saveSettings({
+      rosettaVersion: version,
+      rosettaPath: binaryPath,
+    });
 
     await fs.remove(zipPath);
 
@@ -346,8 +350,6 @@ export default class SettingsService {
 
   private static async performPythonInstall(version: string) {
     if (process.env.E2E_TESTING === 'true') {
-      const settings = await this.loadSettings();
-
       // Create a dummy venv structure
       const venvPath = path.join(os.tmpdir(), 'dummy-venv');
       const binDir =
@@ -363,10 +365,11 @@ export default class SettingsService {
       await fs.ensureFile(dummyBinaryPath);
       await fs.chmod(dummyBinaryPath, 0o755);
 
-      settings.pythonVersion = version;
-      settings.pythonPath = dummyBinaryPath;
-      settings.pythonBinary = dummyBinaryPath;
-      await this.saveSettings(settings);
+      await this.saveSettings({
+        pythonVersion: version,
+        pythonPath: dummyBinaryPath,
+        pythonBinary: dummyBinaryPath,
+      });
 
       return {
         binaryPath: dummyBinaryPath,
@@ -459,21 +462,24 @@ export default class SettingsService {
     // fool every "is Python configured" check elsewhere into skipping
     // auto-install/repair and silently falling back to the unmanaged,
     // non-isolated base interpreter.
-    await this.clearManagedVenvDependents(settings);
+    const clearedDependents = await this.clearManagedVenvDependents();
     await fs.remove(venvDir);
-    settings.pythonVersion = '';
-    settings.pythonPath = '';
-    settings.pythonBinary = '';
-    await this.saveSettings(settings);
+    await this.saveSettings({
+      ...clearedDependents,
+      pythonVersion: '',
+      pythonPath: '',
+      pythonBinary: '',
+    });
 
     const cliAdapter = new CliAdapter();
     await cliAdapter.runCommandWithoutStreaming(
       `cd "${userDataPath}" && "${binaryPath}" -m venv venv`,
     );
-    settings.pythonVersion = version;
-    settings.pythonPath = venvPythonPath;
-    settings.pythonBinary = binaryPath;
-    await this.saveSettings(settings);
+    await this.saveSettings({
+      pythonVersion: version,
+      pythonPath: venvPythonPath,
+      pythonBinary: binaryPath,
+    });
     await fs.remove(archivePath);
 
     return {
@@ -556,9 +562,9 @@ export default class SettingsService {
     }
   }
 
-  private static async clearManagedVenvDependents(
-    settings: SettingsType,
-  ): Promise<void> {
+  private static async clearManagedVenvDependents(): Promise<
+    Partial<SettingsType>
+  > {
     try {
       const { FlowfileService } = await import('./flowfile.service');
       await FlowfileService.stop();
@@ -568,27 +574,23 @@ export default class SettingsService {
 
     // dbt-core (v1 and v2), Flowfile, and sqlglot are all pip-installed into
     // the same managed venv, so removing it also removes their executables.
-    // eslint-disable-next-line no-param-reassign
-    settings.dbtPath = '';
-    // eslint-disable-next-line no-param-reassign
-    settings.dbtVersion = '';
-    // eslint-disable-next-line no-param-reassign
-    settings.flowfileVersion = '';
+    return { dbtPath: '', dbtVersion: '', flowfileVersion: '' };
   }
 
   static async uninstallPython(): Promise<void> {
-    const settings = await this.loadSettings();
     const userDataPath = app.getPath('userData');
 
-    await this.clearManagedVenvDependents(settings);
+    const clearedDependents = await this.clearManagedVenvDependents();
 
     await fs.remove(path.join(userDataPath, 'python'));
     await fs.remove(path.join(userDataPath, 'venv'));
 
-    settings.pythonVersion = '';
-    settings.pythonPath = '';
-    settings.pythonBinary = '';
-    await this.saveSettings(settings);
+    await this.saveSettings({
+      ...clearedDependents,
+      pythonVersion: '',
+      pythonPath: '',
+      pythonBinary: '',
+    });
   }
 
   static async resetFactorySettings(session: Session): Promise<void> {
@@ -608,12 +610,13 @@ export default class SettingsService {
     let teardownStarted = false;
 
     try {
-      const dataBase = await loadDatabaseFile();
+      const projects = await databaseStore.getField('projects');
+      const settings = await databaseStore.getField('settings');
       const projectPaths = await this.resolveProjectPaths(
-        (dataBase.projects ?? []).map((project) => project.path),
+        (projects ?? []).map((project) => project.path),
       );
       const managedRosettaPath = await this.resolveManagedRosettaPath(
-        dataBase.settings?.rosettaPath,
+        settings?.rosettaPath,
       );
 
       stage = 'stopping active resources';
@@ -1080,9 +1083,10 @@ export default class SettingsService {
       );
 
       // Update settings
-      settings.rosettaVersion = version;
-      settings.rosettaPath = binaryPath;
-      await this.saveSettings(settings);
+      await this.saveSettings({
+        rosettaVersion: version,
+        rosettaPath: binaryPath,
+      });
 
       // Clean up download file
       await fs.remove(zipPath);
@@ -1110,9 +1114,7 @@ export default class SettingsService {
       await fs.remove(rosettaRoot);
     }
 
-    settings.rosettaVersion = '';
-    settings.rosettaPath = '';
-    await this.saveSettings(settings);
+    await this.saveSettings({ rosettaVersion: '', rosettaPath: '' });
   }
 
   private static getRosettaDownloadUrl(release: any): string {

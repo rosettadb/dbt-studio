@@ -19,5 +19,11 @@ export const FinishSetup: React.FC<Props> = ({ settings }) => (
         All set! dbt path: {settings.dbtPath}
       </Alert>
     )}
+    {settings.runnerPath && (
+      <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
+        Local runner (version {settings.runnerVersion || 'Unknown'}) is
+        successfully installed at: {settings.runnerPath}
+      </Alert>
+    )}
   </Box>
 );

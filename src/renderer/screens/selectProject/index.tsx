@@ -724,7 +724,10 @@ const SelectProject: React.FC = () => {
                           toast.error(
                             'Invalid dbt project structure. Please ensure the folder contains a valid dbt_project.yml file.',
                           );
-                        } else if (error.message.includes('already exists')) {
+                        } else if (
+                          error.message.includes('already exists') ||
+                          error.message.includes('already imported')
+                        ) {
                           toast.error(error.message);
                         } else {
                           toast.error(

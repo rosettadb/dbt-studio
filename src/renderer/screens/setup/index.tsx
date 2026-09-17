@@ -2,7 +2,13 @@ import React from 'react';
 import { Box, Button } from '@mui/material';
 import { toast } from 'react-toastify';
 import { useGetSettings, useUpdateSettings } from '../../controllers';
-import { Loader, FinishSetup, DbtSetup, PythonSetup } from '../../components';
+import {
+  Loader,
+  FinishSetup,
+  DbtSetup,
+  PythonSetup,
+  RunnerSetup,
+} from '../../components';
 import { client } from '../../config/client';
 
 const ADAPTERS = [
@@ -17,6 +23,8 @@ const ADAPTERS = [
     description: 'Adapter for DuckDB - embedded analytics database',
   },
 ];
+
+const FINAL_STEP = 3;
 
 const Setup: React.FC = () => {
   const { data: settings, isLoading } = useGetSettings();
@@ -44,7 +52,11 @@ const Setup: React.FC = () => {
     if (settings && !isInitialized) {
       if (settings.pythonPath && settings.pythonPath !== '') {
         if (settings.dbtPath && settings.dbtPath !== '') {
-          setCurrentStep(2);
+          if (settings.runnerPath && settings.runnerPath !== '') {
+            setCurrentStep(FINAL_STEP);
+          } else {
+            setCurrentStep(2);
+          }
         } else {
           setCurrentStep(1);
         }
@@ -97,6 +109,16 @@ const Setup: React.FC = () => {
         </div>
       )}
       {currentStep === 2 && (
+        <div data-testid="setup-step-runner" style={{ width: '100%' }}>
+          <RunnerSetup
+            settings={settings}
+            onInstallComplete={() => {
+              setCurrentStep(currentStep + 1);
+            }}
+          />
+        </div>
+      )}
+      {currentStep === FINAL_STEP && (
         <div data-testid="setup-step-complete" style={{ width: '100%' }}>
           <FinishSetup settings={settings} />
         </div>
@@ -113,21 +135,22 @@ const Setup: React.FC = () => {
           variant="contained"
           disabled={
             (currentStep === 0 && !settings.pythonPath) ||
-            (currentStep === 1 && !settings.dbtPath)
+            (currentStep === 1 && !settings.dbtPath) ||
+            (currentStep === 2 && !settings.runnerPath)
           }
           style={{ marginLeft: 'auto' }}
           data-testid={
-            currentStep === 2 ? 'setup-finish-btn' : 'setup-next-btn'
+            currentStep === FINAL_STEP ? 'setup-finish-btn' : 'setup-next-btn'
           }
           onClick={() => {
-            if (currentStep === 2) {
+            if (currentStep === FINAL_STEP) {
               handleSkip();
               return;
             }
             setCurrentStep(currentStep + 1);
           }}
         >
-          {currentStep === 2 ? 'Finish' : 'Next'}
+          {currentStep === FINAL_STEP ? 'Finish' : 'Next'}
         </Button>
       </div>
     </Box>

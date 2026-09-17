@@ -19,5 +19,15 @@ if (!(global as any).TransformStream) {
   (global as any).TransformStream = TransformStream;
 }
 
+// jsdom (v20 here) doesn't have structuredClone (added in jsdom v21).
+// Production runs in the Electron main process (plain Node), where the
+// real global is always present.
+if (!(global as any).structuredClone) {
+  // eslint-disable-next-line global-require
+  const v8 = require('v8');
+  (global as any).structuredClone = (value: unknown) =>
+    v8.deserialize(v8.serialize(value));
+}
+
 (global as any).fetch = jest.fn();
 process.env.NODE_ENV = 'test';
