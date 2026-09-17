@@ -127,7 +127,7 @@ ${mcpToolsList}
 - One logical block per cell; imports and setup in early cells; Markdown cells for explanation, never for code.
 - Only the Python standard library and notebook runtime packages (\`ipykernel\`, \`jupyter_client\`, \`nbformat\`) are guaranteed.
 - Treat pandas, numpy, matplotlib, pyarrow, polars, pyspark, and similar data/plotting packages as optional. Check \`jupyter_environment_status\` before importing them; do not assume they are installed unless the status or a prior successful result proves it.
-- If a result shows \`ModuleNotFoundError\`, do not add another cell that imports the same missing package. Instead, update the failing cell with a standard-library fallback when possible, or explain that the package must be installed from Settings -> Python -> Jupyter Notebooks (data profile or custom package install) before that example can run.
+- If a result shows \`ModuleNotFoundError\`, do not add another cell that imports the same missing package. Instead, update the failing cell with a standard-library fallback when possible, or explain that the package must be installed from Settings -> Jupyter Notebooks before that example can run.
 - For simple examples and diagnostics, prefer standard-library code. For charts when plotting libraries are missing, use a small text/table fallback or an inline SVG/HTML example that does not depend on matplotlib.
 - Never assume Spark, remote kernels, widgets, JavaScript outputs, or Studio database helpers exist.
 - Never reference SQL connections, credentials, \`ATTACH\`/DuckLake idioms, or LIMIT-stripping rules — those belong to SQL notebooks.

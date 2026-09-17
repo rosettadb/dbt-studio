@@ -58,9 +58,25 @@ const DATA_PROFILE_PACKAGES = [
   'pyarrow',
   'pyspark',
 ] as const;
+const CATALOG_PACKAGES = [
+  ...DATA_PROFILE_PACKAGES,
+  'duckdb',
+  'seaborn',
+  'plotly',
+  'scipy',
+  'scikit-learn',
+  'sqlalchemy',
+  'psycopg',
+  'requests',
+  'boto3',
+  'fsspec',
+  's3fs',
+  'pyiceberg',
+  'deltalake',
+  'openpyxl',
+] as const;
 const ENVIRONMENT_METADATA_FILENAME = 'environment.json';
 const USER_PACKAGES_FILENAME = 'user-packages.json';
-const MAX_CUSTOM_INTERPRETERS = 10;
 const MAX_TRACKED_USER_PACKAGES = 100;
 const MAX_ENVIRONMENT_LABEL_LENGTH = 120;
 const PACKAGE_NAME_MAX_LENGTH = 128;
@@ -232,36 +248,9 @@ export class PythonNotebookService {
   }
 
   private static async loadEnvironmentSelection(): Promise<EnvironmentSelection> {
-    const fallback: EnvironmentSelection = {
-      selectedId: 'managed',
-      customPaths: [],
-    };
-    try {
-      const raw = (await fs.readJson(
-        this.environmentMetadataPath(),
-      )) as Partial<EnvironmentSelection> | null;
-      if (!raw || typeof raw !== 'object') return fallback;
-      const selectedId =
-        typeof raw.selectedId === 'string' && raw.selectedId.length > 0
-          ? raw.selectedId
-          : 'managed';
-      const customPaths = Array.isArray(raw.customPaths)
-        ? raw.customPaths
-            .filter(
-              (item): item is string =>
-                typeof item === 'string' && item.length > 0,
-            )
-            .slice(0, MAX_CUSTOM_INTERPRETERS)
-        : [];
-      const selectedProjectPath =
-        typeof raw.selectedProjectPath === 'string' &&
-        raw.selectedProjectPath.length > 0
-          ? raw.selectedProjectPath
-          : undefined;
-      return { selectedId, selectedProjectPath, customPaths };
-    } catch {
-      return fallback;
-    }
+    // Phase 12: all notebook operations use the dedicated Studio runtime.
+    // Keep legacy metadata on disk for rollback; it no longer controls execution.
+    return { selectedId: 'managed', customPaths: [] };
   }
 
   private static async saveEnvironmentSelection(
@@ -435,7 +424,9 @@ export class PythonNotebookService {
     }
     if (
       REQUIRED_PACKAGES.some(
-        (item) => item.name.toLowerCase() === name.toLowerCase(),
+        (item) =>
+          item.name.replace(/[-_.]/g, '-').toLowerCase() ===
+          name.replace(/[-_.]/g, '-').toLowerCase(),
       )
     ) {
       throw new Error(
@@ -686,7 +677,7 @@ export class PythonNotebookService {
 
     const environments = await Promise.all(
       pending
-        .slice(0, 13)
+        .filter((entry) => entry.id === 'managed')
         .map((entry) =>
           this.buildEnvironmentEntry(
             entry.id,
@@ -706,7 +697,7 @@ export class PythonNotebookService {
       const reason =
         selectedId === 'managed'
           ? null
-          : 'The selected Python environment is no longer available. Choose another environment to run notebooks.';
+          : 'Set up the Studio notebook environment to run notebooks.';
       return {
         selection,
         environments,
@@ -832,6 +823,38 @@ export class PythonNotebookService {
       throw new Error('Unable to inspect the dedicated Jupyter environment.');
     }
     return JSON.parse(result.stdout) as Record<PackageName, string | null>;
+  }
+
+  private static async readInstalledPackageList(
+    pythonPath: string,
+  ): Promise<{ name: string; version: string }[]> {
+    const script = [
+      'import importlib.metadata as metadata',
+      'import json',
+      'items = sorted((d.metadata.get("Name", ""), d.version) for d in metadata.distributions())',
+      'print(json.dumps(items[:200]))',
+    ].join('\n');
+    const result = await this.runProcess(
+      pythonPath,
+      ['-c', script],
+      undefined,
+      32768,
+    );
+    if (result.exitCode !== 0) return [];
+    const entries = JSON.parse(result.stdout) as unknown;
+    if (!Array.isArray(entries)) return [];
+    return entries
+      .filter(
+        (item): item is [string, string] =>
+          Array.isArray(item) &&
+          item.length === 2 &&
+          typeof item[0] === 'string' &&
+          typeof item[1] === 'string',
+      )
+      .map(([name, version]) => ({
+        name: name.slice(0, 128),
+        version: version.slice(0, 64),
+      }));
   }
 
   private static async runHealthProbe(
@@ -1017,6 +1040,8 @@ export class PythonNotebookService {
           JSON.parse(line) as Record<string, unknown>,
         );
         if (!event) return;
+        // A final bridge reply must not revive a session being shut down.
+        if (session.state === 'stopped' && event.type === 'session') return;
         this.emit(session, event);
         if (event.type === 'session') {
           session.state = event.status;
@@ -1028,6 +1053,7 @@ export class PythonNotebookService {
           (event.status === 'success' || event.status === 'error')
         ) {
           session.activeExecution = null;
+          if (session.state === 'stopped') return;
           session.state = 'idle';
           this.emit(session, {
             type: 'session',
@@ -1062,6 +1088,11 @@ export class PythonNotebookService {
     }
     const existing = this.sessions.get(notebookId);
     if (existing) {
+      if (existing.environmentId !== 'managed') {
+        throw new Error(
+          'Close the previous kernel before using the Studio notebook environment.',
+        );
+      }
       if (existing.ownerWebContentsId !== sender.id) {
         throw new Error('This notebook kernel belongs to another window.');
       }
@@ -1080,9 +1111,7 @@ export class PythonNotebookService {
     }
     const selected = status.selectedEnvironment;
     if (!selected) {
-      throw new Error(
-        'Select a Python environment before running notebook cells.',
-      );
+      throw new Error('Set up the notebook environment before running cells.');
     }
 
     const child = spawn(
@@ -1091,6 +1120,14 @@ export class PythonNotebookService {
       {
         shell: false,
         stdio: 'pipe',
+        // Spark launches Python workers separately from the notebook driver.
+        // Pin both sides to the exact Studio-managed interpreter so PySpark
+        // does not fall back to the macOS system Python.
+        env: {
+          ...process.env,
+          PYSPARK_PYTHON: selected.pythonPath,
+          PYSPARK_DRIVER_PYTHON: selected.pythonPath,
+        },
       },
     );
     const session: NotebookSession = {
@@ -1113,18 +1150,17 @@ export class PythonNotebookService {
     child.stderr.on('data', () => undefined);
     child.on('error', () => this.sessions.delete(notebookId));
     child.on('exit', () => {
-      if (
-        this.sessions.get(notebookId) === session &&
-        session.state !== 'stopped'
-      ) {
-        session.state = 'dead';
-        this.emit(session, {
-          type: 'session',
-          notebookId,
-          status: 'dead',
-          message: 'The Python kernel stopped unexpectedly.',
-        });
-      }
+      if (this.sessions.get(notebookId) !== session) return;
+      const stopped = session.state === 'stopped';
+      session.state = stopped ? 'stopped' : 'dead';
+      this.emit(session, {
+        type: 'session',
+        notebookId,
+        status: session.state,
+        message: stopped
+          ? 'The Python kernel was shut down.'
+          : 'The Python kernel stopped unexpectedly.',
+      });
       this.sessions.delete(notebookId);
       this.activeSessionCount = this.sessions.size;
     });
@@ -1503,8 +1539,10 @@ export class PythonNotebookService {
     selectedEnvironment: PythonNotebookSelectedEnvironment | null;
     environments: PythonNotebookEnvironmentStatus[];
     requiredVersions: Record<string, string | null>;
+    inspectionFailed: boolean;
     dataPackages: PythonNotebookDataPackageStatus[];
     userPackages: PythonNotebookUserPackageStatus[];
+    installedPackages: { name: string; version: string }[];
     requirementsSnippet: string;
     kernelReady: boolean;
   }> {
@@ -1514,10 +1552,11 @@ export class PythonNotebookService {
     const selectedTracked = selected ? (tracked[selected.id] ?? []) : [];
     const inspectedNames = [
       ...REQUIRED_PACKAGES.map((item) => item.name),
-      ...DATA_PROFILE_PACKAGES,
+      ...CATALOG_PACKAGES,
       ...selectedTracked.map((item) => item.name),
     ];
     let inspected: Record<string, string | null> = {};
+    let inspectionFailed = false;
     if (selected) {
       try {
         inspected = await this.readNamedPackageVersions(
@@ -1525,11 +1564,21 @@ export class PythonNotebookService {
           inspectedNames,
         );
       } catch {
-        inspected = {};
+        inspectionFailed = true;
+      }
+    }
+    let installedPackages: { name: string; version: string }[] = [];
+    if (selected && !inspectionFailed) {
+      try {
+        installedPackages = await this.readInstalledPackageList(
+          selected.pythonPath,
+        );
+      } catch {
+        // The curated package versions and runtime health remain authoritative.
       }
     }
     const dataPackages: PythonNotebookDataPackageStatus[] =
-      DATA_PROFILE_PACKAGES.map((name) => ({
+      CATALOG_PACKAGES.map((name) => ({
         name,
         installedVersion: inspected[name] ?? null,
       }));
@@ -1547,6 +1596,7 @@ export class PythonNotebookService {
     return {
       selectedEnvironment: selected,
       environments: env.environments,
+      inspectionFailed,
       requiredVersions: Object.fromEntries(
         REQUIRED_PACKAGES.map((item) => [
           item.name,
@@ -1555,6 +1605,7 @@ export class PythonNotebookService {
       ),
       dataPackages,
       userPackages,
+      installedPackages,
       requirementsSnippet: this.buildRequirementsSnippet(
         dataPackages,
         userPackages,
@@ -1600,6 +1651,7 @@ export class PythonNotebookService {
       environments: envBlock.environments,
       dataPackages: envBlock.dataPackages,
       userPackages: envBlock.userPackages,
+      installedPackages: envBlock.installedPackages,
       requirementsSnippet: envBlock.requirementsSnippet,
       kernelReady: envBlock.kernelReady,
     };
@@ -1623,8 +1675,7 @@ export class PythonNotebookService {
         return {
           ...baseStatus,
           state: 'needs-attention',
-          message:
-            'The selected Python environment is no longer available. Choose another environment to run notebooks.',
+          message: 'Set up the Studio notebook environment to run notebooks.',
         };
       }
     }
@@ -1669,11 +1720,20 @@ export class PythonNotebookService {
       ...baseStatus,
       packages: resolvedPackages,
       state:
-        hasRequiredPackages && !this.operation.error
+        hasRequiredPackages &&
+        envBlock.kernelReady &&
+        !envBlock.inspectionFailed &&
+        !this.operation.error
           ? 'ready'
           : 'needs-attention',
       message:
         this.operation.error ||
+        (envBlock.inspectionFailed
+          ? 'Could not inspect notebook packages. Retry the runtime check or repair the environment.'
+          : undefined) ||
+        (!envBlock.kernelReady && hasRequiredPackages
+          ? 'Notebook kernel is unavailable. Repair the environment.'
+          : undefined) ||
         (hasRequiredPackages
           ? this.operation.message
           : 'One or more required Jupyter packages are missing.') ||
@@ -1726,6 +1786,11 @@ export class PythonNotebookService {
       'installing',
       'Creating dedicated Jupyter environment…',
       async () => {
+        if (this.sessions.size > 0) {
+          throw new Error(
+            'Close running notebook kernels before setting up the Studio environment. Saved notebooks are preserved.',
+          );
+        }
         await this.installRuntimeIntoStaging('installing');
       },
     );
@@ -1945,142 +2010,36 @@ export class PythonNotebookService {
     const env = await this.resolveEnvironments();
     if (!env.selected) {
       throw new Error(
-        env.unavailableReason ?? 'Select a Python environment first.',
+        env.unavailableReason ?? 'Set up the notebook environment first.',
       );
     }
     if (!env.selected.writable) {
       throw new Error(
-        `"${env.selected.label}" is read-only. Install packages manually with ${env.selected.pythonPath} -m pip install <package>, or switch to a writable environment.`,
+        `"${env.selected.label}" is read-only. Install packages manually with ${env.selected.pythonPath} -m pip install <package>, or repair the Studio notebook environment.`,
       );
     }
     return env.selected;
   }
 
   static async selectEnvironment(
-    request: PythonNotebookSelectEnvironmentRequest,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _request: PythonNotebookSelectEnvironmentRequest,
   ): Promise<PythonNotebookRuntimeStatus> {
-    const environmentId = String(request.environmentId ?? '')
-      .trim()
-      .slice(0, 256);
-    if (!environmentId) {
-      throw new Error('Select a Python environment.');
-    }
-    this.requireNoActiveOperation();
-    if (this.sessions.size !== request.expectedActiveSessionCount) {
-      throw new Error(
-        'Active notebook kernels changed. Review the current session count and try again.',
-      );
-    }
-    if (this.sessions.size > 0) {
-      throw new Error(
-        'Shut down all running Python notebook kernels before switching environments. Saved notebooks are preserved.',
-      );
-    }
-    const projectPath =
-      typeof request.projectPath === 'string' ? request.projectPath : undefined;
-    const env = await this.resolveEnvironments(projectPath);
-    const entry = env.environments.find((item) => item.id === environmentId);
-    if (!entry || !entry.exists || !entry.pythonPath) {
-      throw new Error('The selected Python environment is not available.');
-    }
-    const selection = await this.loadEnvironmentSelection();
-    await this.saveEnvironmentSelection({
-      selectedId: environmentId,
-      selectedProjectPath:
-        entry.kind === 'project' && projectPath
-          ? projectPath
-          : selection.selectedProjectPath,
-      customPaths: selection.customPaths,
-    });
-    return this.getRuntimeStatus(projectPath);
+    throw new Error('Notebook environments are managed by Studio.');
   }
 
   static async addCustomInterpreter(
-    request: PythonNotebookCustomInterpreterRequest,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _request: PythonNotebookCustomInterpreterRequest,
   ): Promise<PythonNotebookRuntimeStatus> {
-    const rawPath = String(request.path ?? '').trim();
-    if (!rawPath || rawPath.length > 1024) {
-      throw new Error('Enter the full path to a Python executable.');
-    }
-    if (!path.isAbsolute(rawPath)) {
-      throw new Error('Use an absolute path to a Python executable.');
-    }
-    // eslint-disable-next-line no-control-regex
-    if (/[;\0`$&|<>]/.test(rawPath)) {
-      throw new Error('The interpreter path contains unsupported characters.');
-    }
-    let stat: { isFile(): boolean };
-    try {
-      stat = await fs.stat(rawPath);
-    } catch {
-      throw new Error('No file exists at the provided interpreter path.');
-    }
-    if (!stat.isFile()) {
-      throw new Error('The interpreter path must point to a file.');
-    }
-    if (!/^python(\d(\.\d+)?)?(\.exe)?$/i.test(path.basename(rawPath))) {
-      throw new Error(
-        'The selected file does not look like a Python executable.',
-      );
-    }
-    const version = await this.resolvePythonVersion(rawPath);
-    if (!version) {
-      throw new Error('Could not run the selected Python executable.');
-    }
-    if (!this.isAtLeastMinimumVersion(version)) {
-      throw new Error(
-        `Notebook environments require Python ${MINIMUM_PYTHON_VERSION} or later (found ${version}).`,
-      );
-    }
-    this.requireNoActiveOperation();
-    const selection = await this.loadEnvironmentSelection();
-    const normalized = path.normalize(rawPath);
-    const customPaths = [
-      normalized,
-      ...selection.customPaths.filter(
-        (item) =>
-          path.normalize(item).toLowerCase() !== normalized.toLowerCase(),
-      ),
-    ].slice(0, MAX_CUSTOM_INTERPRETERS);
-    await this.saveEnvironmentSelection({ ...selection, customPaths });
-    return this.getRuntimeStatus();
+    throw new Error('Notebook environments are managed by Studio.');
   }
 
   static async removeEnvironment(
-    request: PythonNotebookRemoveEnvironmentRequest,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _request: PythonNotebookRemoveEnvironmentRequest,
   ): Promise<PythonNotebookRuntimeStatus> {
-    const environmentId = String(request.environmentId ?? '')
-      .trim()
-      .slice(0, 256);
-    this.requireNoActiveOperation();
-    const env = await this.resolveEnvironments();
-    const entry = env.environments.find((item) => item.id === environmentId);
-    if (!entry || entry.kind !== 'custom' || !entry.pythonPath) {
-      throw new Error('Only custom interpreters can be removed.');
-    }
-    if (
-      [...this.sessions.values()].some(
-        (session) => session.environmentId === environmentId,
-      )
-    ) {
-      throw new Error(
-        'Shut down notebook kernels using this environment before removing it.',
-      );
-    }
-    const selection = await this.loadEnvironmentSelection();
-    const normalized = path.normalize(entry.pythonPath);
-    await this.saveEnvironmentSelection({
-      selectedId:
-        selection.selectedId === environmentId
-          ? 'managed'
-          : selection.selectedId,
-      selectedProjectPath: selection.selectedProjectPath,
-      customPaths: selection.customPaths.filter(
-        (item) =>
-          path.normalize(item).toLowerCase() !== normalized.toLowerCase(),
-      ),
-    });
-    return this.getRuntimeStatus();
+    throw new Error('Notebook environments are managed by Studio.');
   }
 
   static async ensureKernelSupport(
@@ -2276,7 +2235,7 @@ export class PythonNotebookService {
       dataPackages: status.dataPackages,
       userPackages: status.userPackages,
       installHint:
-        'Install missing packages from Settings → Python → Jupyter Notebooks (data profile or custom package install), or switch the notebook environment there.',
+        'Install missing packages from Settings → Jupyter Notebooks.',
     };
   }
 

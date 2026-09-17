@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, IconButton, Tooltip, useTheme } from '@mui/material';
-import { Close, Description } from '@mui/icons-material';
+import { Close, Code } from '@mui/icons-material';
+import { icons } from '../../../../assets';
 import { NotebookTabState } from '../../hooks/useNotebookTabManager';
 
 interface NotebookTabProps {
@@ -108,7 +109,15 @@ const NotebookTab: React.FC<NotebookTabProps> = ({
             }}
           />
         )}
-        <Description sx={{ fontSize: 16, color: 'inherit' }} />
+        {tab.kind === 'python' ? (
+          <img
+            src={icons.jupyterLogo}
+            alt="Jupyter"
+            style={{ width: 16, height: 16 }}
+          />
+        ) : (
+          <Code sx={{ fontSize: 16, color: 'inherit' }} />
+        )}
         <Box
           sx={{
             fontSize: 13,

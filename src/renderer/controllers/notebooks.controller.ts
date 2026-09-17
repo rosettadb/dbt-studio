@@ -144,6 +144,7 @@ export function usePythonNotebookRuntimeStatus(projectPath?: string) {
     queryKey: notebooksKeys.pythonRuntime(projectPath),
     queryFn: () => notebooksService.getPythonRuntimeStatus(projectPath),
     staleTime: 30000,
+    refetchOnMount: 'always',
     refetchInterval: (data) =>
       data?.operation.state === 'idle' ? false : 1000,
   });

@@ -7,6 +7,7 @@ import {
   Button,
   Chip,
   Collapse,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -54,6 +55,7 @@ import {
   usePythonNotebookRuntimeStatus,
   useSavePythonNotebook,
   useClearPythonNotebookOutputs,
+  useInstallPythonUserPackage,
 } from '../../controllers/notebooks.controller';
 import { notebooksService } from '../../services/notebooks.service';
 import { JupyterBridgeHandlers } from '../../services/notebookBridge.service';
@@ -87,7 +89,7 @@ const safeHtmlDocument = (html: string) => {
       /\s(?:src|href)\s*=\s*(?:"(?!data:image\/(?:png|jpeg);base64)[^"]*"|'(?!data:image\/(?:png|jpeg);base64)[^']*'|[^\s>]+)/gi,
       '',
     );
-  return `<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'"><body>${sanitized}</body>`;
+  return `<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'"><style>body { font-size: 12px; line-height: 18px; } pre, code, table { font-size: inherit; }</style><body>${sanitized}</body>`;
 };
 
 const PythonOutput: React.FC<{ output: PythonCellOutput }> = ({ output }) => {
@@ -135,6 +137,69 @@ const PythonOutput: React.FC<{ output: PythonCellOutput }> = ({ output }) => {
   );
 };
 
+const PythonOutputViewport: React.FC<{
+  children: React.ReactNode;
+  error?: boolean;
+}> = ({ children, error = false }) => {
+  const viewportRef = React.useRef<HTMLDivElement>(null);
+  const [hasMoreBelow, setHasMoreBelow] = React.useState(false);
+
+  const updateOverflow = React.useCallback(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    setHasMoreBelow(
+      viewport.scrollTop + viewport.clientHeight < viewport.scrollHeight - 2,
+    );
+  }, []);
+
+  React.useEffect(() => {
+    updateOverflow();
+    const viewport = viewportRef.current;
+    if (!viewport || typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(updateOverflow);
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, [updateOverflow, children]);
+
+  return (
+    <Box
+      ref={viewportRef}
+      onScroll={updateOverflow}
+      sx={{
+        m: 0,
+        p: 1,
+        position: 'relative',
+        maxHeight: 480,
+        overflow: 'auto',
+        '&::after': hasMoreBelow
+          ? {
+              content: '"Scroll for more output ↓"',
+              position: 'sticky',
+              display: 'block',
+              bottom: 0,
+              left: 0,
+              width: '100%',
+              py: 0.5,
+              textAlign: 'center',
+              fontSize: 11,
+              color: 'text.secondary',
+              background:
+                'linear-gradient(transparent, rgba(40, 40, 40, 0.92) 45%)',
+              pointerEvents: 'none',
+            }
+          : undefined,
+        bgcolor: error ? 'error.dark' : 'action.hover',
+        color: error ? 'error.contrastText' : 'text.primary',
+        fontFamily: '"Menlo", "Monaco", "Consolas", "Courier New", monospace',
+        fontSize: 12,
+        lineHeight: '18px',
+      }}
+    >
+      {children}
+    </Box>
+  );
+};
+
 export async function flushPythonNotebookPendingSave(notebookId: string) {
   return pythonNotebookSaveFlushers.get(notebookId)?.();
 }
@@ -147,7 +212,15 @@ export const PythonNotebookEditor: React.FC<{
   const muiTheme = useTheme();
   const { data: notebook, isLoading } = usePythonNotebook(notebookId);
   const save = useSavePythonNotebook();
-  const { data: runtime } = usePythonNotebookRuntimeStatus();
+  const {
+    data: runtime,
+    refetch: refreshRuntime,
+    isFetching: refreshingRuntime,
+  } = usePythonNotebookRuntimeStatus();
+  const installPackage = useInstallPythonUserPackage();
+  const [packageName, setPackageName] = React.useState('');
+  const [packageFeedback, setPackageFeedback] = React.useState('');
+  const [packageError, setPackageError] = React.useState('');
   const {
     cells: executionCells,
     clearCellOutput: clearExecutionCellOutput,
@@ -258,6 +331,7 @@ export const PythonNotebookEditor: React.FC<{
       expectedRevision: draft.revision,
     });
     setDraft(saved);
+    restart.reset();
     await execute.mutateAsync({
       notebookId: saved.id,
       cellId,
@@ -274,6 +348,7 @@ export const PythonNotebookEditor: React.FC<{
       expectedRevision: draft.revision,
     });
     setDraft(saved);
+    restart.reset();
     await runAll.mutateAsync({
       notebookId: saved.id,
       revision: saved.revision,
@@ -282,6 +357,8 @@ export const PythonNotebookEditor: React.FC<{
   };
 
   const navigate = useNavigate();
+  const [missingPackageDialogOpen, setMissingPackageDialogOpen] =
+    React.useState(false);
   const getCellSummary = (cell: PythonNotebookCell): string => {
     const firstLine = cell.source.split('\n')[0].trim();
     const preview =
@@ -290,8 +367,7 @@ export const PythonNotebookEditor: React.FC<{
     return `Empty ${cell.cellType} cell`;
   };
 
-  // Phase 11: surface the first missing third-party import so the user can
-  // install it from Settings instead of re-running a failing cell.
+  // Historical output remains visible, but installed packages no longer prompt.
   const missingPackageName = React.useMemo(() => {
     const fromExecution = Object.values(executionCells).flatMap((cell) => [
       cell.text,
@@ -311,8 +387,32 @@ export const PythonNotebookEditor: React.FC<{
             ?.split('.')[0],
       )
       .find((name): name is string => Boolean(name));
-    return found ?? null;
-  }, [executionCells, draft]);
+    if (!found) return null;
+    const distribution =
+      (
+        {
+          sklearn: 'scikit-learn',
+          PIL: 'Pillow',
+          cv2: 'opencv-python',
+          yaml: 'PyYAML',
+        } as Record<string, string>
+      )[found] ?? found;
+    const normalize = (name: string) =>
+      name.toLowerCase().replace(/[-_.]+/g, '-');
+    return runtime?.installedPackages.some(
+      (item) => normalize(item.name) === normalize(distribution),
+    )
+      ? null
+      : distribution;
+  }, [executionCells, draft, runtime?.installedPackages]);
+
+  React.useEffect(() => {
+    if (missingPackageName) {
+      setPackageName(missingPackageName);
+      setPackageError('');
+      setMissingPackageDialogOpen(true);
+    }
+  }, [missingPackageName]);
 
   // Phase 10 — Jupyter AI Agent bridge (read/edit only, no execution).
   // Edits flow through updateCells so they persist via the normal debounced
@@ -408,7 +508,7 @@ export const PythonNotebookEditor: React.FC<{
 
   const getSourceEditorHeight = (source: string): number => {
     const lineCount = Math.max(3, source.split('\n').length);
-    return lineCount * 20 + 18;
+    return lineCount * 18 + 18;
   };
 
   const closeCellMenu = () => setCellMenu(null);
@@ -458,6 +558,11 @@ export const PythonNotebookEditor: React.FC<{
   const isBusy = ['running', 'interrupting', 'restarting'].includes(
     sessionState,
   );
+  const kernelStopped = sessionState === 'stopped' || sessionState === 'dead';
+  let kernelStatusColor = 'text.secondary';
+  if (sessionState === 'running') kernelStatusColor = 'success.main';
+  else if (kernelStopped) kernelStatusColor = 'text.disabled';
+
   const documentActionTitle = {
     rename: 'Rename Python notebook',
     duplicate: 'Duplicate Python notebook',
@@ -483,7 +588,10 @@ export const PythonNotebookEditor: React.FC<{
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
         <Typography variant="h6">{draft.name}</Typography>
-        <Chip size="small" label="Python" color="primary" />
+        <Chip
+          size="small"
+          label={`${draft.cells.length} ${draft.cells.length === 1 ? 'cell' : 'cells'}`}
+        />
         <Box sx={{ flex: 1 }} />
         <Box
           sx={{
@@ -548,20 +656,30 @@ export const PythonNotebookEditor: React.FC<{
               </IconButton>
             </span>
           </Tooltip>
-          <Tooltip title="Shut down kernel">
+          <Tooltip title={`Shut down kernel · Kernel ${sessionState}`}>
             <span style={{ order: 3 }}>
               <IconButton
                 size="small"
-                aria-label="Shut down kernel"
+                aria-label={`Shut down kernel · Kernel ${sessionState}`}
                 sx={toolbarActionSx(3)}
-                disabled={
-                  shutdown.isLoading ||
-                  (!hasActiveSession &&
-                    (runtime?.activeSessionCount ?? 0) === 0)
-                }
+                disabled={shutdown.isLoading || !hasActiveSession}
                 onClick={() => shutdown.mutate()}
               >
                 <Stop fontSize="small" />
+                <Box
+                  component="span"
+                  aria-hidden="true"
+                  sx={{
+                    position: 'absolute',
+                    right: 2,
+                    bottom: 2,
+                    width: 6,
+                    height: 6,
+                    borderRadius: '50%',
+                    bgcolor: kernelStatusColor,
+                    opacity: kernelStopped ? 0.5 : 1,
+                  }}
+                />
               </IconButton>
             </span>
           </Tooltip>
@@ -747,43 +865,140 @@ export const PythonNotebookEditor: React.FC<{
       </Box>
       {runtime?.state !== 'ready' && (
         <Alert severity="warning" sx={{ mb: 2 }}>
-          Set up Jupyter packages in Settings → Python before running cells.
+          Set up notebook packages in Settings → Jupyter Notebooks before
+          running cells.
         </Alert>
       )}
-      {runtime?.selectedEnvironment && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-          <Chip
-            size="small"
-            label={runtime.selectedEnvironment.label}
-            color="default"
-          />
-          <Typography variant="caption" color="text.secondary">
-            Python {runtime.selectedEnvironment.pythonVersion ?? 'unknown'}
-            {sessionState !== 'stopped' ? ` · kernel ${sessionState}` : ''}
-            {!runtime.selectedEnvironment.writable ? ' · read-only' : ''}
-          </Typography>
-        </Box>
+      {packageFeedback && (
+        <Alert
+          severity="success"
+          sx={{ mb: 2 }}
+          onClose={() => setPackageFeedback('')}
+        >
+          {packageFeedback}
+        </Alert>
       )}
-      {missingPackageName && (
+      <Dialog
+        open={missingPackageDialogOpen}
+        onClose={() => {
+          if (!installPackage.isLoading) setMissingPackageDialogOpen(false);
+        }}
+        maxWidth="sm"
+        fullWidth
+        aria-labelledby="notebook-package-title"
+      >
+        <DialogTitle id="notebook-package-title">
+          {missingPackageName
+            ? 'Python package required'
+            : 'Install Python package'}
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            {missingPackageName
+              ? 'A cell reported a missing Python module. '
+              : ''}
+            Install a package into the Studio notebook environment, then run
+            your cells again.
+          </DialogContentText>
+          <TextField
+            autoFocus
+            fullWidth
+            label="Package name"
+            variant="outlined"
+            value={packageName}
+            disabled={installPackage.isLoading}
+            onChange={(event) => setPackageName(event.target.value)}
+            helperText="Use the package name from PyPI; it may differ from the import name."
+          />
+          {Boolean(runtime?.activeSessionCount) && (
+            <Alert severity="warning" sx={{ mt: 2 }}>
+              Installing will stop {runtime?.activeSessionCount} active notebook
+              kernels and clear their variables. Saved notebooks and outputs are
+              preserved. Rerun prerequisite cells afterward.
+            </Alert>
+          )}
+          {runtime?.state !== 'ready' && (
+            <Alert severity="info" sx={{ mt: 2 }}>
+              Open notebook settings to set up or repair the environment before
+              installing packages.
+            </Alert>
+          )}
+          {packageError && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {packageError}
+            </Alert>
+          )}
+          {installPackage.isLoading && (
+            <Box
+              role="status"
+              sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2 }}
+            >
+              <CircularProgress size={18} /> Installing {packageName}…
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            disabled={installPackage.isLoading}
+            onClick={() => setMissingPackageDialogOpen(false)}
+          >
+            Close
+          </Button>
+          <Button
+            disabled={installPackage.isLoading}
+            onClick={async () => {
+              await flushPendingSave();
+              setMissingPackageDialogOpen(false);
+              navigate('/app/settings/jupiter-notebooks');
+            }}
+          >
+            Open settings
+          </Button>
+          <Button
+            variant="contained"
+            disabled={
+              !packageName.trim() ||
+              installPackage.isLoading ||
+              refreshingRuntime ||
+              runtime?.state !== 'ready' ||
+              runtime?.operation.state !== 'idle' ||
+              !runtime?.selectedEnvironment?.writable
+            }
+            onClick={async () => {
+              setPackageError('');
+              try {
+                await flushPendingSave();
+                await installPackage.mutateAsync({
+                  name: packageName.trim(),
+                  expectedActiveSessionCount: runtime?.activeSessionCount ?? 0,
+                });
+                await refreshRuntime();
+                setMissingPackageDialogOpen(false);
+                setPackageFeedback(
+                  `${packageName.trim()} installed. Run your cells again; previous outputs are unchanged.`,
+                );
+              } catch (error) {
+                setPackageError(
+                  error instanceof Error
+                    ? error.message
+                    : 'Package installation failed.',
+                );
+                await refreshRuntime();
+              }
+            }}
+          >
+            {runtime?.activeSessionCount
+              ? 'Stop kernels and install'
+              : 'Install'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      {restart.isSuccess && sessionState === 'idle' && (
         <Alert
           severity="warning"
           sx={{ mb: 2 }}
-          action={
-            <Button
-              size="small"
-              onClick={() => navigate('/app/settings/python')}
-            >
-              Open package settings
-            </Button>
-          }
+          onClose={() => restart.reset()}
         >
-          Python package &quot;{missingPackageName}&quot; is not installed in
-          the active notebook environment. Install it from Settings → Python →
-          Jupyter Notebooks instead of re-running this cell.
-        </Alert>
-      )}
-      {restart.isSuccess && sessionState === 'idle' && (
-        <Alert severity="warning" sx={{ mb: 2 }}>
           The kernel was restarted. Existing output may be stale.
         </Alert>
       )}
@@ -1035,12 +1250,12 @@ export const PythonNotebookEditor: React.FC<{
                         minimap: { enabled: false },
                         scrollBeyondLastLine: false,
                         wordWrap: 'on',
-                        fontSize: 13,
+                        fontSize: 12,
                         tabSize: 2,
                         automaticLayout: true,
                         fixedOverflowWidgets: true,
                         padding: { top: 8, bottom: 12 },
-                        lineHeight: 20,
+                        lineHeight: 18,
                         scrollbar: {
                           vertical: 'hidden',
                           horizontal: 'auto',
@@ -1059,6 +1274,7 @@ export const PythonNotebookEditor: React.FC<{
                 )}
                 {showCode && cell.cellType === 'markdown' && (
                   <MarkdownCell
+                    fontSize={12}
                     content={cell.source}
                     attachmentResolver={(href) => {
                       const attachmentName = href.slice('attachment:'.length);
@@ -1111,8 +1327,8 @@ export const PythonNotebookEditor: React.FC<{
                           : '#000000',
                       fontFamily:
                         '"Menlo", "Monaco", "Consolas", "Courier New", monospace',
-                      fontSize: 13,
-                      lineHeight: '20px',
+                      fontSize: 12,
+                      lineHeight: '18px',
                       height: getSourceEditorHeight(cell.source),
                       outline: 'none',
                       px: 2,
@@ -1129,20 +1345,7 @@ export const PythonNotebookEditor: React.FC<{
                   />
                 )}
                 {showOutput && hasOutput && (
-                  <Box
-                    sx={{
-                      m: 0,
-                      p: 1,
-                      bgcolor:
-                        execution?.status === 'error'
-                          ? 'error.dark'
-                          : 'action.hover',
-                      color:
-                        execution?.status === 'error'
-                          ? 'error.contrastText'
-                          : 'text.primary',
-                    }}
-                  >
+                  <PythonOutputViewport error={execution?.status === 'error'}>
                     {outputs.map((output, outputIndex) => (
                       <PythonOutput
                         key={`${cell.id}-${outputIndex}`}
@@ -1153,7 +1356,7 @@ export const PythonNotebookEditor: React.FC<{
                     {execution?.truncated && (
                       <Alert severity="warning">Output truncated.</Alert>
                     )}
-                  </Box>
+                  </PythonOutputViewport>
                 )}
               </Box>
             </Collapse>

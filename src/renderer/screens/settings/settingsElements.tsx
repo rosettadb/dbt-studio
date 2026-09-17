@@ -10,6 +10,7 @@ import TerminalIcon from '@mui/icons-material/Terminal';
 import CodeIcon from '@mui/icons-material/Code';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import BackupOutlinedIcon from '@mui/icons-material/BackupOutlined';
+import LibraryBooksIcon from '@mui/icons-material/LibraryBooks';
 import { SvgIconComponent } from '@mui/icons-material';
 import React from 'react';
 import { Icon } from '../../components/icon';
@@ -101,6 +102,11 @@ export const settingsSidebarCategories: SettingsSidebarCategory[] = [
         icon: CodeIcon,
         text: 'Python',
         path: '/app/settings/python',
+      },
+      {
+        icon: LibraryBooksIcon,
+        text: 'Notebooks',
+        path: '/app/settings/jupiter-notebooks',
       },
       {
         icon: FolderIcon,

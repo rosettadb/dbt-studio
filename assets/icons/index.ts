@@ -18,6 +18,7 @@ import apacheIcebergLake from './apache-iceberg-lake.png';
 import deltaLake from './delta-lake.png';
 import apacheHudiLake from './apache-hudi-lake.png';
 import flow from './flow.svg';
+import jupyterLogo from './jupyter-logo.png';
 
 export const icons = {
   settings,
@@ -40,4 +41,5 @@ export const icons = {
   deltaLake,
   apacheHudiLake,
   flow,
+  jupyterLogo,
 };

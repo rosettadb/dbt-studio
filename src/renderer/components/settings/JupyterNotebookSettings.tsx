@@ -25,31 +25,24 @@ import {
   ExpandMore,
   Refresh,
   Warning,
-  Add,
-  ContentCopy,
-  Computer,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
+import { useNavigate } from 'react-router-dom';
 import {
   useCheckPythonNotebookRuntime,
   useInstallPythonNotebookPackage,
   useInstallPythonNotebookRuntime,
+  useUpdatePythonNotebookRuntime,
   useListPythonNotebookPackageVersions,
   useUninstallPythonNotebookPackage,
   usePythonNotebookRuntimeStatus,
-  useSelectPythonNotebookEnvironment,
-  useAddCustomPythonInterpreter,
-  useRemovePythonNotebookEnvironment,
-  useInstallPythonDataProfile,
-  useEnsurePythonKernelSupport,
   useInstallPythonUserPackage,
   useUninstallPythonUserPackage,
   useListPythonUserPackageVersions,
-  useGetSelectedProject,
 } from '../../controllers';
 import { ConfirmationModal } from '../modals';
+import { icons } from '../../../../assets';
 import {
-  PythonNotebookEnvironmentStatus,
   PythonNotebookPackageStatus,
   PythonNotebookPackageVersionListResponse,
   PythonNotebookUserPackageVersionListResponse,
@@ -84,7 +77,31 @@ const statePresentation = {
   },
 };
 
+const optionalPackages = [
+  ['numpy', 'Numerical arrays'],
+  ['pandas', 'DataFrames'],
+  ['polars', 'Fast DataFrames'],
+  ['pyarrow', 'Arrow and Parquet'],
+  ['duckdb', 'Local analytical SQL'],
+  ['matplotlib', 'Charts'],
+  ['seaborn', 'Statistical charts'],
+  ['plotly', 'Interactive charts'],
+  ['scipy', 'Scientific computing'],
+  ['scikit-learn', 'Machine learning'],
+  ['sqlalchemy', 'Database access'],
+  ['psycopg', 'PostgreSQL access'],
+  ['requests', 'HTTP requests'],
+  ['boto3', 'AWS services'],
+  ['fsspec', 'Filesystem adapters'],
+  ['s3fs', 'S3 files'],
+  ['pyiceberg', 'Iceberg tables'],
+  ['deltalake', 'Delta tables'],
+  ['pyspark', 'Spark Python API'],
+  ['openpyxl', 'Excel files'],
+] as const;
+
 export const JupyterNotebookSettings: React.FC = () => {
+  const navigate = useNavigate();
   const [packageVersions, setPackageVersions] = React.useState<
     Partial<
       Record<
@@ -108,7 +125,6 @@ export const JupyterNotebookSettings: React.FC = () => {
     version?: string;
   } | null>(null);
   // Phase 11: environment selection and user package management.
-  const [customInterpreterPath, setCustomInterpreterPath] = React.useState('');
   const [userPackageName, setUserPackageName] = React.useState('');
   const [userPackageExtras, setUserPackageExtras] = React.useState('');
   const [userPackageVersion, setUserPackageVersion] = React.useState('');
@@ -119,23 +135,13 @@ export const JupyterNotebookSettings: React.FC = () => {
     question: string;
     run: () => void;
   } | null>(null);
-  const { data: selectedProject } = useGetSelectedProject();
-  const projectPath = selectedProject?.path ?? undefined;
-  const {
-    data: status,
-    isLoading,
-    isError,
-  } = usePythonNotebookRuntimeStatus(projectPath);
+  const { data: status, isLoading, isError } = usePythonNotebookRuntimeStatus();
   const installRuntime = useInstallPythonNotebookRuntime();
+  const updateRuntime = useUpdatePythonNotebookRuntime();
   const checkRuntime = useCheckPythonNotebookRuntime();
   const listPackageVersions = useListPythonNotebookPackageVersions();
   const installPackage = useInstallPythonNotebookPackage();
   const uninstallPackage = useUninstallPythonNotebookPackage();
-  const selectEnvironment = useSelectPythonNotebookEnvironment();
-  const addCustomInterpreter = useAddCustomPythonInterpreter();
-  const removeEnvironment = useRemovePythonNotebookEnvironment();
-  const installDataProfile = useInstallPythonDataProfile();
-  const ensureKernelSupport = useEnsurePythonKernelSupport();
   const installUserPackage = useInstallPythonUserPackage();
   const uninstallUserPackage = useUninstallPythonUserPackage();
   const listUserPackageVersions = useListPythonUserPackageVersions();
@@ -143,14 +149,10 @@ export const JupyterNotebookSettings: React.FC = () => {
   const isBusy = Boolean(
     operationActive ||
       installRuntime.isLoading ||
+      updateRuntime.isLoading ||
       installPackage.isLoading ||
       uninstallPackage.isLoading ||
       checkRuntime.isLoading ||
-      selectEnvironment.isLoading ||
-      addCustomInterpreter.isLoading ||
-      removeEnvironment.isLoading ||
-      installDataProfile.isLoading ||
-      ensureKernelSupport.isLoading ||
       installUserPackage.isLoading ||
       uninstallUserPackage.isLoading,
   );
@@ -310,81 +312,6 @@ export const JupyterNotebookSettings: React.FC = () => {
     toast.error(error instanceof Error ? error.message : fallback);
   };
 
-  const runSelectEnvironment = async (environmentId: string): Promise<void> => {
-    try {
-      await selectEnvironment.mutateAsync({
-        environmentId,
-        expectedActiveSessionCount: status?.activeSessionCount ?? 0,
-        projectPath,
-      });
-      toast.success('Notebook environment selected');
-    } catch (error) {
-      notifyError(error, 'Failed to select environment.');
-    }
-  };
-
-  const runAddCustomInterpreter = async (): Promise<void> => {
-    const interpreterPath = customInterpreterPath.trim();
-    if (!interpreterPath) {
-      toast.error('Enter the full path to a Python executable.');
-      return;
-    }
-    try {
-      await addCustomInterpreter.mutateAsync({ path: interpreterPath });
-      toast.success('Custom interpreter added. Select it to use it.');
-      setCustomInterpreterPath('');
-    } catch (error) {
-      notifyError(error, 'Failed to add interpreter.');
-    }
-  };
-
-  const runRemoveEnvironment = async (
-    environment: PythonNotebookEnvironmentStatus,
-  ): Promise<void> => {
-    try {
-      await removeEnvironment.mutateAsync({ environmentId: environment.id });
-      toast.success('Custom interpreter removed');
-    } catch (error) {
-      notifyError(error, 'Failed to remove interpreter.');
-    }
-  };
-
-  const startDataProfileInstall = () => {
-    const expectedActiveSessionCount = status?.activeSessionCount ?? 0;
-    confirmOrRunEnvAction(
-      'Install data packages',
-      kernelLossQuestion(
-        'Install numpy, pandas, matplotlib, polars, pyarrow, and pyspark into the selected environment?',
-      ),
-      async () => {
-        try {
-          await installDataProfile.mutateAsync(expectedActiveSessionCount);
-          toast.success('Data packages installed');
-        } catch (error) {
-          notifyError(error, 'Failed to install data packages.');
-        }
-      },
-    );
-  };
-
-  const startEnsureKernelSupport = () => {
-    const expectedActiveSessionCount = status?.activeSessionCount ?? 0;
-    confirmOrRunEnvAction(
-      'Install kernel support',
-      kernelLossQuestion(
-        'Install ipykernel support into the selected environment?',
-      ),
-      async () => {
-        try {
-          await ensureKernelSupport.mutateAsync(expectedActiveSessionCount);
-          toast.success('Kernel support installed');
-        } catch (error) {
-          notifyError(error, 'Failed to install kernel support.');
-        }
-      },
-    );
-  };
-
   const parseExtras = (value: string) =>
     value
       .split(',')
@@ -403,7 +330,7 @@ export const JupyterNotebookSettings: React.FC = () => {
     const spec = `${name}${extras.length > 0 ? `[${extras.join(',')}]` : ''}${version ? `==${version}` : ''}`;
     confirmOrRunEnvAction(
       'Install Python package',
-      kernelLossQuestion(`Install ${spec} into the selected environment?`),
+      kernelLossQuestion(`Install ${spec} into the notebook environment?`),
       async () => {
         try {
           await installUserPackage.mutateAsync({
@@ -421,12 +348,100 @@ export const JupyterNotebookSettings: React.FC = () => {
     );
   };
 
+  const startCatalogInstall = (name: string) => {
+    const expectedActiveSessionCount = status?.activeSessionCount ?? 0;
+    confirmOrRunEnvAction(
+      'Install notebook package',
+      kernelLossQuestion(
+        `Install or update ${name} in the notebook environment?`,
+      ),
+      async () => {
+        try {
+          await installUserPackage.mutateAsync({
+            name,
+            extras: [],
+            expectedActiveSessionCount,
+          });
+          toast.success(`${name} installed`);
+        } catch (error) {
+          notifyError(error, `Failed to install ${name}.`);
+        }
+      },
+    );
+  };
+
+  const startInstallAllCatalogPackages = () => {
+    confirmOrRunEnvAction(
+      'Install all optional packages',
+      kernelLossQuestion(
+        `Install all ${optionalPackages.length} optional data packages in the notebook environment?`,
+      ),
+      async () => {
+        try {
+          await optionalPackages.reduce(
+            (previous, [name]) =>
+              previous.then(async () => {
+                await installUserPackage.mutateAsync({
+                  name,
+                  extras: [],
+                  expectedActiveSessionCount: 0,
+                });
+                return undefined;
+              }),
+            Promise.resolve(),
+          );
+          toast.success('All optional data packages installed');
+        } catch (error) {
+          notifyError(error, 'Failed to install all optional packages.');
+        }
+      },
+    );
+  };
+
+  const startUninstallAllCatalogPackages = () => {
+    const installedNames = optionalPackages
+      .map(([name]) => name)
+      .filter((name) =>
+        status?.dataPackages.some(
+          (pkg) => pkg.name === name && Boolean(pkg.installedVersion),
+        ),
+      );
+    if (installedNames.length === 0) {
+      toast.info('No optional data packages are installed.');
+      return;
+    }
+    confirmOrRunEnvAction(
+      'Uninstall all optional packages',
+      kernelLossQuestion(
+        `Uninstall ${installedNames.length} optional data package${installedNames.length === 1 ? '' : 's'}?`,
+      ),
+      async () => {
+        try {
+          await installedNames.reduce(
+            (previous, name) =>
+              previous.then(async () => {
+                await uninstallUserPackage.mutateAsync({
+                  name,
+                  expectedActiveSessionCount: 0,
+                });
+                return undefined;
+              }),
+            Promise.resolve(),
+          );
+          toast.success('All optional data packages uninstalled');
+        } catch (error) {
+          notifyError(error, 'Failed to uninstall all optional packages.');
+        }
+      },
+    );
+  };
+
   const startUserPackageUninstall = (packageName: string) => {
     const expectedActiveSessionCount = status?.activeSessionCount ?? 0;
     confirmOrRunEnvAction(
       'Uninstall Python package',
       kernelLossQuestion(
-        `Uninstall ${packageName} from the selected environment?`,
+        `Uninstall ${packageName} from the notebook environment?`,
       ),
       async () => {
         try {
@@ -459,21 +474,11 @@ export const JupyterNotebookSettings: React.FC = () => {
     }
   };
 
-  const copyRequirementsSnippet = async (): Promise<void> => {
-    if (!status) return;
-    try {
-      await navigator.clipboard.writeText(status.requirementsSnippet);
-      toast.success('Install command copied');
-    } catch {
-      toast.error('Failed to copy install command');
-    }
-  };
-
   return (
     <Box sx={{ pt: 3, mt: 3, borderTop: 1, borderColor: 'divider' }}>
       <Backdrop
         open={isBusy}
-        sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, color: '#fff' }}
+        sx={{ zIndex: (t) => t.zIndex.drawer + 1, color: '#fff' }}
       >
         <Box
           sx={{
@@ -488,9 +493,14 @@ export const JupyterNotebookSettings: React.FC = () => {
         </Box>
       </Backdrop>
 
-      <Typography variant="h6" gutterBottom>
-        Jupyter Notebooks
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+        <img
+          src={icons.jupyterLogo}
+          alt="Jupyter"
+          style={{ width: 28, height: 28, objectFit: 'contain' }}
+        />
+        <Typography variant="h6">Jupyter Notebooks</Typography>
+      </Box>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         Uses Rosetta DBT Studio&apos;s managed Python with a dedicated
         environment for notebook packages.
@@ -535,6 +545,12 @@ export const JupyterNotebookSettings: React.FC = () => {
             <Typography variant="body2" sx={{ mt: 0.5 }}>
               Active Python kernels: {status.activeSessionCount}
             </Typography>
+            <Typography
+              variant="body2"
+              sx={{ mt: 0.5, wordBreak: 'break-all' }}
+            >
+              Environment location: {status.environmentPath}
+            </Typography>
             {status.message && (
               <Typography variant="body2" sx={{ mt: 0.5 }}>
                 {status.message}
@@ -542,160 +558,55 @@ export const JupyterNotebookSettings: React.FC = () => {
             )}
           </Alert>
 
-          {/* Phase 11: IDE-style environment selection */}
-          <Typography variant="subtitle1" sx={{ fontWeight: 500, mt: 1 }}>
-            Python environment
+          <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>
+            Notebook environment
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            Notebook kernels run with the selected environment, like choosing an
-            interpreter in PyCharm or VS Code. Shut down all kernels before
-            switching environments.
-          </Typography>
-          <List
-            sx={{ border: 1, borderColor: 'divider', borderRadius: 1, mb: 1 }}
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ mb: 2, wordBreak: 'break-all' }}
           >
-            {status.environments.map((env, index) => (
-              <React.Fragment key={env.id}>
-                <ListItem>
-                  <ListItemText
-                    primary={
-                      <Box
-                        sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
-                      >
-                        <Computer fontSize="small" color="action" />
-                        <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                          {env.label}
-                        </Typography>
-                        {env.isSelected && (
-                          <Chip label="Selected" size="small" color="success" />
-                        )}
-                        {env.kernelReady === true && (
-                          <Chip label="Kernel ready" size="small" />
-                        )}
-                        {env.kernelReady === false && env.isSelected && (
-                          <Chip
-                            label="Missing kernel support"
-                            size="small"
-                            color="warning"
-                          />
-                        )}
-                        {!env.exists && (
-                          <Chip
-                            label="Unavailable"
-                            size="small"
-                            color="warning"
-                          />
-                        )}
-                        {!env.writable && env.exists && (
-                          <Chip label="Read-only" size="small" />
-                        )}
-                      </Box>
-                    }
-                    secondaryTypographyProps={{ component: 'div' }}
-                    secondary={
-                      <Box>
-                        <Typography variant="body2" color="text.secondary">
-                          {env.kind === 'managed' &&
-                            'Studio managed environment'}
-                          {env.kind === 'base' &&
-                            'Managed Python base interpreter'}
-                          {env.kind === 'project' && 'Project-local virtualenv'}
-                          {env.kind === 'custom' && 'Custom interpreter'}
-                          {env.pythonVersion
-                            ? ` · Python ${env.pythonVersion}`
-                            : ''}
-                        </Typography>
-                        {env.pythonPath && (
-                          <Typography
-                            variant="caption"
-                            color="text.secondary"
-                            sx={{
-                              wordBreak: 'break-all',
-                              fontFamily: 'monospace',
-                            }}
-                          >
-                            {env.pythonPath}
-                          </Typography>
-                        )}
-                      </Box>
-                    }
-                  />
-                  <ListItemSecondaryAction>
-                    {!env.isSelected && env.exists && (
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => runSelectEnvironment(env.id)}
-                        disabled={isBusy}
-                        sx={{ mr: 1 }}
-                      >
-                        Use
-                      </Button>
-                    )}
-                    {env.kind === 'custom' && (
-                      <Button
-                        size="small"
-                        color="error"
-                        variant="outlined"
-                        onClick={() => runRemoveEnvironment(env)}
-                        disabled={isBusy}
-                      >
-                        Remove
-                      </Button>
-                    )}
-                  </ListItemSecondaryAction>
-                </ListItem>
-                {index < status.environments.length - 1 && <Divider />}
-              </React.Fragment>
-            ))}
-          </List>
-          <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-            <TextField
-              size="small"
-              fullWidth
-              label="Custom interpreter path"
-              placeholder="/usr/local/bin/python3"
-              value={customInterpreterPath}
-              onChange={(event) => setCustomInterpreterPath(event.target.value)}
-              disabled={isBusy}
-            />
-            <Button
-              variant="outlined"
-              onClick={runAddCustomInterpreter}
-              disabled={!customInterpreterPath.trim() || isBusy}
-              startIcon={<Add />}
-              sx={{ whiteSpace: 'nowrap' }}
-            >
-              Add
-            </Button>
-          </Box>
-
-          {status.selectedEnvironment && !status.kernelReady && (
+            Managed by Studio for all notebooks.
+          </Typography>
+          {!status.managedPython.available && (
             <Alert
-              severity="warning"
+              severity="info"
               sx={{ mb: 2 }}
               action={
-                status.selectedEnvironment.writable ? (
-                  <Button
-                    size="small"
-                    onClick={startEnsureKernelSupport}
-                    disabled={isBusy}
-                  >
-                    Install kernel support
-                  </Button>
-                ) : undefined
+                <Button
+                  size="small"
+                  onClick={() => navigate('/app/settings/python')}
+                  startIcon={<CloudDownload />}
+                >
+                  Install Python first
+                </Button>
               }
             >
-              {status.selectedEnvironment.writable
-                ? `"${status.selectedEnvironment.label}" cannot run notebooks yet (missing ipykernel).`
-                : `"${status.selectedEnvironment.label}" is read-only and cannot run notebooks yet. Install ipykernel manually, then check the runtime again.`}
+              Install Python in Settings → Python, then return here.
             </Alert>
           )}
 
-          {status.selectedEnvironment?.kind !== 'managed' && (
-            <Alert severity="info" sx={{ mb: 1 }}>
-              Required Jupyter package versions below are managed in the Studio
-              managed environment. Switch environments to change them.
+          <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+            <Button
+              variant="outlined"
+              onClick={() => checkRuntime.mutate()}
+              disabled={status.state === 'not-installed' || isBusy}
+              startIcon={<Refresh />}
+            >
+              Check Runtime
+            </Button>
+          </Box>
+          {checkRuntime.isSuccess && !checkRuntime.isLoading && (
+            <Alert severity="success" sx={{ mb: 2 }}>
+              Runtime check passed. The notebook kernel and required packages
+              are ready.
+            </Alert>
+          )}
+          {checkRuntime.isError && !checkRuntime.isLoading && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {checkRuntime.error instanceof Error
+                ? checkRuntime.error.message
+                : 'Runtime check failed. Repair the notebook environment and try again.'}
             </Alert>
           )}
 
@@ -704,9 +615,7 @@ export const JupyterNotebookSettings: React.FC = () => {
             const latestStable =
               packageVersions[pkg.name]?.latestStable ?? null;
             const isLoadingVersions = loadingVersions[pkg.name] ?? false;
-            const canManagePackage =
-              status.state !== 'not-installed' &&
-              status.selectedEnvironment?.kind === 'managed';
+            const canManagePackage = status.state === 'ready';
 
             return (
               <Accordion
@@ -907,54 +816,107 @@ export const JupyterNotebookSettings: React.FC = () => {
             );
           })}
 
-          {/* Phase 11: curated data packages for the selected environment */}
-          <Typography variant="subtitle1" sx={{ fontWeight: 500, mt: 2 }}>
-            Data packages
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            Quick-install numpy, pandas, matplotlib, polars, pyarrow, and
-            pyspark into the selected environment. For pyspark, Java/Spark
-            runtime availability is separate from package installation.
-          </Typography>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1 }}>
-            {status.dataPackages.map((pkg) => (
-              <Chip
-                key={pkg.name}
-                size="small"
-                label={
-                  pkg.installedVersion
-                    ? `${pkg.name} ${pkg.installedVersion}`
-                    : `${pkg.name} missing`
-                }
-                color={pkg.installedVersion ? 'success' : 'default'}
-              />
-            ))}
-          </Box>
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={startDataProfileInstall}
-            disabled={!status.selectedEnvironment?.writable || isBusy}
-            startIcon={<Download />}
-            sx={{ mb: 2 }}
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 1,
+              mt: 2,
+            }}
           >
-            Install data packages
-          </Button>
+            <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>
+              Optional data packages
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button
+                size="small"
+                variant="outlined"
+                disabled={isBusy || status.state !== 'ready'}
+                onClick={startInstallAllCatalogPackages}
+                startIcon={<Download />}
+              >
+                Install all
+              </Button>
+              <Button
+                size="small"
+                color="error"
+                variant="outlined"
+                disabled={isBusy || status.state !== 'ready'}
+                onClick={startUninstallAllCatalogPackages}
+                startIcon={<Delete />}
+              >
+                Uninstall all
+              </Button>
+            </Box>
+          </Box>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            Install packages as needed. PySpark also needs a separate Java/Spark
+            runtime for execution.
+          </Typography>
+          <List
+            sx={{ border: 1, borderColor: 'divider', borderRadius: 1, mb: 2 }}
+          >
+            {optionalPackages.map(([name, purpose], index) => {
+              const installed =
+                status.dataPackages.find((item) => item.name === name)
+                  ?.installedVersion ??
+                status.userPackages.find((item) => item.name === name)
+                  ?.installedVersion;
+              return (
+                <React.Fragment key={name}>
+                  <ListItem>
+                    <ListItemText
+                      primary={name}
+                      secondary={`${purpose} · ${installed ? `Installed ${installed}` : 'Not installed'}`}
+                    />
+                    <ListItemSecondaryAction>
+                      <Box sx={{ display: 'flex', gap: 1 }}>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          disabled={isBusy || status.state !== 'ready'}
+                          onClick={() => startCatalogInstall(name)}
+                          startIcon={<Download />}
+                        >
+                          {installed ? 'Update' : 'Install'}
+                        </Button>
+                        {installed && (
+                          <Button
+                            size="small"
+                            color="error"
+                            variant="outlined"
+                            disabled={isBusy || status.state !== 'ready'}
+                            onClick={() => startUserPackageUninstall(name)}
+                            startIcon={<Delete />}
+                          >
+                            Uninstall
+                          </Button>
+                        )}
+                      </Box>
+                    </ListItemSecondaryAction>
+                  </ListItem>
+                  {index < optionalPackages.length - 1 && <Divider />}
+                </React.Fragment>
+              );
+            })}
+          </List>
 
-          {/* Phase 11: arbitrary user packages for the selected environment */}
+          {/* Phase 11: arbitrary user packages for the notebook environment */}
           <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>
             Additional packages
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            Install any PyPI package into the selected environment. Shell
+            Install any PyPI package into the notebook environment. Shell
             commands, paths, editable installs, and version-control URLs are not
             accepted here.
           </Typography>
           <Box sx={{ display: 'flex', gap: 1, mb: 1, flexWrap: 'wrap' }}>
             <TextField
-              size="small"
+              variant="outlined"
+              size="medium"
               label="Package name"
-              placeholder="seaborn"
+              sx={{ width: 200 }}
               value={userPackageName}
               onChange={(event) => {
                 setUserPackageName(event.target.value);
@@ -963,17 +925,19 @@ export const JupyterNotebookSettings: React.FC = () => {
               disabled={isBusy}
             />
             <TextField
-              size="small"
+              variant="outlined"
+              size="medium"
               label="Extras (optional)"
-              placeholder="perf,test"
+              sx={{ width: 200 }}
               value={userPackageExtras}
               onChange={(event) => setUserPackageExtras(event.target.value)}
               disabled={isBusy}
             />
             <TextField
-              size="small"
+              variant="outlined"
+              size="medium"
               label="Version (optional)"
-              placeholder="3.1.0"
+              sx={{ width: 200 }}
               value={userPackageVersion}
               onChange={(event) => setUserPackageVersion(event.target.value)}
               disabled={isBusy}
@@ -985,6 +949,7 @@ export const JupyterNotebookSettings: React.FC = () => {
               variant="outlined"
               onClick={lookupUserPackageVersions}
               disabled={!userPackageName.trim() || isBusy}
+              startIcon={<Refresh />}
             >
               Check versions
             </Button>
@@ -993,9 +958,7 @@ export const JupyterNotebookSettings: React.FC = () => {
               variant="contained"
               onClick={startUserPackageInstall}
               disabled={
-                !userPackageName.trim() ||
-                !status.selectedEnvironment?.writable ||
-                isBusy
+                !userPackageName.trim() || status.state !== 'ready' || isBusy
               }
               startIcon={<Download />}
             >
@@ -1020,74 +983,24 @@ export const JupyterNotebookSettings: React.FC = () => {
               ))}
             </Box>
           )}
-          {status.userPackages.length > 0 && (
-            <List
-              sx={{ border: 1, borderColor: 'divider', borderRadius: 1, mb: 2 }}
-            >
-              {status.userPackages.map((pkg, index) => (
-                <React.Fragment key={`${pkg.name}-${index}`}>
-                  <ListItem>
-                    <ListItemText
-                      primary={pkg.name}
-                      secondary={
-                        pkg.installedVersion
-                          ? `Installed ${pkg.installedVersion}${pkg.requestedVersion ? ` · Requested ${pkg.requestedVersion}` : ''}${pkg.extras.length > 0 ? ` · Extras ${pkg.extras.join(', ')}` : ''}`
-                          : 'Not installed'
-                      }
-                    />
-                    <ListItemSecondaryAction>
-                      <Button
-                        size="small"
-                        color="error"
-                        variant="outlined"
-                        onClick={() => startUserPackageUninstall(pkg.name)}
-                        disabled={isBusy}
-                      >
-                        Uninstall
-                      </Button>
-                    </ListItemSecondaryAction>
-                  </ListItem>
-                  {index < status.userPackages.length - 1 && <Divider />}
-                </React.Fragment>
-              ))}
-            </List>
-          )}
-
-          <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>
-            Reproducibility
-          </Typography>
-          <Box
-            component="pre"
-            sx={{
-              border: 1,
-              borderColor: 'divider',
-              borderRadius: 1,
-              p: 1,
-              fontSize: '0.75rem',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-all',
-              mb: 1,
-            }}
-          >
-            {status.requirementsSnippet}
-          </Box>
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={copyRequirementsSnippet}
-            startIcon={<ContentCopy />}
-            sx={{ mb: 1 }}
-          >
-            Copy install command
-          </Button>
-
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            sx={{ display: 'block' }}
-          >
-            Environment location: {status.environmentPath}
-          </Typography>
+          <Accordion sx={{ mb: 2 }}>
+            <AccordionSummary expandIcon={<ExpandMore />}>
+              Installed packages ({status.installedPackages.length})
+            </AccordionSummary>
+            <AccordionDetails>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Includes dependencies. Remove only packages you installed
+                through Studio.
+              </Typography>
+              <Box sx={{ maxHeight: 240, overflow: 'auto' }}>
+                {status.installedPackages.map((item) => (
+                  <Typography variant="body2" key={item.name}>
+                    {item.name} {item.version}
+                  </Typography>
+                ))}
+              </Box>
+            </AccordionDetails>
+          </Accordion>
 
           <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
             {status.state === 'not-installed' && (
@@ -1095,31 +1008,30 @@ export const JupyterNotebookSettings: React.FC = () => {
                 variant="contained"
                 onClick={() => installRuntime.mutate()}
                 disabled={!status.managedPython.available || isBusy}
-                startIcon={
-                  installRuntime.isLoading ? (
-                    <CircularProgress size={16} />
-                  ) : (
-                    <CloudDownload />
-                  )
-                }
+                startIcon={<CloudDownload />}
               >
-                Install Jupyter Packages
+                Set up notebook environment
               </Button>
             )}
-            <Button
-              variant="outlined"
-              onClick={() => checkRuntime.mutate()}
-              disabled={status.state !== 'ready' || isBusy}
-              startIcon={
-                checkRuntime.isLoading ? (
-                  <CircularProgress size={16} />
-                ) : (
-                  <Refresh />
-                )
-              }
-            >
-              Check Runtime
-            </Button>
+            {status.state === 'needs-attention' &&
+              status.managedPython.available && (
+                <Button
+                  variant="contained"
+                  disabled={isBusy}
+                  onClick={() =>
+                    confirmOrRunEnvAction(
+                      'Repair notebook environment',
+                      kernelLossQuestion(
+                        'Repair the Studio notebook environment?',
+                      ),
+                      () => updateRuntime.mutate(status.activeSessionCount),
+                    )
+                  }
+                  startIcon={<Refresh />}
+                >
+                  Repair notebook environment
+                </Button>
+              )}
           </Box>
 
           <ConfirmationModal

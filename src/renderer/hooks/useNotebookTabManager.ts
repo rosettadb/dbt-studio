@@ -7,6 +7,7 @@ export interface NotebookTabState {
   notebookId: string;
   notebookName: string;
   kind: 'sql' | 'python';
+  cellCount: number;
   connectionId?: string;
   isModified: boolean;
 }
@@ -238,6 +239,7 @@ const useNotebookTabManager = (): UseNotebookTabManagerReturn => {
         notebookName: notebook.name,
         connectionId,
         kind: 'sql',
+        cellCount: notebook.cellCount,
         isModified: false,
       };
 
@@ -266,6 +268,7 @@ const useNotebookTabManager = (): UseNotebookTabManagerReturn => {
         notebookId: notebook.id,
         notebookName: notebook.name,
         kind: 'python',
+        cellCount: notebook.cells.length,
         isModified: false,
       };
       setTabs((current) => {

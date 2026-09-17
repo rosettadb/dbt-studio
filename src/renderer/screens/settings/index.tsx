@@ -26,6 +26,7 @@ import {
   ProfileSettings,
   DbtSettings,
   PythonSettings,
+  JupyterNotebookSettings,
   RosettaSettings,
   RunnerSettings,
   AboutSettings,
@@ -123,6 +124,7 @@ const Settings: React.FC = () => {
   const getSectionTitle = (section: string) => {
     if (section === 'dbt') return 'dbt™ Core';
     if (section === 'python') return 'Python';
+    if (section === 'jupiter-notebooks') return 'Notebooks';
     if (section === 'ai-providers') return 'AI Settings';
     if (section === 'profile') return 'Rosetta Cloud';
     if (section === 'duckdb') return 'DuckDB';
@@ -166,6 +168,8 @@ const Settings: React.FC = () => {
         );
       case 'python':
         return <PythonSettings settings={localSettings} />;
+      case 'jupiter-notebooks':
+        return <JupyterNotebookSettings />;
       case 'rosetta':
         return <RosettaSettings settings={localSettings} />;
       case 'runner':
@@ -232,9 +236,9 @@ const Settings: React.FC = () => {
                 py: 0,
                 width: '100%',
                 '& .MuiListItem-root': {
-                  py: 0.25,
+                  py: 0,
                   px: 1,
-                  minHeight: '32px',
+                  minHeight: '28px',
                   width: '100%',
                 },
               }}

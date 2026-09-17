@@ -246,6 +246,7 @@ export interface PythonNotebookRuntimeStatus {
   environments: PythonNotebookEnvironmentStatus[];
   dataPackages: PythonNotebookDataPackageStatus[];
   userPackages: PythonNotebookUserPackageStatus[];
+  installedPackages: { name: string; version: string }[];
   requirementsSnippet: string;
   kernelReady: boolean;
 }

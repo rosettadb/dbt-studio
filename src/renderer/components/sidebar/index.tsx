@@ -55,9 +55,9 @@ export const Sidebar: React.FC<Props> = ({
       return '/app/data-lake';
     if (path.includes('flows')) return '/app/flows';
     if (path.includes('connection')) return '/app/connections';
+    if (path.includes('settings')) return '/app/settings';
     if (path.includes('notebooks')) return '/app/notebooks';
     if (path.includes('sql')) return '/app/sql';
-    if (path.includes('settings')) return '/app/settings';
     if (path === '/app') return '/app';
     return '';
   }, [location.pathname]);

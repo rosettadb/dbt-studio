@@ -17,3 +17,4 @@ export * from './KeystoreSettings';
 export * from './TaskManagerSettings';
 export * from './SecondBrainTab';
 export * from './BackupSettings';
+export * from './JupyterNotebookSettings';

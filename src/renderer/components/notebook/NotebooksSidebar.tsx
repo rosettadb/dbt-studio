@@ -31,6 +31,7 @@ import {
   Code,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import { icons } from '../../../../assets';
 import { SchemaTreeViewerWithSchema } from '../../screens/sql/SchemaTreeViewerWithSchema';
 import { NotebooksTreeView } from './NotebooksTreeView';
 import { JupyterSidebar } from './JupyterSidebar';
@@ -309,14 +310,20 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
           }}
         >
           <Tab
-            icon={<LibraryBooks sx={{ fontSize: 15 }} />}
+            icon={<Code sx={{ fontSize: 15 }} />}
             iconPosition="start"
             label="SQL"
             id="nb-primary-tab-sql"
             aria-controls="nb-primary-panel-sql"
           />
           <Tab
-            icon={<Code sx={{ fontSize: 15 }} />}
+            icon={
+              <img
+                src={icons.jupyterLogo}
+                alt="Jupyter"
+                style={{ width: 15, height: 15 }}
+              />
+            }
             iconPosition="start"
             label="Jupyter"
             id="nb-primary-tab-jupyter"

@@ -18,6 +18,7 @@ interface MarkdownCellProps {
   /** SQL notebook cell. Use content for a Python notebook markdown cell. */
   cell?: Pick<NotebookCell, 'content'>;
   content?: string;
+  fontSize?: number;
   attachmentResolver?: (href: string) => string | null;
   onUpdate: (content: string) => void;
 }
@@ -107,13 +108,15 @@ const createMarkdownComponents = (
 export const MarkdownCell: React.FC<MarkdownCellProps> = ({
   cell,
   content,
+  fontSize = 13,
   attachmentResolver,
   onUpdate,
 }) => {
   const value = content ?? cell?.content ?? '';
   const [isEditing, setIsEditing] = useState(!value);
   const lineCount = Math.max(3, value.split('\n').length);
-  const editorHeight = Math.min(400, Math.max(80, lineCount * 20 + 18));
+  const lineHeight = Math.round(fontSize * 1.5);
+  const editorHeight = Math.min(400, Math.max(80, lineCount * lineHeight + 18));
 
   return (
     <Box sx={{ position: 'relative' }}>
@@ -160,9 +163,9 @@ export const MarkdownCell: React.FC<MarkdownCellProps> = ({
             display: 'block',
             fontFamily:
               '"Menlo", "Monaco", "Consolas", "Courier New", monospace',
-            fontSize: 13,
+            fontSize,
             height: editorHeight,
-            lineHeight: '20px',
+            lineHeight: `${lineHeight}px`,
             outline: 'none',
             overflow: 'auto',
             px: 2,
@@ -195,7 +198,7 @@ export const MarkdownCell: React.FC<MarkdownCellProps> = ({
             border: '1px solid',
             borderColor: 'divider',
             minHeight: 40,
-            fontSize: 13,
+            fontSize,
             lineHeight: 1.5,
             overflowWrap: 'anywhere',
             '& h1, & h2, & h3, & h4, & h5, & h6': {
@@ -203,9 +206,9 @@ export const MarkdownCell: React.FC<MarkdownCellProps> = ({
               mt: 1.5,
               mb: 0.75,
             },
-            '& h1': { fontSize: '1.45rem' },
-            '& h2': { fontSize: '1.3rem' },
-            '& h3': { fontSize: '1.15rem' },
+            '& h1': { fontSize: `${(1.45 * fontSize) / 13}rem` },
+            '& h2': { fontSize: `${(1.3 * fontSize) / 13}rem` },
+            '& h3': { fontSize: `${(1.15 * fontSize) / 13}rem` },
             '& p': { my: 0.75 },
             '& ul, & ol': { pl: 2.5, my: 0.75 },
             '& input[type="checkbox"]': { pointerEvents: 'none' },
