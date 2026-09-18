@@ -81,6 +81,13 @@ export async function createAnalyticsAgent(
 
   let connectionHints = '';
   switch (connectionMeta.type) {
+    case 'iceberg':
+      connectionHints = `\n\n## Iceberg Specifics
+This connection is an Apache Iceberg ${connectionMeta.catalogType ?? 'REST'} catalog accessed through DuckDB's Iceberg extension.
+- Use DuckDB SQL. Every Iceberg table reference must be fully qualified as \`iceberg.<namespace>.<table>\`; this is required by the Analytics execution policy.
+- Never use \`<namespace>.<table>\`, a bare table name, or \`USE\` to make Iceberg table references unqualified. A successful query in another editor does not change this Analytics requirement.
+- Do not write \`ATTACH\`, \`DETACH\`, extension, secret, storage, or catalog configuration SQL; DBT Studio owns the temporary attachment lifecycle.`;
+      break;
     case 'ducklake':
       connectionHints = `\n\n## DuckLake Specifics
 You are connected to a DuckLake lakehouse. DuckLake is a DuckDB extension (not a separate library).

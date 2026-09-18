@@ -8,6 +8,7 @@ import { toast } from 'react-toastify';
 import { Notebook, NotebookCell, SchemaInfo } from '../../types/notebooks';
 import { notebooksService } from '../services/notebooks.service';
 import { connectorsServices } from '../services';
+import { getIcebergNotebookTables } from '../services/iceberg.service';
 import { DuckLakeService } from '../services/duckLake.service';
 
 // Query keys
@@ -281,6 +282,7 @@ export function useRunCell() {
       sql,
       limit,
       offset,
+      options,
     }: {
       connectionId: string;
       notebookId: string;
@@ -288,6 +290,7 @@ export function useRunCell() {
       sql: string;
       limit?: number;
       offset?: number;
+      options?: { executionId?: string; signal?: AbortSignal };
     }) =>
       notebooksService.runCell(
         connectionId,
@@ -296,8 +299,9 @@ export function useRunCell() {
         sql,
         limit,
         offset,
+        options,
       ),
-    onSuccess: async (_, { connectionId, notebookId, sql }) => {
+    onSuccess: async (output, { connectionId, notebookId, sql }) => {
       // Manually refetch the notebook to get updated cell output
       await queryClient.refetchQueries(
         notebooksKeys.detail(connectionId, notebookId),
@@ -305,6 +309,8 @@ export function useRunCell() {
       );
 
       if (
+        (connectionId.startsWith('iceberg-') &&
+          ['create', 'drop'].includes(output.statementClass ?? '')) ||
         /^\s*(CREATE|DROP|ALTER|INSERT|UPDATE|DELETE|TRUNCATE|MERGE|REPLACE)/i.test(
           sql,
         )
@@ -384,6 +390,27 @@ export function useSchema(connectionId: string) {
   return useQuery<SchemaInfo>({
     queryKey: notebooksKeys.schema(connectionId),
     queryFn: async () => {
+      if (connectionId.startsWith('iceberg-')) {
+        const tables = await getIcebergNotebookTables(connectionId);
+        return {
+          schemas: [...new Set(tables.map((table) => table.schema))].map(
+            (name) => ({ schema_id: name, schema_name: name }),
+          ),
+          tables: tables.map((table) => ({
+            table_name: table.name,
+            schema_name: table.schema,
+          })),
+          columns: tables.flatMap((table) =>
+            table.columns.map((column) => ({
+              column_name: column.name,
+              column_type: column.typeName,
+              table_name: table.name,
+              schema_name: table.schema,
+              nulls_allowed: true,
+            })),
+          ),
+        };
+      }
       // Extract schema based on connection type
       if (connectionId.startsWith('ducklake-')) {
         const instanceId = connectionId.replace('ducklake-', '');

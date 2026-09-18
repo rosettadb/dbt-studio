@@ -1,5 +1,6 @@
 import { executeQueryForConnection } from '../../../../src/renderer/services/connectors.service';
 import { DuckLakeService } from '../../../../src/renderer/services/duckLake.service';
+import { executeIcebergSql } from '../../../../src/renderer/services/iceberg.service';
 import { executeAnalyticsQuery } from '../../../../src/renderer/utils/analyticsQueryEngine';
 
 jest.mock('../../../../src/renderer/services/connectors.service', () => ({
@@ -12,8 +13,13 @@ jest.mock('../../../../src/renderer/services/duckLake.service', () => ({
   },
 }));
 
+jest.mock('../../../../src/renderer/services/iceberg.service', () => ({
+  executeIcebergSql: jest.fn(),
+}));
+
 const executeConnectorQuery = executeQueryForConnection as jest.Mock;
 const executeDuckLakeQuery = DuckLakeService.executeQuery as jest.Mock;
+const executeIcebergQuery = executeIcebergSql as jest.Mock;
 
 describe('executeAnalyticsQuery', () => {
   beforeEach(() => {
@@ -69,5 +75,68 @@ describe('executeAnalyticsQuery', () => {
       error: 'no such table: missing_table',
     });
     expect(executeDuckLakeQuery).not.toHaveBeenCalled();
+  });
+
+  it('routes Iceberg reads through validation and a bounded trusted execution', async () => {
+    executeIcebergQuery
+      .mockResolvedValueOnce({ statementClass: 'select' })
+      .mockResolvedValueOnce({
+        statementClass: 'select',
+        columns: ['station_id'],
+        rows: [{ station_id: 1 }],
+        truncated: false,
+      });
+
+    await expect(
+      executeAnalyticsQuery({
+        queryName: 'stations',
+        sql: 'SELECT station_id FROM iceberg.default.stations',
+        connectionId: 'iceberg-catalog-id',
+      }),
+    ).resolves.toEqual({
+      name: 'stations',
+      status: 'success',
+      data: [{ station_id: 1 }],
+      fields: ['station_id'],
+      rowCount: 1,
+    });
+
+    expect(executeIcebergQuery).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        instanceId: 'catalog-id',
+        sql: 'SELECT station_id FROM iceberg.default.stations',
+        pageLimit: 500,
+        pageOffset: 0,
+        validateOnly: true,
+      }),
+    );
+    expect(executeIcebergQuery).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        instanceId: 'catalog-id',
+        pageLimit: 500,
+        pageOffset: 0,
+      }),
+    );
+    expect(executeConnectorQuery).not.toHaveBeenCalled();
+    expect(executeDuckLakeQuery).not.toHaveBeenCalled();
+  });
+
+  it('rejects Iceberg mutations after trusted classification', async () => {
+    executeIcebergQuery.mockResolvedValueOnce({ statementClass: 'delete' });
+
+    await expect(
+      executeAnalyticsQuery({
+        queryName: 'remove_stations',
+        sql: 'DELETE FROM iceberg.default.stations',
+        connectionId: 'iceberg-catalog-id',
+      }),
+    ).resolves.toMatchObject({
+      name: 'remove_stations',
+      status: 'error',
+      error: 'Analytics pages support read-only Iceberg SELECT queries.',
+    });
+    expect(executeIcebergQuery).toHaveBeenCalledTimes(1);
   });
 });
