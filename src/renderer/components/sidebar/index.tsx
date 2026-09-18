@@ -50,6 +50,7 @@ export const Sidebar: React.FC<Props> = ({
 
   const activeItemPath = React.useMemo(() => {
     const path = location.pathname;
+    if (path.includes('dbt-project')) return '/app/dbt-project';
     if (path.includes('cloud-explorer')) return '/app/cloud-explorer';
     if (path.includes('data-lake') || path.includes('datalake'))
       return '/app/data-lake';
@@ -70,6 +71,15 @@ export const Sidebar: React.FC<Props> = ({
     : ACTIVITY_BAR_COLLAPSED_WIDTH;
 
   const isPanelOpen = Boolean(content) && isSidebarOpen;
+
+  // Auto-collapse sidebar panel when on Home (/app) and auto-expand when navigating to any module
+  React.useEffect(() => {
+    if (location.pathname === '/app') {
+      setIsSidebarOpen(false);
+    } else {
+      setIsSidebarOpen(true);
+    }
+  }, [location.pathname, setIsSidebarOpen]);
 
   const renderItem = (element: (typeof mainElements)[0], isActive: boolean) => {
     const isDisabled = element.disabled;
@@ -114,14 +124,10 @@ export const Sidebar: React.FC<Props> = ({
       </ListItem>
     );
 
-    const tourAttr =
-      element.path === '/app/connections' ? 'tour-connections-nav' : undefined;
-
     const wrapped = (
       <StyledNavLink
         to={targetPath}
         data-testid={element.testId}
-        data-tour={tourAttr}
         style={{
           cursor: 'pointer',
           pointerEvents: isDisabled ? 'none' : 'auto',
@@ -148,6 +154,7 @@ export const Sidebar: React.FC<Props> = ({
       open={isPanelOpen}
       activityBarWidth={activityBarWidth}
       data-testid="sidebar"
+      data-tour="tour-sidebar-nav"
     >
       <ActivityBar expanded={isBarExpanded}>
         <ActivityBarHeader>

@@ -97,67 +97,71 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
   return (
     <StyledToolbar variant="dense">
       <IconsContainer>
-        {!isSidebarOpen && (
-          <Tooltip title="Show panel">
-            <IconButton
-              size="small"
-              onClick={() => setIsSidebarOpen(true)}
-              sx={{
-                opacity: 0.5,
-                '&:hover': { opacity: 1 },
-              }}
-            >
-              <ExpandRightIcon />
-            </IconButton>
-          </Tooltip>
-        )}
-        <SimpleDropdownMenu
-          items={[
-            {
-              value: 'all',
-              label: (
-                <BranchDropdownToggle>
-                  <FormatListNumbered fontSize="small" />
-                  All Projects
-                </BranchDropdownToggle>
-              ),
-            },
-            ...projects.map((p) => ({
-              value: String(p.id),
-              label: (
-                <BranchDropdownToggle>
-                  <LetterAvatar name={p?.name ?? ''} size={16} />
-                  {p?.name}
-                </BranchDropdownToggle>
-              ),
-            })),
-          ]}
-          onSelect={async (value) => {
-            if (value === 'all') {
-              navigate('/app/select-project');
-            } else {
-              await selectProject({ projectId: value });
-              navigate('/app');
+        {!isSidebarOpen &&
+          location.pathname !== '/app' &&
+          !location.pathname.includes('flows') && (
+            <Tooltip title="Show panel">
+              <IconButton
+                size="small"
+                onClick={() => setIsSidebarOpen(true)}
+                sx={{
+                  opacity: 0.5,
+                  '&:hover': { opacity: 1 },
+                }}
+              >
+                <ExpandRightIcon />
+              </IconButton>
+            </Tooltip>
+          )}
+        {!isOnProjectDetails && (
+          <SimpleDropdownMenu
+            items={[
+              {
+                value: 'all',
+                label: (
+                  <BranchDropdownToggle>
+                    <FormatListNumbered fontSize="small" />
+                    All Projects
+                  </BranchDropdownToggle>
+                ),
+              },
+              ...projects.map((p) => ({
+                value: String(p.id),
+                label: (
+                  <BranchDropdownToggle>
+                    <LetterAvatar name={p?.name ?? ''} size={16} />
+                    {p?.name}
+                  </BranchDropdownToggle>
+                ),
+              })),
+            ]}
+            onSelect={async (value) => {
+              if (value === 'all') {
+                navigate('/app/select-project');
+              } else {
+                await selectProject({ projectId: value });
+                navigate('/app');
+              }
+            }}
+            selectedItem={project ? String(project.id) : 'all'}
+            anchorElement={
+              <BranchDropdownToggle>
+                {project ? (
+                  <>
+                    <LetterAvatar name={project.name ?? ''} size={16} />
+                    {project.name}
+                  </>
+                ) : (
+                  <>
+                    <FormatListNumbered fontSize="small" />
+                    Select Project
+                  </>
+                )}
+                <ArrowDownward style={{ fontSize: 9 }} />
+              </BranchDropdownToggle>
             }
-          }}
-          selectedItem={project ? String(project.id) : 'all'}
-          anchorElement={
-            <BranchDropdownToggle>
-              {project ? (
-                <>
-                  <LetterAvatar name={project.name ?? ''} size={16} />
-                  {project.name}
-                </>
-              ) : (
-                <>
-                  <FormatListNumbered fontSize="small" />
-                  Select Project
-                </>
-              )}
-              <ArrowDownward style={{ fontSize: 9 }} />
-            </BranchDropdownToggle>
-          }
-        />
+          />
+        )}
       </IconsContainer>
       <IconsContainer sx={{ gap: 2 }}>
         {isProjectSelected && actions}
