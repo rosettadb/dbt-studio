@@ -30,6 +30,7 @@ import type {
   PythonNotebookUserPackageVersionListResponse,
 } from '../../types/notebooks';
 import SettingsService from './settings.service';
+import { PythonLanguageServerService } from './pythonLanguageServer.service';
 import { NotebooksService } from './notebooks.service';
 
 const RUNTIME_VERSION = '1';
@@ -203,6 +204,19 @@ export class PythonNotebookService {
   };
 
   private static operationPromise: Promise<void> | null = null;
+
+  private static editorServer: PythonLanguageServerService | null = null;
+
+  static getLanguageServer(): PythonLanguageServerService {
+    if (!this.editorServer) {
+      this.editorServer = new PythonLanguageServerService(
+        this.getPythonPath(),
+        this.getRuntimeDirectory(),
+      );
+      if (this.operationPromise) this.editorServer.stop(true);
+    }
+    return this.editorServer;
+  }
 
   private static getRuntimeRoot(): string {
     return path.join(app.getPath('userData'), 'python-notebooks', 'runtime');
@@ -888,6 +902,7 @@ export class PythonNotebookService {
     if (this.operationPromise) return this.getRuntimeStatus();
 
     this.operation = { state, message };
+    this.editorServer?.stop(true);
     this.operationPromise = action();
     try {
       await this.operationPromise;
@@ -903,6 +918,7 @@ export class PythonNotebookService {
       };
     } finally {
       this.operationPromise = null;
+      this.editorServer?.resume();
     }
     return this.getRuntimeStatus();
   }
@@ -1384,6 +1400,7 @@ export class PythonNotebookService {
   }
 
   static async shutdownAll(): Promise<void> {
+    this.editorServer?.stop(true);
     await Promise.all(
       [...this.sessions.values()].map(
         async (session) =>

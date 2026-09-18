@@ -19,9 +19,36 @@ import type {
   PythonNotebookRunAllRequest,
 } from '../../types/notebooks';
 
+import type {
+  PythonLanguageDocument,
+  PythonLanguageRequest,
+} from '../../types/pythonLanguageServer';
+
 let appCleanupRegistered = false;
 
 export function registerNotebooksHandlers() {
+  ipcMain.handle('notebooks:python:lsp:status', (event) =>
+    PythonNotebookService.getLanguageServer().getStatus(event.sender),
+  );
+  ipcMain.handle('notebooks:python:lsp:restart', (event) =>
+    PythonNotebookService.getLanguageServer().restart(event.sender),
+  );
+  ipcMain.handle(
+    'notebooks:python:lsp:sync',
+    (event, document: PythonLanguageDocument) =>
+      PythonNotebookService.getLanguageServer().sync(document, event.sender),
+  );
+  ipcMain.handle(
+    'notebooks:python:lsp:request',
+    (event, request: PythonLanguageRequest) =>
+      PythonNotebookService.getLanguageServer().request(request, event.sender),
+  );
+  ipcMain.handle('notebooks:python:lsp:close', (event, modelUri: string) =>
+    PythonNotebookService.getLanguageServer().close(modelUri, event.sender),
+  );
+  ipcMain.handle('notebooks:python:lsp:cancel', (event, requestId: string) =>
+    PythonNotebookService.getLanguageServer().cancel(requestId, event.sender),
+  );
   if (!appCleanupRegistered) {
     appCleanupRegistered = true;
     app.on('before-quit', () => {

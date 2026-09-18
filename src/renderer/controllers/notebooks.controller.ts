@@ -28,7 +28,10 @@ import {
   PythonCellOutput,
   SchemaInfo,
 } from '../../types/notebooks';
-import { notebooksService } from '../services/notebooks.service';
+import {
+  notebooksService,
+  setPythonLanguageCells,
+} from '../services/notebooks.service';
 import { connectorsServices } from '../services';
 import { DuckLakeService } from '../services/duckLake.service';
 
@@ -1039,4 +1042,44 @@ export function useDeleteAllArchivedNotebooks() {
       toast.error(`Failed to delete archived notebooks: ${error.message}`);
     },
   });
+}
+
+const pythonLanguageStatusKey = ['notebooks', 'python', 'languageServer'];
+
+export function usePythonLanguageServerStatus() {
+  const queryClient = useQueryClient();
+  useEffect(
+    () =>
+      notebooksService.onPythonLanguageEvent((event) => {
+        if (event.type === 'status')
+          queryClient.setQueryData(pythonLanguageStatusKey, event.status);
+      }),
+    [queryClient],
+  );
+  return useQuery({
+    queryKey: pythonLanguageStatusKey,
+    queryFn: notebooksService.pythonLanguageStatus,
+    staleTime: 30000,
+    refetchOnMount: 'always',
+  });
+}
+
+export function useRestartPythonLanguageServer() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: notebooksService.restartPythonLanguageServer,
+    onSuccess: (status) => {
+      queryClient.setQueryData(pythonLanguageStatusKey, status);
+    },
+  });
+}
+
+export function usePythonLanguageNotebookContext(
+  notebookId: string,
+  cells?: PythonNotebook['cells'],
+) {
+  useEffect(() => {
+    if (cells) setPythonLanguageCells(notebookId, cells);
+  }, [notebookId, cells]);
+  useEffect(() => () => setPythonLanguageCells(notebookId, null), [notebookId]);
 }

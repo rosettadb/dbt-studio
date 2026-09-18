@@ -27,7 +27,37 @@ import {
   PythonNotebookUserPackageVersionListResponse,
 } from '../../types/notebooks';
 
+import type {
+  PythonLanguageDocument,
+  PythonLanguageRequest,
+  PythonLanguageEvent,
+  PythonLanguageServerStatus,
+} from '../../types/pythonLanguageServer';
+
 export const notebooksService = {
+  pythonLanguageStatus: (): Promise<PythonLanguageServerStatus> =>
+    window.electron.ipcRenderer.invoke('notebooks:python:lsp:status'),
+  restartPythonLanguageServer: (): Promise<PythonLanguageServerStatus> =>
+    window.electron.ipcRenderer.invoke('notebooks:python:lsp:restart'),
+  syncPythonLanguageDocument: (
+    document: PythonLanguageDocument,
+  ): Promise<boolean> =>
+    window.electron.ipcRenderer.invoke('notebooks:python:lsp:sync', document),
+  requestPythonLanguage: (request: PythonLanguageRequest): Promise<unknown> =>
+    window.electron.ipcRenderer.invoke('notebooks:python:lsp:request', request),
+  closePythonLanguageDocument: (modelUri: string): Promise<void> =>
+    window.electron.ipcRenderer.invoke('notebooks:python:lsp:close', modelUri),
+  cancelPythonLanguageRequest: (requestId: string): Promise<void> =>
+    window.electron.ipcRenderer.invoke(
+      'notebooks:python:lsp:cancel',
+      requestId,
+    ),
+  onPythonLanguageEvent: (
+    callback: (event: PythonLanguageEvent) => void,
+  ): (() => void) =>
+    window.electron.ipcRenderer.on('notebooks:python:lsp:event', (...args) =>
+      callback(args[0] as PythonLanguageEvent),
+    ),
   listPythonNotebooks: async (): Promise<PythonNotebook[]> => {
     return window.electron.ipcRenderer.invoke('notebooks:python:list');
   },
@@ -519,3 +549,48 @@ export const notebooksService = {
     );
   },
 };
+
+// Source-only context for notebook analysis; outputs and kernel variables never enter LSP.
+const pythonLanguageCells = new Map<string, { id: string; source: string }[]>();
+const pythonLanguageContextListeners = new Set<() => void>();
+
+export function setPythonLanguageCells(
+  notebookId: string,
+  cells: PythonNotebook['cells'] | null,
+) {
+  const sources = cells
+    ?.filter((cell) => cell.cellType === 'code')
+    .map(({ id, source }) => ({ id, source }));
+  if (
+    JSON.stringify(pythonLanguageCells.get(notebookId)) ===
+    JSON.stringify(sources)
+  )
+    return;
+  if (sources) pythonLanguageCells.set(notebookId, sources);
+  else pythonLanguageCells.delete(notebookId);
+  pythonLanguageContextListeners.forEach((listener) => listener());
+}
+
+export function pythonLanguagePrefix(modelPath: string): string {
+  const match = modelPath.match(
+    /^\/__rosetta_python_notebooks__\/([^/]+)\/([^/]+)\.py$/,
+  );
+  if (!match) return '';
+  const cells = pythonLanguageCells.get(match[1]) ?? [];
+  const index = cells.findIndex((cell) => cell.id === match[2]);
+  if (index <= 0) return '';
+  const prefix = cells
+    .slice(0, index)
+    .map((cell) => cell.source)
+    .join('\n\n');
+  return `${prefix}\n\n`;
+}
+
+export function onPythonLanguageContextChange(
+  callback: () => void,
+): () => void {
+  pythonLanguageContextListeners.add(callback);
+  return () => {
+    pythonLanguageContextListeners.delete(callback);
+  };
+}

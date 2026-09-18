@@ -2,6 +2,10 @@
 import type * as monaco from 'monaco-editor';
 import { languageIntelligenceService } from '../../../services';
 import { projectIdFromUri } from '../uri';
+import {
+  pythonLanguageCompletions,
+  registerPythonLanguageServer,
+} from '../pythonLanguageServer';
 
 type Monaco = typeof monaco;
 
@@ -957,6 +961,7 @@ function buildMemberItems(
  * scopes suggestions accordingly — no running Python process required.
  */
 export const registerPythonCompletions = (monacoNs: Monaco): void => {
+  registerPythonLanguageServer(monacoNs);
   monacoNs.languages.registerCompletionItemProvider('python', {
     // Space triggers import-context suggestions after typing 'import '
     triggerCharacters: ['.', '"', "'", ' '],
@@ -964,8 +969,18 @@ export const registerPythonCompletions = (monacoNs: Monaco): void => {
     provideCompletionItems: async (
       model: monaco.editor.ITextModel,
       position: monaco.Position,
+      _context: monaco.languages.CompletionContext,
+      token: monaco.CancellationToken,
     ): Promise<monaco.languages.CompletionList> => {
       try {
+        const languageItems = await pythonLanguageCompletions(
+          monacoNs,
+          model,
+          position,
+          token,
+        );
+        if (languageItems) return languageItems;
+        if (token.isCancellationRequested) return { suggestions: [] };
         const projectId = projectIdFromUri(model.uri);
         const notebookModel = isPythonNotebookModel(model);
         const word = model.getWordUntilPosition(position);

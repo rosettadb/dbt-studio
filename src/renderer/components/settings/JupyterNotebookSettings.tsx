@@ -30,6 +30,8 @@ import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import {
   useCheckPythonNotebookRuntime,
+  usePythonLanguageServerStatus,
+  useRestartPythonLanguageServer,
   useInstallPythonNotebookPackage,
   useInstallPythonNotebookRuntime,
   useUpdatePythonNotebookRuntime,
@@ -102,6 +104,9 @@ const optionalPackages = [
 
 export const JupyterNotebookSettings: React.FC = () => {
   const navigate = useNavigate();
+  const { data: languageStatus, isError: languageStatusError } =
+    usePythonLanguageServerStatus();
+  const restartLanguageServer = useRestartPythonLanguageServer();
   const [packageVersions, setPackageVersions] = React.useState<
     Partial<
       Record<
@@ -557,6 +562,90 @@ export const JupyterNotebookSettings: React.FC = () => {
               </Typography>
             )}
           </Alert>
+
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>
+              Python editor intelligence
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              python-lsp-server / Jedi {languageStatus?.version ?? ''} ·{' '}
+              {languageStatus?.state ?? 'Checking…'}
+            </Typography>
+            <Typography
+              variant="caption"
+              sx={{ display: 'block', wordBreak: 'break-all', mb: 1 }}
+            >
+              {languageStatus?.pythonPath}
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              {languageStatusError
+                ? 'Could not check editor intelligence.'
+                : languageStatus?.message}{' '}
+              Completion, hover, signatures, and syntax/name diagnostics use the
+              notebook environment without running cells.
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button
+                variant="outlined"
+                disabled={
+                  isBusy ||
+                  !status.selectedEnvironment?.writable ||
+                  status.state !== 'ready'
+                }
+                onClick={() =>
+                  confirmOrRunEnvAction(
+                    'Install Python editor support',
+                    kernelLossQuestion(
+                      'Install or repair python-lsp-server with Pyflakes diagnostics?',
+                    ),
+                    async () => {
+                      try {
+                        const result = await installUserPackage.mutateAsync({
+                          name: 'python-lsp-server',
+                          extras: ['pyflakes'],
+                          expectedActiveSessionCount: status.activeSessionCount,
+                        });
+                        if (result.operation.error)
+                          throw new Error(result.operation.error);
+                        const server =
+                          await restartLanguageServer.mutateAsync();
+                        if (server.state !== 'ready')
+                          throw new Error(
+                            server.message ??
+                              'Editor intelligence is unavailable.',
+                          );
+                        toast.success('Python editor intelligence is ready.');
+                      } catch (error) {
+                        notifyError(
+                          error,
+                          'Could not install Python editor support.',
+                        );
+                      }
+                    },
+                  )
+                }
+              >
+                {languageStatus?.version
+                  ? 'Repair editor support'
+                  : 'Install editor support'}
+              </Button>
+              <Button
+                disabled={
+                  isBusy ||
+                  restartLanguageServer.isLoading ||
+                  languageStatus?.state === 'starting'
+                }
+                onClick={() => restartLanguageServer.mutate()}
+              >
+                Restart language server
+              </Button>
+            </Box>
+            {restartLanguageServer.isError && (
+              <Alert severity="error" sx={{ mt: 1 }}>
+                Could not restart editor intelligence.
+              </Alert>
+            )}
+          </Box>
 
           <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>
             Notebook environment

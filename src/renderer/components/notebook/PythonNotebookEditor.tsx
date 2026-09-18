@@ -56,6 +56,8 @@ import {
   useSavePythonNotebook,
   useClearPythonNotebookOutputs,
   useInstallPythonUserPackage,
+  usePythonLanguageServerStatus,
+  usePythonLanguageNotebookContext,
 } from '../../controllers/notebooks.controller';
 import { notebooksService } from '../../services/notebooks.service';
 import { JupyterBridgeHandlers } from '../../services/notebookBridge.service';
@@ -218,6 +220,8 @@ export const PythonNotebookEditor: React.FC<{
     isFetching: refreshingRuntime,
   } = usePythonNotebookRuntimeStatus();
   const installPackage = useInstallPythonUserPackage();
+  const { data: languageStatus, isError: languageStatusError } =
+    usePythonLanguageServerStatus();
   const [packageName, setPackageName] = React.useState('');
   const [packageFeedback, setPackageFeedback] = React.useState('');
   const [packageError, setPackageError] = React.useState('');
@@ -234,6 +238,7 @@ export const PythonNotebookEditor: React.FC<{
     shutdown,
   } = usePythonNotebookExecution(notebookId);
   const [draft, setDraft] = React.useState<PythonNotebook | null>(null);
+  usePythonLanguageNotebookContext(notebookId, draft?.cells);
   const saveTimer = React.useRef<number | null>(null);
   const [restartOpen, setRestartOpen] = React.useState(false);
   const [documentAction, setDocumentAction] = React.useState<
@@ -592,6 +597,26 @@ export const PythonNotebookEditor: React.FC<{
           size="small"
           label={`${draft.cells.length} ${draft.cells.length === 1 ? 'cell' : 'cells'}`}
         />
+        {(languageStatus?.state !== 'ready' || languageStatusError) && (
+          <Tooltip
+            title={
+              languageStatus?.message ??
+              'Python autocomplete is using local suggestions. Open Notebook settings for editor support.'
+            }
+          >
+            <Button
+              size="small"
+              onClick={async () => {
+                await flushPendingSave();
+                navigate('/app/settings/jupiter-notebooks');
+              }}
+            >
+              {languageStatus?.state === 'starting'
+                ? 'Autocomplete starting…'
+                : 'Autocomplete setup'}
+            </Button>
+          </Tooltip>
+        )}
         <Box sx={{ flex: 1 }} />
         <Box
           sx={{
