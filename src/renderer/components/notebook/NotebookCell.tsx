@@ -381,6 +381,7 @@ const NotebookCellComponent: React.FC<NotebookCellProps> = ({
                 <SQLCell
                   cell={cell}
                   connectionId={connectionId}
+                  notebookId={notebookId}
                   isExecuting={isExecuting}
                   onRun={onRun}
                   onUpdate={onUpdate}
