@@ -27,6 +27,7 @@ import StorageOutlinedIcon from '@mui/icons-material/StorageOutlined';
 import { icons, rosettaIcon } from '../../../../assets';
 import { ReactComponent as RouteIcon } from '../../assets/icons/lucide/route.svg';
 import { useAppContext } from '../../hooks';
+import { QuickStartTour, hasSeenTour, markTourSeen } from '../../components';
 import {
   useGetProjects,
   useGetConnections,
@@ -202,6 +203,12 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  React.useEffect(() => {
+    if (projects.length > 0 && !hasSeenTour()) {
+      markTourSeen();
+    }
+  }, [projects.length]);
+
   return (
     <Box
       sx={{
@@ -216,6 +223,7 @@ const Dashboard: React.FC = () => {
       {/* Hero / Welcome Header */}
       <Paper
         elevation={0}
+        data-tour="tour-workspace-overview"
         sx={{
           p: 3,
           mb: 4,
@@ -273,6 +281,7 @@ const Dashboard: React.FC = () => {
             variant="outlined"
             startIcon={<FolderOpenIcon />}
             onClick={() => handleFeatureClick('/select-project')}
+            data-tour="tour-open-project-btn"
             sx={{
               borderColor: theme.palette.divider,
               color: theme.palette.text.primary,
@@ -309,120 +318,122 @@ const Dashboard: React.FC = () => {
       </Paper>
 
       {/* Main Studio Modules (7 Cards) */}
-      <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
-        Studio Modules
-      </Typography>
-      <Grid container spacing={2.5} sx={{ mb: 4 }}>
-        {features.map((feature) => {
-          const IconComponent = feature.icon;
-          return (
-            <Grid item xs={12} sm={6} md={4} lg={3} key={feature.id}>
-              <Card
-                sx={{
-                  height: '100%',
-                  borderRadius: 2.5,
-                  border: `1px solid ${theme.palette.divider}`,
-                  backgroundColor: theme.palette.background.paper,
-                  transition: 'all 0.25s ease-in-out',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  '&:hover': {
-                    transform: 'translateY(-4px)',
-                    boxShadow:
-                      theme.palette.mode === 'dark'
-                        ? '0 8px 24px rgba(0, 0, 0, 0.4)'
-                        : '0 8px 20px rgba(0, 0, 0, 0.08)',
-                    borderColor: theme.palette.primary.main,
-                    '& .icon-box': {
-                      backgroundColor: theme.palette.action.selected,
-                      color: theme.palette.primary.main,
-                      transform: 'scale(1.05)',
-                    },
-                  },
-                }}
-              >
-                <CardActionArea
-                  onClick={() => handleCardClick(feature)}
+      <Box data-tour="tour-modules-area">
+        <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
+          Studio Modules
+        </Typography>
+        <Grid container spacing={2.5} sx={{ mb: 4 }}>
+          {features.map((feature) => {
+            const IconComponent = feature.icon;
+            return (
+              <Grid item xs={12} sm={6} md={4} lg={3} key={feature.id}>
+                <Card
                   sx={{
                     height: '100%',
-                    p: 2.5,
+                    borderRadius: 2.5,
+                    border: `1px solid ${theme.palette.divider}`,
+                    backgroundColor: theme.palette.background.paper,
+                    transition: 'all 0.25s ease-in-out',
                     display: 'flex',
                     flexDirection: 'column',
-                    alignItems: 'flex-start',
-                    justifyContent: 'space-between',
+                    '&:hover': {
+                      transform: 'translateY(-4px)',
+                      boxShadow:
+                        theme.palette.mode === 'dark'
+                          ? '0 8px 24px rgba(0, 0, 0, 0.4)'
+                          : '0 8px 20px rgba(0, 0, 0, 0.08)',
+                      borderColor: theme.palette.primary.main,
+                      '& .icon-box': {
+                        backgroundColor: theme.palette.action.selected,
+                        color: theme.palette.primary.main,
+                        transform: 'scale(1.05)',
+                      },
+                    },
                   }}
                 >
-                  <Box sx={{ width: '100%' }}>
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        mb: 2,
-                      }}
-                    >
+                  <CardActionArea
+                    onClick={() => handleCardClick(feature)}
+                    sx={{
+                      height: '100%',
+                      p: 2.5,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'flex-start',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <Box sx={{ width: '100%' }}>
                       <Box
-                        className="icon-box"
                         sx={{
-                          width: 48,
-                          height: 48,
-                          borderRadius: 2,
                           display: 'flex',
                           alignItems: 'center',
-                          justifyContent: 'center',
-                          backgroundColor: theme.palette.action.hover,
-                          color: theme.palette.primary.main,
-                          transition: 'all 0.25s ease',
+                          justifyContent: 'space-between',
+                          mb: 2,
                         }}
                       >
-                        <IconComponent />
+                        <Box
+                          className="icon-box"
+                          sx={{
+                            width: 48,
+                            height: 48,
+                            borderRadius: 2,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            backgroundColor: theme.palette.action.hover,
+                            color: theme.palette.primary.main,
+                            transition: 'all 0.25s ease',
+                          }}
+                        >
+                          <IconComponent />
+                        </Box>
+                        <Chip
+                          label={feature.category}
+                          size="small"
+                          sx={{
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            borderRadius: 1.5,
+                            backgroundColor:
+                              theme.palette.mode === 'dark'
+                                ? 'rgba(255, 255, 255, 0.06)'
+                                : 'rgba(0, 0, 0, 0.04)',
+                            color: theme.palette.text.secondary,
+                          }}
+                        />
                       </Box>
-                      <Chip
-                        label={feature.category}
-                        size="small"
+                      <Typography
+                        variant="h6"
                         sx={{
-                          fontSize: '0.75rem',
-                          fontWeight: 600,
-                          borderRadius: 1.5,
-                          backgroundColor:
-                            theme.palette.mode === 'dark'
-                              ? 'rgba(255, 255, 255, 0.06)'
-                              : 'rgba(0, 0, 0, 0.04)',
-                          color: theme.palette.text.secondary,
+                          fontWeight: 700,
+                          fontSize: '1.1rem',
+                          color: theme.palette.text.primary,
+                          mb: 0.8,
                         }}
-                      />
+                      >
+                        {feature.title}
+                      </Typography>
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{
+                          lineHeight: 1.4,
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        {feature.description}
+                      </Typography>
                     </Box>
-                    <Typography
-                      variant="h6"
-                      sx={{
-                        fontWeight: 700,
-                        fontSize: '1.1rem',
-                        color: theme.palette.text.primary,
-                        mb: 0.8,
-                      }}
-                    >
-                      {feature.title}
-                    </Typography>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{
-                        lineHeight: 1.4,
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden',
-                      }}
-                    >
-                      {feature.description}
-                    </Typography>
-                  </Box>
-                </CardActionArea>
-              </Card>
-            </Grid>
-          );
-        })}
-      </Grid>
+                  </CardActionArea>
+                </Card>
+              </Grid>
+            );
+          })}
+        </Grid>
+      </Box>
 
       {/* Bottom Panels: Recent Projects & Active Connections */}
       <Grid container spacing={2.5}>
@@ -430,6 +441,7 @@ const Dashboard: React.FC = () => {
         <Grid item xs={12} md={6}>
           <Paper
             elevation={0}
+            data-tour="tour-recent-projects"
             sx={{
               p: 2.5,
               borderRadius: 2.5,
@@ -520,6 +532,7 @@ const Dashboard: React.FC = () => {
         <Grid item xs={12} md={6}>
           <Paper
             elevation={0}
+            data-tour="tour-configured-connections"
             sx={{
               p: 2.5,
               borderRadius: 2.5,
@@ -609,6 +622,8 @@ const Dashboard: React.FC = () => {
           </Paper>
         </Grid>
       </Grid>
+      {/* Only show the quick start tour for brand-new users with no projects */}
+      {projects.length === 0 && <QuickStartTour />}
     </Box>
   );
 };
