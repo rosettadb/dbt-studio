@@ -23,6 +23,18 @@ import {
 import { ItemProps } from '../../../types/frontend';
 import { OverflowTip } from '../overflowTip';
 
+/**
+ * Extra DOM props forwarded to the label's root element. Used to make rows
+ * draggable, attach context menus, and expose `data-*` hooks for tests.
+ * Optional everywhere, so existing callers render exactly as before.
+ */
+export type TreeItemRootProps = React.HTMLAttributes<HTMLDivElement> & {
+  draggable?: boolean;
+  [dataAttribute: `data-${string}`]: string | undefined;
+};
+
+type LabelProps = ItemProps & { rootProps?: TreeItemRootProps };
+
 const getColumnIcon = (
   typeName?: string,
   primaryKey?: boolean,
@@ -96,40 +108,51 @@ const getColumnIcon = (
 };
 
 export const TreeItems = {
-  Column: ({ label, typeName, primaryKey, foreignKey }: ItemProps) => (
-    <StyledTreeItem>
+  Column: ({
+    label,
+    typeName,
+    primaryKey,
+    foreignKey,
+    rootProps,
+  }: LabelProps) => (
+    // eslint-disable-next-line react/jsx-props-no-spreading
+    <StyledTreeItem {...rootProps}>
       {getColumnIcon(typeName, primaryKey, foreignKey)}
       <StyledColumnLabel variant="caption">
         <OverflowTip placement="right">{label}</OverflowTip>
       </StyledColumnLabel>
     </StyledTreeItem>
   ),
-  Schema: ({ label }: ItemProps) => (
-    <StyledTreeItem>
+  Schema: ({ label, rootProps }: LabelProps) => (
+    // eslint-disable-next-line react/jsx-props-no-spreading
+    <StyledTreeItem {...rootProps}>
       <SchemaIcon sx={{ color: '#5f89f4', width: 14, height: 14 }} />
       <StyledLabel variant="caption">
         <OverflowTip placement="right">{label}</OverflowTip>
       </StyledLabel>
     </StyledTreeItem>
   ),
-  Table: ({ label }: ItemProps) => (
-    <StyledTreeItem>
+  Table: ({ label, rootProps }: LabelProps) => (
+    // eslint-disable-next-line react/jsx-props-no-spreading
+    <StyledTreeItem {...rootProps}>
       <TableChart sx={{ color: '#5f89f4', width: 14, height: 14 }} />
       <StyledLabel variant="caption">
         <OverflowTip placement="right">{label}</OverflowTip>
       </StyledLabel>
     </StyledTreeItem>
   ),
-  View: ({ label }: ItemProps) => (
-    <StyledTreeItem>
+  View: ({ label, rootProps }: LabelProps) => (
+    // eslint-disable-next-line react/jsx-props-no-spreading
+    <StyledTreeItem {...rootProps}>
       <TableChart sx={{ color: '#4db6ac', width: 14, height: 14 }} />
       <StyledLabel variant="caption">
         <OverflowTip placement="right">{label}</OverflowTip>
       </StyledLabel>
     </StyledTreeItem>
   ),
-  Database: ({ label, icon }: ItemProps) => (
-    <StyledTreeItem>
+  Database: ({ label, icon, rootProps }: LabelProps) => (
+    // eslint-disable-next-line react/jsx-props-no-spreading
+    <StyledTreeItem {...rootProps}>
       {icon && <DatabaseIcon src={icon} alt="icon" />}
       <StyledLabel variant="caption">
         <OverflowTip placement="right">{label}</OverflowTip>

@@ -5,13 +5,23 @@
  * Updated to use shared hooks from SQL Editor (Phase 2)
  */
 
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useContext } from 'react';
 import { Box, CircularProgress, Typography, useTheme } from '@mui/material';
 import Editor, { OnMount } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
 import { editor } from 'monaco-editor';
 import { NotebookCell } from '../../../types/notebooks';
 import { useSchemaForConnection } from '../../hooks';
+import { useSchemaObjectDrop } from '../../hooks/useSchemaObjectDrop';
+import {
+  registerNotebookCellEditor,
+  setActiveNotebookCell,
+} from './notebookCellEditorRegistry';
+import { NotebookSqlCompletionsContext } from './NotebookSqlCompletionsContext';
+import {
+  clearSqlSchemaCompletions,
+  setSqlSchemaCompletions,
+} from '../../lib/monaco/completions/sqlSchema';
 
 // SQL themes ('sql-enhanced-dark', 'sql-enhanced-light') and the enhanced
 // SQL Monarch tokenizer are registered once at app startup via
@@ -20,6 +30,8 @@ import { useSchemaForConnection } from '../../hooks';
 interface SQLCellProps {
   cell: NotebookCell;
   connectionId: string; // Changed from instanceId to connectionId for consistency
+  /** When provided, the cell's editor is registered so the notebook can insert text into it. */
+  notebookId?: string;
   isExecuting: boolean;
   onRun: (content: string) => void | Promise<void>;
   onUpdate: (content: string) => void;
@@ -28,6 +40,7 @@ interface SQLCellProps {
 export const SQLCell: React.FC<SQLCellProps> = ({
   cell,
   connectionId,
+  notebookId,
   isExecuting,
   onRun,
   onUpdate,
@@ -40,6 +53,36 @@ export const SQLCell: React.FC<SQLCellProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const isExecutingRef = useRef(isExecuting);
   const handleRunRef = useRef(onRun);
+
+  // Accept tables/columns dragged from the Data tree (see useSchemaObjectDrop).
+  const editorContainerRef = useRef<HTMLDivElement>(null);
+  const getEditorInstance = React.useCallback(() => editorRef.current, []);
+  useSchemaObjectDrop(editorContainerRef, getEditorInstance);
+
+  // Publish the notebook's completions to the shared `sql` provider for this
+  // cell's Monaco model (see lib/monaco/completions/sqlSchema).
+  const sqlCompletions = useContext(NotebookSqlCompletionsContext);
+  const modelIdRef = useRef<string | null>(null);
+  const publishCompletions = React.useCallback(() => {
+    const model = editorRef.current?.getModel();
+    if (!model) return;
+    modelIdRef.current = model.id;
+    setSqlSchemaCompletions(model.id, sqlCompletions);
+  }, [sqlCompletions]);
+
+  useEffect(() => {
+    publishCompletions();
+  }, [publishCompletions]);
+
+  useEffect(
+    () => () => {
+      if (modelIdRef.current) {
+        clearSqlSchemaCompletions(modelIdRef.current);
+        modelIdRef.current = null;
+      }
+    },
+    [],
+  );
 
   // Determine Monaco theme based on MUI theme
   const monacoTheme =
@@ -98,9 +141,32 @@ export const SQLCell: React.FC<SQLCellProps> = ({
     }
   }, [monacoTheme]);
 
+  // Registry membership lives for the editor's lifetime; torn down on unmount.
+  const unregisterRef = useRef<(() => void) | null>(null);
+  useEffect(
+    () => () => {
+      unregisterRef.current?.();
+      unregisterRef.current = null;
+    },
+    [],
+  );
+
   const handleEditorDidMount: OnMount = (editorInstance, _monaco) => {
     editorRef.current = editorInstance;
     _monaco.editor.setTheme(monacoTheme);
+    publishCompletions();
+
+    if (notebookId) {
+      unregisterRef.current?.();
+      unregisterRef.current = registerNotebookCellEditor(
+        notebookId,
+        cell.id,
+        editorInstance,
+      );
+      editorInstance.onDidFocusEditorText(() => {
+        setActiveNotebookCell(notebookId, cell.id);
+      });
+    }
     editorInstance.addCommand(
       // eslint-disable-next-line no-bitwise
       _monaco.KeyMod.CtrlCmd | _monaco.KeyCode.Enter,
@@ -174,6 +240,7 @@ export const SQLCell: React.FC<SQLCellProps> = ({
     >
       {/* SQL Editor */}
       <Box
+        ref={editorContainerRef}
         sx={{
           border: '1px solid',
           borderColor: 'divider',
