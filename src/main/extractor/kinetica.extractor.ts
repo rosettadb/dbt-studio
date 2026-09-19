@@ -1,5 +1,6 @@
 /* eslint-disable no-restricted-syntax, no-await-in-loop, consistent-return, class-methods-use-this, no-console */
 import { Column, Table } from '../../types/backend';
+import { buildKineticaUrl } from '../../shared/kineticaUrl';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const GPUdb = require('../lib/GPUdb');
@@ -18,18 +19,7 @@ export default class KineticaExtractor {
     timeout?: number;
     schema?: string;
   }) {
-    const protocol = config.useSSL ? 'https:' : 'http:';
-    const normalized = config.host.match(/^https?:\/\//)
-      ? config.host
-      : `${protocol}//${config.host}`;
-
-    const urlObj = new URL(normalized);
-    urlObj.protocol = protocol;
-    if (!urlObj.port && config.port) {
-      urlObj.port = String(config.port);
-    }
-
-    const url = `${urlObj.protocol}//${urlObj.hostname}${urlObj.port ? `:${urlObj.port}` : ''}${urlObj.pathname}`;
+    const url = buildKineticaUrl(config);
 
     this.db = new GPUdb(url, {
       username: config.username,

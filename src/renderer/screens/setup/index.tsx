@@ -10,18 +10,17 @@ import {
   RunnerSetup,
 } from '../../components';
 import { client } from '../../config/client';
+import {
+  DBT_ADAPTER_PACKAGES,
+  DBT_ADAPTER_PACKAGE_DESCRIPTIONS,
+} from '../../../shared/dbtAdapterPackages';
 
 const ADAPTERS = [
   { name: 'dbt-core', description: 'The core dbt™ package' },
-  { name: 'dbt-postgres', description: 'Adapter for PostgreSQL databases' },
-  { name: 'dbt-snowflake', description: 'Adapter for Snowflake databases' },
-  { name: 'dbt-bigquery', description: 'Adapter for Google BigQuery' },
-  { name: 'dbt-redshift', description: 'Adapter for Amazon Redshift' },
-  { name: 'dbt-databricks', description: 'Adapter for Databricks' },
-  {
-    name: 'dbt-duckdb',
-    description: 'Adapter for DuckDB - embedded analytics database',
-  },
+  ...DBT_ADAPTER_PACKAGES.map((name) => ({
+    name,
+    description: DBT_ADAPTER_PACKAGE_DESCRIPTIONS[name],
+  })),
 ];
 
 const FINAL_STEP = 3;

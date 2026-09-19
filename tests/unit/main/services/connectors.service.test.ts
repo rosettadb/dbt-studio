@@ -165,6 +165,80 @@ describe('ConnectorsService (main)', () => {
     });
   });
 
+  describe('generateProfilesYml (kinetica)', () => {
+    it('renders a dbt-kinetica profile that the adapter can load', async () => {
+      const yamlText = await ConnectorsService.generateProfilesYml('proj', {
+        type: 'kinetica',
+        name: 'kin_01',
+        host: 'kinetica.example.com',
+        port: 9191,
+        username: 'admin',
+        password: 'secret',
+        database: 'kinetica',
+        schema: 'analytics',
+        timeout: 30000,
+        useSSL: false,
+        bypassSslCertCheck: false,
+      } as any);
+
+      expect(yamlText).toContain('type: kinetica');
+      expect(yamlText).toContain(`host: '{{ env_var("db-url-kin_01") }}'`);
+      expect(yamlText).toContain(`user: '{{ env_var("db-user-kin_01") }}'`);
+      expect(yamlText).toContain('disable_auto_discovery: true');
+      expect(yamlText).not.toContain('port:');
+      expect(yamlText).not.toContain('timeout:');
+      expect(yamlText).not.toContain('secret');
+    });
+  });
+
+  describe('parseProjectConnectionFiles (kinetica)', () => {
+    it('imports a dbt-kinetica profile into a Studio connection', async () => {
+      const os = jest.requireActual('os');
+      const path = jest.requireActual('path');
+      const projectPath = await fs.promises.mkdtemp(
+        path.join(os.tmpdir(), 'rosetta-kinetica-import-'),
+      );
+      await fs.promises.writeFile(
+        path.join(projectPath, 'profiles.yml'),
+        [
+          'proj:',
+          '  target: dev',
+          '  outputs:',
+          '    dev:',
+          '      type: kinetica',
+          '      host: https://tenant.kinetica.com/cluster-1/gpudb-0',
+          '      user: admin',
+          '      password: secret',
+          '      schema: analytics',
+          '      skip_ssl_cert_verification: true',
+        ].join('\n'),
+        'utf8',
+      );
+
+      try {
+        const result =
+          await ConnectorsService.parseProjectConnectionFiles(projectPath);
+        expect(result.dbtConnection).toMatchObject({
+          type: 'kinetica',
+          host: 'tenant.kinetica.com/cluster-1/gpudb-0',
+          port: 443,
+          useSSL: true,
+          bypassSslCertCheck: true,
+          username: 'admin',
+          schema: 'analytics',
+        });
+        expect(result.connectionInput).toMatchObject({
+          type: 'kinetica',
+          host: 'tenant.kinetica.com/cluster-1/gpudb-0',
+          port: 443,
+          useSSL: true,
+        });
+      } finally {
+        await fs.promises.rm(projectPath, { recursive: true, force: true });
+      }
+    });
+  });
+
   describe('SQLite query execution', () => {
     it('routes SQLite through the existing execute statement flow', async () => {
       const connection = {

@@ -21,6 +21,7 @@ import {
 } from '../../types/backend';
 import { SNOWFLAKE_TYPE_MAP } from './constants';
 import SecureStorageService from '../services/secureStorage.service';
+import { buildKineticaUrl } from '../../shared/kineticaUrl';
 
 export async function testPostgresConnection(
   config: PostgresConnection,
@@ -916,18 +917,7 @@ const GPUdb = require('../lib/GPUdb');
 export async function testKineticaConnection(
   config: KineticaConnection,
 ): Promise<boolean> {
-  const protocol = config.useSSL ? 'https:' : 'http:';
-  const normalized = config.host.match(/^https?:\/\//)
-    ? config.host
-    : `${protocol}//${config.host}`;
-
-  const urlObj = new URL(normalized);
-  urlObj.protocol = protocol;
-  if (!urlObj.port && config.port) {
-    urlObj.port = String(config.port);
-  }
-
-  const url = `${urlObj.protocol}//${urlObj.hostname}${urlObj.port ? `:${urlObj.port}` : ''}${urlObj.pathname}`;
+  const url = buildKineticaUrl(config);
 
   try {
     // Create GPUdb instance
@@ -989,18 +979,7 @@ export const executeKineticaQuery = async (
   query: string,
   registerCancel?: (fn: () => void) => void,
 ): Promise<QueryResponseType> => {
-  const protocol = config.useSSL ? 'https:' : 'http:';
-  const normalized = config.host.match(/^https?:\/\//)
-    ? config.host
-    : `${protocol}//${config.host}`;
-
-  const urlObj = new URL(normalized);
-  urlObj.protocol = protocol;
-  if (!urlObj.port && config.port) {
-    urlObj.port = String(config.port);
-  }
-
-  const url = `${urlObj.protocol}//${urlObj.hostname}${urlObj.port ? `:${urlObj.port}` : ''}${urlObj.pathname}`;
+  const url = buildKineticaUrl(config);
 
   let db: any;
 
