@@ -10,6 +10,8 @@ import fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
 import { ConnectionInput } from '../../types/backend';
+import { buildKineticaUrl } from '../../shared/kineticaUrl';
+import { buildKineticaProfileOutput } from './kineticaProfile';
 
 /**
  * Extracts the database name from a file path (filename without extension)
@@ -119,6 +121,15 @@ function generateProfileOutputFields(
         schema: 'main',
       };
 
+    case 'kinetica': {
+      // Reuse the full generator so the partial update and the initial
+      // profiles.yml always agree on the dbt-kinetica field set.
+      const fields = buildKineticaProfileOutput(connection, envVar);
+      // `threads` is a per-project preference; leave whatever the user has.
+      delete fields.threads;
+      return { ...baseFields, ...fields };
+    }
+
     default:
       // @ts-ignore
       throw new Error(`Unsupported connection type: ${connection.type}`);
@@ -157,6 +168,17 @@ function generateJdbcUrl(
 
     case 'ducklake':
       return `jdbc:duckdb:`; // In-memory DuckDB
+
+    case 'kinetica': {
+      let kineticaUrl = `jdbc:kinetica:URL=${buildKineticaUrl(connection)}`;
+      if (connection.timeout) {
+        kineticaUrl += `;Timeout=${connection.timeout}`;
+      }
+      if (connection.bypassSslCertCheck && connection.useSSL) {
+        kineticaUrl += ';BypassSslCertCheck=1';
+      }
+      return kineticaUrl;
+    }
 
     default:
       // @ts-ignore

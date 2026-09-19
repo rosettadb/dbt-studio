@@ -53,6 +53,11 @@ import { CloudConnection, RecentItem } from '../../types/frontend';
 import { updateProjectConfigFiles } from '../utils/yamlPartialUpdate';
 import DuckLakeService from './duckLake.service';
 import DuckLakeInstanceStore from './duckLake/instanceStore.service';
+import { buildKineticaUrl, parseKineticaUrl } from '../../shared/kineticaUrl';
+import {
+  buildKineticaProfileOutput,
+  DEFAULT_KINETICA_SCHEMA,
+} from '../utils/kineticaProfile';
 
 export default class ConnectorsService {
   private static readonly bigQueryKeyFiles = new Map<string, string>();
@@ -1109,19 +1114,7 @@ export default class ConnectorsService {
       case 'kinetica': {
         // Kinetica JDBC URL format: jdbc:kinetica:URL=http://<host>:9191
         // Optional parameters can be appended
-        const kineticaProtocol = conn.useSSL ? 'https:' : 'http:';
-        const normalized = conn.host.match(/^https?:\/\//)
-          ? conn.host
-          : `${kineticaProtocol}//${conn.host}`;
-
-        const urlObj = new URL(normalized);
-        urlObj.protocol = kineticaProtocol;
-        if (!urlObj.port && conn.port) {
-          urlObj.port = String(conn.port);
-        }
-
-        const kineticaFinalUrl = `${urlObj.protocol}//${urlObj.hostname}${urlObj.port ? `:${urlObj.port}` : ''}${urlObj.pathname}`;
-        let kineticaUrl = `jdbc:kinetica:URL=${kineticaFinalUrl}`;
+        let kineticaUrl = `jdbc:kinetica:URL=${buildKineticaUrl(conn)}`;
         // Add additional params if needed (e.g., timeout)
         if (conn.timeout) {
           kineticaUrl += `;Timeout=${conn.timeout}`;
@@ -1247,10 +1240,10 @@ export default class ConnectorsService {
           type: 'kinetica',
           host: conn.host,
           port: conn.port,
-          username: conn.username,
-          password: conn.password,
+          username: `db-user-${conn.name}`,
+          password: `db-password-${conn.name}`,
           database: conn.database,
-          schema: conn.schema,
+          schema: conn.schema || DEFAULT_KINETICA_SCHEMA,
           timeout: conn.timeout,
           useSSL: conn.useSSL,
           bypassSslCertCheck: conn.bypassSslCertCheck,
@@ -1420,21 +1413,7 @@ export default class ConnectorsService {
         return duckLakeProfile;
       }
       case 'kinetica':
-        // Map to a dbt profile. NOTE: dbt-kinetica adapter does not exist natively.
-        // This output assumes users might use dbt-trino or have a custom adapter.
-        // We output a generic 'kinetica' type profile for now.
-        return {
-          type: 'kinetica',
-          host: envVar('host'),
-          port: envVarInt('port'),
-          user: envVar('user'),
-          password: envVar('password'),
-          database: envVar('dbname'),
-          schema: envVar('schema'),
-          threads: 4,
-          ...(conn.timeout && { timeout: conn.timeout }),
-          ...(conn.useSSL && { ssl: conn.useSSL }),
-        };
+        return buildKineticaProfileOutput(conn, envVar);
       default:
         throw new Error('Unsupported connection type!');
     }
@@ -1578,6 +1557,25 @@ export default class ConnectorsService {
             schema: devOutput.schema || 'main',
           };
 
+        case 'kinetica': {
+          // dbt-kinetica accepts `host` (alias `url`) as a full URL and
+          // `user`/`username`, `password`/`pass`, `database`/`dbname` aliases.
+          const kineticaUrl = parseKineticaUrl(
+            String(devOutput.host ?? devOutput.url ?? 'http://localhost:9191'),
+          );
+          return {
+            type: 'kinetica',
+            host: kineticaUrl.host,
+            port: kineticaUrl.port,
+            useSSL: kineticaUrl.useSSL,
+            bypassSslCertCheck: devOutput.skip_ssl_cert_verification === true,
+            username: devOutput.user ?? devOutput.username ?? '',
+            password: devOutput.password ?? devOutput.pass ?? '',
+            database: devOutput.database ?? devOutput.dbname ?? '',
+            schema: devOutput.schema || DEFAULT_KINETICA_SCHEMA,
+          };
+        }
+
         default:
           return null;
       }
@@ -1681,6 +1679,21 @@ export default class ConnectorsService {
               dbtConnection.path.split('/').pop() || dbtConnection.path,
             database: dbtConnection.database,
             schema: dbtConnection.schema,
+          };
+
+        case 'kinetica':
+          return {
+            type: 'kinetica',
+            name: connectionName,
+            host: dbtConnection.host,
+            port: dbtConnection.port,
+            username: dbtConnection.username,
+            password: dbtConnection.password,
+            database: dbtConnection.database,
+            schema: dbtConnection.schema,
+            timeout: dbtConnection.timeout,
+            useSSL: dbtConnection.useSSL,
+            bypassSslCertCheck: dbtConnection.bypassSslCertCheck,
           };
 
         default:
