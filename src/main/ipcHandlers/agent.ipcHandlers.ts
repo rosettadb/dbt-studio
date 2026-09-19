@@ -3,6 +3,7 @@ import AgentService from '../services/agent.service';
 import { TerminalConfirmGate } from '../services/ai/tools/terminalConfirmGate';
 import { AgentEditorBridgeService } from '../services/ai/agentEditorBridge.service';
 import FileMutationRollbackService from '../services/ai/fileMutationRollback.service';
+import ChatImageAttachmentService from '../services/ai/chatImageAttachment.service';
 import type {
   AgentContextOverheadRequest,
   AgentRunRequest,
@@ -12,6 +13,30 @@ import type { GetQueryResultsRequest } from '../../types/backend';
 export const registerAgentHandlers = () => {
   ipcMain.handle('agent:run', async (event, request: AgentRunRequest) =>
     AgentService.runAgent(event, request),
+  );
+
+  ipcMain.handle(
+    'agent:images:select',
+    async (event, { conversationId, maxImages }) =>
+      ChatImageAttachmentService.selectAndStage(
+        event,
+        conversationId,
+        maxImages,
+      ),
+  );
+
+  ipcMain.handle(
+    'agent:images:preview',
+    async (
+      _event,
+      { id, conversationId }: { id: string; conversationId: number },
+    ) => ChatImageAttachmentService.previewAttachment(id, conversationId),
+  );
+
+  ipcMain.handle(
+    'agent:images:release',
+    async (_event, { conversationId, ids }) =>
+      ChatImageAttachmentService.releaseStaged(conversationId, ids),
   );
 
   ipcMain.handle('agent:cancel', async (_event, { conversationId }) =>

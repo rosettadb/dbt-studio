@@ -439,6 +439,9 @@ export type NotebookChannels =
 
 export type AgentChannels =
   | 'agent:run'
+  | 'agent:images:select'
+  | 'agent:images:preview'
+  | 'agent:images:release'
   | 'agent:cancel'
   | 'agent:context-overhead:get'
   | 'agent:tool-call'
