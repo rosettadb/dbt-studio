@@ -54,6 +54,18 @@ describe('NotebookEnvService', () => {
     expect(python).toBe(expected);
   });
 
+  it('strips ANSI and progress-bar noise from forwarded pip output', async () => {
+    const { stripControlSequences } = await import(
+      '../../../../src/main/services/notebookEnv.service'
+    );
+    const raw =
+      '\u001b[2K\u001b[38;2;249;38;114m━━━━━━━━\u001b[0m 1.2/3.4 MB \u001b[31m1.0 MB/s\u001b[0m';
+    expect(stripControlSequences(raw).trim()).toBe('1.2/3.4 MB 1.0 MB/s');
+    expect(stripControlSequences('Collecting pyspark')).toBe(
+      'Collecting pyspark',
+    );
+  });
+
   it('rejects package specifiers that look like pip flags or paths', async () => {
     const NotebookEnvService = await load();
     await expect(

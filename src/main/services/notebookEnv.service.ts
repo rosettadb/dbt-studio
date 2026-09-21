@@ -41,6 +41,16 @@ interface EnvMarker {
   createdAt: string;
 }
 
+// ANSI CSI / OSC sequences (colours, cursor moves, "erase line") plus the
+// box-drawing characters pip's rich progress bar paints with.
+const CONTROL_SEQUENCE_PATTERN =
+  // eslint-disable-next-line no-control-regex
+  /\u001b\[[0-9;?]*[ -/]*[@-~]|\u001b\][^\u0007]*\u0007|[\u2500-\u257f]/g;
+
+export function stripControlSequences(text: string): string {
+  return text.replace(CONTROL_SEQUENCE_PATTERN, '');
+}
+
 export interface RunProcessResult {
   code: number | null;
   stdout: string;
@@ -85,8 +95,8 @@ export function runProcess(
       if (!options.onLine) return;
       chunk
         .toString()
-        .split(/\r?\n/)
-        .map((line) => line.trim())
+        .split(/\r?\n|\r/)
+        .map((line) => stripControlSequences(line).trim())
         .filter(Boolean)
         .forEach((line) => options.onLine?.(line));
     };
@@ -254,6 +264,8 @@ export default class NotebookEnvService {
             'install',
             '--disable-pip-version-check',
             '--no-input',
+            '--progress-bar',
+            'off',
             ...KERNEL_PACKAGES,
           ],
           {
@@ -376,6 +388,8 @@ export default class NotebookEnvService {
           'install',
           '--disable-pip-version-check',
           '--no-input',
+          '--progress-bar',
+          'off',
           ...cleaned,
         ],
         {
