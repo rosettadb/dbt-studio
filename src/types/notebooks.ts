@@ -27,6 +27,9 @@ export interface NotebookCell {
 
 export interface Notebook {
   id: string;
+  /** Absent on existing files; treated as 'sql'. Python notebooks are listed
+   *  alongside SQL ones using the same summary shape. */
+  kind?: 'sql' | 'python';
   name: string;
   description?: string;
   cells: NotebookCell[];

@@ -27,8 +27,10 @@ import registerTaskManagerHandlers from './taskManager.ipcHandlers';
 import { registerSecondBrainHandlers } from './secondBrain.ipcHandlers';
 import { registerIcebergDatalakeHandlers } from './icebergDatalake.ipcHandlers';
 import registerBackupHandlers from './backup.ipcHandlers';
+import { registerPythonNotebooksHandlers } from './pythonNotebooks.ipcHandlers';
 
 export {
+  registerPythonNotebooksHandlers,
   registerCliHandlers,
   registerProjectHandlers,
   registerSettingsHandlers,

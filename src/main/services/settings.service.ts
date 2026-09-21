@@ -28,9 +28,11 @@ const FACTORY_RESET_SHUTDOWN_TIMEOUT_MS = 10_000;
 
 // All built from the same python-build-standalone release tag; verified to
 // exist for macOS (arm64/x64), Linux (x64), and Windows (x64) at that tag.
-const PYTHON_BUILD_TAG = '20250409';
-const RECOMMENDED_PYTHON_VERSION = '3.10.17';
-const SUPPORTED_PYTHON_VERSIONS = [
+// Exported so the per-notebook Python runtime registry can offer the same
+// builds without going through (or altering) the global managed install.
+export const PYTHON_BUILD_TAG = '20250409';
+export const RECOMMENDED_PYTHON_VERSION = '3.10.17';
+export const SUPPORTED_PYTHON_VERSIONS = [
   '3.9.22',
   '3.10.17',
   '3.11.12',

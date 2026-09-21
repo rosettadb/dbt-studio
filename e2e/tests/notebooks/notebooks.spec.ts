@@ -109,4 +109,39 @@ test.describe('Notebooks', () => {
       window.getByRole('treeitem', { name: 'E2E Notebook' }),
     ).toBeVisible();
   });
+
+  test('should offer SQL and Python notebook kinds when creating', async ({
+    electronApp,
+  }) => {
+    const window = await openNotebooksWithConnection(electronApp);
+
+    await window.getByRole('button', { name: 'Create New Notebook' }).click();
+    const dialog = window.getByRole('dialog');
+
+    // SQL is the default and needs no runtime
+    const sqlKind = dialog.locator('[data-testid="create-notebook-kind-sql"]');
+    const pythonKind = dialog.locator(
+      '[data-testid="create-notebook-kind-python"]',
+    );
+    await expect(sqlKind).toHaveAttribute('aria-pressed', 'true');
+    await expect(
+      dialog.locator('[data-testid="python-runtime-select"]'),
+    ).toBeHidden();
+
+    // Python asks for a managed interpreter; until one is installed the
+    // Create button stays disabled even with a name.
+    await pythonKind.click();
+    await expect(pythonKind).toHaveAttribute('aria-pressed', 'true');
+    await expect(
+      dialog.locator('[data-testid="python-runtime-select"]'),
+    ).toBeVisible();
+    await dialog.getByLabel('Notebook Name').fill('Py Notebook');
+    await expect(
+      dialog.locator('[data-testid="create-notebook-confirm"]'),
+    ).toBeDisabled();
+    await expect(dialog.getByRole('button', { name: 'Install' })).toBeVisible();
+
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toBeHidden();
+  });
 });

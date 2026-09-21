@@ -25,6 +25,8 @@ import {
   IconButton,
   CircularProgress,
   useMediaQuery,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@mui/material';
 import {
   Add,
@@ -68,7 +70,21 @@ import { NotebookTabManager } from '../../components/notebook/NotebookTabManager
 import {
   NotebookEditor,
   flushNotebookPendingSave,
+  PythonNotebookEditor,
+  pythonNotebookToSummary,
+  PythonRuntimePicker,
+  NotebookKindIcon,
 } from '../../components/notebook';
+import {
+  usePythonNotebooks,
+  useCreatePythonNotebook,
+  useRenamePythonNotebook,
+  useDuplicatePythonNotebook,
+  useDeletePythonNotebook,
+  useImportPythonNotebook,
+} from '../../controllers/pythonNotebooks.controller';
+import { pythonNotebooksService } from '../../services/pythonNotebooks.service';
+import type { NotebookKind } from '../../../types/pythonNotebooks';
 import { ExportNotebookDialog } from '../../components/notebook/ExportNotebookDialog';
 import { ImportConnectionDialog } from '../../components/notebook/ImportConnectionDialog';
 import { ChatWindow } from '../../components/chat';
@@ -213,6 +229,43 @@ const Notebooks = () => {
   // Notebooks state - fetch from backend
   const { data: notebooks = [], isLoading: isLoadingNotebooks } =
     useNotebooks(activeConnectionId);
+  const { data: pythonNotebooks = [], isLoading: isLoadingPythonNotebooks } =
+    usePythonNotebooks(activeConnectionId);
+  const createPythonNotebook = useCreatePythonNotebook();
+  const renamePythonNotebook = useRenamePythonNotebook();
+  const duplicatePythonNotebook = useDuplicatePythonNotebook();
+  const deletePythonNotebook = useDeletePythonNotebook();
+  const importPythonNotebook = useImportPythonNotebook();
+
+  // SQL and Python notebooks share one list in the sidebar; the icon is
+  // derived from `kind` (absent → sql).
+  const allNotebooks = useMemo(
+    () =>
+      [
+        ...notebooks.map((n) => ({ ...n, kind: n.kind ?? ('sql' as const) })),
+        ...pythonNotebooks.map(pythonNotebookToSummary),
+      ].sort(
+        (a, b) =>
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+      ),
+    [notebooks, pythonNotebooks],
+  );
+  const kindOf = useCallback(
+    (notebookId: string): NotebookKind =>
+      allNotebooks.find((n) => n.id === notebookId)?.kind ??
+      notebookTabManager.tabs.find((t) => t.notebookId === notebookId)?.kind ??
+      'sql',
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [allNotebooks],
+  );
+
+  const [newNotebookKind, setNewNotebookKind] = useState<NotebookKind>('sql');
+  const [newNotebookPython, setNewNotebookPython] = useState('');
+  const [newNotebookPythonReady, setNewNotebookPythonReady] = useState(false);
+  const [importPythonOpen, setImportPythonOpen] = useState(false);
+  const [importPythonPath, setImportPythonPath] = useState<string | null>(null);
+  const [importPythonVersion, setImportPythonVersion] = useState('');
+  const [importPythonReady, setImportPythonReady] = useState(false);
   const deleteNotebook = useDeleteNotebook();
   const importAllNotebooksFromPath = useImportAllNotebooksFromPath();
   const importConnectionFromNotebook = useImportConnectionFromNotebook();
@@ -491,6 +544,32 @@ const Notebooks = () => {
   const handleCreateNotebook = useCallback(() => {
     if (!activeConnectionId || !newNotebookName.trim()) return;
 
+    if (newNotebookKind === 'python') {
+      if (!newNotebookPython || !newNotebookPythonReady) return;
+      createPythonNotebook.mutate(
+        {
+          connectionId: activeConnectionId,
+          input: {
+            name: newNotebookName.trim(),
+            description: newNotebookDescription.trim() || undefined,
+            pythonVersion: newNotebookPython,
+          },
+        },
+        {
+          onSuccess: (created) => {
+            notebookTabManager.openNotebook(
+              pythonNotebookToSummary(created),
+              activeConnectionId,
+            );
+            setCreateNotebookOpen(false);
+            setNewNotebookName('');
+            setNewNotebookDescription('');
+          },
+        },
+      );
+      return;
+    }
+
     createNotebook.mutate(
       {
         connectionId: activeConnectionId,
@@ -511,7 +590,58 @@ const Notebooks = () => {
     activeConnectionId,
     newNotebookName,
     newNotebookDescription,
+    newNotebookKind,
+    newNotebookPython,
+    newNotebookPythonReady,
     createNotebook,
+    createPythonNotebook,
+    notebookTabManager,
+  ]);
+
+  // Import a Jupyter .ipynb as a Python notebook: pick the file, then the
+  // interpreter for its environment.
+  const handleImportPythonNotebook = useCallback(async () => {
+    if (!activeConnectionId) {
+      toast.error('Select a connection first, then import.');
+      return;
+    }
+    let filePath: string | null;
+    try {
+      filePath = await pythonNotebooksService.selectImportFile();
+    } catch (err) {
+      toast.error(`Failed to select file: ${(err as Error).message}`);
+      return;
+    }
+    if (!filePath) return;
+    setImportPythonPath(filePath);
+    setImportPythonOpen(true);
+  }, [activeConnectionId]);
+
+  const confirmImportPythonNotebook = useCallback(() => {
+    if (!importPythonPath || !importPythonVersion || !activeConnectionId)
+      return;
+    importPythonNotebook.mutate(
+      {
+        connectionId: activeConnectionId,
+        filePath: importPythonPath,
+        pythonVersion: importPythonVersion,
+      },
+      {
+        onSuccess: (imported) => {
+          notebookTabManager.openNotebook(
+            pythonNotebookToSummary(imported),
+            activeConnectionId,
+          );
+          setImportPythonOpen(false);
+          setImportPythonPath(null);
+        },
+      },
+    );
+  }, [
+    importPythonPath,
+    importPythonVersion,
+    activeConnectionId,
+    importPythonNotebook,
     notebookTabManager,
   ]);
 
@@ -618,12 +748,12 @@ const Notebooks = () => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleOpenNotebook = useCallback(
     (notebookId: string) => {
-      const notebook = notebooks.find((n) => n.id === notebookId);
+      const notebook = allNotebooks.find((n) => n.id === notebookId);
       if (notebook) {
         notebookTabManager.openNotebook(notebook, activeConnectionId);
       }
     },
-    [notebooks, activeConnectionId, notebookTabManager],
+    [allNotebooks, activeConnectionId, notebookTabManager],
   );
 
   // Handle delete notebook
@@ -660,7 +790,11 @@ const Notebooks = () => {
   const confirmDeleteNotebook = useCallback(() => {
     if (!activeNotebookToDelete) return;
 
-    deleteNotebook.mutate(
+    const mutation =
+      kindOf(activeNotebookToDelete.notebookId) === 'python'
+        ? deletePythonNotebook
+        : deleteNotebook;
+    mutation.mutate(
       {
         connectionId: activeConnectionId,
         notebookId: activeNotebookToDelete.notebookId,
@@ -678,12 +812,36 @@ const Notebooks = () => {
     activeNotebookToDelete,
     activeConnectionId,
     deleteNotebook,
+    deletePythonNotebook,
+    kindOf,
     notebookTabManager,
   ]);
 
   // Confirm rename notebook
   const confirmRenameNotebook = useCallback(() => {
     if (!renameNotebookId || !renameNotebookName.trim()) return;
+
+    if (kindOf(renameNotebookId) === 'python') {
+      renamePythonNotebook.mutate(
+        {
+          connectionId: activeConnectionId,
+          notebookId: renameNotebookId,
+          newName: renameNotebookName.trim(),
+        },
+        {
+          onSuccess: () => {
+            notebookTabManager.updateTabName(
+              renameNotebookId,
+              renameNotebookName.trim(),
+            );
+            setRenameNotebookOpen(false);
+            setRenameNotebookId(null);
+            setRenameNotebookName('');
+          },
+        },
+      );
+      return;
+    }
 
     renameNotebook.mutate(
       {
@@ -709,12 +867,36 @@ const Notebooks = () => {
     renameNotebookName,
     activeConnectionId,
     renameNotebook,
+    renamePythonNotebook,
+    kindOf,
     notebookTabManager,
   ]);
 
   // Confirm duplicate notebook
   const confirmDuplicateNotebook = useCallback(() => {
     if (!duplicateNotebookId || !duplicateNotebookName.trim()) return;
+
+    if (kindOf(duplicateNotebookId) === 'python') {
+      duplicatePythonNotebook.mutate(
+        {
+          connectionId: activeConnectionId,
+          notebookId: duplicateNotebookId,
+          newName: duplicateNotebookName.trim(),
+        },
+        {
+          onSuccess: (created) => {
+            notebookTabManager.openNotebook(
+              pythonNotebookToSummary(created),
+              activeConnectionId,
+            );
+            setDuplicateNotebookOpen(false);
+            setDuplicateNotebookId(null);
+            setDuplicateNotebookName('');
+          },
+        },
+      );
+      return;
+    }
 
     duplicateNotebook.mutate(
       {
@@ -737,6 +919,8 @@ const Notebooks = () => {
     duplicateNotebookName,
     activeConnectionId,
     duplicateNotebook,
+    duplicatePythonNotebook,
+    kindOf,
     notebookTabManager,
   ]);
 
@@ -1147,8 +1331,10 @@ const Notebooks = () => {
               }
               schema={activeSchema}
               isLoadingSchema={isLoadingSchema}
-              notebooks={notebooks}
-              isLoadingNotebooks={isLoadingNotebooks}
+              notebooks={allNotebooks}
+              isLoadingNotebooks={
+                isLoadingNotebooks || isLoadingPythonNotebooks
+              }
               archivedNotebooks={archivedNotebooks}
               showArchived={showArchived}
               onRefresh={handleRefreshSchema}
@@ -1174,6 +1360,7 @@ const Notebooks = () => {
               getConnectionName={getConnectionName}
               onExportAllNotebooks={handleExportAllNotebooksClick}
               onImportAllNotebooks={handleImportAllNotebooks}
+              onImportPythonNotebook={handleImportPythonNotebook}
               onTabChange={setActiveSidebarTab}
               connectionId={activeConnectionId}
               activeAnalyticsPageId={activeAnalyticsPageId}
@@ -1335,7 +1522,28 @@ const Notebooks = () => {
                         : 'calc(100vw - 56px)',
                     }}
                   >
-                    {notebookTabManager.activeTabId && activeConnectionId ? (
+                    {notebookTabManager.activeTabId &&
+                    activeConnectionId &&
+                    notebookTabManager.activeTab?.kind === 'python' ? (
+                      <PythonNotebookEditor
+                        key={`python-notebook-${notebookTabManager.activeTabId}`}
+                        connectionId={activeConnectionId}
+                        notebookId={notebookTabManager.activeTabId}
+                        onOpenNotebook={(notebook, connectionId) => {
+                          notebookTabManager.openNotebook(
+                            notebook,
+                            connectionId,
+                          );
+                        }}
+                        onRenamed={(id, name) =>
+                          notebookTabManager.updateTabName(id, name)
+                        }
+                        onDeleted={(id) => notebookTabManager.closeTab(id)}
+                      />
+                    ) : null}
+                    {notebookTabManager.activeTabId &&
+                    activeConnectionId &&
+                    notebookTabManager.activeTab?.kind !== 'python' ? (
                       <NotebookEditor
                         key={`notebook-${notebookTabManager.activeTabId}`}
                         instanceId={activeConnectionId}
@@ -1349,7 +1557,10 @@ const Notebooks = () => {
                         }}
                         onSchemaChange={handleRefreshSchema}
                       />
-                    ) : (
+                    ) : null}
+                    {!(
+                      notebookTabManager.activeTabId && activeConnectionId
+                    ) && (
                       <Box
                         sx={{
                           display: 'flex',
@@ -1556,6 +1767,28 @@ const Notebooks = () => {
         <DialogTitle>Create New Notebook</DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+            <ToggleButtonGroup
+              exclusive
+              size="small"
+              value={newNotebookKind}
+              onChange={(_e, value: NotebookKind | null) => {
+                if (value) setNewNotebookKind(value);
+              }}
+              fullWidth
+              data-testid="create-notebook-kind"
+            >
+              <ToggleButton value="sql" data-testid="create-notebook-kind-sql">
+                <NotebookKindIcon kind="sql" sx={{ fontSize: 16, mr: 1 }} />
+                SQL Notebook
+              </ToggleButton>
+              <ToggleButton
+                value="python"
+                data-testid="create-notebook-kind-python"
+              >
+                <NotebookKindIcon kind="python" sx={{ fontSize: 16, mr: 1 }} />
+                Python Notebook
+              </ToggleButton>
+            </ToggleButtonGroup>
             <TextField
               autoFocus
               label="Notebook Name"
@@ -1578,6 +1811,19 @@ const Notebooks = () => {
               onChange={(e) => setNewNotebookDescription(e.target.value)}
               placeholder="Describe what this notebook is for..."
             />
+            {newNotebookKind === 'python' && (
+              <>
+                <PythonRuntimePicker
+                  value={newNotebookPython}
+                  onChange={setNewNotebookPython}
+                  onReadyChange={setNewNotebookPythonReady}
+                />
+                <Typography variant="caption" color="text.secondary">
+                  A dedicated virtual environment is created for this notebook
+                  with ipykernel installed. Packages you install stay inside it.
+                </Typography>
+              </>
+            )}
           </Box>
         </DialogContent>
         <DialogActions>
@@ -1593,9 +1839,64 @@ const Notebooks = () => {
           <Button
             onClick={handleCreateNotebook}
             variant="contained"
-            disabled={!newNotebookName.trim() || createNotebook.isLoading}
+            disabled={
+              !newNotebookName.trim() ||
+              createNotebook.isLoading ||
+              createPythonNotebook.isLoading ||
+              (newNotebookKind === 'python' && !newNotebookPythonReady)
+            }
+            data-testid="create-notebook-confirm"
           >
-            {createNotebook.isLoading ? 'Creating...' : 'Create'}
+            {createNotebook.isLoading || createPythonNotebook.isLoading
+              ? 'Creating...'
+              : 'Create'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Import Jupyter Notebook Dialog */}
+      <Dialog
+        open={importPythonOpen}
+        onClose={() => {
+          setImportPythonOpen(false);
+          setImportPythonPath(null);
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Import Jupyter Notebook</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+            <DialogContentText>
+              Choose the Python version for the imported notebook&apos;s
+              environment. Requirements embedded in a studio export are
+              reinstalled automatically.
+            </DialogContentText>
+            <Typography variant="caption" color="text.secondary" noWrap>
+              {importPythonPath}
+            </Typography>
+            <PythonRuntimePicker
+              value={importPythonVersion}
+              onChange={setImportPythonVersion}
+              onReadyChange={setImportPythonReady}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setImportPythonOpen(false);
+              setImportPythonPath(null);
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={confirmImportPythonNotebook}
+            variant="contained"
+            disabled={!importPythonReady || importPythonNotebook.isLoading}
+          >
+            {importPythonNotebook.isLoading ? 'Importing...' : 'Import'}
           </Button>
         </DialogActions>
       </Dialog>

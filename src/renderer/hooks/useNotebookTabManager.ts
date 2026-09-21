@@ -8,6 +8,8 @@ export interface NotebookTabState {
   notebookName: string;
   connectionId: string;
   isModified: boolean;
+  /** Absent for tabs persisted before Python notebooks existed → 'sql'. */
+  kind?: 'sql' | 'python';
 }
 
 type PersistedNotebookTabsState = {
@@ -234,6 +236,7 @@ const useNotebookTabManager = (): UseNotebookTabManagerReturn => {
         notebookName: notebook.name,
         connectionId,
         isModified: false,
+        kind: notebook.kind ?? 'sql',
       };
 
       setTabs((current) => {

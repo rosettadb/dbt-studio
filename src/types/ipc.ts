@@ -437,6 +437,38 @@ export type NotebookChannels =
   | 'notebooks:archived:delete'
   | 'notebooks:archived:deleteAll';
 
+export type PythonNotebookChannels =
+  // Managed interpreters (python-build-standalone) usable by notebooks
+  | 'pythonRuntimes:list'
+  | 'pythonRuntimes:install'
+  | 'pythonRuntimes:event' // main → renderer (install progress)
+  // Python notebooks (.ipynb files, connection scoped)
+  | 'pythonNotebooks:list'
+  | 'pythonNotebooks:get'
+  | 'pythonNotebooks:create'
+  | 'pythonNotebooks:update'
+  | 'pythonNotebooks:rename'
+  | 'pythonNotebooks:duplicate'
+  | 'pythonNotebooks:delete'
+  | 'pythonNotebooks:export'
+  | 'pythonNotebooks:selectImportFile'
+  | 'pythonNotebooks:import'
+  // Per-notebook virtualenv
+  | 'pythonNotebooks:env:status'
+  | 'pythonNotebooks:env:recreate'
+  | 'pythonNotebooks:env:packages:list'
+  | 'pythonNotebooks:env:packages:install'
+  | 'pythonNotebooks:env:packages:uninstall'
+  | 'pythonNotebooks:env:event' // main → renderer
+  // Kernel (ipykernel via bridge script)
+  | 'pythonNotebooks:kernel:start'
+  | 'pythonNotebooks:kernel:execute'
+  | 'pythonNotebooks:kernel:interrupt'
+  | 'pythonNotebooks:kernel:restart'
+  | 'pythonNotebooks:kernel:shutdown'
+  | 'pythonNotebooks:kernel:status'
+  | 'pythonNotebooks:kernel:event'; // main → renderer
+
 export type AgentChannels =
   | 'agent:run'
   | 'agent:cancel'
@@ -579,6 +611,7 @@ export type Channels =
   | DuckLakeChannels
   | LineageChannels
   | NotebookChannels
+  | PythonNotebookChannels
   | AgentChannels
   | MCPChannels
   | SkillsChannels

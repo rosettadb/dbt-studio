@@ -194,7 +194,8 @@ function getNotebookPath(connectionKey: string, notebookId: string): string {
 }
 
 // Get connection directory path with security validation
-function getConnectionDir(connectionKey: string): string {
+// (exported so Python notebooks can share the same per-connection directory)
+export function getConnectionDir(connectionKey: string): string {
   const safeConnectionKey = assertSafeSegment(connectionKey, 'connection key');
   let dirPath = path.resolve(NOTEBOOKS_DIR, safeConnectionKey);
   if (process.platform === 'win32') {
@@ -257,7 +258,8 @@ async function writeNotebookFile(
 }
 
 // Normalize connection ID to connectionKey format with input validation
-function normalizeConnectionKey(connectionId: string): string {
+// (exported so Python notebooks can share the same per-connection directory)
+export function normalizeConnectionKey(connectionId: string): string {
   // Validate input before transformation
   if (!/^[A-Za-z0-9_-]+$/.test(connectionId)) {
     throw new Error(
