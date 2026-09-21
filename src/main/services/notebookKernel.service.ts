@@ -65,7 +65,9 @@ function getBridgePath(): string {
     path.join(__dirname, '..', '..', '..', ...BRIDGE_RELATIVE),
     path.join(process.cwd(), ...BRIDGE_RELATIVE),
   ];
-  return candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0];
+  return (
+    candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0]
+  );
 }
 
 export default class NotebookKernelService {
