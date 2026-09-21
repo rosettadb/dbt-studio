@@ -32,10 +32,10 @@ export type ElectronFixtures = {
   extraProjects: string[];
   /**
    * Mark the Quick Start tour as already seen before the renderer loads.
-   * The tour auto-opens ~700ms after the project selection screen mounts
-   * with zero projects and its full-screen overlay swallows every click, so
-   * tests that don't target it would otherwise race against it. Set to false
-   * in specs that test the tour itself.
+   * The tour auto-opens ~700ms after the Home screen (dashboard) mounts with
+   * zero projects and its full-screen overlay swallows every click, so tests
+   * that don't target it would otherwise race against it. Set to false in
+   * specs that test the tour itself.
    */
   skipQuickStartTour: boolean;
   /** The Electron application instance */

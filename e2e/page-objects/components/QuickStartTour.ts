@@ -1,9 +1,9 @@
 /**
  * Quick Start Tour Component
  *
- * Page object for the custom onboarding tour overlay shown on the project
- * selection screen for users with no projects. It has no testids, so it is
- * located through its visible text and the "Skip tour" icon title.
+ * Page object for the custom onboarding tour overlay shown on the Home screen
+ * (dashboard) for users with no projects. It has no testids, so it is located
+ * through its visible text and the "Skip tour" icon title.
  */
 
 import { Page, Locator, expect } from '@playwright/test';

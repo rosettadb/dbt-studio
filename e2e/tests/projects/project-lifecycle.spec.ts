@@ -1,7 +1,7 @@
 import { Page, ElectronApplication } from '@playwright/test';
 import { test, expect } from '../../fixtures/electron.fixture';
 import { ProjectSelectionPage } from '../../page-objects/screens/ProjectSelection';
-import { AppHelper } from '../../helpers/app.helper';
+import { openProjectSelection } from '../../helpers/window.helper';
 
 // Helper to find a stable window (after splash screen closes)
 const findStableWindow = async (
@@ -31,17 +31,7 @@ const findStableWindow = async (
 
 test.describe('Project Lifecycle', () => {
   test.beforeEach(async ({ electronApp }) => {
-    // Wait for stable window (splash screen to close)
-    const stableWindow = await findStableWindow(electronApp);
-    await stableWindow.waitForLoadState('domcontentloaded');
-
-    const appHelper = new AppHelper(electronApp, stableWindow);
-    await appHelper.skipSetupIfPresent();
-
-    // Wait for project selection screen to be visible
-    await stableWindow.waitForSelector('[data-testid="project-selection"]', {
-      timeout: 10000,
-    });
+    await openProjectSelection(electronApp);
   });
 
   test('should create a new project', async ({ electronApp }) => {
