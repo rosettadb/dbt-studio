@@ -26,9 +26,16 @@ export function buildKineticaUrl({
     ? trimmed
     : `${protocol}//${trimmed}`;
 
+  // `URL` reports an empty `port` when the input carries the scheme's default
+  // (e.g. `tenant:443` over https), so detect an explicit authority port in
+  // the raw string instead. The form port only applies when there is none.
+  const hasExplicitPort = /^https?:\/\/[^/?#]*:\d+(?=[/?#]|$)/i.test(
+    normalized,
+  );
+
   const urlObj = new URL(normalized);
   urlObj.protocol = protocol;
-  if (!urlObj.port && port) {
+  if (!hasExplicitPort && port) {
     urlObj.port = String(port);
   }
 

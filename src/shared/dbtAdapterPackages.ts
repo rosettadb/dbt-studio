@@ -39,8 +39,11 @@ export type PackageInstallSource = {
 };
 
 /**
- * Packages that pip cannot resolve from PyPI. The requirement is a pinned
- * source archive so `pip install --upgrade` always re-fetches the branch head.
+ * Packages that pip cannot resolve from PyPI. The requirement is a source
+ * archive pinned to a reviewed commit SHA (never a mutable branch) so the
+ * installed code cannot change under us. To pick up upstream changes, review
+ * the new commit and bump the SHA here; `docs/adapters/kinetica.md` shows the
+ * same command.
  */
 export const DBT_PACKAGE_INSTALL_SOURCES: Partial<
   Record<DbtAdapterPackage, PackageInstallSource>
@@ -48,7 +51,7 @@ export const DBT_PACKAGE_INSTALL_SOURCES: Partial<
   'dbt-kinetica': {
     homepage: 'https://github.com/rosettadb/kinetica-dbt-adapter',
     requirement:
-      'dbt-kinetica @ https://github.com/rosettadb/kinetica-dbt-adapter/archive/refs/heads/main.zip',
+      'dbt-kinetica @ https://github.com/rosettadb/kinetica-dbt-adapter/archive/92f4866dad614d24aa1f771585d249ab30a4ac6a.zip',
   },
 };
 

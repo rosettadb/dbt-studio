@@ -181,7 +181,7 @@ describe('DbtCoreVersionService', () => {
         'install',
         '--upgrade',
         '--no-cache-dir',
-        'dbt-kinetica @ https://github.com/rosettadb/kinetica-dbt-adapter/archive/refs/heads/main.zip',
+        'dbt-kinetica @ https://github.com/rosettadb/kinetica-dbt-adapter/archive/92f4866dad614d24aa1f771585d249ab30a4ac6a.zip',
       ],
       { shell: false },
     );

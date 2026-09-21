@@ -11,17 +11,22 @@ JDBC driver is required for dbt.
 Python environment from the GitHub source archive:
 
 ```
-pip install "dbt-kinetica @ https://github.com/rosettadb/kinetica-dbt-adapter/archive/refs/heads/main.zip"
+pip install "dbt-kinetica @ https://github.com/rosettadb/kinetica-dbt-adapter/archive/92f4866dad614d24aa1f771585d249ab30a4ac6a.zip"
 ```
 
 This pulls `dbt-core>=1.8,<2`, `dbt-adapters`, `dbt-common` and `gpudb>=7.2,<8`.
 The archive form is used instead of `git+https://...` so that end users do not
-need a local `git` executable. The source is declared once in
+need a local `git` executable. The archive is pinned to a reviewed commit SHA
+rather than the `main` branch so a later upstream change cannot alter what
+users install. The source is declared once in
 `src/shared/dbtAdapterPackages.ts`; every install path (onboarding, Settings,
-"Install all adapters") reads from it.
+"Install all adapters") reads from it. To pick up a newer upstream revision,
+review the commit and bump the SHA there.
 
 Because there is no PyPI release, the Settings screen offers "Install" /
-"Update from source" for this adapter instead of a version list. The adapter
+"Update from source" for this adapter instead of a version list.
+"Update from source" reinstalls the pinned revision; it only delivers new
+upstream code after the SHA in the Studio has been bumped. The adapter
 requires dbt Core 1.x; under the dbt Core v2 preview it is reported as
 unsupported and execution is blocked, like Postgres.
 
