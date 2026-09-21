@@ -13,6 +13,7 @@ import { test as base, ElectronApplication, Page } from '@playwright/test';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
+import { CURRENT_SCHEMA_VERSION } from '../../src/main/database/migrations';
 
 // Type definitions for our fixtures
 export type ElectronFixtures = {
@@ -20,6 +21,23 @@ export type ElectronFixtures = {
   userData: string;
   /** Whether to automatically skip the setup wizard by seeding database.json */
   autoSkipSetup: boolean;
+  /**
+   * Project names to seed into database.json before the app launches. Each
+   * gets a minimal project directory + dbt_project.yml created automatically.
+   * Use this instead of writing to database.json after the app is already
+   * running — the app only ever re-reads the file on its own operations, so
+   * an external write made while it's live has no defined way to be picked
+   * up short of restarting it.
+   */
+  extraProjects: string[];
+  /**
+   * Mark the Quick Start tour as already seen before the renderer loads.
+   * The tour auto-opens ~700ms after the project selection screen mounts
+   * with zero projects and its full-screen overlay swallows every click, so
+   * tests that don't target it would otherwise race against it. Set to false
+   * in specs that test the tour itself.
+   */
+  skipQuickStartTour: boolean;
   /** The Electron application instance */
   electronApp: ElectronApplication;
   /** The main browser window */
@@ -32,6 +50,8 @@ export type ElectronFixtures = {
 export const test = base.extend<ElectronFixtures>({
   // Default to skipping setup for convenience in most tests
   autoSkipSetup: [true, { option: true }],
+  extraProjects: [[], { option: true }],
+  skipQuickStartTour: [true, { option: true }],
 
   // Create isolated userData directory for each test
   // biome-ignore lint/complexity/noEmptyPattern: Playwright requires object destructuring
@@ -58,7 +78,11 @@ export const test = base.extend<ElectronFixtures>({
   },
 
   // Launch Electron app
-  electronApp: async ({ userData, autoSkipSetup }, use, testInfo) => {
+  electronApp: async (
+    { userData, autoSkipSetup, extraProjects, skipQuickStartTour },
+    use,
+    testInfo,
+  ) => {
     // Helper to seed database if skipping setup
     if (autoSkipSetup) {
       // Create projects directory
@@ -80,7 +104,24 @@ export const test = base.extend<ElectronFixtures>({
 
       const dbPath = path.join(userData, 'database.json');
 
+      const seededProjects = extraProjects.map((name) => {
+        const projectPath = path.join(userData, 'projects', name);
+        fs.mkdirSync(projectPath, { recursive: true });
+        fs.writeFileSync(
+          path.join(projectPath, 'dbt_project.yml'),
+          `name: ${name}\nversion: 1.0.0\nconfig-version: 2\n`,
+        );
+        return {
+          id: `${name}-id`,
+          name,
+          path: projectPath,
+          createdAt: new Date().toISOString(),
+          isExtracted: false,
+        };
+      });
+
       const settings = {
+        schemaVersion: CURRENT_SCHEMA_VERSION,
         settings: {
           isSetup: 'true',
           pythonPath:
@@ -94,7 +135,7 @@ export const test = base.extend<ElectronFixtures>({
           dbtSampleDirectory: path.join(userData, 'dbt_sample'),
           sampleRosettaMainConf: path.join(userData, 'main.conf'),
         },
-        projects: [],
+        projects: seededProjects,
         connections: [],
       };
       fs.writeFileSync(dbPath, JSON.stringify(settings, null, 2));
@@ -141,6 +182,15 @@ export const test = base.extend<ElectronFixtures>({
         }),
       },
     });
+
+    // The splash window is already open at this point, but the main/setup
+    // window is created a few seconds later, so an init script registered now
+    // runs before the React app in that window mounts.
+    if (skipQuickStartTour) {
+      await electronApp.context().addInitScript(() => {
+        window.localStorage.setItem('dbt-studio-quickstart-tour-seen', 'true');
+      });
+    }
 
     // Playwright's config-level `trace: 'on'` only auto-attaches snapshot
     // and screenshot capture to contexts created through its own built-in

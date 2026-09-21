@@ -12,9 +12,10 @@ export const initializeDataStorage = async () => {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
 
-  if (!fs.existsSync(DB_FILE)) {
-    fs.writeFileSync(DB_FILE, JSON.stringify({ projects: [] }, null, 2));
-  }
+  // database.json itself no longer needs eager seeding here: DatabaseStore
+  // creates it (with a valid, versioned shape) automatically the first time
+  // any service reads or writes through it, which happens moments after
+  // this function returns.
 
   // Initialize main database for AI and future features
   try {

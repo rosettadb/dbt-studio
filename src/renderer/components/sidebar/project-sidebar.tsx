@@ -374,6 +374,10 @@ const ExplorerTab: React.FC<ExplorerTabProps> = ({
           onClose={() => setCreatePipelineOpen(false)}
           project={project}
           onCreated={(filePath) => handlePipelineCreated(filePath)}
+          onApplied={async () => {
+            await refetchPipelines();
+            await onRefreshFiles();
+          }}
         />
       )}
     </FileTreeContainer>
