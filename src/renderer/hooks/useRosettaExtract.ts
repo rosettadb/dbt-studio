@@ -97,6 +97,7 @@ const useRosettaExtract = () => {
         bigquery: ['project', 'dataset'],
         databricks: ['host', 'httppath', 'catalog', 'schema'],
         kinetica: ['host', 'port', 'dbname', 'schema'],
+        mysql: ['host', 'port', 'dbname', 'schema'],
       };
 
       const c = conn as any;

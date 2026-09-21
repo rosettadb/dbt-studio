@@ -104,6 +104,13 @@ export type KineticaConnection = ConnectionBase & {
   bypassSslCertCheck?: boolean;
 };
 
+export type MySqlConnection = ConnectionBase & {
+  type: 'mysql';
+  host: string;
+  port: number;
+  ssl?: boolean;
+};
+
 export type DuckLakeConnectionConfig = Omit<
   ConnectionBase,
   'username' | 'password' | 'database' | 'schema'
@@ -125,11 +132,12 @@ export type ConnectionInput =
   | DuckDBConnection
   | SQLiteConnection
   | KineticaConnection
+  | MySqlConnection
   | DuckLakeConnectionConfig;
 
 export const canUseAsDbtConnection = (
   type: SupportedConnectionTypes,
-): boolean => type !== 'sqlite';
+): boolean => type !== 'sqlite' && type !== 'mysql';
 
 export type ConnectionModel = {
   id: string;
@@ -211,6 +219,14 @@ export type KineticaDBTConnection = DBTConnectionBase & {
   bypassSslCertCheck?: boolean;
 };
 
+export type MySqlDBTConnection = DBTConnectionBase & {
+  type: 'mysql';
+  host: string;
+  port: number;
+  ssl?: boolean;
+  sslRejectUnauthorized?: boolean;
+};
+
 export type DBTConnection =
   | PostgresDBTConnection
   | SnowflakeDBTConnection
@@ -218,7 +234,8 @@ export type DBTConnection =
   | RedshiftDBTConnection
   | DatabricksDBTConnection
   | DuckDBDBTConnection
-  | KineticaDBTConnection;
+  | KineticaDBTConnection
+  | MySqlDBTConnection;
 
 export type RosettaConnection = {
   name: string;

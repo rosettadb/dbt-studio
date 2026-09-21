@@ -284,6 +284,18 @@ export const getConnectionInput = (conn: ConnectionModel) => {
         database: kinetica.database || '',
         schema: kinetica.schema || '',
       };
+    case 'mysql':
+      const mysql = connection as any;
+      return {
+        type,
+        host: mysql.host,
+        port: mysql.port,
+        username: mysql.username,
+        password: mysql.password,
+        database: mysql.database || '',
+        schema: mysql.schema || '',
+        ssl: mysql.ssl,
+      };
     default:
       return undefined;
   }

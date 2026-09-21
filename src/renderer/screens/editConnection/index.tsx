@@ -98,6 +98,15 @@ const EditConnection: React.FC = () => {
           />
         );
       }
+      case 'mysql': {
+        return (
+          <Connections.MySql
+            key={connId}
+            onCancel={handleCancel}
+            connection={conn}
+          />
+        );
+      }
       default: {
         return (
           <Connections.Postgres

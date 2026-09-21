@@ -213,6 +213,7 @@ export const ProcessProvider: React.FC<ProcessProviderProps> = ({
             bigquery: ['project', 'dataset'],
             databricks: ['host', 'httppath', 'catalog', 'schema'],
             kinetica: ['host', 'port', 'dbname', 'schema'],
+            mysql: ['host', 'port', 'dbname', 'schema'],
           };
 
           const fields = fieldMap[connType] || [];

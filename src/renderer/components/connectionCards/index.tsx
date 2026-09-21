@@ -1,5 +1,5 @@
 import React from 'react';
-import { Typography, Tooltip } from '@mui/material';
+import { Typography, Tooltip, Chip } from '@mui/material';
 import {
   StyledCard,
   ContentWrapper,
@@ -14,6 +14,7 @@ interface ItemDetails {
   img: keyof typeof connectionIcons.images;
   name: string;
   disabled?: boolean;
+  dbtCompatible?: boolean;
 }
 
 type Props = {
@@ -44,6 +45,23 @@ export const ConnectionCard: React.FC<Props> = ({ itemDetails, onClick }) => {
               alt="Data source icon"
               src={connectionIcons.images[itemDetails.img]}
             />
+          )}
+          {itemDetails.dbtCompatible && (
+            <Tooltip title="Compatible with dbt">
+              <Chip
+                label="dbt"
+                size="small"
+                color="primary"
+                sx={{
+                  position: 'absolute',
+                  top: 8,
+                  left: 8,
+                  height: 20,
+                  fontSize: '11px',
+                  fontWeight: 'bold',
+                }}
+              />
+            </Tooltip>
           )}
           {itemDetails.disabled && <ComingSoonBanner>Soon</ComingSoonBanner>}
         </ContentWrapper>

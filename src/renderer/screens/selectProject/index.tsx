@@ -55,7 +55,11 @@ import {
 import { icons } from '../../../../assets';
 import connectionIcons from '../../../../assets/connectionIcons';
 import { AppLayout } from '../../layouts';
-import { Project, SupportedConnectionTypes } from '../../../types/backend';
+import {
+  Project,
+  SupportedConnectionTypes,
+  canUseAsDbtConnection,
+} from '../../../types/backend';
 import {
   ConnectionIcon,
   EmptyStateContainer,
@@ -598,8 +602,8 @@ const SelectProject: React.FC = () => {
             connectionType={connectionType}
             setConnectionType={setConnectionType}
             isLoadingConnections={isLoadingConnections}
-            connections={connections.filter(
-              (connection) => connection.connection.type !== 'sqlite',
+            connections={connections.filter((connection) =>
+              canUseAsDbtConnection(connection.connection.type),
             )}
             datalakeInstances={datalakeInstances}
             isLoadingDatalakes={isLoadingDatalakes}
@@ -854,7 +858,9 @@ const SelectProject: React.FC = () => {
           isOpen={isAddConnectionModalOpen}
           onClose={handleConnectionModalClose}
           project={selectedProjectForConnection}
-          connections={connections}
+          connections={connections.filter((connection) =>
+            canUseAsDbtConnection(connection.connection.type),
+          )}
           onSuccess={() => {
             // Projects will be automatically refreshed via React Query
           }}

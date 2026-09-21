@@ -16,6 +16,7 @@ import {
   DuckLakeConnectionConfig,
   ExecuteStatementType,
   KineticaConnection,
+  MySqlConnection,
   PostgresConnection,
   Project,
   QueryResponseType,
@@ -44,8 +45,10 @@ import {
   testSnowflakeConnection,
   testKineticaConnection,
   testSQLiteConnection,
+  testMySqlConnection,
   executeKineticaQuery,
   executeSQLiteQuery,
+  executeMySqlQuery,
   extractSQLiteSchema,
 } from '../utils/connectors';
 import SecureStorageService from './secureStorage.service';
@@ -281,6 +284,19 @@ export default class ConnectorsService {
             (conn2 as KineticaConnection).bypassSslCertCheck
         );
 
+      case 'mysql':
+        return (
+          (conn1 as MySqlConnection).host === (conn2 as MySqlConnection).host &&
+          (conn1 as MySqlConnection).port === (conn2 as MySqlConnection).port &&
+          (conn1 as MySqlConnection).database ===
+            (conn2 as MySqlConnection).database &&
+          (conn1 as MySqlConnection).username ===
+            (conn2 as MySqlConnection).username &&
+          (conn1 as MySqlConnection).schema ===
+            (conn2 as MySqlConnection).schema &&
+          (conn1 as MySqlConnection).ssl === (conn2 as MySqlConnection).ssl
+        );
+
       default:
         return false;
     }
@@ -317,6 +333,7 @@ export default class ConnectorsService {
       }
       case 'postgres':
       case 'redshift':
+      case 'mysql':
         baseName = connection.database;
         break;
       case 'snowflake':
@@ -791,6 +808,8 @@ export default class ConnectorsService {
         return testRedshiftConnection(connection);
       case 'kinetica':
         return testKineticaConnection(connection);
+      case 'mysql':
+        return testMySqlConnection(connection);
       default:
         throw new Error(
           `Unsupported connection type: ${(connection as any).type}`,
@@ -914,6 +933,9 @@ export default class ConnectorsService {
             registerCancel,
           );
           break;
+        case 'mysql':
+          response = await executeMySqlQuery(connection, query, registerCancel);
+          break;
         default:
           throw new Error(
             `Unsupported connection type: ${(connection as any).type}`,
@@ -1035,6 +1057,7 @@ export default class ConnectorsService {
     switch (conn.type) {
       case 'postgres':
       case 'redshift':
+      case 'mysql':
         if (!conn.host) throw new Error('Host is required');
         if (!conn.port) throw new Error('Port is required');
         break;
@@ -1130,6 +1153,11 @@ export default class ConnectorsService {
           kineticaUrl += ';BypassSslCertCheck=1';
         }
         return kineticaUrl;
+      }
+      case 'mysql': {
+        let mysqlUrl = `jdbc:mysql://${ev('host')}:${ev('port')}/${ev('dbname')}`;
+        mysqlUrl += `?useSSL=${conn.ssl ? 'true' : 'false'}&serverTimezone=UTC&useUnicode=true&characterEncoding=UTF-8`;
+        return mysqlUrl;
       }
       default:
         throw new Error('Unsupported connection type!');
@@ -1915,6 +1943,7 @@ export default class ConnectorsService {
       DuckDBExtractor,
       RedshiftExtractor,
       KineticaExtractor,
+      MySqlExtractor,
     } = await import('../extractor');
 
     switch (connection.type) {
@@ -2052,6 +2081,24 @@ export default class ConnectorsService {
           useSSL: kinConn.useSSL,
           timeout: kinConn.timeout,
           schema: kinConn.schema,
+        });
+        try {
+          await extractor.connect();
+          const schema = await extractor.extractSchema();
+          return schema;
+        } finally {
+          await extractor.disconnect();
+        }
+      }
+      case 'mysql': {
+        const myConn = connection as MySqlConnection;
+        const extractor = new MySqlExtractor({
+          user: myConn.username,
+          host: myConn.host,
+          database: myConn.database,
+          password: myConn.password,
+          port: myConn.port,
+          ssl: myConn.ssl,
         });
         try {
           await extractor.connect();
