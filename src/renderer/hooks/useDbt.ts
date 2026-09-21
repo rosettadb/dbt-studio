@@ -122,6 +122,7 @@ const useDbt = (
             bigquery: ['project', 'dataset'],
             databricks: ['host', 'httppath', 'catalog', 'schema'],
             kinetica: ['host', 'port', 'dbname', 'schema'],
+            mysql: ['host', 'port', 'dbname', 'schema'],
           };
 
           // Map field names to connection object values for fallback

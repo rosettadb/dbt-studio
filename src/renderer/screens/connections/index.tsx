@@ -268,6 +268,8 @@ const Connections: React.FC = () => {
         return 'Databricks';
       case 'duckdb':
         return 'DuckDB';
+      case 'mysql':
+        return 'MySQL';
       default:
         return connectionType.toUpperCase();
     }
@@ -302,6 +304,8 @@ const Connections: React.FC = () => {
         return '#ff3621';
       case 'duckdb':
         return '#fff000';
+      case 'mysql':
+        return '#00758f';
       default:
         return '#666';
     }

@@ -54,6 +54,10 @@ const getConnectionTypeName = (connectionType?: string) => {
       return 'Databricks';
     case 'duckdb':
       return 'DuckDB';
+    case 'kinetica':
+      return 'Kinetica';
+    case 'mysql':
+      return 'MySQL';
     default:
       return String(connectionType).toUpperCase();
   }
@@ -74,6 +78,8 @@ const getConnectionTypeColor = (connectionType: string) => {
       return '#ff3621';
     case 'duckdb':
       return '#fff000';
+    case 'mysql':
+      return '#00758f';
     default:
       return '#666';
   }

@@ -1,12 +1,22 @@
 import React from 'react';
 import { styled } from '@mui/material/styles';
-import { Typography, Box, Button } from '@mui/material';
+import {
+  Typography,
+  Box,
+  Button,
+  FormControlLabel,
+  Switch,
+  Stack,
+} from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ConnectionCard } from '../../components/connectionCards';
 import connectionIcons from '../../../../assets/connectionIcons';
 import { Connections } from '../../components';
-import { SupportedConnectionTypes } from '../../../types/backend';
+import {
+  canUseAsDbtConnection,
+  SupportedConnectionTypes,
+} from '../../../types/backend';
 import { AppLayout } from '../../layouts';
 import { ConnectionsSidebar } from '../../components/sidebarConnections';
 
@@ -38,6 +48,7 @@ type ItemType = {
   name: string;
   img: keyof typeof connectionIcons.images;
   disabled: boolean;
+  dbtCompatible?: boolean;
 };
 
 const baseItems: ItemType[] = [
@@ -89,6 +100,12 @@ const baseItems: ItemType[] = [
     img: 'kinetica',
     disabled: false,
   },
+  {
+    id: 'mysql',
+    name: 'MySQL',
+    img: 'mysql',
+    disabled: false,
+  },
 ];
 
 const AddConnection: React.FC = () => {
@@ -98,6 +115,17 @@ const AddConnection: React.FC = () => {
   const duplicateData = location.state?.duplicateFrom;
   const suggestedName = location.state?.suggestedName;
   const [selectedItem, setSelectedItem] = React.useState<ItemType>();
+  const [onlyDbtCompatible, setOnlyDbtCompatible] = React.useState(false);
+
+  const visibleItems = React.useMemo(
+    () =>
+      baseItems.filter(
+        (item) =>
+          (!projectId || item.id !== 'sqlite') &&
+          (!onlyDbtCompatible || canUseAsDbtConnection(item.id)),
+      ),
+    [projectId, onlyDbtCompatible],
+  );
 
   // Auto-select connection type if duplicating
   React.useEffect(() => {
@@ -194,6 +222,16 @@ const AddConnection: React.FC = () => {
           />
         );
       }
+      case 'mysql': {
+        return (
+          <Connections.MySql
+            onCancel={() => setSelectedItem(undefined)}
+            projectId={projectId}
+            duplicateFrom={duplicateData}
+            suggestedName={suggestedName}
+          />
+        );
+      }
       default: {
         return (
           <Connections.Postgres
@@ -233,16 +271,35 @@ const AddConnection: React.FC = () => {
               Select a database type to create a new connection
             </Typography>
 
-            <ConnectionCardsContainer>
-              {baseItems
-                .filter((item) => !projectId || item.id !== 'sqlite')
-                .map((item, index) => (
-                  <ConnectionCard
-                    itemDetails={item}
-                    onClick={() => setSelectedItem(item)}
-                    key={index}
+            <Stack
+              direction="row"
+              alignItems="center"
+              justifyContent="flex-end"
+              sx={{ mb: 1 }}
+            >
+              <FormControlLabel
+                control={
+                  <Switch
+                    size="small"
+                    checked={onlyDbtCompatible}
+                    onChange={(e) => setOnlyDbtCompatible(e.target.checked)}
                   />
-                ))}
+                }
+                label="Only show dbt-compatible connections"
+              />
+            </Stack>
+
+            <ConnectionCardsContainer>
+              {visibleItems.map((item, index) => (
+                <ConnectionCard
+                  itemDetails={{
+                    ...item,
+                    dbtCompatible: canUseAsDbtConnection(item.id),
+                  }}
+                  onClick={() => setSelectedItem(item)}
+                  key={index}
+                />
+              ))}
             </ConnectionCardsContainer>
           </Box>
         </ConnectionContainer>

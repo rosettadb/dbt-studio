@@ -146,6 +146,9 @@ function generateJdbcUrl(
     case 'redshift':
       return `jdbc:redshift://${ev('host')}:${ev('port')}/${ev('dbname')}?currentSchema=${ev('schema')}`;
 
+    case 'mysql':
+      return `jdbc:mysql://${ev('host')}:${ev('port')}/${ev('dbname')}?useSSL=${connection.ssl ? 'true' : 'false'}&serverTimezone=UTC&useUnicode=true&characterEncoding=UTF-8`;
+
     case 'bigquery':
       return `jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=${ev('project')};OAuthType=0;OAuthServiceAcctEmail=${ev('bigquery-email')};OAuthPvtKeyPath=${ev('bigquery')};`;
 
