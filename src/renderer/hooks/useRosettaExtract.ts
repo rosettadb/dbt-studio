@@ -8,6 +8,7 @@ import {
 } from '../controllers';
 import { Project } from '../../types/backend';
 import { settingsServices } from '../services';
+import { buildKineticaUrl } from '../../shared/kineticaUrl';
 
 const useRosettaExtract = () => {
   const {
@@ -96,7 +97,7 @@ const useRosettaExtract = () => {
         snowflake: ['account', 'warehouse', 'dbname', 'schema', 'role'],
         bigquery: ['project', 'dataset'],
         databricks: ['host', 'httppath', 'catalog', 'schema'],
-        kinetica: ['host', 'port', 'dbname', 'schema'],
+        kinetica: ['host', 'port', 'url', 'dbname', 'schema'],
       };
 
       const c = conn as any;
@@ -104,6 +105,8 @@ const useRosettaExtract = () => {
         const valueMap: Record<string, string | undefined> = {
           host: c.host ? String(c.host) : undefined,
           port: c.port ? String(c.port) : undefined,
+          url:
+            c.type === 'kinetica' && c.host ? buildKineticaUrl(c) : undefined,
           dbname: c.database,
           schema: c.schema,
           account: c.account,

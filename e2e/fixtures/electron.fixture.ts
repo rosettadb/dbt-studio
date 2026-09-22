@@ -30,6 +30,14 @@ export type ElectronFixtures = {
    * up short of restarting it.
    */
   extraProjects: string[];
+  /**
+   * Mark the Quick Start tour as already seen before the renderer loads.
+   * The tour auto-opens ~700ms after the project selection screen mounts
+   * with zero projects and its full-screen overlay swallows every click, so
+   * tests that don't target it would otherwise race against it. Set to false
+   * in specs that test the tour itself.
+   */
+  skipQuickStartTour: boolean;
   /** The Electron application instance */
   electronApp: ElectronApplication;
   /** The main browser window */
@@ -43,6 +51,7 @@ export const test = base.extend<ElectronFixtures>({
   // Default to skipping setup for convenience in most tests
   autoSkipSetup: [true, { option: true }],
   extraProjects: [[], { option: true }],
+  skipQuickStartTour: [true, { option: true }],
 
   // Create isolated userData directory for each test
   // biome-ignore lint/complexity/noEmptyPattern: Playwright requires object destructuring
@@ -70,7 +79,7 @@ export const test = base.extend<ElectronFixtures>({
 
   // Launch Electron app
   electronApp: async (
-    { userData, autoSkipSetup, extraProjects },
+    { userData, autoSkipSetup, extraProjects, skipQuickStartTour },
     use,
     testInfo,
   ) => {
@@ -173,6 +182,15 @@ export const test = base.extend<ElectronFixtures>({
         }),
       },
     });
+
+    // The splash window is already open at this point, but the main/setup
+    // window is created a few seconds later, so an init script registered now
+    // runs before the React app in that window mounts.
+    if (skipQuickStartTour) {
+      await electronApp.context().addInitScript(() => {
+        window.localStorage.setItem('dbt-studio-quickstart-tour-seen', 'true');
+      });
+    }
 
     // Playwright's config-level `trace: 'on'` only auto-attaches snapshot
     // and screenshot capture to contexts created through its own built-in

@@ -160,6 +160,59 @@ describe('DbtCoreVersionService', () => {
     );
   });
 
+  it('installs dbt-kinetica from its GitHub source archive', async () => {
+    mockCommands([
+      { exitCode: 0 },
+      { exitCode: 0, stdout: 'Name: dbt-kinetica\nVersion: 0.1.0\n' },
+    ]);
+
+    const result = await DbtCoreVersionService.installLatestPackage({
+      pythonPath,
+      packageName: 'dbt-kinetica',
+    });
+
+    expect(result).toEqual({ ok: true, installedVersion: '0.1.0' });
+    expect(spawnMock).toHaveBeenNthCalledWith(
+      1,
+      pythonPath,
+      [
+        '-m',
+        'pip',
+        'install',
+        '--upgrade',
+        '--no-cache-dir',
+        'dbt-kinetica @ https://github.com/rosettadb/kinetica-dbt-adapter/archive/92f4866dad614d24aa1f771585d249ab30a4ac6a.zip',
+      ],
+      { shell: false },
+    );
+    expect(spawnMock).toHaveBeenNthCalledWith(
+      2,
+      pythonPath,
+      ['-m', 'pip', 'show', 'dbt-kinetica'],
+      { shell: false },
+    );
+  });
+
+  it('does not offer PyPI versions or pinned installs for dbt-kinetica', async () => {
+    const versions =
+      await DbtCoreVersionService.listPackageVersions('dbt-kinetica');
+    expect(versions).toEqual({
+      packageName: 'dbt-kinetica',
+      versions: [],
+      latestStable: null,
+    });
+    expect(axiosGetMock).not.toHaveBeenCalled();
+
+    const pinned = await DbtCoreVersionService.installPackageVersion({
+      pythonPath,
+      packageName: 'dbt-kinetica',
+      version: '0.1.0',
+    });
+    expect(pinned.ok).toBe(false);
+    expect(pinned.error).toContain('Install latest');
+    expect(spawnMock).not.toHaveBeenCalled();
+  });
+
   it('rejects versions that are not exact package versions', async () => {
     const result = await DbtCoreVersionService.installDbtCoreVersion({
       pythonPath,
@@ -253,6 +306,7 @@ describe('DbtCoreVersionService', () => {
   it('returns installed adapter warnings for a v2 preview plan', async () => {
     mockCommands([
       { exitCode: 0, stdout: 'Name: dbt-postgres\nVersion: 1.9.0\n' },
+      { exitCode: 1 },
       { exitCode: 1 },
       { exitCode: 1 },
       { exitCode: 1 },

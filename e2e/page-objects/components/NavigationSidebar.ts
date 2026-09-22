@@ -11,12 +11,23 @@ import { BasePage } from '../BasePage';
 export type NavItem =
   | 'files'
   | 'sql'
-  | 'connections'
+  | 'notebooks'
   | 'cloud-explorer'
   | 'data-lake'
-  | 'chat'
-  | 'settings'
-  | 'lineage';
+  | 'flows'
+  | 'connections'
+  | 'settings';
+
+export const NAV_ITEMS: NavItem[] = [
+  'files',
+  'sql',
+  'notebooks',
+  'cloud-explorer',
+  'data-lake',
+  'flows',
+  'connections',
+  'settings',
+];
 
 export class NavigationSidebarComponent extends BasePage {
   // Container
@@ -27,29 +38,29 @@ export class NavigationSidebarComponent extends BasePage {
 
   readonly sqlNavItem: Locator;
 
-  readonly connectionsNavItem: Locator;
+  readonly notebooksNavItem: Locator;
 
   readonly cloudExplorerNavItem: Locator;
 
   readonly dataLakeNavItem: Locator;
 
-  readonly chatNavItem: Locator;
+  readonly flowsNavItem: Locator;
+
+  readonly connectionsNavItem: Locator;
 
   readonly settingsNavItem: Locator;
 
-  readonly lineageNavItem: Locator;
-
   constructor(page: Page) {
     super(page);
-    this.container = this.getByTestId('navigation-sidebar');
+    this.container = this.getByTestId('sidebar');
     this.filesNavItem = this.getByTestId('nav-item-files');
     this.sqlNavItem = this.getByTestId('nav-item-sql');
-    this.connectionsNavItem = this.getByTestId('nav-item-connections');
+    this.notebooksNavItem = this.getByTestId('nav-item-notebooks');
     this.cloudExplorerNavItem = this.getByTestId('nav-item-cloud-explorer');
     this.dataLakeNavItem = this.getByTestId('nav-item-data-lake');
-    this.chatNavItem = this.getByTestId('nav-item-chat');
+    this.flowsNavItem = this.getByTestId('nav-item-flows');
+    this.connectionsNavItem = this.getByTestId('nav-item-connections');
     this.settingsNavItem = this.getByTestId('nav-item-settings');
-    this.lineageNavItem = this.getByTestId('nav-item-lineage');
   }
 
   // ==================== Actions ====================
@@ -70,82 +81,75 @@ export class NavigationSidebarComponent extends BasePage {
   }
 
   /**
-   * Navigate to the SQL Editor section
+   * Navigate to the SQL Editor
    */
   async goToSqlEditor(): Promise<void> {
     await this.sqlNavItem.click();
   }
 
   /**
-   * Navigate to the Connections section
+   * Navigate to Notebooks
+   */
+  async goToNotebooks(): Promise<void> {
+    await this.notebooksNavItem.click();
+  }
+
+  /**
+   * Navigate to Connections
    */
   async goToConnections(): Promise<void> {
     await this.connectionsNavItem.click();
   }
 
   /**
-   * Navigate to the Cloud Explorer section
+   * Navigate to Cloud Explorer
    */
   async goToCloudExplorer(): Promise<void> {
     await this.cloudExplorerNavItem.click();
   }
 
   /**
-   * Navigate to the DataLake section
+   * Navigate to Data Lake
    */
   async goToDataLake(): Promise<void> {
     await this.dataLakeNavItem.click();
   }
 
   /**
-   * Navigate to the AI Chat section
+   * Navigate to Flows
    */
-  async goToChat(): Promise<void> {
-    await this.chatNavItem.click();
+  async goToFlows(): Promise<void> {
+    await this.flowsNavItem.click();
   }
 
   /**
-   * Navigate to the Settings section
+   * Navigate to Settings
    */
   async goToSettings(): Promise<void> {
     await this.settingsNavItem.click();
   }
 
-  /**
-   * Navigate to the Lineage section
-   */
-  async goToLineage(): Promise<void> {
-    await this.lineageNavItem.click();
-  }
-
   // ==================== Getters ====================
 
   /**
-   * Get the currently active navigation item
+   * Get the currently active navigation items.
+   *
+   * Nav items are react-router NavLinks, which receive the `active` class
+   * when their route matches. The Files item points at `/app` and matches
+   * every `/app/*` route, so it is usually active alongside the current one.
    */
-  async getActiveItem(): Promise<NavItem | null> {
-    const items: NavItem[] = [
-      'files',
-      'sql',
-      'connections',
-      'cloud-explorer',
-      'data-lake',
-      'chat',
-      'settings',
-      'lineage',
-    ];
-
+  async getActiveItems(): Promise<NavItem[]> {
+    const active: NavItem[] = [];
     // eslint-disable-next-line no-restricted-syntax
-    for (const item of items) {
+    for (const item of NAV_ITEMS) {
       const navItem = this.getByTestId(`nav-item-${item}`);
       // eslint-disable-next-line no-await-in-loop
-      const isActive = await navItem.getAttribute('data-active');
-      if (isActive === 'true') {
-        return item;
+      const className = (await navItem.getAttribute('class')) || '';
+      if (className.split(/\s+/).includes('active')) {
+        active.push(item);
       }
     }
-
-    return null;
+    return active;
   }
 
   // ==================== Assertions ====================
@@ -162,7 +166,7 @@ export class NavigationSidebarComponent extends BasePage {
    */
   async expectActiveItem(item: NavItem): Promise<void> {
     const navItem = this.getByTestId(`nav-item-${item}`);
-    await expect(navItem).toHaveAttribute('data-active', 'true');
+    await expect(navItem).toHaveClass(/(^|\s)active(\s|$)/);
   }
 
   /**
@@ -170,8 +174,7 @@ export class NavigationSidebarComponent extends BasePage {
    */
   async expectNotActiveItem(item: NavItem): Promise<void> {
     const navItem = this.getByTestId(`nav-item-${item}`);
-    const isActive = await navItem.getAttribute('data-active');
-    expect(isActive).not.toBe('true');
+    await expect(navItem).not.toHaveClass(/(^|\s)active(\s|$)/);
   }
 
   /**
