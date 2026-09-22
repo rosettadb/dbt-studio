@@ -1,14 +1,14 @@
 /**
  * Quick Start Tour Tests
  *
- * The tour auto-opens on the project selection screen when there are no
+ * The tour auto-opens on the Home screen (dashboard) when there are no
  * projects and it has not been seen before. Its overlay blocks the whole
  * page until it is skipped or completed. The fixture suppresses it by
  * default; these specs opt back in.
  */
 
 import { test, expect } from '../../fixtures/electron.fixture';
-import { openProjectSelection } from '../../helpers/window.helper';
+import { openHome } from '../../helpers/window.helper';
 import { QuickStartTourComponent } from '../../page-objects/components/QuickStartTour';
 import { ProjectSelectionPage } from '../../page-objects/screens/ProjectSelection';
 
@@ -18,7 +18,7 @@ test.describe('Quick Start Tour', () => {
   test('should open automatically for a new user with no projects', async ({
     electronApp,
   }) => {
-    const window = await openProjectSelection(electronApp);
+    const window = await openHome(electronApp);
     const tour = new QuickStartTourComponent(window);
 
     await tour.expectVisible();
@@ -32,52 +32,56 @@ test.describe('Quick Start Tour', () => {
   test('should block the page underneath until dismissed', async ({
     electronApp,
   }) => {
-    const window = await openProjectSelection(electronApp);
+    const window = await openHome(electronApp);
     const tour = new QuickStartTourComponent(window);
     const projectSelection = new ProjectSelectionPage(window);
 
     await tour.expectVisible();
 
     // The overlay intercepts pointer events, so a normal click never lands
+    const openProjectBtn = window.locator('[data-tour="tour-open-project-btn"]');
     await expect(
-      projectSelection.createProjectBtn.click({ timeout: 1500 }),
+      openProjectBtn.click({ timeout: 1500 }),
     ).rejects.toThrow();
 
     await tour.skip();
     await tour.expectHidden();
 
     // Now the page is interactive again
-    await projectSelection.clickCreateProject();
-    await expect(
-      window.locator('[data-testid="project-name-input"]'),
-    ).toBeVisible();
+    await openProjectBtn.click();
+    await expect(projectSelection.container).toBeVisible();
   });
 
   test('should step forward and back through the tour', async ({
     electronApp,
   }) => {
-    const window = await openProjectSelection(electronApp);
+    const window = await openHome(electronApp);
     const tour = new QuickStartTourComponent(window);
 
     await tour.expectStep(1);
     await tour.letsGo();
     await tour.expectStep(2);
     await expect(
-      window.getByRole('heading', { name: 'Your Projects' }),
+      window.getByRole('heading', { name: 'Workspace Overview' }),
     ).toBeVisible();
+    await expect(window.getByText('Your Home Screen')).toBeVisible();
 
     await tour.next();
     await tour.expectStep(3);
+    await expect(window.getByText('Studio Modules').first()).toBeVisible();
+
+    await tour.next();
+    await tour.expectStep(4);
     await expect(
-      window.getByRole('heading', { name: 'Create a New Project' }),
+      window.getByText('Recent Projects', { exact: true }),
     ).toBeVisible();
 
     await tour.back();
-    await tour.expectStep(2);
+    await tour.expectStep(3);
   });
 
   test('should mark the tour as seen when skipped', async ({ electronApp }) => {
-    const window = await openProjectSelection(electronApp);
+    const window = await openHome(electronApp);
     const tour = new QuickStartTourComponent(window);
 
     await tour.expectVisible();
@@ -90,7 +94,7 @@ test.describe('Quick Start Tour', () => {
   test('should close with the skip icon at any step', async ({
     electronApp,
   }) => {
-    const window = await openProjectSelection(electronApp);
+    const window = await openHome(electronApp);
     const tour = new QuickStartTourComponent(window);
 
     await tour.letsGo();
@@ -102,7 +106,7 @@ test.describe('Quick Start Tour', () => {
   });
 
   test('should finish with Done on the last step', async ({ electronApp }) => {
-    const window = await openProjectSelection(electronApp);
+    const window = await openHome(electronApp);
     const tour = new QuickStartTourComponent(window);
 
     await tour.letsGo();
@@ -128,7 +132,7 @@ test.describe('Quick Start Tour', () => {
     test('should not open when the user already has projects', async ({
       electronApp,
     }) => {
-      const window = await openProjectSelection(electronApp);
+      const window = await openHome(electronApp);
       const tour = new QuickStartTourComponent(window);
 
       // Give the 700ms auto-open timer a chance to fire
@@ -144,7 +148,7 @@ test.describe('Quick Start Tour - fixture default', () => {
   test('should be suppressed by the fixture for ordinary specs', async ({
     electronApp,
   }) => {
-    const window = await openProjectSelection(electronApp);
+    const window = await openHome(electronApp);
     const tour = new QuickStartTourComponent(window);
 
     await window.waitForTimeout(1500);

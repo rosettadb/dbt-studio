@@ -7,6 +7,7 @@ import {
   ElectricalServices as ElectricalServicesIcon,
   LibraryBooks,
   Settings,
+  Home as HomeMuiIcon,
 } from '@mui/icons-material';
 import { useTheme } from '@mui/material/styles';
 import { icons } from '../../../../assets';
@@ -151,3 +152,5 @@ export const FlowsIcon: React.FC = () => {
     />
   );
 };
+
+export const HomeIcon: React.FC = () => <HomeMuiIcon color="primary" />;

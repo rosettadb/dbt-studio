@@ -37,7 +37,28 @@ export const findStableWindow = async (
 };
 
 /**
- * Land on the project selection screen with setup skipped.
+ * Land on the Home screen (dashboard) with setup skipped. Home is the app's
+ * default route, so this simply waits for the workspace overview to mount.
+ */
+export const openHome = async (
+  electronApp: ElectronApplication,
+): Promise<Page> => {
+  const window = await findStableWindow(electronApp);
+  await window.waitForLoadState('domcontentloaded');
+
+  const appHelper = new AppHelper(electronApp, window);
+  await appHelper.skipSetupIfPresent();
+
+  await window.waitForSelector('[data-tour="tour-workspace-overview"]', {
+    timeout: 10000,
+  });
+  return window;
+};
+
+/**
+ * Land on the project selection screen with setup skipped. The app opens on
+ * the Home screen, so when the selection screen is not already mounted we take
+ * the "Open Project" shortcut from Home.
  */
 export const openProjectSelection = async (
   electronApp: ElectronApplication,
@@ -47,6 +68,19 @@ export const openProjectSelection = async (
 
   const appHelper = new AppHelper(electronApp, window);
   await appHelper.skipSetupIfPresent();
+
+  const selection = window.locator('[data-testid="project-selection"]');
+  const home = window.locator('[data-tour="tour-workspace-overview"]');
+
+  await Promise.race([
+    selection.waitFor({ state: 'visible', timeout: 10000 }),
+    home.waitFor({ state: 'visible', timeout: 10000 }),
+  ]);
+
+  if (await home.isVisible().catch(() => false)) {
+    await appHelper.dismissQuickStartTourIfPresent();
+    await window.locator('[data-tour="tour-open-project-btn"]').click();
+  }
 
   await window.waitForSelector('[data-testid="project-selection"]', {
     timeout: 10000,
@@ -77,5 +111,9 @@ export const openProject = async (
   await expect(window.locator('[data-testid="sidebar"]')).toBeVisible({
     timeout: 30000,
   });
+
+  // The app opens on the Home screen, so enter the selected project's
+  // workspace to mount the project-scoped chrome (file tree, dbt actions).
+  await window.locator('[data-testid="nav-item-files"]').click();
   return window;
 };

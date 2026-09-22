@@ -7,10 +7,11 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckIcon from '@mui/icons-material/Check';
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
-import AddIcon from '@mui/icons-material/Add';
 import ElectricalServicesIcon from '@mui/icons-material/ElectricalServices';
-import SearchIcon from '@mui/icons-material/Search';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import SpaceDashboardIcon from '@mui/icons-material/SpaceDashboard';
+import AppsIcon from '@mui/icons-material/Apps';
+import MenuIcon from '@mui/icons-material/Menu';
 
 const TOUR_SEEN_KEY = 'dbt-studio-quickstart-tour-seen';
 
@@ -51,61 +52,61 @@ const TOUR_STEPS: TourStep[] = [
   {
     title: 'Welcome to DBT Studio! 🎉',
     description:
-      "We'll give you a quick tour of the key features so you can hit the ground running. This only takes about 30 seconds.",
+      "We'll give you a quick tour of the home screen and the key features so you can hit the ground running. This only takes about 30 seconds.",
     icon: <AutoAwesomeIcon sx={{ fontSize: 40, color: '#4f83cc' }} />,
     placement: 'center',
   },
   {
-    targetId: 'tour-projects-area',
-    title: 'Your Projects',
+    targetId: 'tour-workspace-overview',
+    title: 'Your Home Screen',
     description:
-      'This is your project workspace. All your dbt projects live here. Click any project to open it and start working.',
-    icon: <FolderOpenIcon sx={{ fontSize: 28, color: '#4f83cc' }} />,
+      'This is your workspace overview. From here you can jump into any module, open your projects, or manage your database connections.',
+    icon: <SpaceDashboardIcon sx={{ fontSize: 28, color: '#4f83cc' }} />,
     placement: 'bottom',
     padding: 12,
   },
   {
-    targetId: 'tour-new-project-btn',
-    title: 'Create a New Project',
+    targetId: 'tour-modules-area',
+    title: 'Studio Modules',
     description:
-      'Click here to create a brand new dbt project from scratch. Give it a name, choose a location, and optionally link a database connection.',
-    icon: <AddIcon sx={{ fontSize: 28, color: '#4f83cc' }} />,
+      'These cards give you one-click access to every tool — SQL Editor, Notebooks, Analytics, Data Lake, Pipeline, and more. Click any card to jump in.',
+    icon: <AppsIcon sx={{ fontSize: 28, color: '#4f83cc' }} />,
     placement: 'bottom',
-    padding: 8,
+    padding: 12,
   },
   {
-    targetId: 'tour-get-started-btn',
-    title: 'Get Started Fast',
+    targetId: 'tour-recent-projects',
+    title: 'Recent Projects',
     description:
-      'New to dbt Studio? Import a pre-built example project with sample data and dbt models — ready to explore instantly. Perfect for learning the ropes.',
-    icon: <RocketLaunchIcon sx={{ fontSize: 28, color: '#4f83cc' }} />,
-    placement: 'bottom',
-    padding: 8,
-  },
-  {
-    targetId: 'tour-import-btn',
-    title: 'Import an Existing Project',
-    description:
-      'Already have a dbt project on your machine? Use Import to load it directly from your filesystem or from a compressed archive (.zip, .tar.gz).',
+      'Your projects live here. Click any project to open it and pick up right where you left off.',
     icon: <FolderOpenIcon sx={{ fontSize: 28, color: '#4f83cc' }} />,
-    placement: 'bottom',
-    padding: 8,
+    placement: 'top',
+    padding: 12,
   },
   {
-    targetId: 'tour-connections-nav',
+    targetId: 'tour-configured-connections',
     title: 'Database Connections',
     description:
-      'Manage your database connections here — connect to BigQuery, Snowflake, DuckDB, Redshift, and more. Connections can be shared across multiple projects.',
+      'Your configured connections are listed here — BigQuery, Snowflake, DuckDB, Redshift, and more. Add or manage them anytime.',
     icon: <ElectricalServicesIcon sx={{ fontSize: 28, color: '#4f83cc' }} />,
+    placement: 'top',
+    padding: 12,
+  },
+  {
+    targetId: 'tour-sidebar-nav',
+    title: 'Navigate the App',
+    description:
+      'Use the sidebar to move around DBT Studio at any time — Home, your project, and every module are just a click away.',
+    icon: <MenuIcon sx={{ fontSize: 28, color: '#4f83cc' }} />,
     placement: 'right',
     padding: 8,
   },
   {
-    targetId: 'tour-search-bar',
+    targetId: 'tour-open-project-btn',
     title: "You're All Set! 🚀",
     description:
-      'Start by creating your first project or importing an existing one. Use the search bar to quickly find projects as your list grows. Happy building!',
-    icon: <SearchIcon sx={{ fontSize: 28, color: '#4caf50' }} />,
+      'Start by creating your first project or importing an existing one — the Open Project button takes you to the project manager. Happy building!',
+    icon: <RocketLaunchIcon sx={{ fontSize: 28, color: '#4caf50' }} />,
     placement: 'bottom',
     padding: 8,
   },
