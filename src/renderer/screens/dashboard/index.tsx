@@ -97,7 +97,7 @@ const features = [
     description:
       'Manage and explore your dbt models, sources, and documentation.',
     icon: DbtCardIcon,
-    path: '/select-project',
+    path: '/app/select-project',
   },
   {
     id: 'notebook',
@@ -280,7 +280,7 @@ const Dashboard: React.FC = () => {
           <Button
             variant="outlined"
             startIcon={<FolderOpenIcon />}
-            onClick={() => handleFeatureClick('/select-project')}
+            onClick={() => handleFeatureClick('/app/select-project')}
             data-tour="tour-open-project-btn"
             sx={{
               borderColor: theme.palette.divider,
@@ -472,7 +472,7 @@ const Dashboard: React.FC = () => {
               </Typography>
               <Button
                 size="small"
-                onClick={() => navigate('/select-project')}
+                onClick={() => navigate('/app/select-project')}
                 sx={{
                   textTransform: 'none',
                   color: theme.palette.primary.main,

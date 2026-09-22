@@ -319,7 +319,7 @@ const SelectProject: React.FC = () => {
       setNewProject({ name: '', createTemplateFolders: true });
       setSelectedConnection('');
       setConnectionType('standard');
-      navigate('/app/loading');
+      navigate('/app/select-project');
     } catch (error) {
       toast.error(
         `Failed to create project: ${error instanceof Error ? error.message : 'Unknown error'}`,
