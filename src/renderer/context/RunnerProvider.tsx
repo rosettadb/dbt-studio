@@ -211,7 +211,7 @@ export const RunnerProvider: React.FC<RunnerProviderProps> = ({ children }) => {
             snowflake: ['account', 'warehouse', 'dbname', 'schema', 'role'],
             bigquery: ['project', 'dataset'],
             databricks: ['host', 'httppath', 'catalog', 'schema'],
-            kinetica: ['host', 'port', 'dbname', 'schema'],
+            kinetica: ['host', 'port', 'url', 'dbname', 'schema'],
           };
           const fields = fieldMap[connType] || [];
           const fieldPromises = fields.map(async (field) => {
