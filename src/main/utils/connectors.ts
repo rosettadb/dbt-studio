@@ -21,6 +21,68 @@ import {
 import { SNOWFLAKE_TYPE_MAP } from './constants';
 import SecureStorageService from '../services/secureStorage.service';
 
+// ─── Snowflake SSO URL fix (legacy — no-op for oauth_authorization_code) ───────
+// NOTE: The web_browser auth mode now uses OAUTH_AUTHORIZATION_CODE
+// (Snowflake Local Application OAuth via SNOWFLAKE$LOCAL_APPLICATION), which
+// redirects to http://127.0.0.1:<port> — NOT to /fed/login. The monkey-patch
+// below is therefore a no-op for the current flow.
+//
+// It is kept as a safety net in case a future code path reintroduces
+// EXTERNALBROWSER (which hits /fed/login and has the org-account URL bug).
+//
+// Bug that it fixes (externalbrowser only):
+//   xwtfxpq-nt22728.eu-central-2.aws.snowflakecomputing.com/fed/login  ❌
+//   xwtfxpq-nt22728.snowflakecomputing.com/fed/login                   ✅
+const fixSnowflakeSsoUrl = (url: string): string => {
+  if (!url || !url.includes('snowflakecomputing.com/fed/login')) return url;
+  const fixed = url.replace(
+    /([a-z0-9]+-[a-z0-9]+)\.[a-z0-9-]+\.(aws|azure|gcp)\.snowflakecomputing\.com/gi,
+    '$1.snowflakecomputing.com',
+  );
+  if (fixed !== url) {
+    // eslint-disable-next-line no-console
+    console.info('[Snowflake] Fixed SSO URL:', fixed);
+  }
+  return fixed;
+};
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const childProcessModule = require('child_process');
+
+const origSpawn = childProcessModule.spawn.bind(childProcessModule);
+childProcessModule.spawn = function spawnOverride(
+  cmd: string,
+  args: any[],
+  opts?: any,
+) {
+  if (cmd === 'open' && Array.isArray(args)) {
+    const fixedArgs = args.map((arg) =>
+      typeof arg === 'string' ? fixSnowflakeSsoUrl(arg) : arg,
+    );
+    return origSpawn(cmd, fixedArgs, opts);
+  }
+  return origSpawn(cmd, args, opts);
+};
+const origExec = childProcessModule.exec.bind(childProcessModule);
+childProcessModule.exec = function execOverride(cmd: string, ...rest: any[]) {
+  let finalCmd = cmd;
+  if (typeof cmd === 'string') {
+    finalCmd = cmd.replace(
+      /"(https?:\/\/[^"]*snowflakecomputing\.com\/fed\/login[^"]*)"/gi,
+      (m: string, u: string) => `"${fixSnowflakeSsoUrl(u)}"`,
+    );
+  }
+  return origExec(finalCmd, ...rest);
+};
+
+// Extend the browser OAuth timeout to 2 minutes globally.
+// In snowflake-sdk v2.x the per-connection `browserActionTimeout` option is
+// ignored — only the global configure call is respected.
+snowflake.configure({
+  browserActionTimeout: 120000,
+} as any);
+// ──────────────────────────────────────────────────────────────────────────────
+
 export async function testPostgresConnection(
   config: PostgresConnection,
 ): Promise<boolean> {
@@ -171,6 +233,28 @@ const getSnowflakeAuthMethod = (
 ): SnowflakeAuthMethod =>
   config.authMethod === 'web_browser' ? 'web_browser' : 'password';
 
+/**
+ * Normalizes a Snowflake account string into the compact locator format
+ * that the Node.js SDK and EXTERNALBROWSER auth require.
+ *
+ * Handles inputs like:
+ *   - "xy12345.us-east-2.aws"           → "xy12345.us-east-2.aws"  (unchanged)
+ *   - "https://xy12345.snowflakecomputing.com" → "xy12345"
+ *   - "XWTFXPQ-NT22728"                → "XWTFXPQ-NT22728"  (org-account, passed through)
+ *   - "GZ12955"                         → "GZ12955"  (short locator, passed through)
+ */
+const normalizeSnowflakeAccount = (account: string): string => {
+  if (!account) return account;
+  let s = account.trim();
+  // Strip protocol
+  s = s.replace(/^https?:\/\//i, '');
+  // Strip .snowflakecomputing.com suffix
+  s = s.replace(/\.snowflakecomputing\.com\/?$/i, '');
+  // Strip trailing slash
+  s = s.replace(/\/$/, '');
+  return s;
+};
+
 const sanitizeSnowflakeMessage = (message?: string) =>
   (message || 'Unknown Snowflake connection error').replace(/\s+/g, ' ').trim();
 
@@ -233,6 +317,26 @@ const normalizeSnowflakeError = (
     };
   }
 
+  // "This URL is not recognized" / redirect errors from Snowflake SSO page —
+  // almost always caused by a wrong account locator being passed to the SDK.
+  if (
+    authMethod === 'web_browser' &&
+    (lowercaseMessage.includes('url') ||
+      lowercaseMessage.includes('redirect') ||
+      lowercaseMessage.includes('not recognized') ||
+      lowercaseMessage.includes('idp') ||
+      lowercaseMessage.includes('identity provider'))
+  ) {
+    return {
+      ok: false,
+      code,
+      message: 'Snowflake SSO redirect failed',
+      details:
+        'The Account Locator value may be incorrect. Open Snowflake \u2192 Admin \u2192 Accounts, find your account row, and use the value in the "Locator" column (e.g. GZ12955 or xy12345.us-east-2.aws).',
+      authFlow,
+    };
+  }
+
   if (
     lowercaseMessage.includes('account') ||
     lowercaseMessage.includes('incorrect username or password') ||
@@ -272,10 +376,17 @@ const createSnowflakeConnection = (config: SnowflakeConnection) => {
   };
 
   if (authMethod === 'web_browser') {
+    // Snowflake Local Application OAuth via SNOWFLAKE$LOCAL_APPLICATION built-in integration.
+    // The SDK opens the user's browser to Snowflake's own login page (username + password + MFA).
+    // No external IdP (Okta, Azure AD) required — this is NOT the same as externalbrowser/SSO.
+    const resolvedAccount = normalizeSnowflakeAccount(config.account);
+
     return snowflake.createConnection({
       ...baseConfig,
-      account: config.accountLocator || config.account,
-      authenticator: 'EXTERNALBROWSER',
+      account: resolvedAccount,
+      authenticator: 'OAUTH_AUTHORIZATION_CODE',
+      browserActionTimeout: 120000,
+      clientStoreTemporaryCredential: true, // Caches the token so SQL Editor doesn't prompt again
     });
   }
 

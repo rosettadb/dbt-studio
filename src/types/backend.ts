@@ -39,7 +39,6 @@ export type SnowflakeAuthMethod = 'password' | 'web_browser';
 export type SnowflakeConnection = ConnectionBase & {
   type: 'snowflake';
   account: string;
-  accountLocator?: string;
   warehouse: string;
   role?: string;
   client_session_keep_alive?: boolean;
@@ -147,13 +146,14 @@ export type SnowflakeDBTConnection = Omit<DBTConnectionBase, 'password'> & {
   type: 'snowflake';
   password?: string;
   account: string;
-  accountLocator?: string;
   warehouse: string;
   role?: string;
   client_session_keep_alive?: boolean;
   query_tag?: string;
   authMethod?: SnowflakeAuthMethod;
-  authenticator?: 'externalbrowser';
+  // oauth_authorization_code = Snowflake Local Application OAuth (SNOWFLAKE$LOCAL_APPLICATION)
+  // No external IdP required. externalbrowser = legacy SSO/IdP redirect (kept for migration).
+  authenticator?: 'oauth_authorization_code' | 'externalbrowser';
 };
 
 export type BigQueryDBTConnection = DBTConnectionBase & {

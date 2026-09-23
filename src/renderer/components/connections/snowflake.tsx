@@ -26,6 +26,8 @@ import {
   useTestConnection,
   useUpdateConnection,
   useGetConnections,
+  useRevokeSnowflakeToken,
+  useHasSnowflakeToken,
 } from '../../controllers';
 import ConnectionHeader from './connection-header';
 import useSecureStorage from '../../hooks/useSecureStorage';
@@ -87,10 +89,6 @@ export const Snowflake: React.FC<Props> = ({
       existingConnection?.authMethod ??
       duplicateConnection?.authMethod ??
       'password',
-    accountLocator:
-      existingConnection?.accountLocator ??
-      duplicateConnection?.accountLocator ??
-      '',
   });
 
   const isWebBrowserAuth = formState.authMethod === 'web_browser';
@@ -144,6 +142,10 @@ export const Snowflake: React.FC<Props> = ({
         toast.error(`Configuration failed: ${error}`);
       },
     });
+
+  const { data: hasToken, refetch: refetchHasToken } = useHasSnowflakeToken();
+  const { mutate: revokeToken, isLoading: isRevoking } =
+    useRevokeSnowflakeToken();
 
   const { mutate: updateConnection, isLoading: isUpdating } =
     useUpdateConnection({
@@ -205,6 +207,24 @@ export const Snowflake: React.FC<Props> = ({
     getDatabasePassword,
   ]);
 
+  const handleRevokeToken = () => {
+    revokeToken(undefined, {
+      onSuccess: (success) => {
+        if (success) {
+          toast.success(
+            'Snowflake cached token revoked. You will be prompted to log in again.',
+          );
+          refetchHasToken();
+        } else {
+          toast.error('Failed to revoke token. Cache file might not exist.');
+        }
+      },
+      onError: (err) => {
+        toast.error(`Error revoking token: ${err.message}`);
+      },
+    });
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormState((prev) => ({ ...prev, [name]: value }));
@@ -242,11 +262,6 @@ export const Snowflake: React.FC<Props> = ({
       formState.name,
     );
     await setConnectionField('account', formState.account, formState.name);
-    await setConnectionField(
-      'accountLocator',
-      formState.accountLocator || '',
-      formState.name,
-    );
     await setConnectionField('warehouse', formState.warehouse, formState.name);
     await setConnectionField('dbname', formState.database, formState.name);
     await setConnectionField('schema', formState.schema, formState.name);
@@ -346,7 +361,8 @@ export const Snowflake: React.FC<Props> = ({
           onChange={handleChange}
           fullWidth
           required
-          placeholder="xy12345.us-east-2.aws"
+          placeholder="xy12345.us-east-2.aws or ORGNAME-ACCOUNTNAME"
+          helperText="Found in Snowflake → Admin → Accounts (e.g. XWTFXPQ-NT22728)"
         />
 
         <Tabs
@@ -362,16 +378,12 @@ export const Snowflake: React.FC<Props> = ({
         </Tabs>
 
         {isWebBrowserAuth && (
-          <TextField
-            label="Account Locator"
-            name="accountLocator"
-            value={formState.accountLocator || ''}
-            onChange={handleChange}
-            fullWidth
-            required
-            placeholder="e.g. GZ12955"
-            helperText="Required for Web Browser authentication. Enter your Snowflake Account Locator."
-          />
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            Uses your Account Identifier with{' '}
+            <code>authenticator = &quot;oauth_authorization_code&quot;</code>.
+            Snowflake will securely open your browser to its login page (with
+            MFA support) during connection tests and dbt runs.
+          </Typography>
         )}
 
         <TextField
@@ -456,9 +468,9 @@ export const Snowflake: React.FC<Props> = ({
           sx={{
             mt: 3,
             display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'flex-start',
-            gap: 1,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 2,
           }}
         >
           <Button
@@ -503,6 +515,19 @@ export const Snowflake: React.FC<Props> = ({
             <Typography variant="body2" color="text.secondary">
               Waiting for browser authentication to complete...
             </Typography>
+          )}
+
+          {isWebBrowserAuth && hasToken && (
+            <Button
+              type="button"
+              variant="outlined"
+              color="error"
+              onClick={handleRevokeToken}
+              disabled={isRevoking || isTesting}
+              sx={{ ml: 'auto' }}
+            >
+              {isRevoking ? 'Revoking...' : 'Revoke Token'}
+            </Button>
           )}
         </Box>
       </Box>

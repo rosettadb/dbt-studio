@@ -103,6 +103,8 @@ export type ConnectorChannels =
   | 'connector:get'
   | 'connector:update'
   | 'connector:delete'
+  | 'connector:revokeSnowflakeToken'
+  | 'connector:hasSnowflakeToken'
   | 'connector:cancel-query'
   | 'connector:extractSchema'
   | 'connector:updateQuery'

@@ -21,7 +21,10 @@ export default class SnowflakeExtractor {
       account: config.account,
       username: config.username,
       ...(authMethod === 'web_browser'
-        ? { authenticator: 'EXTERNALBROWSER' as const }
+        ? {
+            authenticator: 'OAUTH_AUTHORIZATION_CODE' as const,
+            clientStoreTemporaryCredential: true, // Use the token cached by the initial connection
+          }
         : { password: config.password }),
       warehouse: config.warehouse,
       database: config.database,

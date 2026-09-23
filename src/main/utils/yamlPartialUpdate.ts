@@ -70,7 +70,8 @@ function generateProfileOutputFields(
           database: envVar('dbname'),
           warehouse: envVar('warehouse'),
           schema: envVar('schema'),
-          authenticator: 'externalbrowser',
+          // Snowflake Local Application OAuth (SNOWFLAKE$LOCAL_APPLICATION built-in)
+          authenticator: 'oauth_authorization_code',
         };
       }
       return {
@@ -155,7 +156,7 @@ function generateJdbcUrl(
       return `jdbc:postgresql://${ev('host')}:${ev('port')}/${ev('dbname')}?currentSchema=${ev('schema')}`;
 
     case 'snowflake':
-      return `jdbc:snowflake://${ev('account')}.snowflakecomputing.com/?warehouse=${ev('warehouse')}&db=${ev('dbname')}&schema=${ev('schema')}${(connection as SnowflakeConnection).authMethod === 'web_browser' ? '&authenticator=externalbrowser' : ''}`;
+      return `jdbc:snowflake://${ev('account')}.snowflakecomputing.com/?warehouse=${ev('warehouse')}&db=${ev('dbname')}&schema=${ev('schema')}${(connection as SnowflakeConnection).authMethod === 'web_browser' ? '&authenticator=oauth_authorization_code' : ''}`;
 
     case 'redshift':
       return `jdbc:redshift://${ev('host')}:${ev('port')}/${ev('dbname')}?currentSchema=${ev('schema')}`;
@@ -242,7 +243,8 @@ export async function updateProfilesYml(
     if (connection.type === 'snowflake') {
       if ((connection as SnowflakeConnection).authMethod === 'web_browser') {
         delete profiles[projectName].outputs.dev.password;
-        profiles[projectName].outputs.dev.authenticator = 'externalbrowser';
+        // Snowflake Local Application OAuth (SNOWFLAKE$LOCAL_APPLICATION built-in)
+        profiles[projectName].outputs.dev.authenticator = 'oauth_authorization_code';
       } else {
         delete profiles[projectName].outputs.dev.authenticator;
       }
@@ -346,7 +348,8 @@ export async function updateMainConf(
         connection.authMethod === 'web_browser'
       ) {
         delete connectionEntry.password;
-        connectionEntry.authenticator = 'externalbrowser';
+        // Snowflake Local Application OAuth (SNOWFLAKE$LOCAL_APPLICATION built-in)
+        connectionEntry.authenticator = 'oauth_authorization_code';
       } else {
         connectionEntry.password = ev('password');
         delete connectionEntry.authenticator;

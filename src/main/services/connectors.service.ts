@@ -674,6 +674,59 @@ export default class ConnectorsService {
   }
 
   /**
+   * Check if Snowflake Local Application OAuth Token exists
+   */
+  static async hasSnowflakeToken(): Promise<boolean> {
+    try {
+      let cacheDir = '';
+      if (process.platform === 'win32') {
+        cacheDir = path.join(
+          process.env.USERPROFILE || '',
+          'AppData/Local/Snowflake/Caches',
+        );
+      } else if (process.platform === 'darwin') {
+        cacheDir = path.join(os.homedir(), 'Library/Caches/Snowflake');
+      } else {
+        cacheDir = path.join(os.homedir(), '.cache/snowflake');
+      }
+
+      const cacheFile = path.join(cacheDir, 'credential_cache_v1.json');
+      return fs.existsSync(cacheFile);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
+   * Revoke Snowflake Local Application OAuth Token
+   */
+  static async revokeSnowflakeToken(): Promise<boolean> {
+    try {
+      let cacheDir = '';
+      if (process.platform === 'win32') {
+        cacheDir = path.join(
+          process.env.USERPROFILE || '',
+          'AppData/Local/Snowflake/Caches',
+        );
+      } else if (process.platform === 'darwin') {
+        cacheDir = path.join(os.homedir(), 'Library/Caches/Snowflake');
+      } else {
+        cacheDir = path.join(os.homedir(), '.cache/snowflake');
+      }
+
+      const cacheFile = path.join(cacheDir, 'credential_cache_v1.json');
+      if (fs.existsSync(cacheFile)) {
+        fs.unlinkSync(cacheFile);
+      }
+      return true;
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[ConnectorsService] Failed to revoke Snowflake token:', e);
+      return false;
+    }
+  }
+
+  /**
    * Test a connection configuration
    */
   static async testConnection(
@@ -936,7 +989,8 @@ export default class ConnectorsService {
         connection.type === 'snowflake' &&
         this.getSnowflakeAuthMethod(connection) === 'web_browser'
       ) {
-        connectionConfig.authenticator = 'externalbrowser';
+        // Snowflake Local Application OAuth (SNOWFLAKE$LOCAL_APPLICATION built-in)
+        connectionConfig.authenticator = 'oauth_authorization_code';
       } else {
         connectionConfig.password = ev('password');
       }
@@ -1011,7 +1065,7 @@ export default class ConnectorsService {
         return postgresUrl;
       }
       case 'snowflake':
-        return `jdbc:snowflake://${ev('account')}.snowflakecomputing.com/?warehouse=${ev('warehouse')}&db=${ev('dbname')}&schema=${ev('schema')}${this.getSnowflakeAuthMethod(conn) === 'web_browser' ? '&authenticator=externalbrowser' : ''}`;
+        return `jdbc:snowflake://${ev('account')}.snowflakecomputing.com/?warehouse=${ev('warehouse')}&db=${ev('dbname')}&schema=${ev('schema')}${this.getSnowflakeAuthMethod(conn) === 'web_browser' ? '&authenticator=oauth_authorization_code' : ''}`;
       case 'redshift': {
         let redshiftUrl = `jdbc:redshift://${ev('host')}:${ev('port')}/${ev('dbname')}?currentSchema=${ev('schema')}`;
 
@@ -1112,7 +1166,7 @@ export default class ConnectorsService {
       ...(connection.type === 'snowflake' &&
         this.getSnowflakeAuthMethod(connection) === 'web_browser' && {
           userName: `db-user-${connection.name}`,
-          authenticator: 'externalbrowser',
+          authenticator: 'oauth_authorization_code',
         }),
     };
   }
@@ -1126,11 +1180,12 @@ export default class ConnectorsService {
             username: `db-user-${conn.name}`,
             database: conn.database,
             schema: conn.schema,
-            account: conn.accountLocator || conn.account,
+            account: conn.account,
             warehouse: conn.warehouse,
             ...(conn.role && { role: conn.role }),
             authMethod: 'web_browser',
-            authenticator: 'externalbrowser',
+            // Snowflake Local Application OAuth (SNOWFLAKE$LOCAL_APPLICATION built-in)
+            authenticator: 'oauth_authorization_code',
           };
         }
         return {
@@ -1300,7 +1355,8 @@ export default class ConnectorsService {
             type: 'snowflake',
             account: envVar('account'),
             user: envVar('user'),
-            authenticator: 'externalbrowser',
+            // Snowflake Local Application OAuth (SNOWFLAKE$LOCAL_APPLICATION built-in)
+            authenticator: 'oauth_authorization_code',
             ...(conn.role && { role: envVar('role') }),
             warehouse: envVar('warehouse'),
             database: envVar('dbname'),

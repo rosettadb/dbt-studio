@@ -53,6 +53,14 @@ const registerConnectorsHandlers = () => {
     return ConnectorsService.testConnection(body);
   });
 
+  ipcMain.handle('connector:revokeSnowflakeToken', async () => {
+    return ConnectorsService.revokeSnowflakeToken();
+  });
+
+  ipcMain.handle('connector:hasSnowflakeToken', async () => {
+    return ConnectorsService.hasSnowflakeToken();
+  });
+
   ipcMain.handle(
     'connector:update',
     async (_event, body: UpdateConnectionBody) => {

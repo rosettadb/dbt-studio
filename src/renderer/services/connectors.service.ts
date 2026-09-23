@@ -48,6 +48,22 @@ export const testConnection = async (
   return data;
 };
 
+export const revokeSnowflakeToken = async (): Promise<boolean> => {
+  const { data } = await client.post<void, boolean>(
+    'connector:revokeSnowflakeToken',
+    undefined,
+  );
+  return data;
+};
+
+export const hasSnowflakeToken = async (): Promise<boolean> => {
+  const { data } = await client.post<void, boolean>(
+    'connector:hasSnowflakeToken',
+    undefined,
+  );
+  return data;
+};
+
 export const listConnections = async (
   includeDataLake?: boolean,
 ): Promise<ConnectionModel[]> => {

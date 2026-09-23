@@ -155,6 +155,27 @@ export const useTestConnection = (
   });
 };
 
+export const useRevokeSnowflakeToken = (): UseMutationResult<
+  boolean,
+  CustomError,
+  void
+> => {
+  return useMutation<boolean, CustomError, void>({
+    mutationFn: async () => {
+      return connectorsServices.revokeSnowflakeToken();
+    },
+  });
+};
+
+export const useHasSnowflakeToken = () => {
+  return useQuery<boolean, CustomError>({
+    queryKey: ['connector:hasSnowflakeToken'],
+    queryFn: async () => {
+      return connectorsServices.hasSnowflakeToken();
+    },
+  });
+};
+
 export const useValidateConnection = (
   customOptions?: UseMutationOptions<
     { valid: boolean; error?: string },
