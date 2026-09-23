@@ -17,6 +17,9 @@ interface PythonTextCellProps {
   /** Start in edit mode (new empty cells) */
   startEditing?: boolean;
   focusRequest?: number;
+  /** Increment to leave edit mode and show the rendered markdown */
+  renderRequest?: number;
+  onEditingChange?: (editing: boolean) => void;
 }
 
 export const PythonTextCell: React.FC<PythonTextCellProps> = ({
@@ -26,6 +29,8 @@ export const PythonTextCell: React.FC<PythonTextCellProps> = ({
   onFocus,
   startEditing,
   focusRequest,
+  renderRequest,
+  onEditingChange,
 }) => {
   const theme = useTheme();
   const [isEditing, setIsEditing] = useState(Boolean(startEditing) || !source);
@@ -37,6 +42,14 @@ export const PythonTextCell: React.FC<PythonTextCellProps> = ({
       setTimeout(() => inputRef.current?.focus(), 0);
     }
   }, [focusRequest]);
+
+  useEffect(() => {
+    if (renderRequest) setIsEditing(false);
+  }, [renderRequest]);
+
+  useEffect(() => {
+    onEditingChange?.(isEditing);
+  }, [isEditing, onEditingChange]);
 
   if (isEditing) {
     return (

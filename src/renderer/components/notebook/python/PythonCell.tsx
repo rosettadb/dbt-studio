@@ -31,6 +31,7 @@ import {
   PlayArrow,
   Stop,
   Storage,
+  Visibility,
 } from '@mui/icons-material';
 import type {
   PythonCellType,
@@ -100,6 +101,8 @@ const PythonCellComponent: React.FC<PythonCellProps> = ({
 }) => {
   const theme = useTheme();
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const [textEditing, setTextEditing] = useState(false);
+  const [renderRequest, setRenderRequest] = useState(0);
   const isSql = cell.cell_type === 'sql';
   /** Runs on the kernel and has outputs (code or sql). */
   const isCode = cell.cell_type !== 'markdown';
@@ -295,6 +298,8 @@ const PythonCellComponent: React.FC<PythonCellProps> = ({
             onFocus={onSelect}
             startEditing={startEditing}
             focusRequest={focusRequest}
+            renderRequest={renderRequest}
+            onEditingChange={setTextEditing}
           />
         )}
         {isCode && (
@@ -340,6 +345,18 @@ const PythonCellComponent: React.FC<PythonCellProps> = ({
             <ArrowDownward sx={{ fontSize: 14 }} />
           </IconButton>
         </Tooltip>
+        {!isCode && textEditing && (
+          <Tooltip title="Preview (Shift+Enter)">
+            <IconButton
+              size="small"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setRenderRequest((n) => n + 1)}
+              data-testid={`python-cell-preview-${index}`}
+            >
+              <Visibility sx={{ fontSize: 14 }} />
+            </IconButton>
+          </Tooltip>
+        )}
         <Tooltip title={isCode ? 'Convert to text' : 'Convert to code'}>
           <IconButton
             size="small"
