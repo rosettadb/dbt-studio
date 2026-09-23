@@ -244,7 +244,8 @@ export async function updateProfilesYml(
       if ((connection as SnowflakeConnection).authMethod === 'web_browser') {
         delete profiles[projectName].outputs.dev.password;
         // Snowflake Local Application OAuth (SNOWFLAKE$LOCAL_APPLICATION built-in)
-        profiles[projectName].outputs.dev.authenticator = 'oauth_authorization_code';
+        profiles[projectName].outputs.dev.authenticator =
+          'oauth_authorization_code';
       } else {
         delete profiles[projectName].outputs.dev.authenticator;
       }
