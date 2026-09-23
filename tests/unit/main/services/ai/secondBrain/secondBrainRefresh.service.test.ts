@@ -67,6 +67,11 @@ Validate revenue totals before publishing.
 
 const emptyAdditionalSources = {
   loadConnections: jest.fn(async () => []),
+  listIcebergInstances: jest.fn(async () => []),
+  getIcebergSqlSchema: jest.fn(async () => ({
+    catalogName: 'iceberg',
+    namespaces: [],
+  })),
   listNotebooks: jest.fn(async () => []),
   collectGitStatus: jest.fn(async () => ({})),
   collectDbtRuntimeEvidence: jest.fn(async () => ({
@@ -604,6 +609,85 @@ Existing guidance.
       new Set(['application', 'notebook', 'git']),
     );
     expect(JSON.stringify(capturedEvidence)).not.toContain('must-not-project');
+  });
+
+  it('collects only safe, bounded metadata for verified Iceberg connections', async () => {
+    let capturedEvidence: SecondBrainEvidenceItem[] = [];
+    const refresh = new SecondBrainRefreshService(secondBrain, {
+      ...emptyAdditionalSources,
+      generateOperations: jest.fn(async (input: any) => {
+        capturedEvidence = input.evidence;
+        return [];
+      }),
+      collectSessions: jest.fn(async () => []) as any,
+      collectAnalytics: jest.fn(async () => []) as any,
+      loadProjects: jest.fn(async () => []),
+      listIcebergInstances: jest.fn(async () => [
+        {
+          id: 'catalog-id',
+          name: 'Acceptance catalog',
+          catalogType: 'polaris',
+          sqlAvailable: true,
+          sqlUnavailableReason: undefined,
+          storageBucket: 'must-not-project',
+        },
+        {
+          id: 'unverified-id',
+          name: 'Unverified catalog',
+          catalogType: 'rest',
+          sqlAvailable: false,
+        },
+      ]) as any,
+      getIcebergSqlSchema: jest.fn(async () => ({
+        catalogName: 'iceberg',
+        namespaces: [
+          {
+            name: 'default',
+            tables: [
+              {
+                name: 'orders',
+                type: 'TABLE',
+                columns: [
+                  { name: 'id', type: 'BIGINT', position: 1 },
+                  { name: 'customer', type: 'VARCHAR', position: 2 },
+                ],
+              },
+            ],
+          },
+        ],
+      })),
+    });
+
+    await refresh.refresh({ dryRun: true });
+
+    const icebergEvidence = capturedEvidence.find(
+      (item) => item.stableId === 'connection:iceberg-catalog-id',
+    );
+    expect(icebergEvidence?.scope.connectionId).toBe('iceberg-catalog-id');
+    expect(icebergEvidence?.projection).toMatchObject({
+      name: 'Acceptance catalog',
+      type: 'iceberg',
+      catalogType: 'polaris',
+      sqlAvailable: true,
+      schema: [
+        {
+          name: 'default',
+          tables: [
+            {
+              name: 'orders',
+              columns: [
+                { name: 'id', type: 'BIGINT' },
+                { name: 'customer', type: 'VARCHAR' },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(JSON.stringify(capturedEvidence)).not.toContain('must-not-project');
+    expect(JSON.stringify(capturedEvidence)).not.toContain(
+      'Unverified catalog',
+    );
   });
 
   it('cancels before collection without a model call or state change', async () => {

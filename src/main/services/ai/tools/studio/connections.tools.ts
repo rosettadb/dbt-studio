@@ -12,6 +12,7 @@ import type {
 import CloudExplorerService from '../../../cloudExplorer.service';
 import ConnectorsService from '../../../connectors.service';
 import DuckLakeService from '../../../duckLake.service';
+import { IcebergDatalakeService } from '../../../icebergDatalake.service';
 import SecureStorageService from '../../../secureStorage.service';
 import { isToolEnabled } from '../toolRegistry';
 
@@ -217,7 +218,7 @@ export function createStudioConnectionsTools() {
             id: string;
             name: string;
             type: string;
-            kind: 'database' | 'ducklake';
+            kind: 'database' | 'ducklake' | 'iceberg';
             health: ConnectionHealth;
           }> = [];
 
@@ -262,6 +263,22 @@ export function createStudioConnectionsTools() {
                 : ('unknown' as const),
           }));
           rows.push(...duckLakeRows);
+
+          // Iceberg instances are distinct from database connections. Only
+          // list instances already verified for SQL, and expose no catalog or
+          // storage credentials to the agent.
+          const icebergInstances = await IcebergDatalakeService.listInstances();
+          rows.push(
+            ...icebergInstances
+              .filter((instance) => instance.sqlAvailable)
+              .map((instance) => ({
+                id: `iceberg-${instance.id}`,
+                name: instance.name,
+                type: `iceberg (${instance.catalogType})`,
+                kind: 'iceberg' as const,
+                health: 'healthy' as const,
+              })),
+          );
 
           return {
             ok: true,

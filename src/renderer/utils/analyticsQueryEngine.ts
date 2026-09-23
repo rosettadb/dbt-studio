@@ -2,11 +2,13 @@
  * Analytics Query Engine
  *
  * Encapsulates SQL execution for analytics pages, handling both regular
- * DB connections and DuckLake connections transparently.
+ * DB connections, DuckLake instances, and verified Iceberg catalogs.
  * Supports {{query_name}} dependency resolution for inter-query references.
  */
+import { v4 as uuidv4 } from 'uuid';
 import { executeQueryForConnection } from '../services/connectors.service';
 import { DuckLakeService } from '../services/duckLake.service';
+import { executeIcebergSql } from '../services/iceberg.service';
 import {
   buildQueryDependencyGraph,
   validateQueryReferences,
@@ -143,6 +145,46 @@ export async function executeAnalyticsQuery(params: {
   const ROW_LIMIT = 500;
 
   try {
+    if (connectionId.startsWith('iceberg-')) {
+      const instanceId = connectionId.replace('iceberg-', '');
+      const executionId = `analytics-${uuidv4()}`;
+      const classification = await executeIcebergSql({
+        instanceId,
+        executionId,
+        sql,
+        pageLimit: ROW_LIMIT,
+        pageOffset: 0,
+        validateOnly: true,
+      });
+
+      if (classification.statementClass !== 'select') {
+        return {
+          name: queryName,
+          status: 'error',
+          data: [],
+          fields: [],
+          rowCount: 0,
+          error: 'Analytics pages support read-only Iceberg SELECT queries.',
+        };
+      }
+
+      const response = await executeIcebergSql({
+        instanceId,
+        executionId,
+        sql,
+        pageLimit: ROW_LIMIT,
+        pageOffset: 0,
+      });
+      const data = normalizeAnalyticsRows(response.rows.slice(0, ROW_LIMIT));
+      return {
+        name: queryName,
+        status: 'success',
+        data,
+        fields: response.columns,
+        rowCount: data.length,
+      };
+    }
+
     if (connectionId.startsWith('ducklake-')) {
       const instanceId = connectionId.replace('ducklake-', '');
       const response = await DuckLakeService.executeQuery({

@@ -72,18 +72,12 @@ export const IcebergTableImportWizard: React.FC<
   const [activeStep, setActiveStep] = useState(0);
   const [tableName, setTableName] = useState('');
   const [filePath, setFilePath] = useState('');
-  const [selectedNamespace, setSelectedNamespace] = useState<string | null>(
-    '__new__',
-  );
-  const [newNamespace, setNewNamespace] = useState('default');
+  const [selectedNamespace, setSelectedNamespace] = useState('default');
   const [error, setError] = useState('');
 
   const { mutate: getFiles } = useFilePicker();
   const namespacesQuery = useListIcebergNamespaces(instanceId);
   const namespaces = (namespacesQuery.data ?? []).map((ns) => ns.join('.'));
-
-  const isCreatingNamespace =
-    selectedNamespace === '__new__' || selectedNamespace === null;
 
   const handleFileSelect = () => {
     getFiles(
@@ -124,21 +118,6 @@ export const IcebergTableImportWizard: React.FC<
         setError('Unsupported file type. Use CSV, Parquet, or JSON.');
         return;
       }
-      if (isCreatingNamespace) {
-        const namespaceParts = newNamespace
-          .split('.')
-          .map((part) => part.trim())
-          .filter(Boolean);
-        if (
-          namespaceParts.length === 0 ||
-          namespaceParts.some((part) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(part))
-        ) {
-          setError(
-            'Namespace must be dot-separated identifiers (letters, numbers, underscores)',
-          );
-          return;
-        }
-      }
     }
     setError('');
     setActiveStep((prev) => prev + 1);
@@ -150,12 +129,7 @@ export const IcebergTableImportWizard: React.FC<
   };
 
   const handleImport = () => {
-    const namespace: string[] = isCreatingNamespace
-      ? newNamespace
-          .split('.')
-          .map((part) => part.trim())
-          .filter(Boolean)
-      : (selectedNamespace ?? 'default').split('.');
+    const namespace = selectedNamespace.split('.');
     const format = detectFormat(filePath);
     if (!format) return;
     onImport(namespace, tableName.trim(), filePath.trim(), format);
@@ -165,8 +139,7 @@ export const IcebergTableImportWizard: React.FC<
     setActiveStep(0);
     setTableName('');
     setFilePath('');
-    setSelectedNamespace('__new__');
-    setNewNamespace('default');
+    setSelectedNamespace('default');
     setError('');
   };
 
@@ -241,24 +214,22 @@ export const IcebergTableImportWizard: React.FC<
 
       <Autocomplete
         fullWidth
+        disableClearable
         value={selectedNamespace}
-        options={['__new__', ...namespaces]}
-        onChange={(_event, value) => {
-          setSelectedNamespace(value ?? null);
-          if (value === '__new__' || value === null) {
-            setNewNamespace('default');
-          }
-        }}
-        getOptionLabel={(option) =>
-          option === '__new__' ? 'Create new namespace…' : option
+        options={
+          namespaces.includes('default')
+            ? namespaces
+            : ['default', ...namespaces]
         }
+        onChange={(_event, value) => setSelectedNamespace(value ?? 'default')}
+        getOptionLabel={(option) => option}
         isOptionEqualToValue={(option, value) => option === value}
         renderOption={(props, option) => (
           <li
             {...props} // eslint-disable-line react/jsx-props-no-spreading
             key={option}
           >
-            {option === '__new__' ? 'Create new namespace…' : option}
+            {option}
           </li>
         )}
         renderInput={(params) => (
@@ -266,23 +237,11 @@ export const IcebergTableImportWizard: React.FC<
             {...params} // eslint-disable-line react/jsx-props-no-spreading
             label="Namespace"
             placeholder="default"
-            helperText="Choose an existing namespace or create a new one (dot-separated for nested)"
-            sx={{ mb: isCreatingNamespace ? 2 : 3 }}
+            helperText="Choose an existing namespace"
+            sx={{ mb: 3 }}
           />
         )}
       />
-
-      {isCreatingNamespace && (
-        <TextField
-          fullWidth
-          label="New Namespace"
-          value={newNamespace}
-          onChange={(e) => setNewNamespace(e.target.value)}
-          placeholder="e.g., default or analytics.raw"
-          helperText="Nested namespaces are separated by dots"
-          sx={{ mb: 3 }}
-        />
-      )}
 
       <TextField
         fullWidth
@@ -322,12 +281,7 @@ export const IcebergTableImportWizard: React.FC<
   );
 
   const renderReview = () => {
-    const namespace = isCreatingNamespace
-      ? newNamespace
-          .split('.')
-          .map((part) => part.trim())
-          .filter(Boolean)
-      : (selectedNamespace ?? 'default').split('.');
+    const namespace = selectedNamespace.split('.');
     return (
       <Box sx={{ mt: 2 }}>
         <Typography variant="h6" gutterBottom>

@@ -4,6 +4,7 @@ import type { BaseAgentConfig } from './baseAgentConfig';
 import { createStudioCloudTools } from '../tools/studio/cloud.tools';
 import { createStudioConnectionsTools } from '../tools/studio/connections.tools';
 import { createStudioDuckLakeTools } from '../tools/studio/ducklake.tools';
+import { createStudioSqlTools } from '../tools/studio/sql.tools';
 import { createStudioNotebooksTools } from '../tools/studio/notebooks.tools';
 import { NotebooksService } from '../../notebooks.service';
 
@@ -87,6 +88,14 @@ export async function createNotebooksAgent(
 
   let connectionHints = '';
   switch (connectionMeta.type) {
+    case 'iceberg':
+      connectionHints = `\n\n## Iceberg Specifics
+You are connected to an Apache Iceberg ${connectionMeta.catalogType ?? 'REST'} catalog through DuckDB's Iceberg extension.
+- Use DuckDB SQL and fully qualified catalog references such as \`iceberg.<namespace>.<table>\`.
+- Inspect the schema before composing a query. You may prepare supported catalog and data mutations; Notebook execution presents the user confirmation before it executes the exact statement.
+- Every table target must be \`iceberg.<namespace>.<table>\`. Never infer that unqualified database syntax, attachment SQL, credentials, or storage SQL is available for this connection.
+- Do not write \`ATTACH\`, \`DETACH\`, extension, secret, storage, or catalog configuration SQL; DBT Studio owns the temporary attachment lifecycle.`;
+      break;
     case 'ducklake':
       connectionHints = `\n\n## DuckLake Specifics
 You are connected to a DuckLake lakehouse. DuckLake is a DuckDB extension (not a separate library).
@@ -134,6 +143,7 @@ You are connected to a DuckLake lakehouse. DuckLake is a DuckDB extension (not a
   }
 
   const isAskMode = options.toolMode === 'chat';
+  const isIcebergConnection = connectionId?.startsWith('iceberg-') ?? false;
 
   const notebookContext =
     connectionId && notebookId
@@ -196,7 +206,7 @@ ${skills ?? ''}
 ${mcpToolsList}
 
 ## Capabilities & Workflow
-1. **Analyze Schema**: Use DuckLake tools to understand the database structure (tables, columns).
+1. **Analyze Schema**: Use the active connection's schema tool to understand the database structure (tables, columns).
 2. **Notebook Awareness**: Use \`notebooks_get_state\` to see which cells exist.
 3. **Strict Single-Statement Cells**:
    - **CRITICAL RULE**: You can only write ONE SQL statement per cell. Multiple SQL statements (statement chaining) are strictly forbidden and will fail.
@@ -230,10 +240,16 @@ The notebook UI handles large datasets efficiently using server-side pagination.
   delete safeEnabledTools.studio_ducklake_query;
   delete safeEnabledTools.studio_sql_query;
 
+  const activeSchemaTools = isIcebergConnection
+    ? createStudioSqlTools(options.conversationId)
+    : createStudioDuckLakeTools(options.conversationId);
+  delete activeSchemaTools.studio_sql_query;
+  delete activeSchemaTools.studio_sql_get_query_results;
+
   const studioNotebookTools: Record<string, any> = {
     ...createStudioConnectionsTools(),
     ...createStudioCloudTools(),
-    ...createStudioDuckLakeTools(options.conversationId),
+    ...activeSchemaTools,
     ...createStudioNotebooksTools(options.conversationId),
   };
 
@@ -247,6 +263,7 @@ The notebook UI handles large datasets efficiently using server-side pagination.
     : {};
 
   const READ_ONLY_TOOLS = [
+    'studio_sql_schema_extract',
     'studio_ducklake_schema_extract',
     'studio_connections_list',
     'studio_cloud_list_objects',
