@@ -164,12 +164,16 @@ describe('pythonNotebooks.ipcHandlers', () => {
     const result = await getHandler(
       electron.ipcMain,
       'pythonNotebooks:kernel:execute',
-    )({}, 'conn-1', 'nb1', 'c1', 'print(1)');
+    )({}, 'conn-1', 'nb1', 'c1', 'print(1)', {
+      cellType: 'sql',
+      variable: 'df',
+    });
     expect(notebooks.executeCell).toHaveBeenCalledWith(
       'conn-1',
       'nb1',
       'c1',
       'print(1)',
+      { cellType: 'sql', variable: 'df' },
     );
     expect(result.status).toBe('ok');
     expect(kernel.start).not.toHaveBeenCalled();

@@ -1,14 +1,17 @@
 /**
  * Python Cell (chrome)
  * Colab-style cell: run gutter on the left with the execution count, the
- * editor (code or text), outputs underneath, and a hover toolbar on the right.
+ * editor (code, sql or text), outputs underneath, and a hover toolbar on the
+ * right. SQL cells get a header with the variable that receives the result.
  */
 
 import React, { memo, useState } from 'react';
 import {
   Box,
+  Chip,
   CircularProgress,
   IconButton,
+  InputBase,
   Menu,
   MenuItem,
   Tooltip,
@@ -27,13 +30,25 @@ import {
   Notes,
   PlayArrow,
   Stop,
+  Storage,
 } from '@mui/icons-material';
-import type { PythonNotebookCell } from '../../../../types/pythonNotebooks';
+import type {
+  PythonCellType,
+  PythonNotebookCell,
+} from '../../../../types/pythonNotebooks';
 import { PythonCodeCell, RunMode } from './PythonCodeCell';
 import { PythonTextCell } from './PythonTextCell';
 import { PythonCellOutputs } from './PythonCellOutputs';
 
 export type CellRunState = 'idle' | 'queued' | 'running';
+
+const PYTHON_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+const CELL_TYPE_LABELS: Record<PythonCellType, string> = {
+  code: 'Code',
+  sql: 'SQL',
+  markdown: 'Text',
+};
 
 interface PythonCellProps {
   cell: PythonNotebookCell;
@@ -44,8 +59,11 @@ interface PythonCellProps {
   focusRequest?: number;
   startEditing?: boolean;
   dragHandleProps?: any;
+  installingPandas?: boolean;
   onSelect: () => void;
   onChange: (source: string) => void;
+  /** SQL cells: rename the variable that receives the result */
+  onChangeVariable: (variable: string) => void;
   onRun: (mode: RunMode) => void;
   onInterrupt: () => void;
   onDelete: () => void;
@@ -53,7 +71,8 @@ interface PythonCellProps {
   onMoveUp: () => void;
   onMoveDown: () => void;
   onClearOutputs: () => void;
-  onChangeType: (type: 'code' | 'markdown') => void;
+  onChangeType: (type: PythonCellType) => void;
+  onInstallPandas: () => void;
 }
 
 const PythonCellComponent: React.FC<PythonCellProps> = ({
@@ -65,8 +84,10 @@ const PythonCellComponent: React.FC<PythonCellProps> = ({
   focusRequest,
   startEditing,
   dragHandleProps,
+  installingPandas,
   onSelect,
   onChange,
+  onChangeVariable,
   onRun,
   onInterrupt,
   onDelete,
@@ -75,12 +96,17 @@ const PythonCellComponent: React.FC<PythonCellProps> = ({
   onMoveDown,
   onClearOutputs,
   onChangeType,
+  onInstallPandas,
 }) => {
   const theme = useTheme();
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
-  const isCode = cell.cell_type === 'code';
+  const isSql = cell.cell_type === 'sql';
+  /** Runs on the kernel and has outputs (code or sql). */
+  const isCode = cell.cell_type !== 'markdown';
   const isRunning = runState === 'running';
   const closeMenu = () => setMenuAnchor(null);
+  const variable = cell.metadata.rosetta?.variable ?? '';
+  const variableValid = PYTHON_IDENTIFIER.test(variable);
 
   let gutterLabel: React.ReactNode;
   if (isRunning) {
@@ -192,11 +218,70 @@ const PythonCellComponent: React.FC<PythonCellProps> = ({
       <Box
         sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}
       >
+        {isSql && (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              px: 1,
+              py: 0.5,
+              borderBottom: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
+            <Chip
+              icon={<Storage sx={{ fontSize: '14px !important' }} />}
+              label="SQL"
+              size="small"
+              color="primary"
+              variant="outlined"
+              sx={{ height: 20, fontSize: 11 }}
+            />
+            <Typography variant="caption" color="text.secondary">
+              Result as
+            </Typography>
+            <Tooltip
+              title={
+                variableValid
+                  ? 'Python variable that receives the result (DataFrame when pandas is installed)'
+                  : 'Must be a valid Python identifier'
+              }
+            >
+              <InputBase
+                value={variable}
+                onChange={(e) => onChangeVariable(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                error={!variableValid}
+                spellCheck={false}
+                inputProps={{
+                  'data-testid': `python-cell-variable-${index}`,
+                  'aria-label': 'Result variable',
+                }}
+                sx={{
+                  fontFamily: 'monospace',
+                  fontSize: 12,
+                  px: 0.75,
+                  height: 22,
+                  minWidth: 80,
+                  border: '1px solid',
+                  borderColor: variableValid ? 'divider' : 'error.main',
+                  borderRadius: 0.5,
+                  '& input': {
+                    p: 0,
+                    width: `${Math.max(variable.length, 4)}ch`,
+                  },
+                }}
+              />
+            </Tooltip>
+          </Box>
+        )}
         {isCode ? (
           <PythonCodeCell
             cellId={cell.id}
             source={cell.source}
             isExecuting={isRunning}
+            language={isSql ? 'sql' : 'python'}
             onChange={onChange}
             onRun={onRun}
             onFocus={onSelect}
@@ -212,7 +297,13 @@ const PythonCellComponent: React.FC<PythonCellProps> = ({
             focusRequest={focusRequest}
           />
         )}
-        {isCode && <PythonCellOutputs outputs={cell.outputs} />}
+        {isCode && (
+          <PythonCellOutputs
+            outputs={cell.outputs}
+            onInstallPandas={isSql ? onInstallPandas : undefined}
+            installingPandas={installingPandas}
+          />
+        )}
       </Box>
 
       {/* Hover toolbar */}
@@ -261,6 +352,13 @@ const PythonCellComponent: React.FC<PythonCellProps> = ({
             )}
           </IconButton>
         </Tooltip>
+        {!isSql && (
+          <Tooltip title="Convert to SQL">
+            <IconButton size="small" onClick={() => onChangeType('sql')}>
+              <Storage sx={{ fontSize: 14 }} />
+            </IconButton>
+          </Tooltip>
+        )}
         <Tooltip title="Delete cell">
           <IconButton size="small" onClick={onDelete}>
             <Delete sx={{ fontSize: 14 }} />
@@ -286,6 +384,20 @@ const PythonCellComponent: React.FC<PythonCellProps> = ({
           >
             <ContentCopy sx={{ fontSize: 16, mr: 1 }} /> Duplicate cell
           </MenuItem>
+          {(Object.keys(CELL_TYPE_LABELS) as PythonCellType[])
+            .filter((type) => type !== cell.cell_type)
+            .map((type) => (
+              <MenuItem
+                key={type}
+                onClick={() => {
+                  closeMenu();
+                  onChangeType(type);
+                }}
+                sx={{ fontSize: 13 }}
+              >
+                Convert to {CELL_TYPE_LABELS[type]}
+              </MenuItem>
+            ))}
           {isCode && (
             <MenuItem
               onClick={() => {
@@ -325,8 +437,10 @@ export const PythonCell = memo(
     prev.kernelBusy === next.kernelBusy &&
     prev.focusRequest === next.focusRequest &&
     prev.startEditing === next.startEditing &&
+    prev.installingPandas === next.installingPandas &&
     prev.onRun === next.onRun &&
-    prev.onChange === next.onChange,
+    prev.onChange === next.onChange &&
+    prev.onChangeVariable === next.onChangeVariable,
 );
 
 PythonCell.displayName = 'PythonCell';

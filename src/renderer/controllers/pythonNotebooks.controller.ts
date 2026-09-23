@@ -12,6 +12,7 @@ import {
 } from '../services/pythonNotebooks.service';
 import type {
   CreatePythonNotebookInput,
+  ExecuteCellOptions,
   KernelEvent,
   KernelState,
   NotebookEnvEvent,
@@ -386,17 +387,20 @@ export function useExecutePythonCell() {
       notebookId,
       cellId,
       code,
+      options,
     }: {
       connectionId: string;
       notebookId: string;
       cellId: string;
       code: string;
+      options?: ExecuteCellOptions;
     }) =>
       pythonNotebooksService.executeCell(
         connectionId,
         notebookId,
         cellId,
         code,
+        options,
       ),
   });
 }

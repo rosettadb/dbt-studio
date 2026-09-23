@@ -10,6 +10,7 @@
 
 import type {
   CreatePythonNotebookInput,
+  ExecuteCellOptions,
   ExecuteCellResult,
   KernelEvent,
   KernelState,
@@ -159,6 +160,7 @@ export const pythonNotebooksService = {
     notebookId: string,
     cellId: string,
     code: string,
+    options?: ExecuteCellOptions,
   ): Promise<ExecuteCellResult> =>
     ipcRenderer.invoke(
       'pythonNotebooks:kernel:execute',
@@ -166,6 +168,7 @@ export const pythonNotebooksService = {
       notebookId,
       cellId,
       code,
+      options,
     ),
 
   interruptKernel: (notebookId: string): Promise<KernelState> =>

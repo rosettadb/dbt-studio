@@ -11,6 +11,7 @@ import NotebookKernelService from '../services/notebookKernel.service';
 import PythonRuntimesService from '../services/pythonRuntimes.service';
 import type {
   CreatePythonNotebookInput,
+  ExecuteCellOptions,
   UpdatePythonNotebookInput,
 } from '../../types/pythonNotebooks';
 
@@ -126,12 +127,14 @@ export function registerPythonNotebooksHandlers() {
       notebookId: string,
       cellId: string,
       code: string,
+      options?: ExecuteCellOptions,
     ) =>
       PythonNotebooksService.executeCell(
         connectionId,
         notebookId,
         cellId,
         code,
+        options,
       ),
   );
   ipcMain.handle('pythonNotebooks:kernel:interrupt', (_e, notebookId: string) =>

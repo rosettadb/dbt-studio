@@ -18,12 +18,17 @@ import fs from 'fs-extra';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { getConnectionDir, normalizeConnectionKey } from './notebooks.service';
+import ConnectorsService from './connectors.service';
+import DuckLakeService from './duckLake.service';
 import NotebookEnvService from './notebookEnv.service';
 import NotebookKernelService from './notebookKernel.service';
+import { SQL_FALLBACK_MIME } from '../../types/pythonNotebooks';
 import type {
   CreatePythonNotebookInput,
+  ExecuteCellOptions,
   ExecuteCellResult,
   PythonCellOutput,
+  PythonCellType,
   PythonNotebook,
   PythonNotebookCell,
   UpdatePythonNotebookInput,
@@ -34,6 +39,14 @@ const NBFORMAT_MINOR = 5;
 const MAX_STREAM_CHARS = 200_000;
 const MAX_OUTPUTS_PER_CELL = 500;
 const MAX_MIME_VALUE_CHARS = 8_000_000; // ~6MB base64 image
+/** Rows handed to the kernel per SQL cell run. */
+const MAX_SQL_ROWS = 100_000;
+/** Rows shown in the fallback HTML table when pandas is unavailable. */
+const SQL_FALLBACK_PREVIEW_ROWS = 100;
+const DEFAULT_SQL_VARIABLE = 'df';
+const PYTHON_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
+/** `%%sql` magic line as written by Studio / JupySQL: `%%sql [var <<]`. */
+const SQL_MAGIC_LINE = /^%%sql(?:\s+([A-Za-z_][A-Za-z0-9_]*)\s*<<)?\s*$/;
 
 /* ------------------------------------------------------------------ */
 /* nbformat (de)serialisation                                           */
@@ -116,34 +129,85 @@ function normaliseOutput(raw: Record<string, any>): PythonCellOutput | null {
   }
 }
 
+/**
+ * Detect a SQL cell in an nbformat code cell: either Studio's metadata flag or
+ * a leading `%%sql` magic line (JupySQL / ipython-sql notebooks). Returns the
+ * query without the magic line and the target variable, if any.
+ */
+function parseSqlCodeCell(
+  raw: IpynbCell,
+): { source: string; variable?: string } | null {
+  if (raw.cell_type !== 'code') return null;
+  const source = joinMultiline(raw.source);
+  const newline = source.indexOf('\n');
+  const firstLine = newline === -1 ? source : source.slice(0, newline);
+  const magic = SQL_MAGIC_LINE.exec(firstLine.trim());
+  const rosetta = (raw.metadata as PythonNotebookCell['metadata'] | undefined)
+    ?.rosetta;
+  if (!magic && rosetta?.language !== 'sql') return null;
+  let query = source;
+  if (magic) query = newline === -1 ? '' : source.slice(newline + 1);
+  return {
+    source: query,
+    variable:
+      typeof rosetta?.variable === 'string' && rosetta.variable
+        ? rosetta.variable
+        : magic?.[1],
+  };
+}
+
 function fromIpynbCell(raw: IpynbCell): PythonNotebookCell {
-  const cellType = raw.cell_type === 'markdown' ? 'markdown' : 'code';
+  const sql = parseSqlCodeCell(raw);
+  let cellType: PythonCellType = 'code';
+  if (raw.cell_type === 'markdown') cellType = 'markdown';
+  else if (sql) cellType = 'sql';
+  const executable = cellType !== 'markdown';
+  const metadata: PythonNotebookCell['metadata'] = { ...(raw.metadata ?? {}) };
+  if (sql) {
+    metadata.rosetta = {
+      ...(metadata.rosetta ?? {}),
+      language: 'sql',
+      variable: sql.variable ?? DEFAULT_SQL_VARIABLE,
+    };
+  }
   return {
     id: raw.id && /^[A-Za-z0-9_-]{1,64}$/.test(raw.id) ? raw.id : uuidv4(),
     cell_type: cellType,
-    source: joinMultiline(raw.source),
-    outputs:
-      cellType === 'code'
-        ? (raw.outputs ?? [])
-            .map(normaliseOutput)
-            .filter((o): o is PythonCellOutput => o !== null)
-        : [],
+    source: sql ? sql.source : joinMultiline(raw.source),
+    outputs: executable
+      ? (raw.outputs ?? [])
+          .map(normaliseOutput)
+          .filter((o): o is PythonCellOutput => o !== null)
+      : [],
     execution_count:
-      cellType === 'code' && typeof raw.execution_count === 'number'
+      executable && typeof raw.execution_count === 'number'
         ? raw.execution_count
         : null,
-    metadata: raw.metadata ?? {},
+    metadata,
   };
 }
 
 function toIpynbCell(cell: PythonNotebookCell): IpynbCell {
+  const isSql = cell.cell_type === 'sql';
+  const metadata: PythonNotebookCell['metadata'] = { ...(cell.metadata ?? {}) };
+  let { source } = cell;
+  if (isSql) {
+    const variable = metadata.rosetta?.variable || DEFAULT_SQL_VARIABLE;
+    metadata.rosetta = {
+      ...(metadata.rosetta ?? {}),
+      language: 'sql',
+      variable,
+    };
+    // JupySQL syntax so the cell is runnable in Jupyter with jupysql installed.
+    source = `%%sql ${variable} <<\n${cell.source}`;
+  }
   const base: IpynbCell = {
     id: cell.id,
-    cell_type: cell.cell_type,
-    metadata: cell.metadata ?? {},
-    source: splitMultiline(cell.source),
+    cell_type: cell.cell_type === 'markdown' ? 'markdown' : 'code',
+    metadata,
+    source: splitMultiline(source),
   };
-  if (cell.cell_type === 'code') {
+  if (cell.cell_type !== 'markdown') {
     base.execution_count = cell.execution_count ?? null;
     base.outputs = cell.outputs ?? [];
   }
@@ -248,6 +312,131 @@ function limitOutputs(outputs: PythonCellOutput[]): PythonCellOutput[] {
     limited.push(output);
   });
   return limited;
+}
+
+/* ------------------------------------------------------------------ */
+/* SQL cells                                                            */
+/* ------------------------------------------------------------------ */
+
+/** Make a driver row value JSON-serialisable (bigint, Date, Buffer). */
+function toJsonValue(value: unknown): unknown {
+  if (value === undefined) return null;
+  if (typeof value === 'bigint') {
+    return Number.isSafeInteger(Number(value)) ? Number(value) : String(value);
+  }
+  if (value instanceof Date) return value.toISOString();
+  if (Buffer.isBuffer(value)) return value.toString('base64');
+  return value;
+}
+
+function bigIntReplacer(_key: string, value: unknown): unknown {
+  return typeof value === 'bigint' ? toJsonValue(value) : value;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function cellText(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'object') return JSON.stringify(value, bigIntReplacer);
+  return String(value);
+}
+
+/** Plain HTML table used when pandas is not available in the kernel. */
+function renderFallbackTable(
+  columns: string[],
+  rows: Record<string, unknown>[],
+): string {
+  const preview = rows.slice(0, SQL_FALLBACK_PREVIEW_ROWS);
+  const head = columns.map((c) => `<th>${escapeHtml(c)}</th>`).join('');
+  const body = preview
+    .map(
+      (row) =>
+        `<tr>${columns
+          .map((c) => `<td>${escapeHtml(cellText(row[c]))}</td>`)
+          .join('')}</tr>`,
+    )
+    .join('');
+  const note =
+    rows.length > preview.length
+      ? `<p>Showing the first ${preview.length} of ${rows.length} rows.</p>`
+      : '';
+  return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>${note}`;
+}
+
+/** A Python string literal holding `value` (JSON escapes are valid in Python). */
+function pyString(value: string): string {
+  return JSON.stringify(value);
+}
+
+/**
+ * Code executed on the kernel to expose a query result as `variable`: a
+ * pandas DataFrame when pandas is importable, otherwise a list of dicts plus
+ * a display output tagged with SQL_FALLBACK_MIME so the UI can offer to
+ * install pandas.
+ */
+function buildSqlInjectionCode(
+  variable: string,
+  columns: string[],
+  rows: Record<string, unknown>[],
+): string {
+  const rowsJson = JSON.stringify(rows, bigIntReplacer);
+  const fallback = {
+    'text/html': renderFallbackTable(columns, rows),
+    [SQL_FALLBACK_MIME]: { variable, rowCount: rows.length },
+  };
+  return [
+    'import json as _rs_json, importlib as _rs_importlib',
+    '_rs_importlib.invalidate_caches()',
+    `_rs_rows = _rs_json.loads(${pyString(rowsJson)})`,
+    `_rs_columns = _rs_json.loads(${pyString(JSON.stringify(columns))})`,
+    'try:',
+    '    import pandas as _rs_pd',
+    'except ImportError:',
+    '    _rs_pd = None',
+    'if _rs_pd is not None:',
+    `    ${variable} = _rs_pd.DataFrame(_rs_rows, columns=_rs_columns)`,
+    `    _rs_result = ${variable}`,
+    'else:',
+    `    ${variable} = _rs_rows`,
+    '    from IPython.display import display as _rs_display',
+    `    _rs_display(_rs_json.loads(${pyString(JSON.stringify(fallback))}), raw=True)`,
+    '    del _rs_display',
+    '    _rs_result = None',
+    'del _rs_rows, _rs_columns, _rs_json, _rs_importlib, _rs_pd',
+    '_rs_result',
+  ].join('\n');
+}
+
+interface SqlQueryResult {
+  success: boolean;
+  data?: Record<string, unknown>[];
+  fields?: Array<{ name: string }>;
+  rowCount?: number;
+  error?: string;
+  isCommand?: boolean;
+}
+
+/** Run a query on the notebook's connection (regular connection or DuckLake). */
+async function runSqlQuery(
+  connectionId: string,
+  query: string,
+): Promise<SqlQueryResult> {
+  if (connectionId.startsWith('ducklake-')) {
+    return DuckLakeService.executeQuery({
+      instanceId: connectionId.replace('ducklake-', ''),
+      query,
+    }) as Promise<SqlQueryResult>;
+  }
+  return ConnectorsService.executeQueryForConnection({
+    connectionId,
+    query,
+  }) as Promise<SqlQueryResult>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -551,12 +740,18 @@ export default class PythonNotebooksService {
     notebookId: string,
     cellId: string,
     code: string,
+    options: ExecuteCellOptions = {},
   ): Promise<ExecuteCellResult> {
-    const result = await NotebookKernelService.execute(
-      notebookId,
-      cellId,
-      code,
-    );
+    const result =
+      options.cellType === 'sql'
+        ? await this.runSqlCell(
+            connectionId,
+            notebookId,
+            cellId,
+            code,
+            options.variable || DEFAULT_SQL_VARIABLE,
+          )
+        : await NotebookKernelService.execute(notebookId, cellId, code);
     await this.setCellOutputs(
       connectionId,
       notebookId,
@@ -568,6 +763,94 @@ export default class PythonNotebooksService {
       console.error('Failed to persist cell outputs:', error);
     });
     return result;
+  }
+
+  /**
+   * SQL cell: run the query on the notebook's connection in the main process
+   * (credentials never reach the kernel), then hand the rows to the kernel as
+   * `variable`. Row-less statements (DDL / DML) only report a summary.
+   */
+  private static async runSqlCell(
+    connectionId: string,
+    notebookId: string,
+    cellId: string,
+    query: string,
+    variable: string,
+  ): Promise<ExecuteCellResult> {
+    const fail = (message: string): ExecuteCellResult => ({
+      cellId,
+      status: 'error',
+      execution_count: null,
+      outputs: [
+        {
+          output_type: 'error',
+          ename: 'QueryError',
+          evalue: message,
+          traceback: [],
+        },
+      ],
+    });
+
+    if (!PYTHON_IDENTIFIER.test(variable)) {
+      return fail(`"${variable}" is not a valid Python variable name`);
+    }
+
+    let result: SqlQueryResult;
+    try {
+      result = await runSqlQuery(connectionId, query);
+    } catch (error) {
+      return fail(error instanceof Error ? error.message : String(error));
+    }
+    if (!result.success || result.error) {
+      return fail(result.error || 'Query execution failed');
+    }
+
+    const allRows = result.data ?? [];
+    const columns =
+      result.fields && result.fields.length > 0
+        ? result.fields.map((f) => f.name)
+        : Object.keys(allRows[0] ?? {});
+
+    if (columns.length === 0) {
+      const affected =
+        typeof result.rowCount === 'number'
+          ? ` ${result.rowCount} row(s) affected.`
+          : '';
+      return {
+        cellId,
+        status: 'ok',
+        execution_count: null,
+        outputs: [
+          {
+            output_type: 'stream',
+            name: 'stdout',
+            text: `Statement executed.${affected}\n`,
+          },
+        ],
+      };
+    }
+
+    const rows = allRows.slice(0, MAX_SQL_ROWS).map((row) => {
+      const clean: Record<string, unknown> = {};
+      columns.forEach((c) => {
+        clean[c] = toJsonValue(row[c]);
+      });
+      return clean;
+    });
+
+    const kernelResult = await NotebookKernelService.execute(
+      notebookId,
+      cellId,
+      buildSqlInjectionCode(variable, columns, rows),
+    );
+    if (allRows.length > rows.length) {
+      kernelResult.outputs.unshift({
+        output_type: 'stream',
+        name: 'stderr',
+        text: `Result truncated to the first ${MAX_SQL_ROWS} of ${allRows.length} rows.\n`,
+      });
+    }
+    return kernelResult;
   }
 
   static async recreateEnv(

@@ -28,6 +28,24 @@ jest.mock('../../../../src/main/services/notebooks.service', () => ({
     require('path').join(tmpUserData, 'notebooks', connectionKey),
 }));
 
+// SQL cells run queries through the connectors / DuckLake services; neither
+// stack is needed here beyond the query entry points.
+const executeQueryForConnection = jest.fn();
+const duckLakeExecuteQuery = jest.fn();
+jest.mock('../../../../src/main/services/connectors.service', () => ({
+  __esModule: true,
+  default: {
+    executeQueryForConnection: (...args: unknown[]) =>
+      executeQueryForConnection(...args),
+  },
+}));
+jest.mock('../../../../src/main/services/duckLake.service', () => ({
+  __esModule: true,
+  default: {
+    executeQuery: (...args: unknown[]) => duckLakeExecuteQuery(...args),
+  },
+}));
+
 jest.mock('../../../../src/main/services/notebookEnv.service', () => ({
   __esModule: true,
   default: {
@@ -245,6 +263,213 @@ describe('PythonNotebooksService', () => {
     expect(imported.cells.every((c) => /^[A-Za-z0-9_-]+$/.test(c.id))).toBe(
       true,
     );
+  });
+
+  it('stores SQL cells as %%sql code cells and reads them back (incl. JupySQL files)', async () => {
+    const service = await load();
+    const [notebook] = await service.listNotebooks(connectionId);
+
+    await service.updateNotebook(connectionId, notebook.id, {
+      cells: [
+        {
+          id: 'cell-sql',
+          cell_type: 'sql',
+          source: 'select 1 as n',
+          outputs: [],
+          execution_count: null,
+          metadata: { rosetta: { language: 'sql', variable: 'orders' } },
+        },
+      ],
+    });
+
+    const raw = await fs.readJson(
+      path.join(
+        tmpUserData,
+        'notebooks',
+        `db:${connectionId}`,
+        `${notebook.id}.ipynb`,
+      ),
+    );
+    // Valid nbformat: a code cell carrying the JupySQL magic + studio flag
+    expect(raw.cells[0]).toMatchObject({
+      cell_type: 'code',
+      source: ['%%sql orders <<\n', 'select 1 as n'],
+      metadata: { rosetta: { language: 'sql', variable: 'orders' } },
+      outputs: [],
+    });
+
+    const reloaded = await service.getNotebook(connectionId, notebook.id);
+    expect(reloaded!.cells[0]).toMatchObject({
+      cell_type: 'sql',
+      source: 'select 1 as n',
+      metadata: { rosetta: { language: 'sql', variable: 'orders' } },
+    });
+
+    // A notebook written by JupySQL (no studio metadata) imports as SQL cells
+    const foreign = path.join(tmpUserData, 'jupysql.ipynb');
+    await fs.writeJson(foreign, {
+      nbformat: 4,
+      nbformat_minor: 5,
+      metadata: {},
+      cells: [
+        {
+          cell_type: 'code',
+          source: ['%%sql\n', 'select 2'],
+          metadata: {},
+          outputs: [],
+          execution_count: null,
+        },
+        {
+          cell_type: 'code',
+          source: '%%sql result <<\nselect 3',
+          metadata: {},
+          outputs: [],
+          execution_count: null,
+        },
+        {
+          cell_type: 'code',
+          source: 'x = 1',
+          metadata: {},
+          outputs: [],
+          execution_count: null,
+        },
+      ],
+    });
+    const imported = await service.importNotebook(
+      connectionId,
+      foreign,
+      '3.12.10',
+    );
+    expect(imported.cells.map((c) => c.cell_type)).toEqual([
+      'sql',
+      'sql',
+      'code',
+    ]);
+    expect(imported.cells[0].source).toBe('select 2');
+    expect(imported.cells[0].metadata.rosetta?.variable).toBe('df');
+    expect(imported.cells[1].source).toBe('select 3');
+    expect(imported.cells[1].metadata.rosetta?.variable).toBe('result');
+  });
+
+  it('runs SQL cells on the connection and hands the rows to the kernel', async () => {
+    const service = await load();
+    const kernelService = (
+      await import('../../../../src/main/services/notebookKernel.service')
+    ).default;
+    const [notebook] = await service.listNotebooks(connectionId);
+    (kernelService.execute as jest.Mock).mockClear();
+
+    executeQueryForConnection.mockResolvedValueOnce({
+      success: true,
+      fields: [{ name: 'id' }, { name: 'when' }, { name: 'big' }],
+      data: [
+        {
+          id: 1,
+          when: new Date('2026-01-02T03:04:05.000Z'),
+          big: BigInt(42),
+        },
+        { id: 2, when: null, big: BigInt('9007199254740993') },
+      ],
+    });
+
+    const result = await service.executeCell(
+      connectionId,
+      notebook.id,
+      'cell-sql',
+      'select * from t',
+      { cellType: 'sql', variable: 'orders' },
+    );
+    expect(result.status).toBe('ok');
+    expect(executeQueryForConnection).toHaveBeenCalledWith({
+      connectionId,
+      query: 'select * from t',
+    });
+
+    const [, cellId, code] = (kernelService.execute as jest.Mock).mock.calls[0];
+    expect(cellId).toBe('cell-sql');
+    expect(code).toContain(
+      'orders = _rs_pd.DataFrame(_rs_rows, columns=_rs_columns)',
+    );
+    expect(code).toContain('orders = _rs_rows');
+    expect(code).toContain('application/vnd.rosetta.sql-fallback+json');
+    // Driver values are made JSON-safe before they reach the kernel
+    expect(code).toContain('2026-01-02T03:04:05.000Z');
+    expect(code).toContain('\\"big\\":42');
+    expect(code).toContain('\\"big\\":\\"9007199254740993\\"');
+    expect(code).toContain('\\"when\\":null');
+
+    // DuckLake instances go through the DuckLake service
+    duckLakeExecuteQuery.mockResolvedValueOnce({
+      success: true,
+      fields: [{ name: 'n' }],
+      data: [{ n: 1 }],
+    });
+    await service
+      .executeCell('ducklake-inst', notebook.id, 'cell-sql', 'select 1 as n', {
+        cellType: 'sql',
+      })
+      .catch(() => undefined);
+    expect(duckLakeExecuteQuery).toHaveBeenCalledWith({
+      instanceId: 'inst',
+      query: 'select 1 as n',
+    });
+  });
+
+  it('reports SQL failures and row-less statements without touching the kernel', async () => {
+    const service = await load();
+    const kernelService = (
+      await import('../../../../src/main/services/notebookKernel.service')
+    ).default;
+    const [notebook] = await service.listNotebooks(connectionId);
+    (kernelService.execute as jest.Mock).mockClear();
+    executeQueryForConnection.mockClear();
+
+    executeQueryForConnection.mockResolvedValueOnce({
+      success: false,
+      error: 'relation "nope" does not exist',
+    });
+    const failed = await service.executeCell(
+      connectionId,
+      notebook.id,
+      'cell-sql',
+      'select * from nope',
+      { cellType: 'sql', variable: 'df' },
+    );
+    expect(failed.status).toBe('error');
+    expect(failed.outputs[0]).toMatchObject({
+      output_type: 'error',
+      ename: 'QueryError',
+      evalue: 'relation "nope" does not exist',
+    });
+
+    const badName = await service.executeCell(
+      connectionId,
+      notebook.id,
+      'cell-sql',
+      'select 1',
+      { cellType: 'sql', variable: 'not valid' },
+    );
+    expect(badName.status).toBe('error');
+    expect(executeQueryForConnection).toHaveBeenCalledTimes(1);
+
+    executeQueryForConnection.mockResolvedValueOnce({
+      success: true,
+      data: [],
+      rowCount: 3,
+    });
+    const ddl = await service.executeCell(
+      connectionId,
+      notebook.id,
+      'cell-sql',
+      'update t set x = 1',
+      { cellType: 'sql', variable: 'df' },
+    );
+    expect(ddl.status).toBe('ok');
+    expect(ddl.outputs[0]).toMatchObject({
+      output_type: 'stream',
+      text: 'Statement executed. 3 row(s) affected.\n',
+    });
+    expect(kernelService.execute).not.toHaveBeenCalled();
   });
 
   it('deletes the file, the kernel and the environment together', async () => {

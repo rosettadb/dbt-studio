@@ -5,15 +5,17 @@
  */
 
 import React, { useMemo, useRef, useState } from 'react';
-import { Box, Typography, useTheme } from '@mui/material';
+import { Alert, Box, Button, Typography, useTheme } from '@mui/material';
 import AnsiToHtml from 'ansi-to-html';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { SQL_FALLBACK_MIME } from '../../../../types/pythonNotebooks';
 import type {
   DisplayDataOutput,
   ExecuteResultOutput,
   MimeBundle,
   PythonCellOutput,
+  SqlFallbackInfo,
 } from '../../../../types/pythonNotebooks';
 
 const MIME_PRIORITY = [
@@ -151,12 +153,48 @@ const RichOutput: React.FC<{
   }
 };
 
+/**
+ * Shown above a SQL cell result that came back as a list of dicts because
+ * pandas is not installed in the notebook environment.
+ */
+const PandasMissingNotice: React.FC<{
+  info: SqlFallbackInfo;
+  onInstall?: () => void;
+  installing?: boolean;
+}> = ({ info, onInstall, installing }) => (
+  <Alert
+    severity="info"
+    sx={{ py: 0, fontSize: 12, alignItems: 'center' }}
+    action={
+      onInstall && (
+        <Button
+          size="small"
+          onClick={onInstall}
+          disabled={installing}
+          sx={{ textTransform: 'none', fontSize: 12 }}
+          data-testid="python-cell-install-pandas"
+        >
+          {installing ? 'Installing…' : 'Install pandas'}
+        </Button>
+      )
+    }
+  >
+    pandas is not installed, so <code>{info.variable}</code> is a list of dicts.
+    Install pandas to get a DataFrame.
+  </Alert>
+);
+
 interface PythonCellOutputsProps {
   outputs: PythonCellOutput[];
+  /** Install pandas into the notebook env and re-run the cell (sql cells). */
+  onInstallPandas?: () => void;
+  installingPandas?: boolean;
 }
 
 export const PythonCellOutputs: React.FC<PythonCellOutputsProps> = ({
   outputs,
+  onInstallPandas,
+  installingPandas,
 }) => {
   const ansi = useAnsi();
   const theme = useTheme();
@@ -229,27 +267,43 @@ export const PythonCellOutputs: React.FC<PythonCellOutputsProps> = ({
               </Box>
             );
           case 'display_data':
-          case 'execute_result':
+          case 'execute_result': {
+            const fallback = output.data[SQL_FALLBACK_MIME] as
+              | SqlFallbackInfo
+              | undefined;
             return (
-              <Box key={key} sx={{ display: 'flex', gap: 1 }}>
-                {output.output_type === 'execute_result' && (
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      fontFamily: 'monospace',
-                      color: 'error.light',
-                      minWidth: 44,
-                      pt: 0.25,
-                    }}
-                  >
-                    Out[{output.execution_count ?? ' '}]:
-                  </Typography>
+              <Box
+                key={key}
+                sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}
+              >
+                {fallback && (
+                  <PandasMissingNotice
+                    info={fallback}
+                    onInstall={onInstallPandas}
+                    installing={installingPandas}
+                  />
                 )}
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <RichOutput output={output} />
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  {output.output_type === 'execute_result' && (
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        fontFamily: 'monospace',
+                        color: 'error.light',
+                        minWidth: 44,
+                        pt: 0.25,
+                      }}
+                    >
+                      Out[{output.execution_count ?? ' '}]:
+                    </Typography>
+                  )}
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <RichOutput output={output} />
+                  </Box>
                 </Box>
               </Box>
             );
+          }
           default:
             return null;
         }

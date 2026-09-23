@@ -50,6 +50,7 @@ import {
   useDuplicatePythonNotebook,
   useExecutePythonCell,
   useExportPythonNotebook,
+  useInstallNotebookPackages,
   useInterruptKernel,
   useKernelEvents,
   useKernelState,
@@ -68,6 +69,7 @@ import { PythonRuntimePicker } from './PythonRuntimePicker';
 import type { RunMode } from './PythonCodeCell';
 
 const SAVE_DEBOUNCE_MS = 600;
+const PYTHON_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 const pythonSaveFlushers = new Map<string, () => Promise<void>>();
 
@@ -90,14 +92,48 @@ export function pythonNotebookToSummary(notebook: PythonNotebook): Notebook {
   };
 }
 
-function newCell(type: PythonCellType): PythonNotebookCell {
+/** First of df, df_2, df_3… not used by another SQL cell. */
+function nextSqlVariable(cells: PythonNotebookCell[]): string {
+  const taken = new Set(
+    cells
+      .filter((c) => c.cell_type === 'sql')
+      .map((c) => c.metadata.rosetta?.variable),
+  );
+  if (!taken.has('df')) return 'df';
+  let n = 2;
+  while (taken.has(`df_${n}`)) n += 1;
+  return `df_${n}`;
+}
+
+/** Cell metadata for `type`: sql cells carry the language + result variable. */
+function metadataForType(
+  type: PythonCellType,
+  metadata: PythonNotebookCell['metadata'],
+  cells: PythonNotebookCell[],
+): PythonNotebookCell['metadata'] {
+  const { rosetta, ...rest } = metadata;
+  if (type !== 'sql') return rest;
+  return {
+    ...rest,
+    rosetta: {
+      ...rosetta,
+      language: 'sql',
+      variable: rosetta?.variable || nextSqlVariable(cells),
+    },
+  };
+}
+
+function newCell(
+  type: PythonCellType,
+  cells: PythonNotebookCell[],
+): PythonNotebookCell {
   return {
     id: uuidv4(),
     cell_type: type,
     source: '',
     outputs: [],
     execution_count: null,
-    metadata: {},
+    metadata: metadataForType(type, {}, cells),
   };
 }
 
@@ -148,6 +184,7 @@ export const PythonNotebookEditor: React.FC<PythonNotebookEditorProps> = ({
   const exportNotebook = useExportPythonNotebook();
   const duplicateNotebook = useDuplicatePythonNotebook();
   const deleteNotebook = useDeletePythonNotebook();
+  const installPackages = useInstallNotebookPackages();
   const { data: kernel } = useKernelState(notebookId);
 
   const [cells, setCells] = useState<PythonNotebookCell[]>([]);
@@ -255,10 +292,13 @@ export const PythonNotebookEditor: React.FC<PythonNotebookEditorProps> = ({
   );
 
   /** Content change: apply now, save debounced. */
-  const handleChangeSource = useCallback(
-    (cellId: string, source: string) => {
+  const patchCellDebounced = useCallback(
+    (
+      cellId: string,
+      patch: (cell: PythonNotebookCell) => PythonNotebookCell,
+    ) => {
       setCells((prev) => {
-        const next = prev.map((c) => (c.id === cellId ? { ...c, source } : c));
+        const next = prev.map((c) => (c.id === cellId ? patch(c) : c));
         cellsRef.current = next;
         if (saveTimer.current) clearTimeout(saveTimer.current);
         saveTimer.current = setTimeout(() => {
@@ -269,6 +309,24 @@ export const PythonNotebookEditor: React.FC<PythonNotebookEditorProps> = ({
       });
     },
     [persist],
+  );
+
+  const handleChangeSource = useCallback(
+    (cellId: string, source: string) =>
+      patchCellDebounced(cellId, (c) => ({ ...c, source })),
+    [patchCellDebounced],
+  );
+
+  const handleChangeVariable = useCallback(
+    (cellId: string, variable: string) =>
+      patchCellDebounced(cellId, (c) => ({
+        ...c,
+        metadata: {
+          ...c.metadata,
+          rosetta: { ...c.metadata.rosetta, language: 'sql', variable },
+        },
+      })),
+    [patchCellDebounced],
   );
 
   // ── Environment + kernel events ─────────────────────────────────
@@ -353,7 +411,7 @@ export const PythonNotebookEditor: React.FC<PythonNotebookEditorProps> = ({
 
   const insertCell = useCallback(
     (type: PythonCellType, index: number) => {
-      const cell = newCell(type);
+      const cell = newCell(type, cellsRef.current);
       commitCells((prev) => [
         ...prev.slice(0, index),
         cell,
@@ -382,11 +440,21 @@ export const PythonNotebookEditor: React.FC<PythonNotebookEditorProps> = ({
       commitCells((prev) => {
         const index = prev.findIndex((c) => c.id === cellId);
         if (index === -1) return prev;
+        const original = prev[index];
         const copy: PythonNotebookCell = {
-          ...prev[index],
+          ...original,
           id: uuidv4(),
           outputs: [],
           execution_count: null,
+          // A duplicated SQL cell gets its own result variable
+          metadata:
+            original.cell_type === 'sql'
+              ? metadataForType(
+                  'sql',
+                  { ...original.metadata, rosetta: { language: 'sql' } },
+                  prev,
+                )
+              : original.metadata,
         };
         return [...prev.slice(0, index + 1), copy, ...prev.slice(index + 1)];
       });
@@ -413,7 +481,13 @@ export const PythonNotebookEditor: React.FC<PythonNotebookEditorProps> = ({
       commitCells((prev) =>
         prev.map((c) =>
           c.id === cellId
-            ? { ...c, cell_type: type, outputs: [], execution_count: null }
+            ? {
+                ...c,
+                cell_type: type,
+                outputs: [],
+                execution_count: null,
+                metadata: metadataForType(type, c.metadata, prev),
+              }
             : c,
         ),
       );
@@ -459,7 +533,12 @@ export const PythonNotebookEditor: React.FC<PythonNotebookEditorProps> = ({
   const runCell = useCallback(
     async (cellId: string): Promise<boolean> => {
       const cell = cellsRef.current.find((c) => c.id === cellId);
-      if (!cell || cell.cell_type !== 'code') return true;
+      if (!cell || cell.cell_type === 'markdown') return true;
+      const variable = cell.metadata.rosetta?.variable ?? '';
+      if (cell.cell_type === 'sql' && !PYTHON_IDENTIFIER.test(variable)) {
+        toast.warn(`"${variable}" is not a valid Python variable name.`);
+        return false;
+      }
       if (runtime && runtime.status !== 'ready') {
         toast.warn(
           runtime.status === 'creating'
@@ -488,6 +567,10 @@ export const PythonNotebookEditor: React.FC<PythonNotebookEditorProps> = ({
           notebookId,
           cellId,
           code: cell.source,
+          options:
+            cell.cell_type === 'sql'
+              ? { cellType: 'sql', variable }
+              : undefined,
         });
         setCells((prev) => {
           const next = prev.map((c) =>
@@ -520,7 +603,7 @@ export const PythonNotebookEditor: React.FC<PythonNotebookEditorProps> = ({
       const cell = cellsRef.current[index];
       if (!cell) return;
 
-      if (cell.cell_type === 'code') {
+      if (cell.cell_type !== 'markdown') {
         runCell(cellId).catch(() => undefined);
       }
 
@@ -538,7 +621,9 @@ export const PythonNotebookEditor: React.FC<PythonNotebookEditorProps> = ({
   const handleRunAll = useCallback(async () => {
     setIsRunningAll(true);
     try {
-      const codeCells = cellsRef.current.filter((c) => c.cell_type === 'code');
+      const codeCells = cellsRef.current.filter(
+        (c) => c.cell_type !== 'markdown',
+      );
       // eslint-disable-next-line no-restricted-syntax
       for (const cell of codeCells) {
         // eslint-disable-next-line no-await-in-loop
@@ -552,6 +637,17 @@ export const PythonNotebookEditor: React.FC<PythonNotebookEditorProps> = ({
       setIsRunningAll(false);
     }
   }, [runCell]);
+
+  /** "Install pandas" from a SQL cell's fallback notice: pip install, re-run. */
+  const handleInstallPandas = useCallback(
+    (cellId: string) => {
+      installPackages.mutate(
+        { notebookId, specs: ['pandas'] },
+        { onSuccess: () => runCell(cellId).catch(() => undefined) },
+      );
+    },
+    [installPackages, notebookId, runCell],
+  );
 
   // ── Keyboard (command mode) ─────────────────────────────────────
   const pendingD = useRef(false);
@@ -795,11 +891,12 @@ export const PythonNotebookEditor: React.FC<PythonNotebookEditorProps> = ({
               Empty notebook
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Add a code or text cell to get started
+              Add a code, SQL or text cell to get started
             </Typography>
             <CellInsertBar
               persistent
               onAddCode={() => insertCell('code', 0)}
+              onAddSql={() => insertCell('sql', 0)}
               onAddText={() => insertCell('markdown', 0)}
             />
           </Box>
@@ -815,6 +912,7 @@ export const PythonNotebookEditor: React.FC<PythonNotebookEditorProps> = ({
                 >
                   <CellInsertBar
                     onAddCode={() => insertCell('code', 0)}
+                    onAddSql={() => insertCell('sql', 0)}
                     onAddText={() => insertCell('markdown', 0)}
                   />
                   {cells.map((cell, index) => (
@@ -842,10 +940,15 @@ export const PythonNotebookEditor: React.FC<PythonNotebookEditorProps> = ({
                             focusRequest={focusRequests[cell.id]}
                             startEditing={freshCellId === cell.id}
                             dragHandleProps={draggable.dragHandleProps}
+                            installingPandas={installPackages.isLoading}
                             onSelect={() => setSelectedCellId(cell.id)}
                             onChange={(source) =>
                               handleChangeSource(cell.id, source)
                             }
+                            onChangeVariable={(variable) =>
+                              handleChangeVariable(cell.id, variable)
+                            }
+                            onInstallPandas={() => handleInstallPandas(cell.id)}
                             onRun={(mode) => handleRun(cell.id, mode)}
                             onInterrupt={() =>
                               interruptKernel.mutate(notebookId)
@@ -861,6 +964,7 @@ export const PythonNotebookEditor: React.FC<PythonNotebookEditorProps> = ({
                           />
                           <CellInsertBar
                             onAddCode={() => insertCell('code', index + 1)}
+                            onAddSql={() => insertCell('sql', index + 1)}
                             onAddText={() => insertCell('markdown', index + 1)}
                           />
                         </Box>

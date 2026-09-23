@@ -1,6 +1,7 @@
 /**
  * Cell Insert Bar
- * Colab-style "+ Code" / "+ Text" affordance shown between cells on hover.
+ * Colab-style "+ Code" / "+ SQL" / "+ Text" affordance shown between cells on
+ * hover.
  */
 
 import React from 'react';
@@ -9,6 +10,7 @@ import { Add as AddIcon } from '@mui/icons-material';
 
 interface CellInsertBarProps {
   onAddCode: () => void;
+  onAddSql: () => void;
   onAddText: () => void;
   /** Always visible (used for the empty-notebook state and the trailing bar) */
   persistent?: boolean;
@@ -16,6 +18,7 @@ interface CellInsertBarProps {
 
 export const CellInsertBar: React.FC<CellInsertBarProps> = ({
   onAddCode,
+  onAddSql,
   onAddText,
   persistent,
 }) => (
@@ -61,6 +64,22 @@ export const CellInsertBar: React.FC<CellInsertBarProps> = ({
       }}
     >
       Code
+    </Button>
+    <Button
+      size="small"
+      variant="outlined"
+      startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+      onClick={onAddSql}
+      sx={{
+        zIndex: 1,
+        bgcolor: 'background.paper',
+        height: 24,
+        fontSize: 11,
+        textTransform: 'none',
+        py: 0,
+      }}
+    >
+      SQL
     </Button>
     <Button
       size="small"

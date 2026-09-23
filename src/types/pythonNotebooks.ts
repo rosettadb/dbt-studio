@@ -92,16 +92,41 @@ export type PythonCellOutput =
   | DisplayDataOutput
   | ExecuteResultOutput;
 
-export type PythonCellType = 'code' | 'markdown';
+/**
+ * `sql` cells run against the notebook's connection in the main process and
+ * push the rows into the kernel as a variable. On disk they are stored as
+ * nbformat `code` cells with a `%%sql <variable> <<` magic line (JupySQL
+ * convention) and `metadata.rosetta.language = 'sql'`.
+ */
+export type PythonCellType = 'code' | 'markdown' | 'sql';
+
+/** Studio-specific per-cell metadata, stored under `metadata.rosetta`. */
+export interface PythonCellRosettaMetadata {
+  language?: 'sql';
+  /** Python variable that receives the SQL result (sql cells only). */
+  variable?: string;
+}
 
 export interface PythonNotebookCell {
   id: string;
   cell_type: PythonCellType;
   source: string;
-  /** Only meaningful for code cells */
+  /** Only meaningful for code / sql cells */
   outputs: PythonCellOutput[];
   execution_count: number | null;
-  metadata: Record<string, unknown>;
+  metadata: Record<string, unknown> & { rosetta?: PythonCellRosettaMetadata };
+}
+
+/**
+ * Mime type attached (alongside `text/html`) to the display output of a SQL
+ * cell whose result could not be turned into a DataFrame because pandas is
+ * not installed in the notebook environment.
+ */
+export const SQL_FALLBACK_MIME = 'application/vnd.rosetta.sql-fallback+json';
+
+export interface SqlFallbackInfo {
+  variable: string;
+  rowCount: number;
 }
 
 export interface PythonNotebook {
@@ -170,6 +195,13 @@ export type KernelEvent =
       status: 'ok' | 'error' | 'abort';
       execution_count: number | null;
     };
+
+export interface ExecuteCellOptions {
+  /** Defaults to `code`. `sql` runs the source as a query first. */
+  cellType?: PythonCellType;
+  /** Target variable for sql cells (defaults to `df`). */
+  variable?: string;
+}
 
 export interface ExecuteCellResult {
   cellId: string;
