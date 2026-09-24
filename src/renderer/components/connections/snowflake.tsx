@@ -126,14 +126,6 @@ export const Snowflake: React.FC<Props> = ({
           error: payload.error,
         };
       });
-      if (
-        payload.correlationId === activeCorrelationIdRef.current &&
-        (payload.status === 'completed' ||
-          payload.status === 'cancelled' ||
-          payload.status === 'failed')
-      ) {
-        activeCorrelationIdRef.current = undefined;
-      }
     });
     return () => {
       unsub();
@@ -353,6 +345,7 @@ export const Snowflake: React.FC<Props> = ({
           schema: formState.schema.trim(),
           role: formState.role?.trim() || '',
         });
+        if (activeCorrelationIdRef.current !== correlationId) return;
         if (result.ok) {
           toast.success(
             'Connection test successful. Snowflake may reuse a cached OAuth session without opening the browser.',
@@ -363,6 +356,7 @@ export const Snowflake: React.FC<Props> = ({
           setConnectionStatus('failed');
         }
       } catch (err: any) {
+        if (activeCorrelationIdRef.current !== correlationId) return;
         toast.error(`Test failed: ${err.message}`);
         setConnectionStatus('failed');
         setGateState((prev) => ({
@@ -371,7 +365,9 @@ export const Snowflake: React.FC<Props> = ({
           error: err.message,
         }));
       } finally {
-        activeCorrelationIdRef.current = undefined;
+        if (activeCorrelationIdRef.current === correlationId) {
+          activeCorrelationIdRef.current = undefined;
+        }
       }
     } else {
       testConnection(formState);

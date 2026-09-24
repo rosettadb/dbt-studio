@@ -22,7 +22,10 @@ import {
 import { SNOWFLAKE_TYPE_MAP } from './constants';
 import SecureStorageService from '../services/secureStorage.service';
 import { buildKineticaUrl } from '../../shared/kineticaUrl';
-import { SnowflakeAuthManager } from './snowflakeAuth';
+import {
+  SNOWFLAKE_REAUTH_MESSAGE,
+  SnowflakeAuthManager,
+} from './snowflakeAuth';
 
 export async function testPostgresConnection(
   config: PostgresConnection,
@@ -191,6 +194,9 @@ export const createSnowflakeConnection = (config: SnowflakeConnection) => {
       authenticator: 'OAUTH_AUTHORIZATION_CODE',
       browserActionTimeout: 120000,
       clientStoreTemporaryCredential: true,
+      openExternalBrowserCallback: () => {
+        throw new Error(SNOWFLAKE_REAUTH_MESSAGE);
+      },
     });
   }
 

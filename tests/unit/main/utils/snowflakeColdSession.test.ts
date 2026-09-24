@@ -51,6 +51,10 @@ describe('Snowflake cold-session redirect (Option B: auth lives in Connections s
     expect(result).toEqual({ success: false, error: SNOWFLAKE_REAUTH_MESSAGE });
     // connectAsync never invoked: no browser, no 120s orphan.
     expect(connection.connectAsync).not.toHaveBeenCalled();
+    const options = createConnectionMock.mock.calls[0][0];
+    expect(() =>
+      options.openExternalBrowserCallback('https://example.com'),
+    ).toThrow(SNOWFLAKE_REAUTH_MESSAGE);
   });
 
   it('schema extract path throws guidance without opening a browser flow', async () => {
@@ -64,6 +68,10 @@ describe('Snowflake cold-session redirect (Option B: auth lives in Connections s
       authMethod: 'oauth_browser',
     });
     await expect(extractor.connect()).rejects.toThrow(SNOWFLAKE_REAUTH_MESSAGE);
+    const options = createConnectionMock.mock.calls[0][0];
+    expect(() =>
+      options.openExternalBrowserCallback('https://example.com'),
+    ).toThrow(SNOWFLAKE_REAUTH_MESSAGE);
   });
 
   it('password mode is unaffected by the session check', async () => {
@@ -82,6 +90,9 @@ describe('Snowflake cold-session redirect (Option B: auth lives in Connections s
       'SELECT 1',
     );
     expect(createConnectionMock).toHaveBeenCalled();
+    expect(
+      createConnectionMock.mock.calls[0][0].openExternalBrowserCallback,
+    ).toBeUndefined();
     expect(result).toEqual({ success: true, data: [], fields: [] });
   });
 });

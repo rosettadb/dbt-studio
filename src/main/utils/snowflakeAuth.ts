@@ -2,6 +2,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
 import * as http from 'http';
+import { createHash } from 'crypto';
 import * as snowflake from 'snowflake-sdk';
 import { shell } from 'electron';
 import {
@@ -11,6 +12,7 @@ import {
 import {
   ConnectionTestResult,
   SNOWFLAKE_REAUTH_MESSAGE,
+  SnowflakeConnection,
 } from '../../types/backend';
 
 export { SNOWFLAKE_REAUTH_MESSAGE };
@@ -282,11 +284,55 @@ export class SnowflakeAuthManager {
   // Reads the live OAuth access token from the Node SDK's own credential
   // cache file (never from SDK memory internals). Used to hand the current
   // session to dbt (Python driver) via process env at run time — the token
-  // is never written to profiles, logs, or renderer state. Returns null
-  // unless exactly one access/refresh pair is present (multi-account
-  // machines fail safe to guidance instead of picking the wrong identity).
-  static readCachedOAuthAccessToken(): string | null {
+  // is never written to profiles, logs, or renderer state. Validate the
+  // named session silently before reading its identity-specific cache entry.
+  static async readCachedOAuthAccessToken(
+    namedConnection: SnowflakeConnection,
+  ): Promise<string | null> {
+    if (!this.hasSnowflakeToken()) return null;
+
+    const options: snowflake.ConnectionOptions = {
+      account: namedConnection.account,
+      username: namedConnection.username,
+      warehouse: namedConnection.warehouse,
+      database: namedConnection.database,
+      schema: namedConnection.schema,
+      role: namedConnection.role,
+      authenticator: 'OAUTH_AUTHORIZATION_CODE',
+      clientStoreTemporaryCredential: true,
+      openExternalBrowserCallback: () => {
+        throw new Error(SNOWFLAKE_REAUTH_MESSAGE);
+      },
+    };
+    let connection: snowflake.Connection | undefined;
     try {
+      connection = snowflake.createConnection(options);
+      const sdkConnection = connection;
+      await new Promise<void>((resolve, reject) => {
+        Promise.resolve(
+          sdkConnection.connectAsync((error) =>
+            error ? reject(error) : resolve(),
+          ),
+        ).catch(reject);
+      });
+      // The SDK resolves host/accessUrl in createConnection and hashes these
+      // fields with the username, OAuth token URL, and role for its cache key.
+      if (!options.host || !options.accessUrl) return null;
+      const normalize = (value: string) =>
+        value.includes('"') ? value : value.toLowerCase();
+      const hash = createHash('sha256')
+        .update(
+          JSON.stringify({
+            snowflakeHost: options.host,
+            username: normalize(namedConnection.username),
+            oauthIdpUrl: `${options.accessUrl}/oauth/token-request`,
+            role: namedConnection.role
+              ? normalize(namedConnection.role)
+              : undefined,
+          }),
+          'utf8',
+        )
+        .digest('hex');
       const raw = fs.readFileSync(this.getSnowflakeCacheFile(), 'utf8');
       const parsed: unknown = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object') {
@@ -297,30 +343,24 @@ export class SnowflakeAuthManager {
         return null;
       }
       const record = tokens as Record<string, unknown>;
-      const accessEntries = Object.entries(record).filter(
-        ([key, value]) =>
-          key.includes('OauthAccessToken.') &&
-          typeof value === 'string' &&
-          value.length > 0,
-      );
-      if (accessEntries.length !== 1) {
-        return null;
-      }
-      const [accessKey, accessToken] = accessEntries[0];
-      const hash = accessKey.split('.').pop() ?? '';
-      const hasPairedRefreshToken = Object.entries(record).some(
-        ([key, value]) =>
-          key.includes('OauthRefreshToken.') &&
-          key.endsWith(`.${hash}`) &&
-          typeof value === 'string' &&
-          value.length > 0,
-      );
-      if (!hasPairedRefreshToken) {
-        return null;
-      }
-      return accessToken as string;
+      const accessToken =
+        record[`SnowflakeTokenCache.v2.OauthAccessToken.${hash}`];
+      const refreshToken =
+        record[`SnowflakeTokenCache.v2.OauthRefreshToken.${hash}`];
+      return typeof accessToken === 'string' &&
+        accessToken.length > 0 &&
+        typeof refreshToken === 'string' &&
+        refreshToken.length > 0
+        ? accessToken
+        : null;
     } catch (e) {
       return null;
+    } finally {
+      try {
+        connection?.destroy(() => {});
+      } catch (e) {
+        // Ignore cleanup errors after the cache check.
+      }
     }
   }
 

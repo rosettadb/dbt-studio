@@ -1,7 +1,10 @@
 /* eslint-disable no-restricted-syntax, no-await-in-loop, consistent-return */
 import snowflake from 'snowflake-sdk';
 import { Column, Table } from '../../types/backend';
-import { SnowflakeAuthManager } from '../utils/snowflakeAuth';
+import {
+  SNOWFLAKE_REAUTH_MESSAGE,
+  SnowflakeAuthManager,
+} from '../utils/snowflakeAuth';
 
 export default class SnowflakeExtractor {
   private connection: snowflake.Connection;
@@ -34,6 +37,9 @@ export default class SnowflakeExtractor {
         authenticator: 'OAUTH_AUTHORIZATION_CODE',
         browserActionTimeout: 120000,
         clientStoreTemporaryCredential: true,
+        openExternalBrowserCallback: () => {
+          throw new Error(SNOWFLAKE_REAUTH_MESSAGE);
+        },
       });
     } else {
       this.connection = snowflake.createConnection({

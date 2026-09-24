@@ -866,7 +866,9 @@ export default class ConnectorsService {
     ) {
       return false;
     }
-    const accessToken = SnowflakeAuthManager.readCachedOAuthAccessToken();
+    const accessToken = await SnowflakeAuthManager.readCachedOAuthAccessToken(
+      snowflakeConn as SnowflakeConnection,
+    );
     if (!accessToken) {
       delete process.env[`db-token-${snowflakeConn.name}`];
       return false;

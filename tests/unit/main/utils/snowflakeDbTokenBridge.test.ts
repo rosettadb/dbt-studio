@@ -80,9 +80,14 @@ jest.mock('../../../../src/main/services/secureStorage.service', () => ({
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { createHash } from 'crypto';
 import * as yaml from 'js-yaml';
+import * as snowflake from 'snowflake-sdk';
 
-import { SnowflakeAuthManager } from '../../../../src/main/utils/snowflakeAuth';
+import {
+  SNOWFLAKE_REAUTH_MESSAGE,
+  SnowflakeAuthManager,
+} from '../../../../src/main/utils/snowflakeAuth';
 import ConnectorsService from '../../../../src/main/services/connectors.service';
 import { updateProfilesYml } from '../../../../src/main/utils/yamlPartialUpdate';
 
@@ -117,7 +122,12 @@ const passwordConnection = {
 } as any;
 
 function writeCacheFile(dir: string, content: unknown): void {
-  const cacheDir = path.join(dir, 'Library', 'Caches', 'Snowflake');
+  let cacheDir = path.join(dir, '.cache', 'snowflake');
+  if (process.platform === 'win32') {
+    cacheDir = path.join(dir, 'AppData', 'Local', 'Snowflake', 'Caches');
+  } else if (process.platform === 'darwin') {
+    cacheDir = path.join(dir, 'Library', 'Caches', 'Snowflake');
+  }
   fs.mkdirSync(cacheDir, { recursive: true });
   fs.writeFileSync(
     path.join(cacheDir, 'credential_cache_v1.json'),
@@ -126,59 +136,141 @@ function writeCacheFile(dir: string, content: unknown): void {
   );
 }
 
-const pairCache = (hash: string) => ({
+const accountHost = 'xy12345.us-east-2.aws.snowflakecomputing.com';
+const accountUrl = `https://${accountHost}`;
+const keyHash = createHash('sha256')
+  .update(
+    JSON.stringify({
+      snowflakeHost: accountHost,
+      username: 'alice',
+      oauthIdpUrl: `${accountUrl}/oauth/token-request`,
+      role: 'sysadmin',
+    }),
+  )
+  .digest('hex');
+
+const pairCache = (hash: string, accessToken = 'access-123') => ({
   tokens: {
-    [`SnowflakeTokenCache.v2.OauthAccessToken.${hash}`]: 'access-123',
+    [`SnowflakeTokenCache.v2.OauthAccessToken.${hash}`]: accessToken,
     [`SnowflakeTokenCache.v2.OauthRefreshToken.${hash}`]: 'refresh-123',
   },
 });
 
 describe('Snowflake dbt token bridge', () => {
   let tmpHome = '';
+  const originalUserProfile = process.env.USERPROFILE;
 
   beforeEach(() => {
     tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'snow-bridge-test-'));
     mockHome = tmpHome;
+    if (process.platform === 'win32') process.env.USERPROFILE = tmpHome;
+    (snowflake.createConnection as jest.Mock).mockImplementation((options) => {
+      options.host = accountHost;
+      options.accessUrl = accountUrl;
+      return {
+        connectAsync: jest.fn((callback) => callback(null)),
+        destroy: jest.fn((callback) => callback(null)),
+      };
+    });
     mockConnections.length = 0;
     delete process.env['db-token-snowflake web login'];
   });
 
   afterEach(() => {
     mockHome = '';
+    if (process.platform === 'win32') {
+      if (originalUserProfile === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = originalUserProfile;
+    }
+    jest.clearAllMocks();
     delete process.env['db-token-snowflake web login'];
     fs.rmSync(tmpHome, { recursive: true, force: true });
   });
 
-  it('reads the live access token from a single cached pair', () => {
-    writeCacheFile(tmpHome, pairCache('aaa'));
-    expect(SnowflakeAuthManager.readCachedOAuthAccessToken()).toBe(
-      'access-123',
-    );
+  it('reads the named connection token after a silent SDK connection', async () => {
+    writeCacheFile(tmpHome, pairCache(keyHash));
+    expect(SnowflakeAuthManager.hasSnowflakeToken()).toBe(true);
+    await expect(
+      SnowflakeAuthManager.readCachedOAuthAccessToken(
+        oauthConnection.connection,
+      ),
+    ).resolves.toBe('access-123');
+    const options = (snowflake.createConnection as jest.Mock).mock.calls[0][0];
+    expect(options.openExternalBrowserCallback).toEqual(expect.any(Function));
+    expect(() =>
+      options.openExternalBrowserCallback('https://example.com'),
+    ).toThrow(SNOWFLAKE_REAUTH_MESSAGE);
   });
 
-  it('returns null without a cache file, with malformed JSON, or with ambiguity', () => {
-    expect(SnowflakeAuthManager.readCachedOAuthAccessToken()).toBeNull();
+  it('returns null without a cache file or with malformed JSON', async () => {
+    await expect(
+      SnowflakeAuthManager.readCachedOAuthAccessToken(
+        oauthConnection.connection,
+      ),
+    ).resolves.toBeNull();
     writeCacheFile(tmpHome, 'not-json{{{');
-    expect(SnowflakeAuthManager.readCachedOAuthAccessToken()).toBeNull();
+    await expect(
+      SnowflakeAuthManager.readCachedOAuthAccessToken(
+        oauthConnection.connection,
+      ),
+    ).resolves.toBeNull();
+  });
+
+  it('selects only the matching identity when multiple accounts are cached', async () => {
     writeCacheFile(tmpHome, {
       tokens: {
-        ...pairCache('aaa').tokens,
-        ...pairCache('bbb').tokens,
+        ...pairCache(keyHash).tokens,
+        ...pairCache('other-account', 'wrong-token').tokens,
       },
     });
-    expect(SnowflakeAuthManager.readCachedOAuthAccessToken()).toBeNull();
+    await expect(
+      SnowflakeAuthManager.readCachedOAuthAccessToken(
+        oauthConnection.connection,
+      ),
+    ).resolves.toBe('access-123');
+    writeCacheFile(tmpHome, pairCache('other-account', 'wrong-token'));
+    await expect(
+      SnowflakeAuthManager.readCachedOAuthAccessToken(
+        oauthConnection.connection,
+      ),
+    ).resolves.toBeNull();
   });
 
-  it('returns null when the access token has no paired refresh token', () => {
+  it('returns null when the matching access token has no paired refresh token', async () => {
     writeCacheFile(tmpHome, {
-      tokens: { 'SnowflakeTokenCache.v2.OauthAccessToken.aaa': 'access-123' },
+      tokens: {
+        [`SnowflakeTokenCache.v2.OauthAccessToken.${keyHash}`]: 'access-123',
+      },
     });
-    expect(SnowflakeAuthManager.readCachedOAuthAccessToken()).toBeNull();
+    await expect(
+      SnowflakeAuthManager.readCachedOAuthAccessToken(
+        oauthConnection.connection,
+      ),
+    ).resolves.toBeNull();
+  });
+
+  it('does not read a token when the silent SDK connection fails', async () => {
+    writeCacheFile(tmpHome, pairCache(keyHash));
+    (snowflake.createConnection as jest.Mock).mockImplementationOnce(
+      (options) => {
+        options.host = accountHost;
+        options.accessUrl = accountUrl;
+        return {
+          connectAsync: jest.fn((callback) => callback(new Error('expired'))),
+          destroy: jest.fn((callback) => callback(null)),
+        };
+      },
+    );
+    await expect(
+      SnowflakeAuthManager.readCachedOAuthAccessToken(
+        oauthConnection.connection,
+      ),
+    ).resolves.toBeNull();
   });
 
   it('materializes the token env for oauth connections with a warm cache', async () => {
     mockConnections.push(oauthConnection);
-    writeCacheFile(tmpHome, pairCache('aaa'));
+    writeCacheFile(tmpHome, pairCache(keyHash));
     const ok = await ConnectorsService.materializeSnowflakeOAuthEnv(
       'snowflake web login',
     );
