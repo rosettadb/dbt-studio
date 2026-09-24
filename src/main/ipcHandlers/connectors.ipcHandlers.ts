@@ -5,8 +5,13 @@ import type {
   QueryResponseType,
   ExecuteStatementType,
 } from '../../types/backend';
-import { ConfigureConnectionBody, UpdateConnectionBody } from '../../types/ipc';
+import {
+  ConfigureConnectionBody,
+  UpdateConnectionBody,
+  StartSnowflakeAuthRequest,
+} from '../../types/ipc';
 import { CloudConnection, RecentItem } from '../../types/frontend';
+import { SnowflakeAuthManager } from '../utils/snowflakeAuth';
 
 const handlerChannels = [
   'connector:configure',
@@ -21,6 +26,10 @@ const handlerChannels = [
   'connector:updateQuery',
   'connector:getQuery',
   'connector:executeQuery',
+  'connector:snowflake:auth:start',
+  'connector:snowflake:auth:cancel',
+  'connector:snowflake:auth:revoke',
+  'connector:snowflake:auth:materialize',
 ];
 
 const removeConnectorsIpcHandlers = () => {
@@ -187,6 +196,59 @@ const registerConnectorsHandlers = () => {
       } catch (error: any) {
         return { success: false, error: error.message };
       }
+    },
+  );
+
+  ipcMain.handle(
+    'connector:snowflake:auth:start',
+    async (event, request: StartSnowflakeAuthRequest) => {
+      // Narrow Snowflake-only pre-validation: never invoke the SDK with
+      // missing identity fields. Detailed validation also lives in
+      // SnowflakeAuthManager; this keeps a clear IPC boundary.
+      if (
+        !request ||
+        typeof request.correlationId !== 'string' ||
+        !request.correlationId.trim() ||
+        typeof request.account !== 'string' ||
+        !request.account.trim() ||
+        typeof request.username !== 'string' ||
+        !request.username.trim()
+      ) {
+        throw new Error(
+          'Snowflake account identifier and username are required before starting browser authentication.',
+        );
+      }
+      return SnowflakeAuthManager.startAuth(request, (payload) => {
+        event.sender.send('connector:snowflake:auth:event', payload);
+      });
+    },
+  );
+
+  ipcMain.handle(
+    'connector:snowflake:auth:cancel',
+    async (_event, correlationId: string) => {
+      SnowflakeAuthManager.cancelAuth(correlationId);
+      return { success: true };
+    },
+  );
+  ipcMain.handle('connector:snowflake:auth:hasToken', async () => {
+    return SnowflakeAuthManager.hasSnowflakeToken();
+  });
+
+  ipcMain.handle(
+    'connector:snowflake:auth:revoke',
+    async (_event, body?: { connectionName?: string } | string) => {
+      const connectionName =
+        typeof body === 'string' ? body : (body?.connectionName ?? '');
+      return ConnectorsService.revokeSnowflakeSession(connectionName);
+    },
+  );
+  ipcMain.handle(
+    'connector:snowflake:auth:materialize',
+    async (_event, body?: { connectionName?: string } | string) => {
+      const connectionName =
+        typeof body === 'string' ? body : (body?.connectionName ?? '');
+      return ConnectorsService.materializeSnowflakeOAuthEnv(connectionName);
     },
   );
 };

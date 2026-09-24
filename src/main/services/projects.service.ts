@@ -1079,14 +1079,20 @@ export default class ProjectsService {
   }
 
   static async extractSnowflakeSchema(connection: SnowflakeConnection) {
+    const sfAuthMethod =
+      connection.authMethod === 'oauth_browser' ? 'oauth_browser' : 'password';
     const extractor = new SnowflakeExtractor({
-      account: connection.account.split('.')[0],
+      account:
+        sfAuthMethod === 'oauth_browser'
+          ? connection.account
+          : connection.account.split('.')[0],
       username: connection.username,
       password: connection.password,
       warehouse: connection.warehouse,
       database: connection.database,
       schema: connection.schema,
       role: connection.role,
+      authMethod: sfAuthMethod,
     });
 
     await extractor.connect();

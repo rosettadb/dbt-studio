@@ -9,7 +9,13 @@ import {
   useCheckProjectAdapterCompatibility,
   useSetConnectionEnvVariable,
 } from '../controllers';
-import { Project, DbtCommandType, ConnectionInput } from '../../types/backend';
+import {
+  Project,
+  DbtCommandType,
+  ConnectionInput,
+  SNOWFLAKE_REAUTH_MESSAGE,
+} from '../../types/backend';
+import { materializeSnowflakeToken } from '../services/connectors.service';
 import { useAppContext } from './index';
 import { extractCliErrorDetails } from '../utils/dbtCommandResult';
 import { useDbtRunHistory } from './useDbtRunHistory';
@@ -32,6 +38,17 @@ interface UseDbtReturn {
   isRunning: boolean;
   activeCommand: DbtCommandType | null;
 }
+
+const hasSnowflakeOAuthSession = (connection: ConnectionInput) => {
+  if (
+    connection.type !== 'snowflake' ||
+    connection.authMethod !== 'oauth_browser'
+  ) {
+    return Promise.resolve(true);
+  }
+  // The token stays in main; only the connection name crosses IPC.
+  return materializeSnowflakeToken(connection.name).catch(() => false);
+};
 
 const useDbt = (
   successCallback?: () => void,
@@ -282,6 +299,10 @@ const useDbt = (
           connection.connection.name,
           connection.connection,
         );
+        if (!(await hasSnowflakeOAuthSession(connection.connection))) {
+          if (options.showToast) toast.error(SNOWFLAKE_REAUTH_MESSAGE);
+          return;
+        }
 
         // Build command string
         const cmdString = buildCommand(command, project, args);
@@ -422,6 +443,10 @@ const useDbt = (
             connection.connection.name,
             connection.connection,
           );
+          if (!(await hasSnowflakeOAuthSession(connection.connection))) {
+            toast.error(SNOWFLAKE_REAUTH_MESSAGE);
+            return '';
+          }
 
           // Build command string
           const cmdString = buildCommand(
@@ -551,6 +576,10 @@ const useDbt = (
             connection.connection.name,
             connection.connection,
           );
+          if (!(await hasSnowflakeOAuthSession(connection.connection))) {
+            toast.error(SNOWFLAKE_REAUTH_MESSAGE);
+            return '';
+          }
           const cmdString = buildCommand('list', project, '');
           if (!cmdString) {
             return '';
