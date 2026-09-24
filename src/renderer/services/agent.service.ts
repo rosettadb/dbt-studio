@@ -5,6 +5,7 @@ import type { TextStreamPart } from 'ai';
 import { client } from '../config/client';
 
 import type { AISettingsConfig } from '../../types/backend';
+import type { ChatImageAttachment } from '../../types/chatAttachments';
 
 /**
  * Context item for agent requests
@@ -22,6 +23,7 @@ export interface ContextItem {
 export interface AgentRunRequest {
   conversationId: number;
   content: string;
+  imageAttachmentIds?: string[];
   contextItems?: ContextItem[];
   requestedModel?: string;
   projectPath?: string;
@@ -65,6 +67,38 @@ export const runAgent = async (
     request,
   );
   return data;
+};
+
+export const selectChatImages = async (
+  conversationId: number,
+  maxImages: number,
+): Promise<ChatImageAttachment[]> => {
+  const { data } = await client.post<
+    { conversationId: number; maxImages: number },
+    ChatImageAttachment[]
+  >('agent:images:select', { conversationId, maxImages });
+  return data;
+};
+
+export const previewChatImage = async (
+  id: string,
+  conversationId: number,
+): Promise<{ dataUrl: string; mediaType: string }> => {
+  const { data } = await client.post<
+    { id: string; conversationId: number },
+    { dataUrl: string; mediaType: string }
+  >('agent:images:preview', { id, conversationId });
+  return data;
+};
+
+export const releaseChatImages = async (
+  conversationId: number,
+  ids: string[],
+): Promise<void> => {
+  await client.post<{ conversationId: number; ids: string[] }, void>(
+    'agent:images:release',
+    { conversationId, ids },
+  );
 };
 
 /**
