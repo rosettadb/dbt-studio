@@ -26,6 +26,8 @@ import {
   ContentCopy,
   Delete,
   DragIndicator,
+  ExpandLess,
+  ExpandMore,
   MoreVert,
   Notes,
   PlayArrow,
@@ -74,6 +76,19 @@ interface PythonCellProps {
   onClearOutputs: () => void;
   onChangeType: (type: PythonCellType) => void;
   onInstallPandas: () => void;
+  /** Collapsed cells show a one-line summary instead of editor and outputs */
+  collapsed?: boolean;
+  onToggleCollapsed: () => void;
+}
+
+/** First non-empty line of the source, for the collapsed summary. */
+function summarize(source: string): string {
+  return (
+    source
+      .split('\n')
+      .find((line) => line.trim())
+      ?.trim() ?? ''
+  );
 }
 
 const PythonCellComponent: React.FC<PythonCellProps> = ({
@@ -98,6 +113,8 @@ const PythonCellComponent: React.FC<PythonCellProps> = ({
   onClearOutputs,
   onChangeType,
   onInstallPandas,
+  collapsed = false,
+  onToggleCollapsed,
 }) => {
   const theme = useTheme();
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
@@ -222,7 +239,54 @@ const PythonCellComponent: React.FC<PythonCellProps> = ({
       <Box
         sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}
       >
-        {isSql && (
+        {collapsed && (
+          <Box
+            onDoubleClick={onToggleCollapsed}
+            role="presentation"
+            data-testid={`python-cell-summary-${index}`}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              px: 1.5,
+              py: 0.75,
+              minWidth: 0,
+              cursor: 'pointer',
+            }}
+          >
+            <Typography
+              variant="caption"
+              sx={{ color: 'text.secondary', flexShrink: 0 }}
+            >
+              {CELL_TYPE_LABELS[cell.cell_type]}
+            </Typography>
+            <Typography
+              noWrap
+              sx={{
+                fontFamily: isCode
+                  ? 'ui-monospace, SFMono-Regular, Menlo, monospace'
+                  : undefined,
+                fontSize: 13,
+                color: summarize(cell.source)
+                  ? 'text.primary'
+                  : 'text.disabled',
+                fontStyle: summarize(cell.source) ? 'normal' : 'italic',
+              }}
+            >
+              {summarize(cell.source) || 'Empty cell'}
+            </Typography>
+            {isCode && cell.outputs.length > 0 && (
+              <Typography
+                variant="caption"
+                sx={{ color: 'text.disabled', flexShrink: 0, ml: 'auto' }}
+              >
+                {cell.outputs.length} output
+                {cell.outputs.length === 1 ? '' : 's'}
+              </Typography>
+            )}
+          </Box>
+        )}
+        {!collapsed && isSql && (
           <Box
             sx={{
               display: 'flex',
@@ -280,7 +344,7 @@ const PythonCellComponent: React.FC<PythonCellProps> = ({
             </Tooltip>
           </Box>
         )}
-        {isCode ? (
+        {!collapsed && isCode && (
           <PythonCodeCell
             cellId={cell.id}
             source={cell.source}
@@ -291,7 +355,8 @@ const PythonCellComponent: React.FC<PythonCellProps> = ({
             onFocus={onSelect}
             focusRequest={focusRequest}
           />
-        ) : (
+        )}
+        {!collapsed && !isCode && (
           <PythonTextCell
             source={cell.source}
             onChange={onChange}
@@ -304,7 +369,7 @@ const PythonCellComponent: React.FC<PythonCellProps> = ({
             onEditingChange={setTextEditing}
           />
         )}
-        {isCode && (
+        {!collapsed && isCode && (
           <PythonCellOutputs
             outputs={cell.outputs}
             onInstallPandas={isSql ? onInstallPandas : undefined}
@@ -335,6 +400,19 @@ const PythonCellComponent: React.FC<PythonCellProps> = ({
         onClick={(e) => e.stopPropagation()}
         role="presentation"
       >
+        <Tooltip title={collapsed ? 'Expand cell' : 'Collapse cell'}>
+          <IconButton
+            size="small"
+            onClick={onToggleCollapsed}
+            data-testid={`python-cell-collapse-${index}`}
+          >
+            {collapsed ? (
+              <ExpandMore sx={{ fontSize: 14 }} />
+            ) : (
+              <ExpandLess sx={{ fontSize: 14 }} />
+            )}
+          </IconButton>
+        </Tooltip>
         <Tooltip title="Move up">
           <span>
             <IconButton size="small" onClick={onMoveUp} disabled={index === 0}>
@@ -465,6 +543,7 @@ export const PythonCell = memo(
     prev.focusRequest === next.focusRequest &&
     prev.startEditing === next.startEditing &&
     prev.installingPandas === next.installingPandas &&
+    prev.collapsed === next.collapsed &&
     prev.onRun === next.onRun &&
     prev.onChange === next.onChange &&
     prev.onChangeVariable === next.onChangeVariable,

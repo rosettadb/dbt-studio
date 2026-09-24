@@ -207,6 +207,12 @@ export const PythonNotebookEditor: React.FC<PythonNotebookEditorProps> = ({
   const [duplicateOpen, setDuplicateOpen] = useState(false);
   const [duplicateValue, setDuplicateValue] = useState('');
   const [deleteOpen, setDeleteOpen] = useState(false);
+  // View-only state (not persisted): full-width layout (default) and
+  // collapsed cells.
+  const [wideView, setWideView] = useState(true);
+  const [collapsedCellIds, setCollapsedCellIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedForRef = useRef<string | null>(null);
 
@@ -512,6 +518,25 @@ export const PythonNotebookEditor: React.FC<PythonNotebookEditorProps> = ({
       prev.map((c) => ({ ...c, outputs: [], execution_count: null })),
     );
   }, [commitCells]);
+
+  // ── Collapse ────────────────────────────────────────────────────
+  const toggleCellCollapsed = useCallback((cellId: string) => {
+    setCollapsedCellIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(cellId)) next.delete(cellId);
+      else next.add(cellId);
+      return next;
+    });
+  }, []);
+
+  const allCollapsed =
+    cells.length > 0 && cells.every((c) => collapsedCellIds.has(c.id));
+
+  const toggleCollapseAll = useCallback(() => {
+    setCollapsedCellIds(
+      allCollapsed ? new Set() : new Set(cellsRef.current.map((c) => c.id)),
+    );
+  }, [allCollapsed]);
 
   const handleDragEnd = useCallback(
     (result: DropResult) => {
@@ -857,6 +882,10 @@ export const PythonNotebookEditor: React.FC<PythonNotebookEditorProps> = ({
         }}
         onOpenPackages={() => setPackagesOpen(true)}
         onClearOutputs={clearAllOutputs}
+        wideView={wideView}
+        onToggleWideView={() => setWideView((v) => !v)}
+        allCollapsed={allCollapsed}
+        onToggleCollapseAll={toggleCollapseAll}
         onRename={() => {
           setRenameValue(notebook.name);
           setRenameOpen(true);
@@ -908,7 +937,7 @@ export const PythonNotebookEditor: React.FC<PythonNotebookEditorProps> = ({
                   ref={droppable.innerRef}
                   // eslint-disable-next-line react/jsx-props-no-spreading
                   {...droppable.droppableProps}
-                  sx={{ maxWidth: 1100, mx: 'auto' }}
+                  sx={{ maxWidth: wideView ? 'none' : 1100, mx: 'auto' }}
                 >
                   <CellInsertBar
                     onAddCode={() => insertCell('code', 0)}
@@ -960,6 +989,10 @@ export const PythonNotebookEditor: React.FC<PythonNotebookEditorProps> = ({
                             onClearOutputs={() => clearCellOutputs(cell.id)}
                             onChangeType={(type) =>
                               changeCellType(cell.id, type)
+                            }
+                            collapsed={collapsedCellIds.has(cell.id)}
+                            onToggleCollapsed={() =>
+                              toggleCellCollapsed(cell.id)
                             }
                           />
                           <CellInsertBar

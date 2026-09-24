@@ -33,6 +33,10 @@ import {
   RestartAlt as RestartIcon,
   Stop as InterruptIcon,
   SwapHoriz as ChangeVersionIcon,
+  UnfoldLess as CollapseAllIcon,
+  UnfoldMore as ExpandAllIcon,
+  WidthFull as WideViewIcon,
+  WidthNormal as CompactViewIcon,
 } from '@mui/icons-material';
 import type {
   KernelState,
@@ -59,6 +63,12 @@ interface KernelBarProps {
   onDuplicate: () => void;
   onExport: () => void;
   onDelete: () => void;
+  /** Full-width layout (true) or the centred compact column (false) */
+  wideView: boolean;
+  onToggleWideView: () => void;
+  /** Every cell is collapsed, so the button offers "Expand all" */
+  allCollapsed: boolean;
+  onToggleCollapseAll: () => void;
 }
 
 const KERNEL_COLORS: Record<
@@ -92,6 +102,10 @@ export const KernelBar: React.FC<KernelBarProps> = ({
   onDuplicate,
   onExport,
   onDelete,
+  wideView,
+  onToggleWideView,
+  allCollapsed,
+  onToggleCollapseAll,
 }) => {
   const theme = useTheme();
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
@@ -248,6 +262,36 @@ export const KernelBar: React.FC<KernelBarProps> = ({
         <Tooltip title="Clear all outputs">
           <IconButton size="small" onClick={onClearOutputs} sx={iconButtonSx}>
             <ClearIcon sx={{ fontSize: 18 }} />
+          </IconButton>
+        </Tooltip>
+        <Tooltip
+          title={allCollapsed ? 'Expand all cells' : 'Collapse all cells'}
+        >
+          <IconButton
+            size="small"
+            onClick={onToggleCollapseAll}
+            sx={iconButtonSx}
+            data-testid="python-collapse-all"
+          >
+            {allCollapsed ? (
+              <ExpandAllIcon sx={{ fontSize: 18 }} />
+            ) : (
+              <CollapseAllIcon sx={{ fontSize: 18 }} />
+            )}
+          </IconButton>
+        </Tooltip>
+        <Tooltip title={wideView ? 'Compact view' : 'Wide view'}>
+          <IconButton
+            size="small"
+            onClick={onToggleWideView}
+            sx={iconButtonSx}
+            data-testid="python-wide-view"
+          >
+            {wideView ? (
+              <CompactViewIcon sx={{ fontSize: 18 }} />
+            ) : (
+              <WideViewIcon sx={{ fontSize: 18 }} />
+            )}
           </IconButton>
         </Tooltip>
         <IconButton
