@@ -4,6 +4,7 @@
  */
 
 export { NotebookEditor, flushNotebookPendingSave } from './NotebookEditor';
+export type { NotebookEditorHandle } from './NotebookEditor';
 export { NotebookCell } from './NotebookCell';
 export { SQLCell } from './SQLCell';
 export { MarkdownCell } from './MarkdownCell';

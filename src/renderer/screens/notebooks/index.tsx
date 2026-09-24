@@ -4,6 +4,7 @@ import React, {
   useMemo,
   useContext,
   useEffect,
+  useRef,
 } from 'react';
 import SplitPane, { Pane } from 'split-pane-react';
 import 'split-pane-react/esm/themes/default.css';
@@ -43,6 +44,8 @@ import {
   useGetConnections,
   useDuckLakeInstances,
   useImportConnectionFromNotebook,
+  useRenameDuckLakeTable,
+  useRenameDuckLakeColumn,
 } from '../../controllers';
 import {
   useArchivedNotebooks,
@@ -68,7 +71,14 @@ import { NotebookTabManager } from '../../components/notebook/NotebookTabManager
 import {
   NotebookEditor,
   flushNotebookPendingSave,
+  type NotebookEditorHandle,
 } from '../../components/notebook';
+import { useSchemaTreeContextMenu } from '../../components/schemaTreeViewer/useSchemaTreeContextMenu';
+import type { SchemaTreeNodeRef } from '../../components/schemaTreeViewer/types';
+import {
+  buildRenameColumnStatement,
+  buildRenameTableStatement,
+} from '../../utils/sql/schemaObjectSql';
 import { ExportNotebookDialog } from '../../components/notebook/ExportNotebookDialog';
 import { ImportConnectionDialog } from '../../components/notebook/ImportConnectionDialog';
 import { ChatWindow } from '../../components/chat';
@@ -403,6 +413,108 @@ const Notebooks = () => {
       fetchSchemaForConnection(activeConnectionId, true);
     }
   }, [activeConnectionId, fetchSchemaForConnection]);
+
+  // --- Data tree → notebook interactions (context menu) ---
+  const notebookEditorRef = useRef<NotebookEditorHandle>(null);
+  const renameDuckLakeTable = useRenameDuckLakeTable();
+  const renameDuckLakeColumn = useRenameDuckLakeColumn();
+  const activeConnectionType = activeConnectionId.startsWith('ducklake-')
+    ? 'ducklake'
+    : activeConnection?.connection.type;
+
+  const handleSchemaInsertText = useCallback((text: string) => {
+    if (!notebookEditorRef.current?.insertText(text)) {
+      toast.info('Open a notebook to insert text');
+    }
+  }, []);
+
+  const handleSchemaPreview = useCallback((sql: string) => {
+    if (!notebookEditorRef.current) {
+      toast.info('Open a notebook to preview data');
+      return;
+    }
+    notebookEditorRef.current.addSqlCell(sql, true);
+  }, []);
+
+  // DuckLake tables in the default schema can be renamed through the existing
+  // IPC. Everything else gets an ALTER statement added for the user to review
+  // and run — the tree never executes DDL on external databases.
+  const canRenameNatively = useCallback(
+    (node: SchemaTreeNodeRef) =>
+      activeConnectionId.startsWith('ducklake-') &&
+      (!node.schema || node.schema === 'main'),
+    [activeConnectionId],
+  );
+
+  const describeSchemaRename = useCallback(
+    (node: SchemaTreeNodeRef) =>
+      canRenameNatively(node)
+        ? 'The object is renamed immediately in this DuckLake instance.'
+        : 'A rename statement is added to the notebook for you to review and run.',
+    [canRenameNatively],
+  );
+
+  const handleSchemaRename = useCallback(
+    (node: SchemaTreeNodeRef, newName: string) => {
+      if (!node.table) return;
+
+      if (canRenameNatively(node)) {
+        const instanceId = activeConnectionId.replace('ducklake-', '');
+        if (node.kind === 'column' && node.column) {
+          renameDuckLakeColumn.mutate(
+            {
+              instanceId,
+              tableName: node.table,
+              oldColumnName: node.column,
+              newColumnName: newName,
+            },
+            { onSuccess: handleRefreshSchema },
+          );
+        } else {
+          renameDuckLakeTable.mutate(
+            { instanceId, oldName: node.table, newName },
+            { onSuccess: handleRefreshSchema },
+          );
+        }
+        return;
+      }
+
+      const ref = { schema: node.schema ?? '', name: node.table };
+      const sql =
+        node.kind === 'column' && node.column
+          ? buildRenameColumnStatement(
+              ref,
+              node.column,
+              newName,
+              activeConnectionType,
+            )
+          : buildRenameTableStatement(ref, newName, activeConnectionType);
+
+      if (notebookEditorRef.current?.insertText(sql)) {
+        toast.info('Rename statement added. Review it, then run it.');
+      } else {
+        toast.info('Open a notebook to add the rename statement');
+      }
+    },
+    [
+      canRenameNatively,
+      activeConnectionId,
+      activeConnectionType,
+      renameDuckLakeColumn,
+      renameDuckLakeTable,
+      handleRefreshSchema,
+    ],
+  );
+
+  const { onContextMenu: handleSchemaContextMenu, menu: schemaContextMenu } =
+    useSchemaTreeContextMenu({
+      connectionType: activeConnectionType,
+      onInsertText: handleSchemaInsertText,
+      onPreviewSql: handleSchemaPreview,
+      onRename: handleSchemaRename,
+      describeRename: describeSchemaRename,
+      onRefresh: handleRefreshSchema,
+    });
 
   // Helper: Check if connection exists
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -1182,8 +1294,10 @@ const Notebooks = () => {
                 if (id === activeAnalyticsPageId)
                   setActiveAnalyticsPageId(null);
               }}
+              onSchemaContextMenu={handleSchemaContextMenu}
             />
           )}
+          {schemaContextMenu}
         </Box>
       }
     >
@@ -1338,6 +1452,7 @@ const Notebooks = () => {
                     {notebookTabManager.activeTabId && activeConnectionId ? (
                       <NotebookEditor
                         key={`notebook-${notebookTabManager.activeTabId}`}
+                        ref={notebookEditorRef}
                         instanceId={activeConnectionId}
                         notebookId={notebookTabManager.activeTabId}
                         onOpenNotebook={(notebook, connectionId) => {
