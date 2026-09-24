@@ -226,16 +226,21 @@ export default class NotebookEnvService {
   ): Promise<NotebookRuntime> {
     return this.withLock(notebookId, async () => {
       const venvDir = this.getVenvDir(notebookId);
-      const binary = await PythonRuntimesService.requireBinary(pythonVersion);
 
       this.creating.add(notebookId);
       this.emit({
         notebookId,
         status: 'creating',
-        message: `Creating virtualenv with Python ${pythonVersion}…`,
+        message: `Preparing Python ${pythonVersion}…`,
       });
 
       try {
+        const binary = await this.ensureInterpreter(notebookId, pythonVersion);
+        this.emit({
+          notebookId,
+          status: 'creating',
+          message: `Creating virtualenv with Python ${pythonVersion}…`,
+        });
         await fs.remove(venvDir);
         await fs.mkdirp(this.getVenvsRoot());
 
@@ -309,6 +314,26 @@ export default class NotebookEnvService {
         };
       }
     });
+  }
+
+  /**
+   * Resolve the managed interpreter binary, downloading the runtime first when
+   * it is not installed yet (e.g. notebooks converted from SQL notebooks use
+   * the recommended version, which may not be on disk).
+   */
+  private static async ensureInterpreter(
+    notebookId: string,
+    pythonVersion: string,
+  ): Promise<string> {
+    if (!PythonRuntimesService.describe(pythonVersion).installed) {
+      this.emit({
+        notebookId,
+        status: 'creating',
+        message: `Downloading Python ${pythonVersion}…`,
+      });
+      await PythonRuntimesService.installRuntime(pythonVersion);
+    }
+    return PythonRuntimesService.requireBinary(pythonVersion);
   }
 
   static async deleteEnv(notebookId: string): Promise<void> {

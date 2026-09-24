@@ -86,6 +86,11 @@ export function registerPythonNotebooksHandlers() {
         pythonVersion,
       ),
   );
+  ipcMain.handle(
+    'pythonNotebooks:convertFromSql',
+    (_e, connectionId: string, notebookId: string) =>
+      PythonNotebooksService.convertSqlNotebook(connectionId, notebookId),
+  );
 
   // ── Environment ──────────────────────────────────────────────────
   ipcMain.handle('pythonNotebooks:env:status', (_e, notebookId: string) =>

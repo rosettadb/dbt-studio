@@ -87,6 +87,11 @@ export interface UseNotebookTabManagerReturn {
   closeTab: (tabId: string) => void;
   markTabModified: (tabId: string, isModified: boolean) => void;
   updateTabName: (tabId: string, newName: string) => void;
+  /** Switch the editor a tab renders (e.g. after a SQL → Python conversion). */
+  updateTabKind: (
+    tabId: string,
+    kind: NonNullable<NotebookTabState['kind']>,
+  ) => void;
   reorderTabs: (fromIndex: number, toIndex: number) => void;
   reset: () => void;
   closeTabsByConnection: (connectionId: string) => void;
@@ -172,6 +177,17 @@ const useNotebookTabManager = (): UseNotebookTabManagerReturn => {
       ),
     );
   }, []);
+
+  const updateTabKind = React.useCallback(
+    (tabId: string, kind: NonNullable<NotebookTabState['kind']>) => {
+      setTabs((current) =>
+        current.map((tab) =>
+          tab.notebookId === tabId ? { ...tab, kind } : tab,
+        ),
+      );
+    },
+    [],
+  );
 
   const reorderTabs = React.useCallback(
     (fromIndex: number, toIndex: number) => {
@@ -266,6 +282,7 @@ const useNotebookTabManager = (): UseNotebookTabManagerReturn => {
     closeTab,
     markTabModified,
     updateTabName,
+    updateTabKind,
     reorderTabs,
     reset,
     closeTabsByConnection,

@@ -453,6 +453,7 @@ export type PythonNotebookChannels =
   | 'pythonNotebooks:export'
   | 'pythonNotebooks:selectImportFile'
   | 'pythonNotebooks:import'
+  | 'pythonNotebooks:convertFromSql' // legacy SQL notebook (.json) → .ipynb
   // Per-notebook virtualenv
   | 'pythonNotebooks:env:status'
   | 'pythonNotebooks:env:recreate'

@@ -25,8 +25,6 @@ import {
   IconButton,
   CircularProgress,
   useMediaQuery,
-  ToggleButton,
-  ToggleButtonGroup,
 } from '@mui/material';
 import {
   Add,
@@ -51,7 +49,6 @@ import {
   useRestoreNotebook,
   useDeleteArchivedNotebook,
   useDeleteAllArchivedNotebooks,
-  useCreateNotebook,
   useNotebooks,
   useDeleteNotebook,
   useImportAllNotebooksFromPath,
@@ -73,7 +70,6 @@ import {
   PythonNotebookEditor,
   pythonNotebookToSummary,
   PythonRuntimePicker,
-  NotebookKindIcon,
 } from '../../components/notebook';
 import {
   usePythonNotebooks,
@@ -259,7 +255,8 @@ const Notebooks = () => {
     [allNotebooks],
   );
 
-  const [newNotebookKind, setNewNotebookKind] = useState<NotebookKind>('sql');
+  // New notebooks are always Python notebooks; SQL notebooks are deprecated
+  // and only remain openable (with a convert prompt) until converted.
   const [newNotebookPython, setNewNotebookPython] = useState('');
   const [newNotebookPythonReady, setNewNotebookPythonReady] = useState(false);
   const [importPythonOpen, setImportPythonOpen] = useState(false);
@@ -278,7 +275,6 @@ const Notebooks = () => {
   const restoreNotebook = useRestoreNotebook();
   const deleteArchivedNotebook = useDeleteArchivedNotebook();
   const deleteAllArchived = useDeleteAllArchivedNotebooks();
-  const createNotebook = useCreateNotebook();
 
   // Confirmation dialogs state
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -543,43 +539,24 @@ const Notebooks = () => {
   // Handle create notebook
   const handleCreateNotebook = useCallback(() => {
     if (!activeConnectionId || !newNotebookName.trim()) return;
+    if (!newNotebookPython || !newNotebookPythonReady) return;
 
-    if (newNotebookKind === 'python') {
-      if (!newNotebookPython || !newNotebookPythonReady) return;
-      createPythonNotebook.mutate(
-        {
-          connectionId: activeConnectionId,
-          input: {
-            name: newNotebookName.trim(),
-            description: newNotebookDescription.trim() || undefined,
-            pythonVersion: newNotebookPython,
-          },
-        },
-        {
-          onSuccess: (created) => {
-            notebookTabManager.openNotebook(
-              pythonNotebookToSummary(created),
-              activeConnectionId,
-            );
-            setCreateNotebookOpen(false);
-            setNewNotebookName('');
-            setNewNotebookDescription('');
-          },
-        },
-      );
-      return;
-    }
-
-    createNotebook.mutate(
+    createPythonNotebook.mutate(
       {
         connectionId: activeConnectionId,
-        name: newNotebookName.trim(),
-        description: newNotebookDescription.trim() || undefined,
+        input: {
+          name: newNotebookName.trim(),
+          description: newNotebookDescription.trim() || undefined,
+          pythonVersion: newNotebookPython,
+        },
       },
       {
-        onSuccess: (newNotebook) => {
+        onSuccess: (created) => {
           // Open the newly created notebook in a tab
-          notebookTabManager.openNotebook(newNotebook, activeConnectionId);
+          notebookTabManager.openNotebook(
+            pythonNotebookToSummary(created),
+            activeConnectionId,
+          );
           setCreateNotebookOpen(false);
           setNewNotebookName('');
           setNewNotebookDescription('');
@@ -590,10 +567,8 @@ const Notebooks = () => {
     activeConnectionId,
     newNotebookName,
     newNotebookDescription,
-    newNotebookKind,
     newNotebookPython,
     newNotebookPythonReady,
-    createNotebook,
     createPythonNotebook,
     notebookTabManager,
   ]);
@@ -1556,6 +1531,13 @@ const Notebooks = () => {
                           );
                         }}
                         onSchemaChange={handleRefreshSchema}
+                        onConverted={(converted) =>
+                          // Same id, same tab: just swap in the Python editor
+                          notebookTabManager.updateTabKind(
+                            converted.id,
+                            'python',
+                          )
+                        }
                       />
                     ) : null}
                     {!(
@@ -1767,28 +1749,6 @@ const Notebooks = () => {
         <DialogTitle>Create New Notebook</DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-            <ToggleButtonGroup
-              exclusive
-              size="small"
-              value={newNotebookKind}
-              onChange={(_e, value: NotebookKind | null) => {
-                if (value) setNewNotebookKind(value);
-              }}
-              fullWidth
-              data-testid="create-notebook-kind"
-            >
-              <ToggleButton value="sql" data-testid="create-notebook-kind-sql">
-                <NotebookKindIcon kind="sql" sx={{ fontSize: 16, mr: 1 }} />
-                SQL Notebook
-              </ToggleButton>
-              <ToggleButton
-                value="python"
-                data-testid="create-notebook-kind-python"
-              >
-                <NotebookKindIcon kind="python" sx={{ fontSize: 16, mr: 1 }} />
-                Python Notebook
-              </ToggleButton>
-            </ToggleButtonGroup>
             <TextField
               autoFocus
               label="Notebook Name"
@@ -1811,19 +1771,15 @@ const Notebooks = () => {
               onChange={(e) => setNewNotebookDescription(e.target.value)}
               placeholder="Describe what this notebook is for..."
             />
-            {newNotebookKind === 'python' && (
-              <>
-                <PythonRuntimePicker
-                  value={newNotebookPython}
-                  onChange={setNewNotebookPython}
-                  onReadyChange={setNewNotebookPythonReady}
-                />
-                <Typography variant="caption" color="text.secondary">
-                  A dedicated virtual environment is created for this notebook
-                  with ipykernel installed. Packages you install stay inside it.
-                </Typography>
-              </>
-            )}
+            <PythonRuntimePicker
+              value={newNotebookPython}
+              onChange={setNewNotebookPython}
+              onReadyChange={setNewNotebookPythonReady}
+            />
+            <Typography variant="caption" color="text.secondary">
+              A dedicated virtual environment is created for this notebook with
+              ipykernel installed. Packages you install stay inside it.
+            </Typography>
           </Box>
         </DialogContent>
         <DialogActions>
@@ -1841,15 +1797,12 @@ const Notebooks = () => {
             variant="contained"
             disabled={
               !newNotebookName.trim() ||
-              createNotebook.isLoading ||
               createPythonNotebook.isLoading ||
-              (newNotebookKind === 'python' && !newNotebookPythonReady)
+              !newNotebookPythonReady
             }
             data-testid="create-notebook-confirm"
           >
-            {createNotebook.isLoading || createPythonNotebook.isLoading
-              ? 'Creating...'
-              : 'Create'}
+            {createPythonNotebook.isLoading ? 'Creating...' : 'Create'}
           </Button>
         </DialogActions>
       </Dialog>

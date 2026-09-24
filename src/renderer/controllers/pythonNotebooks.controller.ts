@@ -10,6 +10,7 @@ import {
   pythonNotebooksService,
   pythonRuntimesService,
 } from '../services/pythonNotebooks.service';
+import { notebooksKeys } from './notebooks.controller';
 import type {
   CreatePythonNotebookInput,
   ExecuteCellOptions,
@@ -248,6 +249,30 @@ export function useImportPythonNotebook() {
     },
     onError: (error: Error) => {
       toast.error(`Failed to import notebook: ${error.message}`);
+    },
+  });
+}
+
+/** Convert a legacy SQL notebook into a Python notebook (same id). */
+export function useConvertSqlNotebook() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      connectionId,
+      notebookId,
+    }: {
+      connectionId: string;
+      notebookId: string;
+    }) => pythonNotebooksService.convertFromSql(connectionId, notebookId),
+    onSuccess: (notebook, { connectionId, notebookId }) => {
+      // The .json is gone: drop the SQL notebook queries and refresh both lists.
+      queryClient.removeQueries(notebooksKeys.detail(connectionId, notebookId));
+      queryClient.invalidateQueries(notebooksKeys.list(connectionId));
+      queryClient.invalidateQueries(pythonNotebooksKeys.list(connectionId));
+      toast.success(`"${notebook.name}" converted to a Python notebook`);
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to convert notebook: ${error.message}`);
     },
   });
 }

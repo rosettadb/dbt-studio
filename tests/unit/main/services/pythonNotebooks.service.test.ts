@@ -46,6 +46,11 @@ jest.mock('../../../../src/main/services/duckLake.service', () => ({
   },
 }));
 
+// Only the recommended interpreter version is needed from the settings stack.
+jest.mock('../../../../src/main/services/settings.service', () => ({
+  RECOMMENDED_PYTHON_VERSION: '3.10.17',
+}));
+
 jest.mock('../../../../src/main/services/notebookEnv.service', () => ({
   __esModule: true,
   default: {
@@ -487,5 +492,120 @@ describe('PythonNotebooksService', () => {
     expect(kernelService.shutdown).toHaveBeenCalledWith(notebook.id);
     expect(envService.deleteEnv).toHaveBeenCalledWith(notebook.id);
     expect(await service.getNotebook(connectionId, notebook.id)).toBeNull();
+  });
+
+  describe('legacy SQL notebook conversion', () => {
+    const dir = path.join(tmpUserData, 'notebooks', `db:${connectionId}`);
+    const legacy = {
+      id: 'legacy-sql',
+      name: 'Old SQL',
+      description: 'from the json era',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-02-01T00:00:00.000Z',
+      lastExecutedAt: '2024-02-01T00:00:00.000Z',
+      cellCount: 3,
+      cells: [
+        {
+          id: 'c-md',
+          type: 'markdown',
+          content: '# Title',
+          order: 1,
+        },
+        {
+          id: 'c-sql',
+          type: 'sql',
+          content: 'select 1 as a',
+          order: 0,
+          output: {
+            type: 'table',
+            columns: ['a'],
+            data: [{ a: 1 }],
+            rowCount: 1,
+          },
+        },
+        {
+          id: 'c-err',
+          type: 'sql',
+          content: 'select boom',
+          order: 2,
+          output: { type: 'error', error: 'no such column' },
+        },
+      ],
+    };
+
+    it('writes an .ipynb with the same id, removes the .json and builds the env on the recommended python', async () => {
+      const service = await load();
+      const envService = (
+        await import('../../../../src/main/services/notebookEnv.service')
+      ).default;
+      (envService.createEnv as jest.Mock).mockClear();
+      await fs.writeJson(path.join(dir, 'legacy-sql.json'), legacy);
+
+      const converted = await service.convertSqlNotebook(
+        connectionId,
+        'legacy-sql',
+      );
+
+      expect(converted).toMatchObject({
+        id: 'legacy-sql',
+        kind: 'python',
+        name: 'Old SQL',
+        description: 'from the json era',
+        createdAt: legacy.createdAt,
+        lastExecutedAt: legacy.lastExecutedAt,
+        cellCount: 3,
+        runtime: { pythonVersion: '3.10.17', status: 'creating' },
+      });
+      // Cells are ordered by the legacy `order`, not array position
+      expect(converted.cells.map((c) => c.id)).toEqual([
+        'c-sql',
+        'c-md',
+        'c-err',
+      ]);
+      expect(converted.cells[0]).toMatchObject({
+        cell_type: 'sql',
+        source: 'select 1 as a',
+        metadata: { rosetta: { language: 'sql', variable: 'df' } },
+      });
+      expect(converted.cells[0].outputs[0]).toMatchObject({
+        output_type: 'display_data',
+        data: { 'text/html': expect.stringContaining('<td>1</td>') },
+      });
+      expect(converted.cells[1]).toMatchObject({
+        cell_type: 'markdown',
+        source: '# Title',
+        outputs: [],
+      });
+      expect(converted.cells[2].outputs[0]).toMatchObject({
+        output_type: 'error',
+        evalue: 'no such column',
+      });
+
+      expect(await fs.pathExists(path.join(dir, 'legacy-sql.json'))).toBe(
+        false,
+      );
+      const raw = await fs.readJson(path.join(dir, 'legacy-sql.ipynb'));
+      expect(raw.metadata.rosetta.id).toBe('legacy-sql');
+      expect(raw.cells[0].source[0]).toBe('%%sql df <<\n');
+      expect(envService.createEnv).toHaveBeenCalledWith(
+        'legacy-sql',
+        '3.10.17',
+      );
+
+      // Now listed as a Python notebook
+      const list = await service.listNotebooks(connectionId);
+      expect(list.some((n) => n.id === 'legacy-sql')).toBe(true);
+    });
+
+    it('refuses to overwrite an existing .ipynb with the same id', async () => {
+      const service = await load();
+      await fs.writeJson(path.join(dir, 'legacy-sql.json'), legacy);
+
+      await expect(
+        service.convertSqlNotebook(connectionId, 'legacy-sql'),
+      ).rejects.toThrow(/already been converted/);
+      // The legacy file is left untouched
+      expect(await fs.pathExists(path.join(dir, 'legacy-sql.json'))).toBe(true);
+    });
   });
 });

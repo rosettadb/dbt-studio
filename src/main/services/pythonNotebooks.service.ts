@@ -18,6 +18,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { getConnectionDir, normalizeConnectionKey } from './notebooks.service';
+import { RECOMMENDED_PYTHON_VERSION } from './settings.service';
 import ConnectorsService from './connectors.service';
 import DuckLakeService from './duckLake.service';
 import NotebookEnvService from './notebookEnv.service';
@@ -27,12 +28,14 @@ import type {
   CreatePythonNotebookInput,
   ExecuteCellOptions,
   ExecuteCellResult,
+  NotebookRuntime,
   PythonCellOutput,
   PythonCellType,
   PythonNotebook,
   PythonNotebookCell,
   UpdatePythonNotebookInput,
 } from '../../types/pythonNotebooks';
+import type { Notebook as LegacySqlNotebook } from '../../types/notebooks';
 
 const NBFORMAT = 4;
 const NBFORMAT_MINOR = 5;
@@ -413,6 +416,71 @@ function buildSqlInjectionCode(
   ].join('\n');
 }
 
+/* ------------------------------------------------------------------ */
+/* Legacy SQL notebooks                                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Convert a legacy SQL notebook (`<id>.json`, see types/notebooks.ts) into a
+ * Python notebook with the same id. SQL cells become `sql` cells targeting the
+ * default variable, markdown cells map directly. Stored table results are
+ * kept as static HTML display outputs and stored errors as error outputs;
+ * anything else is dropped.
+ *
+ * SQL notebooks are deprecated, but this must stay convertible indefinitely
+ * so installs upgrading from old versions can still bring their notebooks
+ * over.
+ */
+export function fromLegacySqlNotebook(
+  legacy: LegacySqlNotebook,
+  runtime: NotebookRuntime,
+): PythonNotebook {
+  const now = new Date().toISOString();
+  const cells = [...(legacy.cells ?? [])]
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .map<PythonNotebookCell>((cell) => {
+      const isMarkdown = cell.type === 'markdown';
+      const outputs: PythonCellOutput[] = [];
+      if (!isMarkdown && cell.output?.type === 'table' && cell.output.columns) {
+        const rows = (cell.output.data ?? []) as Record<string, unknown>[];
+        outputs.push({
+          output_type: 'display_data',
+          data: { 'text/html': renderFallbackTable(cell.output.columns, rows) },
+          metadata: {},
+        });
+      } else if (!isMarkdown && cell.output?.type === 'error') {
+        outputs.push({
+          output_type: 'error',
+          ename: 'Error',
+          evalue: cell.output.error ?? cell.error ?? '',
+          traceback: [],
+        });
+      }
+      return {
+        id: /^[A-Za-z0-9_-]{1,64}$/.test(cell.id ?? '') ? cell.id : uuidv4(),
+        cell_type: isMarkdown ? 'markdown' : 'sql',
+        source: cell.content ?? '',
+        outputs,
+        execution_count: null,
+        metadata: isMarkdown
+          ? {}
+          : { rosetta: { language: 'sql', variable: DEFAULT_SQL_VARIABLE } },
+      };
+    });
+  return {
+    id: legacy.id,
+    kind: 'python',
+    name: legacy.name,
+    description: legacy.description,
+    cells,
+    createdAt: legacy.createdAt ?? now,
+    updatedAt: now,
+    lastExecutedAt: legacy.lastExecutedAt,
+    cellCount: cells.length,
+    runtime,
+  };
+}
+
 interface SqlQueryResult {
   success: boolean;
   data?: Record<string, unknown>[];
@@ -591,6 +659,45 @@ export default class PythonNotebooksService {
     // Environment creation runs in the background; progress is broadcast via
     // pythonNotebooks:env:event and the status is re-derived from disk.
     NotebookEnvService.createEnv(id, input.pythonVersion).catch(
+      () => undefined,
+    );
+    return notebook;
+  }
+
+  /**
+   * Convert a legacy SQL notebook (`<id>.json`) in place into a Python
+   * notebook with the same id, on the recommended interpreter. The `.json`
+   * is removed once the `.ipynb` is written; the environment is then built in
+   * the background (downloading the interpreter first if needed).
+   */
+  static async convertSqlNotebook(
+    connectionId: string,
+    notebookId: string,
+  ): Promise<PythonNotebook> {
+    const dir = getConnectionDir(normalizeConnectionKey(connectionId));
+    const legacyPath = path.join(dir, `${assertSafeId(notebookId)}.json`);
+    const targetPath = getNotebookPath(connectionId, notebookId);
+    if (await fs.pathExists(targetPath)) {
+      throw new Error('This notebook has already been converted');
+    }
+    const legacy = JSON.parse(
+      await fs.readFile(legacyPath, 'utf-8'),
+    ) as LegacySqlNotebook;
+    if (!legacy || !Array.isArray(legacy.cells)) {
+      throw new Error('Invalid SQL notebook file: missing cells array');
+    }
+
+    const notebook = fromLegacySqlNotebook(
+      { ...legacy, id: notebookId },
+      {
+        pythonVersion: RECOMMENDED_PYTHON_VERSION,
+        venvPath: NotebookEnvService.getVenvDir(notebookId),
+        status: 'creating',
+      },
+    );
+    await this.save(connectionId, notebook);
+    await fs.remove(legacyPath);
+    NotebookEnvService.createEnv(notebookId, RECOMMENDED_PYTHON_VERSION).catch(
       () => undefined,
     );
     return notebook;

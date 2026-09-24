@@ -1,13 +1,26 @@
 /**
  * Python Notebook Text Cell (markdown)
- * Edit mode is a plain textarea; Shift+Enter (or blur) renders the markdown
- * with react-markdown + GFM. Double-click the preview to edit again.
+ * Edit mode is a plain textarea with a Colab-style formatting toolbar that
+ * inserts markdown syntax; Shift+Enter (or blur) renders the markdown with
+ * react-markdown + GFM. Double-click the preview to edit again.
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, TextField, Typography, useTheme } from '@mui/material';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { MarkdownToolbar } from './MarkdownToolbar';
+import {
+  applyMarkdownFormat,
+  MarkdownFormatAction,
+} from './markdownFormatting';
+
+/** Keyboard shortcuts (⌘ / Ctrl + key) mapped to toolbar actions. */
+const SHORTCUTS: Record<string, MarkdownFormatAction> = {
+  b: 'bold',
+  i: 'italic',
+  k: 'link',
+};
 
 interface PythonTextCellProps {
   source: string;
@@ -19,6 +32,8 @@ interface PythonTextCellProps {
   focusRequest?: number;
   /** Increment to leave edit mode and show the rendered markdown */
   renderRequest?: number;
+  /** Increment to leave the preview and show the raw markdown for editing */
+  editRequest?: number;
   onEditingChange?: (editing: boolean) => void;
 }
 
@@ -30,6 +45,7 @@ export const PythonTextCell: React.FC<PythonTextCellProps> = ({
   startEditing,
   focusRequest,
   renderRequest,
+  editRequest,
   onEditingChange,
 }) => {
   const theme = useTheme();
@@ -48,43 +64,80 @@ export const PythonTextCell: React.FC<PythonTextCellProps> = ({
   }, [renderRequest]);
 
   useEffect(() => {
+    if (editRequest) {
+      setIsEditing(true);
+      setTimeout(() => inputRef.current?.focus(), 0);
+    }
+  }, [editRequest]);
+
+  useEffect(() => {
     onEditingChange?.(isEditing);
   }, [isEditing, onEditingChange]);
 
+  // Apply a toolbar / shortcut action to the textarea selection, then restore
+  // the caret once React has re-rendered the new value.
+  const handleFormat = useCallback(
+    (action: MarkdownFormatAction) => {
+      const input = inputRef.current;
+      if (!input) return;
+      const result = applyMarkdownFormat(
+        source,
+        input.selectionStart ?? source.length,
+        input.selectionEnd ?? source.length,
+        action,
+      );
+      onChange(result.source);
+      requestAnimationFrame(() => {
+        input.focus();
+        input.setSelectionRange(result.selectionStart, result.selectionEnd);
+      });
+    },
+    [source, onChange],
+  );
+
   if (isEditing) {
     return (
-      <TextField
-        inputRef={inputRef}
-        multiline
-        fullWidth
-        minRows={2}
-        autoFocus={Boolean(startEditing)}
-        value={source}
-        placeholder="Type markdown here…"
-        onChange={(e) => onChange(e.target.value)}
-        onFocus={onFocus}
-        onBlur={() => {
-          if (source.trim()) setIsEditing(false);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && e.shiftKey) {
-            e.preventDefault();
-            setIsEditing(false);
-            onRender();
-          }
-        }}
-        variant="standard"
-        InputProps={{ disableUnderline: true }}
-        sx={{
-          px: 1.5,
-          py: 1,
-          '& .MuiInputBase-root': {
-            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-            fontSize: 13,
-            lineHeight: 1.6,
-          },
-        }}
-      />
+      <Box>
+        <MarkdownToolbar onFormat={handleFormat} />
+        <TextField
+          inputRef={inputRef}
+          multiline
+          fullWidth
+          minRows={2}
+          autoFocus={Boolean(startEditing)}
+          value={source}
+          placeholder="Type markdown here…"
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={onFocus}
+          onBlur={() => {
+            if (source.trim()) setIsEditing(false);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && e.shiftKey) {
+              e.preventDefault();
+              setIsEditing(false);
+              onRender();
+              return;
+            }
+            const shortcut = SHORTCUTS[e.key.toLowerCase()];
+            if (shortcut && (e.metaKey || e.ctrlKey) && !e.altKey) {
+              e.preventDefault();
+              handleFormat(shortcut);
+            }
+          }}
+          variant="standard"
+          InputProps={{ disableUnderline: true }}
+          sx={{
+            px: 1.5,
+            py: 1,
+            '& .MuiInputBase-root': {
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+              fontSize: 13,
+              lineHeight: 1.6,
+            },
+          }}
+        />
+      </Box>
     );
   }
 

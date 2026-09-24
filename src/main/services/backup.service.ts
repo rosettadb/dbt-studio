@@ -93,7 +93,8 @@ const readNotebookFiles = async (): Promise<
   if (!fs.existsSync(NOTEBOOKS_DIR)) return [];
   const results: { name: string; content: string }[] = [];
 
-  // Walk recursively to capture connectionKey/<notebookId>.json structure.
+  // Walk recursively to capture connectionKey/<notebookId>.json (legacy SQL)
+  // and connectionKey/<notebookId>.ipynb (Python) structure.
   // relPath is always stored with forward slashes (ZIP archive standard).
   // Skip _orphaned — those belong to deleted connections and should not be backed up.
   const walk = async (dir: string, zipRelPrefix: string) => {
@@ -112,7 +113,10 @@ const readNotebookFiles = async (): Promise<
         const fullFsPath = path.join(dir, f.name);
         if (f.isDirectory()) {
           await walk(fullFsPath, zipRelPath);
-        } else if (f.isFile() && f.name.endsWith('.json')) {
+        } else if (
+          f.isFile() &&
+          (f.name.endsWith('.json') || f.name.endsWith('.ipynb'))
+        ) {
           try {
             const content = await fs.promises.readFile(fullFsPath, 'utf8');
             results.push({ name: zipRelPath, content });
@@ -823,7 +827,7 @@ export default class BackupService {
           (e) =>
             e.entryName.startsWith(NOTEBOOKS_PREFIX) &&
             !e.isDirectory &&
-            e.entryName.endsWith('.json'),
+            (e.entryName.endsWith('.json') || e.entryName.endsWith('.ipynb')),
         );
 
       if (!fs.existsSync(NOTEBOOKS_DIR)) {

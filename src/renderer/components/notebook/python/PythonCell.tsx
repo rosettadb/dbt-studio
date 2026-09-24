@@ -103,6 +103,7 @@ const PythonCellComponent: React.FC<PythonCellProps> = ({
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [textEditing, setTextEditing] = useState(false);
   const [renderRequest, setRenderRequest] = useState(0);
+  const [editRequest, setEditRequest] = useState(0);
   const isSql = cell.cell_type === 'sql';
   /** Runs on the kernel and has outputs (code or sql). */
   const isCode = cell.cell_type !== 'markdown';
@@ -299,6 +300,7 @@ const PythonCellComponent: React.FC<PythonCellProps> = ({
             startEditing={startEditing}
             focusRequest={focusRequest}
             renderRequest={renderRequest}
+            editRequest={editRequest}
             onEditingChange={setTextEditing}
           />
         )}
@@ -345,30 +347,38 @@ const PythonCellComponent: React.FC<PythonCellProps> = ({
             <ArrowDownward sx={{ fontSize: 14 }} />
           </IconButton>
         </Tooltip>
-        {!isCode && textEditing && (
-          <Tooltip title="Preview (Shift+Enter)">
-            <IconButton
-              size="small"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => setRenderRequest((n) => n + 1)}
-              data-testid={`python-cell-preview-${index}`}
-            >
-              <Visibility sx={{ fontSize: 14 }} />
+        {/* Text cells: toggle between raw markdown and rendered preview.
+            Changing the cell type lives in the ⋮ menu only. */}
+        {!isCode &&
+          (textEditing ? (
+            <Tooltip title="Preview (Shift+Enter)">
+              <IconButton
+                size="small"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setRenderRequest((n) => n + 1)}
+                data-testid={`python-cell-preview-${index}`}
+              >
+                <Visibility sx={{ fontSize: 14 }} />
+              </IconButton>
+            </Tooltip>
+          ) : (
+            <Tooltip title="Edit markdown">
+              <IconButton
+                size="small"
+                onClick={() => setEditRequest((n) => n + 1)}
+                data-testid={`python-cell-edit-markdown-${index}`}
+              >
+                <Code sx={{ fontSize: 14 }} />
+              </IconButton>
+            </Tooltip>
+          ))}
+        {isCode && (
+          <Tooltip title="Convert to text">
+            <IconButton size="small" onClick={() => onChangeType('markdown')}>
+              <Notes sx={{ fontSize: 14 }} />
             </IconButton>
           </Tooltip>
         )}
-        <Tooltip title={isCode ? 'Convert to text' : 'Convert to code'}>
-          <IconButton
-            size="small"
-            onClick={() => onChangeType(isCode ? 'markdown' : 'code')}
-          >
-            {isCode ? (
-              <Notes sx={{ fontSize: 14 }} />
-            ) : (
-              <Code sx={{ fontSize: 14 }} />
-            )}
-          </IconButton>
-        </Tooltip>
         {!isSql && (
           <Tooltip title="Convert to SQL">
             <IconButton size="small" onClick={() => onChangeType('sql')}>

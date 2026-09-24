@@ -113,6 +113,17 @@ export const pythonNotebooksService = {
       pythonVersion,
     ),
 
+  /** Convert a legacy SQL notebook (.json) into a Python notebook in place. */
+  convertFromSql: (
+    connectionId: string,
+    notebookId: string,
+  ): Promise<PythonNotebook> =>
+    ipcRenderer.invoke(
+      'pythonNotebooks:convertFromSql',
+      connectionId,
+      notebookId,
+    ),
+
   // ── Environment ────────────────────────────────────────────────
   envStatus: (notebookId: string): Promise<NotebookRuntime> =>
     ipcRenderer.invoke('pythonNotebooks:env:status', notebookId),
