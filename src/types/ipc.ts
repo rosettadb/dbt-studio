@@ -128,7 +128,13 @@ export type ConnectorChannels =
   | 'connector:updateQuery'
   | 'connector:getQuery'
   | 'connector:executeQuery'
-  | 'connector:save';
+  | 'connector:save'
+  | 'connector:snowflake:auth:start'
+  | 'connector:snowflake:auth:cancel'
+  | 'connector:snowflake:auth:revoke'
+  | 'connector:snowflake:auth:materialize'
+  | 'connector:snowflake:auth:hasToken'
+  | 'connector:snowflake:auth:event';
 
 export type SourcesChannels =
   | 'sources:create'
@@ -748,3 +754,26 @@ export interface DeleteBucketRequest {
 export interface DeleteBucketResponse {
   success: boolean;
 }
+
+export type SnowflakeAuthLifecycleEvent =
+  | 'started'
+  | 'waiting_for_browser'
+  | 'completed'
+  | 'cancelled'
+  | 'failed';
+
+export type SnowflakeAuthEventPayload = {
+  correlationId: string;
+  status: SnowflakeAuthLifecycleEvent;
+  error?: string;
+};
+
+export type StartSnowflakeAuthRequest = {
+  correlationId: string;
+  account: string;
+  username: string;
+  warehouse: string;
+  database: string;
+  schema: string;
+  role: string;
+};

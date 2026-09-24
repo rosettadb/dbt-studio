@@ -22,6 +22,7 @@ import {
 import { SNOWFLAKE_TYPE_MAP } from './constants';
 import SecureStorageService from '../services/secureStorage.service';
 import { buildKineticaUrl } from '../../shared/kineticaUrl';
+import { SnowflakeAuthManager } from './snowflakeAuth';
 
 export async function testPostgresConnection(
   config: PostgresConnection,
@@ -168,15 +169,35 @@ export const executeRedshiftQuery = async (
   }
 };
 
-const createSnowflakeConnection = (config: SnowflakeConnection) => {
-  return snowflake.createConnection({
-    account: config.account.split('.')[0],
+const getSnowflakeAuthMethod = (config: SnowflakeConnection) => {
+  return config.authMethod || 'password';
+};
+
+export const createSnowflakeConnection = (config: SnowflakeConnection) => {
+  const authMethod = getSnowflakeAuthMethod(config);
+
+  const baseConfig = {
     username: config.username,
-    password: config.password,
     warehouse: config.warehouse,
     database: config.database,
     schema: config.schema,
     role: config.role,
+  };
+
+  if (authMethod === 'oauth_browser') {
+    return snowflake.createConnection({
+      ...baseConfig,
+      account: config.account,
+      authenticator: 'OAUTH_AUTHORIZATION_CODE',
+      browserActionTimeout: 120000,
+      clientStoreTemporaryCredential: true,
+    });
+  }
+
+  return snowflake.createConnection({
+    ...baseConfig,
+    account: config.account.split('.')[0],
+    password: config.password,
   });
 };
 
@@ -225,40 +246,63 @@ export const executeSnowflakeQuery = async (
   registerCancel?: (fn: () => void) => void,
 ): Promise<QueryResponseType> => {
   const connection = createSnowflakeConnection(config);
+  const authMethod = getSnowflakeAuthMethod(config);
 
   if (registerCancel) {
     registerCancel(() => {
-      connection.destroy(() => {});
+      try {
+        connection.destroy(() => {});
+      } catch (e) {
+        // ignore
+      }
     });
   }
 
-  return new Promise((resolve) => {
-    connection.connect((err) => {
-      if (err) {
-        return resolve({ success: false, error: err.message });
-      }
-
-      connection.execute({
-        sqlText: query,
-        complete: (error, stmt, rows) => {
-          connection.destroy(() => {});
-          if (error) {
-            return resolve({ success: false, error: error.message });
-          }
-
-          const fields =
-            stmt?.getColumns().map((col) => ({
-              name: col.getName(),
-              type: SNOWFLAKE_TYPE_MAP[col.getType().toUpperCase()] || 0,
-            })) || [];
-
-          resolve({
-            success: true,
-            data: rows,
-            fields,
-          });
-        },
+  try {
+    if (authMethod === 'oauth_browser') {
+      // No browser flows outside the Connections screen: a cold session
+      // fails fast with guidance instead of opening an ungated popup.
+      // A warm SDK cache connects silently without user interaction.
+      SnowflakeAuthManager.assertCachedSession();
+      await new Promise<void>((resolve, reject) => {
+        connection.connectAsync((err) => {
+          if (err) return reject(err);
+          resolve();
+        });
       });
+    } else {
+      await new Promise<void>((resolve, reject) => {
+        connection.connect((err) => {
+          if (err) return reject(err);
+          resolve();
+        });
+      });
+    }
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+
+  return new Promise((resolve) => {
+    connection.execute({
+      sqlText: query,
+      complete: (error, stmt, rows) => {
+        connection.destroy(() => {});
+        if (error) {
+          return resolve({ success: false, error: error.message });
+        }
+
+        const fields =
+          stmt?.getColumns()?.map((col) => ({
+            name: col.getName(),
+            type: SNOWFLAKE_TYPE_MAP[col.getType().toUpperCase()] || 0,
+          })) || [];
+
+        resolve({
+          success: true,
+          data: rows,
+          fields,
+        });
+      },
     });
   });
 };

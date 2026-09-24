@@ -383,3 +383,18 @@ export const useUpdateConnectionQuery = (
     },
   });
 };
+
+export const useHasSnowflakeToken = () => {
+  return useQuery(['hasSnowflakeToken'], connectorsServices.hasSnowflakeToken, {
+    refetchOnWindowFocus: true,
+  });
+};
+
+export const useRevokeSnowflakeToken = () => {
+  const queryClient = useQueryClient();
+  return useMutation(connectorsServices.revokeSnowflakeToken, {
+    onSuccess: () => {
+      queryClient.invalidateQueries(['hasSnowflakeToken']);
+    },
+  });
+};

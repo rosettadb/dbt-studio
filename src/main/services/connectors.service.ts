@@ -51,6 +51,7 @@ import {
 import SecureStorageService from './secureStorage.service';
 import { CloudConnection, RecentItem } from '../../types/frontend';
 import { updateProjectConfigFiles } from '../utils/yamlPartialUpdate';
+import { SnowflakeAuthManager } from '../utils/snowflakeAuth';
 import DuckLakeService from './duckLake.service';
 import DuckLakeInstanceStore from './duckLake/instanceStore.service';
 import { buildKineticaUrl, parseKineticaUrl } from '../../shared/kineticaUrl';
@@ -725,9 +726,10 @@ export default class ConnectorsService {
     }
 
     // Clean up connection-specific credentials from secure storage
+    // (keyed by connection name, matching how they were written).
     try {
       await SecureStorageService.cleanupConnectionCredentials(
-        connectionToDelete.id,
+        connectionToDelete.connection.name,
       );
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -812,6 +814,65 @@ export default class ConnectorsService {
       cancelFn();
       this.runningQueries.delete(queryId);
     }
+  }
+
+  // Unified Snowflake revoke across all credential layers so the
+  // Connections screen, SQL Editor, and Selected Project screen observe the
+  // same state: SDK token cache file, keychain secrets, and materialized
+  // process env. Identity fields (username, account, …) are kept so forms
+  // can re-hydrate; only secrets are removed.
+  static async revokeSnowflakeSession(
+    connectionName: string,
+  ): Promise<boolean> {
+    const name = (connectionName ?? '').trim();
+    if (!name) {
+      throw new Error(
+        'Connection name is required to revoke Snowflake credentials.',
+      );
+    }
+    const revoked = SnowflakeAuthManager.revokeSnowflakeToken();
+    for (const field of ['password', 'token']) {
+      const key = `db-${field}-${name}`;
+      try {
+        await SecureStorageService.deleteCredential(key);
+      } catch {
+        // Missing credentials are fine; revoke stays idempotent.
+      }
+      delete process.env[key];
+    }
+    return revoked;
+  }
+
+  // Hands the live Snowflake OAuth session to dbt (Python driver) at run
+  // time: reads the access token from the Node SDK's own cache file and
+  // exports it as `db-token-<name>` process env, which OAuth profiles
+  // reference via `{{ env_var(...) }}`. The token never touches profiles,
+  // logs, keychain, or renderer state — same channel passwords already use.
+  // Self-gating: no-op (false) unless the named connection is
+  // Snowflake+oauth_browser. Returns true when a token was materialized.
+  static async materializeSnowflakeOAuthEnv(
+    connectionName: string,
+  ): Promise<boolean> {
+    const name = (connectionName ?? '').trim();
+    if (!name) {
+      return false;
+    }
+    const connection = await this.findConnectionByName(name);
+    const snowflakeConn = connection?.connection;
+    if (
+      !snowflakeConn ||
+      snowflakeConn.type !== 'snowflake' ||
+      (snowflakeConn as SnowflakeConnection).authMethod !== 'oauth_browser'
+    ) {
+      return false;
+    }
+    const accessToken = SnowflakeAuthManager.readCachedOAuthAccessToken();
+    if (!accessToken) {
+      delete process.env[`db-token-${snowflakeConn.name}`];
+      return false;
+    }
+    process.env[`db-token-${snowflakeConn.name}`] = accessToken;
+    return true;
   }
 
   /**
@@ -1017,9 +1078,20 @@ export default class ConnectorsService {
       connection.type !== 'duckdb' &&
       connection.type !== 'bigquery'
     ) {
-      // Only add userName/password for non-BigQuery, non-Databricks, non-DuckDB, non-ducklake
+      // Only add userName/password for non-BigQuery, non-Databricks, non-DuckDB, non-ducklake.
+      // Snowflake OAuth never persists a password: the JDBC URL carries
+      // authenticator=oauth_authorization_code and tokens stay in the SDK
+      // temporary credential cache (mirrors updateMainConf in
+      // yamlPartialUpdate.ts).
+      const isSnowflakeOauth =
+        connection.type === 'snowflake' &&
+        (connection as SnowflakeConnection).authMethod === 'oauth_browser';
       connectionConfig.userName = ev('user');
-      connectionConfig.password = ev('password');
+      if (isSnowflakeOauth) {
+        connectionConfig.authenticator = 'oauth_authorization_code';
+      } else {
+        connectionConfig.password = ev('password');
+      }
     }
 
     const yamlData: {
@@ -1086,8 +1158,13 @@ export default class ConnectorsService {
         }
         return postgresUrl;
       }
-      case 'snowflake':
-        return `jdbc:snowflake://${ev('account')}.snowflakecomputing.com/?warehouse=${ev('warehouse')}&db=${ev('dbname')}&schema=${ev('schema')}`;
+      case 'snowflake': {
+        let snowflakeUrl = `jdbc:snowflake://${ev('account')}.snowflakecomputing.com/?warehouse=${ev('warehouse')}&db=${ev('dbname')}&schema=${ev('schema')}`;
+        if ((conn as SnowflakeConnection).authMethod === 'oauth_browser') {
+          snowflakeUrl += '&authenticator=oauth_authorization_code';
+        }
+        return snowflakeUrl;
+      }
       case 'redshift': {
         let redshiftUrl = `jdbc:redshift://${ev('host')}:${ev('port')}/${ev('dbname')}?currentSchema=${ev('schema')}`;
 
@@ -1134,6 +1211,12 @@ export default class ConnectorsService {
     project: Project,
   ): Promise<RosettaConnection> {
     const rosettaJdbcUrl = await this.generateJdbcUrl(connection);
+    // Snowflake OAuth never persists a password; the JDBC URL carries
+    // authenticator=oauth_authorization_code and tokens stay in the SDK
+    // temporary credential cache.
+    const isSnowflakeOauth =
+      connection.type === 'snowflake' &&
+      (connection as SnowflakeConnection).authMethod === 'oauth_browser';
 
     return {
       name: connection.name || project.name,
@@ -1153,26 +1236,38 @@ export default class ConnectorsService {
         connection.type !== 'duckdb' &&
         connection.type !== 'bigquery' &&
         'username' in connection &&
-        'password' in connection && {
+        'password' in connection &&
+        !isSnowflakeOauth && {
           userName: `db-user-${connection.name}`,
           password: `db-password-${connection.name}`,
         }),
+      ...(isSnowflakeOauth && {
+        userName: `db-user-${connection.name}`,
+      }),
     };
   }
 
   private static mapToDbtConnection(conn: ConnectionInput): DBTConnection {
     switch (conn.type) {
-      case 'snowflake':
+      case 'snowflake': {
+        const isSnowflakeOauth =
+          (conn as SnowflakeConnection).authMethod === 'oauth_browser';
         return {
           type: 'snowflake',
           username: `db-user-${conn.name}`,
-          password: `db-password-${conn.name}`,
+          ...(isSnowflakeOauth
+            ? {
+                authMethod: 'oauth_browser' as const,
+                authenticator: 'oauth_authorization_code' as const,
+              }
+            : { password: `db-password-${conn.name}` }),
           database: conn.database,
           schema: conn.schema,
           account: conn.account,
           warehouse: conn.warehouse,
           ...(conn.role && { role: conn.role }),
         };
+      }
       case 'bigquery':
         return {
           type: 'bigquery',
@@ -1299,18 +1394,30 @@ export default class ConnectorsService {
           threads: 4,
           ...(conn.ssl && { sslmode: 'require' }),
         };
-      case 'snowflake':
+      case 'snowflake': {
+        const isSnowflakeOauth =
+          (conn as SnowflakeConnection).authMethod === 'oauth_browser';
         return {
           type: 'snowflake',
           account: envVar('account'),
           user: envVar('user'),
-          password: envVar('password'),
+          ...(isSnowflakeOauth
+            ? {
+                // Token comes from `db-token-<name>` process env, materialized
+                // main-side from the live SDK session at dbt run time (never
+                // written to files). Plain `oauth` never opens a browser: a
+                // missing/expired token fails fast with guidance instead.
+                authenticator: 'oauth',
+                token: envVar('token'),
+              }
+            : { password: envVar('password') }),
           ...(conn.role && { role: envVar('role') }),
           warehouse: envVar('warehouse'),
           database: envVar('dbname'),
           schema: envVar('schema'),
           threads: 4,
         };
+      }
       case 'redshift':
         const redshiftProfile: any = {
           type: 'redshift',
@@ -1635,7 +1742,7 @@ export default class ConnectorsService {
             account: dbtConnection.account,
             warehouse: dbtConnection.warehouse,
             username: dbtConnection.username,
-            password: dbtConnection.password,
+            password: dbtConnection.password || '',
             database: dbtConnection.database,
             schema: dbtConnection.schema,
             role: dbtConnection.role,
@@ -1990,14 +2097,20 @@ export default class ConnectorsService {
       }
       case 'snowflake': {
         const sfConn = connection as SnowflakeConnection;
+        const sfAuthMethod =
+          sfConn.authMethod === 'oauth_browser' ? 'oauth_browser' : 'password';
         const extractor = new SnowflakeExtractor({
-          account: sfConn.account.split('.')[0],
+          account:
+            sfAuthMethod === 'oauth_browser'
+              ? sfConn.account
+              : sfConn.account.split('.')[0],
           username: sfConn.username,
           password: sfConn.password,
           warehouse: sfConn.warehouse,
           database: sfConn.database,
           schema: sfConn.schema,
           role: sfConn.role,
+          authMethod: sfAuthMethod,
         });
         try {
           await extractor.connect();

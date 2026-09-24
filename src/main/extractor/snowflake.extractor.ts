@@ -1,23 +1,55 @@
 /* eslint-disable no-restricted-syntax, no-await-in-loop, consistent-return */
 import snowflake from 'snowflake-sdk';
 import { Column, Table } from '../../types/backend';
+import { SnowflakeAuthManager } from '../utils/snowflakeAuth';
 
 export default class SnowflakeExtractor {
   private connection: snowflake.Connection;
 
+  private authMethod: 'password' | 'oauth_browser';
+
   constructor(config: {
     account: string;
     username: string;
-    password: string;
+    password?: string;
     warehouse: string;
     database: string;
     schema: string;
     role?: string;
+    authMethod?: 'password' | 'oauth_browser';
   }) {
-    this.connection = snowflake.createConnection(config);
+    this.authMethod = config.authMethod ?? 'password';
+    const baseConfig = {
+      account: config.account,
+      username: config.username,
+      warehouse: config.warehouse,
+      database: config.database,
+      schema: config.schema,
+      role: config.role,
+    };
+
+    if (this.authMethod === 'oauth_browser') {
+      this.connection = snowflake.createConnection({
+        ...baseConfig,
+        authenticator: 'OAUTH_AUTHORIZATION_CODE',
+        browserActionTimeout: 120000,
+        clientStoreTemporaryCredential: true,
+      });
+    } else {
+      this.connection = snowflake.createConnection({
+        ...baseConfig,
+        password: config.password,
+      });
+    }
   }
 
   async connect(): Promise<void> {
+    if (this.authMethod === 'oauth_browser') {
+      // No browser flows outside the Connections screen: a cold session
+      // fails fast with guidance instead of opening an ungated popup.
+      // A warm SDK cache connects silently without user interaction.
+      SnowflakeAuthManager.assertCachedSession();
+    }
     return new Promise((resolve, reject) => {
       this.connection.connect((err) => {
         if (err) return reject(err);

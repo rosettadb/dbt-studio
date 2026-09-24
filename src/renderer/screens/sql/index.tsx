@@ -473,6 +473,7 @@ const Sql = () => {
         if (result.error) {
           // eslint-disable-next-line no-console
           console.error('Failed to fetch schema:', result.error);
+          toast.error(`Failed to fetch schema: ${result.error}`);
           setTabSchemas((prev) => ({ ...prev, [connectionId]: [] }));
         } else {
           setTabSchemas((prev) => ({ ...prev, [connectionId]: result.tables }));
@@ -480,6 +481,9 @@ const Sql = () => {
       } catch (error: any) {
         // eslint-disable-next-line no-console
         console.error('Failed to fetch schema:', error);
+        toast.error(
+          `Failed to fetch schema: ${error?.message ?? 'Unknown error'}`,
+        );
         setTabSchemas((prev) => ({ ...prev, [connectionId]: [] }));
       } finally {
         setLoadingSchemas((prev) => ({ ...prev, [connectionId]: false }));
