@@ -272,14 +272,16 @@ export async function updateProfilesYml(
     if (connection.type === 'snowflake') {
       if ((connection as SnowflakeConnection).authMethod === 'oauth_browser') {
         delete profiles[projectName].outputs.dev.password;
-        delete profiles[projectName].outputs.dev.client_store_temporary_credential;
+        delete profiles[projectName].outputs.dev
+          .client_store_temporary_credential;
         profiles[projectName].outputs.dev.authenticator = 'oauth';
         profiles[projectName].outputs.dev.token =
           `{{ env_var("db-token-${connection.name}") }}`;
       } else {
         delete profiles[projectName].outputs.dev.authenticator;
         delete profiles[projectName].outputs.dev.token;
-        delete profiles[projectName].outputs.dev.client_store_temporary_credential;
+        delete profiles[projectName].outputs.dev
+          .client_store_temporary_credential;
       }
     }
 
