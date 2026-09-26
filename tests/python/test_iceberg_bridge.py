@@ -502,5 +502,41 @@ class LocalCatalogBridgeTest(unittest.TestCase):
             self.assertFalse(renamed["ok"])
 
 
+class LocalWarehouseLocationTest(unittest.TestCase):
+    def test_windows_drive_uri_becomes_drive_path(self) -> None:
+        self.assertEqual(
+            ICEBERG_BRIDGE.local_warehouse_location(
+                "file:///C:/Users/Arb%C3%ABr/My%20Catalog/warehouse", windows=True
+            ),
+            "C:/Users/Arbër/My Catalog/warehouse",
+        )
+
+    def test_windows_unc_uri_becomes_unc_path(self) -> None:
+        self.assertEqual(
+            ICEBERG_BRIDGE.local_warehouse_location(
+                "file://server/share/warehouse", windows=True
+            ),
+            "//server/share/warehouse",
+        )
+
+    def test_non_file_and_non_windows_locations_are_unchanged(self) -> None:
+        for location, windows in (
+            ("s3://bucket/warehouse", True),
+            ("C:/data/warehouse", True),
+            ("file:///Users/me/warehouse", False),
+        ):
+            self.assertEqual(
+                ICEBERG_BRIDGE.local_warehouse_location(location, windows=windows),
+                location,
+            )
+
+    def test_catalog_properties_normalizes_warehouse(self) -> None:
+        props = ICEBERG_BRIDGE.catalog_properties(
+            {"catalog_properties": {"warehouse": "file:///C:/w"}}
+        )
+        expected = "C:/w" if ICEBERG_BRIDGE.IS_WINDOWS else "file:///C:/w"
+        self.assertEqual(props["warehouse"], expected)
+
+
 if __name__ == "__main__":
     unittest.main()

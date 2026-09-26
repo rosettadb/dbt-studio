@@ -185,7 +185,9 @@ export class IcebergDatalakeService {
     } catch {
       // fall through to default
     }
-    return 'python3';
+    // Windows installs expose python.exe; python3 is usually missing or the
+    // Microsoft Store stub.
+    return process.platform === 'win32' ? 'python' : 'python3';
   }
 
   private static redactBridgeSecrets(
@@ -233,7 +235,7 @@ export class IcebergDatalakeService {
 
     return new Promise((resolve, reject) => {
       const child = spawn(pythonPath, [bridgePath], {
-        env: { ...process.env, ...env },
+        env: { ...process.env, PYTHONIOENCODING: 'utf-8', ...env },
       });
       let stdout = '';
       let stderr = '';
@@ -1287,8 +1289,12 @@ export class IcebergDatalakeService {
           'pip',
           'install',
           // Enabled SQL/Hive catalogs plus the current FileIO profile.
+          // Windows needs 0.12+ for drive-letter warehouse paths; keep in
+          // sync with MIN_PYICEBERG_VERSION in iceberg_bridge.py.
           // --prefer-binary avoids slow source compilation where wheels exist.
-          'pyiceberg[s3fs,sql-sqlite,sql-postgres,pyarrow,hive]>=0.10.0',
+          `pyiceberg[s3fs,sql-sqlite,sql-postgres,pyarrow,hive]>=${
+            process.platform === 'win32' ? '0.12.0' : '0.10.0'
+          }`,
           '--prefer-binary',
           '--quiet',
         ]);
