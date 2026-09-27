@@ -275,7 +275,11 @@
       }
     ],
     "asar": true,
-    "asarUnpack": "**\\*.{node,dll}",
+    "asarUnpack": [
+      "**\\*.{node,dll}",
+      "**/node_modules/ibm_db/build/Release/**",
+      "**/node_modules/ibm_db/installer/clidriver/**"
+    ],
     "files": [
       "dist",
       "node_modules",

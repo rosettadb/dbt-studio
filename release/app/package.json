@@ -20,6 +20,7 @@
     "better-sqlite3": "^12.2.0",
     "drizzle-orm": "^0.44.4",
     "fs-extra": "^11.4.0",
+    "ibm_db": "4.0.1",
     "keytar": "^7.9.0"
   }
 }
