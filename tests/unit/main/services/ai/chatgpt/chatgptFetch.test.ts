@@ -258,6 +258,22 @@ describe('ChatGPT model through the AI SDK', () => {
     expect(result.text).toBe('done');
   });
 
+  it('does not retry a usage limit (D7)', async () => {
+    const baseFetch = jest
+      .fn()
+      .mockResolvedValue(
+        jsonResponse({ error: { code: 'usage_limit_reached' } }, 429),
+      );
+
+    const error = await generateText({
+      model: createChatGptModel(async () => credential, 'gpt-5.5', baseFetch),
+      prompt: 'hi',
+    }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ChatGptUsageLimitError);
+    expect(baseFetch).toHaveBeenCalledTimes(1);
+  });
+
   it('accepts a structured-output schema with optional fields (C1)', async () => {
     const baseFetch = jest
       .fn()
