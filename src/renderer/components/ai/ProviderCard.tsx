@@ -22,6 +22,8 @@ import {
   CheckCircle,
   RadioButtonUnchecked,
   Cable,
+  Logout,
+  Login,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import {
@@ -33,6 +35,7 @@ import {
   useDeleteAIProvider,
   useTestAIProvider,
   useDeactivateAllAIProviders,
+  useSignOutChatGpt,
 } from '../../controllers/aiProviders.controller';
 import type {
   AIProvider,
@@ -113,6 +116,18 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
     },
   });
 
+  const { mutate: signOutChatGpt, isLoading: isSigningOut } = useSignOutChatGpt(
+    {
+      onSuccess: () => {
+        toast.success('Signed out of ChatGPT.');
+        onRefresh();
+      },
+      onError: (error) => {
+        toast.error(`Failed to sign out: ${error.message}`);
+      },
+    },
+  );
+
   const handleTest = () => {
     if (!provider.id) {
       toast.error('No provider ID available');
@@ -174,6 +189,8 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
         return 'Google Gemini';
       case 'anthropic':
         return 'Anthropic Claude';
+      case 'openai-codex':
+        return 'ChatGPT (subscription)';
       default:
         return type.charAt(0).toUpperCase() + type.slice(1);
     }
@@ -182,6 +199,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
   const getProviderTypeColor = (type: string) => {
     switch (type) {
       case 'openai':
+      case 'openai-codex':
         return '#10A37F';
       case 'ollama':
         return '#FF6B35';
@@ -202,20 +220,23 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
     return defaultIcon;
   };
 
-  // Helper function to get model from config
-  const getProviderModel = () => {
+  const getProviderConfig = () => {
     try {
       // Handle both string and object formats
-      const config =
-        typeof provider.config === 'string'
-          ? JSON.parse(provider.config)
-          : provider.config || {};
-      return config.model || '';
+      return typeof provider.config === 'string'
+        ? JSON.parse(provider.config)
+        : provider.config || {};
     } catch (error) {
-      // If config is not valid JSON, return empty string
-      return '';
+      // If config is not valid JSON, treat it as empty
+      return {};
     }
   };
+
+  // Helper function to get model from config
+  const getProviderModel = () => getProviderConfig().model || '';
+
+  const isChatGpt = provider.type === 'openai-codex';
+  const chatGptConfig = isChatGpt ? getProviderConfig() : {};
 
   return (
     <Card
@@ -327,6 +348,51 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
             {getProviderModel() || 'No model configured'}
           </Typography>
         </Box>
+
+        {isChatGpt && (
+          <Box sx={{ mb: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="body2" color="text.secondary">
+                Account:
+              </Typography>
+              <Typography variant="body2">
+                {chatGptConfig.signedOut
+                  ? 'Signed out'
+                  : chatGptConfig.accountEmail || 'ChatGPT account'}
+                {!chatGptConfig.signedOut && chatGptConfig.planType
+                  ? ` · ${chatGptConfig.planType}`
+                  : ''}
+              </Typography>
+              <Chip label="Experimental" size="small" variant="outlined" />
+            </Box>
+            <Typography variant="caption" color="text.secondary">
+              Included in your ChatGPT plan. Plan usage limits apply.
+            </Typography>
+            {chatGptConfig.signedOut ? (
+              <Button
+                size="small"
+                variant="outlined"
+                color="warning"
+                startIcon={<Login />}
+                onClick={handleEdit}
+                sx={{ alignSelf: 'flex-start' }}
+              >
+                Sign in again
+              </Button>
+            ) : (
+              <Button
+                size="small"
+                variant="text"
+                startIcon={<Logout />}
+                onClick={() => provider.id && signOutChatGpt(provider.id)}
+                disabled={isSigningOut}
+                sx={{ alignSelf: 'flex-start' }}
+              >
+                Sign out
+              </Button>
+            )}
+          </Box>
+        )}
 
         <Button
           size="small"
