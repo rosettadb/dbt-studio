@@ -19,6 +19,8 @@ import {
   PromptTemplate,
 } from '../schemas/mainDatabase.schema';
 import ProviderManager from '../services/ai/providerManager.service';
+import ChatGptAuthService from '../services/ai/chatgpt/chatgptAuth.service';
+import type { StartChatGptAuthRequest } from '../../types/ipc';
 import {
   CompletionResponse,
   TypedCompletionRequest,
@@ -32,6 +34,10 @@ const aiHandlerChannels: string[] = [
   'ai:provider:update',
   'ai:provider:delete',
   'ai:provider:get-credential',
+  'ai:chatgpt-auth:start',
+  'ai:chatgpt-auth:cancel',
+  'ai:chatgpt-auth:discard-pending',
+  'ai:chatgpt-auth:sign-out',
   'ai:provider:get-active',
   'ai:provider:set-active',
   'ai:provider:deactivate-all',
@@ -142,6 +148,24 @@ const registerAIHandlers = () => {
         providerType as any,
       );
     },
+  );
+
+  // ChatGPT subscription sign-in (Plan 71). Tokens never cross IPC.
+  ipcMain.handle(
+    'ai:chatgpt-auth:start',
+    (event, request: StartChatGptAuthRequest) =>
+      ChatGptAuthService.startLogin(request, (payload) =>
+        event.sender.send('ai:chatgpt-auth:event', payload),
+      ),
+  );
+  ipcMain.handle('ai:chatgpt-auth:cancel', (_, correlationId: string) =>
+    ChatGptAuthService.cancelLogin(correlationId),
+  );
+  ipcMain.handle('ai:chatgpt-auth:discard-pending', (_, loginId: string) =>
+    ChatGptAuthService.discardPendingLogin(loginId),
+  );
+  ipcMain.handle('ai:chatgpt-auth:sign-out', (_, providerId: number) =>
+    ChatGptAuthService.signOut(providerId),
   );
 
   ipcMain.handle(

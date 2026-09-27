@@ -826,7 +826,8 @@ export type AIProviderType =
   | 'gemini'
   | 'anthropic'
   | 'openai-compatible'
-  | 'lmstudio';
+  | 'lmstudio'
+  | 'openai-codex';
 
 // Chat-related types
 export interface ChatConversation {

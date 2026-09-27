@@ -17,6 +17,7 @@ import {
 } from './services';
 import { copyAssetsToUserData } from './utils/fileHelper';
 import { MCPClientManager } from './services/ai/mcp/mcpClientManager';
+import ChatGptAuthService from './services/ai/chatgpt/chatgptAuth.service';
 
 const isProd = process.env.NODE_ENV === 'production';
 const isDebug =
@@ -145,6 +146,12 @@ if (!gotTheLock) {
           // eslint-disable-next-line promise/no-nesting
           RosettaCloudService.checkTokenOnStartup().catch((e) =>
             console.error('Token check on startup failed:', e),
+          );
+          // Plan 71: a pending ChatGPT sign-in belongs to a dialog that no
+          // longer exists.
+          // eslint-disable-next-line promise/no-nesting
+          ChatGptAuthService.cleanupPendingLogins().catch((e) =>
+            console.error('ChatGPT pending sign-in cleanup failed:', e),
           );
 
           const updateMessage = async (msg: string) => {

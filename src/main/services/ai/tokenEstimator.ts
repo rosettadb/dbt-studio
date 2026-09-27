@@ -97,6 +97,18 @@ const liveCache: Record<string, number> = {};
  *
  * Failures are silenced — the static fallback table is always available.
  */
+/**
+ * Puts known context windows into the live cache, for providers that have
+ * no models API (the ChatGPT sign-in, Plan 71). The live cache wins over
+ * the static table, so ChatGPT's lower input cap replaces the API-key
+ * value for the same model ID while that provider is active.
+ */
+export function cacheContextWindows(windows: Record<string, number>): void {
+  Object.entries(windows).forEach(([modelId, tokens]) => {
+    liveCache[modelId.toLowerCase()] = tokens;
+  });
+}
+
 export async function fetchAndCacheContextWindows(opts: {
   providerType: 'openai' | 'anthropic' | 'gemini' | 'ollama';
   apiKey?: string;
