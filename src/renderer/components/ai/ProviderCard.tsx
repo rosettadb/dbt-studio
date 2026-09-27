@@ -368,29 +368,6 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
             <Typography variant="caption" color="text.secondary">
               Included in your ChatGPT plan. Plan usage limits apply.
             </Typography>
-            {chatGptConfig.signedOut ? (
-              <Button
-                size="small"
-                variant="outlined"
-                color="warning"
-                startIcon={<Login />}
-                onClick={handleEdit}
-                sx={{ alignSelf: 'flex-start' }}
-              >
-                Sign in again
-              </Button>
-            ) : (
-              <Button
-                size="small"
-                variant="text"
-                startIcon={<Logout />}
-                onClick={() => provider.id && signOutChatGpt(provider.id)}
-                disabled={isSigningOut}
-                sx={{ alignSelf: 'flex-start' }}
-              >
-                Sign out
-              </Button>
-            )}
           </Box>
         )}
 
@@ -444,6 +421,28 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
               }}
             />
           </Button>
+          {isChatGpt &&
+            (chatGptConfig.signedOut ? (
+              <Button
+                size="small"
+                variant="outlined"
+                color="warning"
+                startIcon={<Login />}
+                onClick={handleEdit}
+              >
+                Sign in again
+              </Button>
+            ) : (
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<Logout />}
+                onClick={() => provider.id && signOutChatGpt(provider.id)}
+                disabled={isSigningOut}
+              >
+                Sign out
+              </Button>
+            ))}
         </Box>
 
         <Box sx={{ display: 'flex', gap: 1 }}>
