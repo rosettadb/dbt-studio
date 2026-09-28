@@ -140,7 +140,7 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
                 navigate('/app/select-project');
               } else {
                 await selectProject({ projectId: value });
-                navigate('/app');
+                navigate('/app/dbt-project');
               }
             }}
             selectedItem={project ? String(project.id) : 'all'}
