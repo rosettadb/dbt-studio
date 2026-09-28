@@ -88,7 +88,6 @@ import {
   Table,
   SupportedConnectionTypes,
   ConnectionInput,
-  SNOWFLAKE_REAUTH_MESSAGE,
 } from '../../../types/backend';
 import { NotebookImportPreview } from '../../../types/notebooks';
 import useNotebookTabManager from '../../hooks/useNotebookTabManager';
@@ -394,9 +393,7 @@ const Notebooks = () => {
           if (result.error) {
             // eslint-disable-next-line no-console
             console.error('Failed to fetch schema:', result.error);
-            if (result.error === SNOWFLAKE_REAUTH_MESSAGE) {
-              toast.error(SNOWFLAKE_REAUTH_MESSAGE);
-            }
+            toast.error(`Failed to fetch schema: ${result.error}`);
             setTabSchemas((prev) => ({ ...prev, [connectionId]: [] }));
           } else {
             setTabSchemas((prev) => ({
@@ -408,9 +405,9 @@ const Notebooks = () => {
       } catch (error: any) {
         // eslint-disable-next-line no-console
         console.error('Failed to fetch schema:', error);
-        if (error?.message?.includes(SNOWFLAKE_REAUTH_MESSAGE)) {
-          toast.error(SNOWFLAKE_REAUTH_MESSAGE);
-        }
+        toast.error(
+          `Failed to fetch schema: ${error?.message ?? 'Unknown error'}`,
+        );
         setTabSchemas((prev) => ({ ...prev, [connectionId]: [] }));
       } finally {
         setLoadingSchemas((prev) => ({ ...prev, [connectionId]: false }));
