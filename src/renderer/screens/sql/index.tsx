@@ -50,7 +50,11 @@ import { SchemaViewContainer, SchemaViewGrid } from './styles';
 import { ErrorMessage, SqlEditor } from '../../components';
 import { ChatWindow } from '../../components/chat';
 import { QueryResult } from './queryResult';
-import { ConnectionInput, Table } from '../../../types/backend';
+import {
+  ConnectionInput,
+  Table,
+  SNOWFLAKE_REAUTH_MESSAGE,
+} from '../../../types/backend';
 import { getConnectionInput } from '../../helpers/utils';
 import { SqlTabManager } from '../../components/sqlTabs';
 import {
@@ -485,7 +489,9 @@ const Sql = () => {
         if (result.error) {
           // eslint-disable-next-line no-console
           console.error('Failed to fetch schema:', result.error);
-          toast.error(`Failed to fetch schema: ${result.error}`);
+          if (result.error === SNOWFLAKE_REAUTH_MESSAGE) {
+            toast.error(SNOWFLAKE_REAUTH_MESSAGE);
+          }
           setTabSchemas((prev) => ({ ...prev, [connectionId]: [] }));
         } else {
           setTabSchemas((prev) => ({ ...prev, [connectionId]: result.tables }));
@@ -493,9 +499,9 @@ const Sql = () => {
       } catch (error: any) {
         // eslint-disable-next-line no-console
         console.error('Failed to fetch schema:', error);
-        toast.error(
-          `Failed to fetch schema: ${error?.message ?? 'Unknown error'}`,
-        );
+        if (error?.message?.includes(SNOWFLAKE_REAUTH_MESSAGE)) {
+          toast.error(SNOWFLAKE_REAUTH_MESSAGE);
+        }
         setTabSchemas((prev) => ({ ...prev, [connectionId]: [] }));
       } finally {
         setLoadingSchemas((prev) => ({ ...prev, [connectionId]: false }));

@@ -9,7 +9,7 @@ import {
   useProfile,
 } from '../controllers';
 import { useGetActiveAIProvider } from '../controllers/aiProviders.controller';
-import { Project, Table } from '../../types/backend';
+import { Project, Table, SNOWFLAKE_REAUTH_MESSAGE } from '../../types/backend';
 import { projectsServices } from '../services';
 
 type Props = {
@@ -151,11 +151,14 @@ const AppProvider: React.FC<Props> = ({ children }) => {
           setLastFetchedProjectId(null);
           // eslint-disable-next-line no-console
           console.error('Failed to fetch schema:', error);
-          toast.error(
-            `Failed to fetch schema: ${
-              error instanceof Error ? error.message : 'Unknown error'
-            }`,
-          );
+          // Runs eagerly on startup, so only the Snowflake re-auth guidance
+          // is toasted; unreachable servers stay silent (console only).
+          if (
+            error instanceof Error &&
+            error.message.includes(SNOWFLAKE_REAUTH_MESSAGE)
+          ) {
+            toast.error(SNOWFLAKE_REAUTH_MESSAGE);
+          }
         } finally {
           setIsLoadingSchema(false);
         }
