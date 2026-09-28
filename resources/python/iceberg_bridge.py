@@ -285,6 +285,42 @@ def handle_import_table(cmd: dict) -> dict:
         if arrow_table.num_columns == 0:
             return {"ok": False, "error": "The source file contains no columns."}
 
+        # Iceberg requires non-empty, unique field names. CSV files can contain
+        # repeated headers or trailing delimiters that PyArrow exposes as
+        # duplicate empty names, which makes PyIceberg's name mapping invalid.
+        normalized_names = []
+        used_names = set()
+        for column_index, original_name in enumerate(arrow_table.schema.names):
+            base_name = original_name.strip() or f"column_{column_index + 1}"
+            normalized_name = base_name
+            suffix = 2
+            while normalized_name in used_names:
+                normalized_name = f"{base_name}_{suffix}"
+                suffix += 1
+            normalized_names.append(normalized_name)
+            used_names.add(normalized_name)
+        if normalized_names != arrow_table.schema.names:
+            arrow_table = arrow_table.rename_columns(normalized_names)
+
+        # PyArrow represents columns containing only null values with pa.null().
+        # Iceberg format v2 cannot persist that logical type, so give those
+        # columns a concrete nullable type while preserving every null value.
+        # String is the least surprising fallback for schemaless CSV/JSON data
+        # because a later import may contain text in the same source column.
+        for column_index, field in enumerate(arrow_table.schema):
+            if pa.types.is_null(field.type):
+                string_field = pa.field(
+                    field.name,
+                    pa.string(),
+                    nullable=True,
+                    metadata=field.metadata,
+                )
+                arrow_table = arrow_table.set_column(
+                    column_index,
+                    string_field,
+                    arrow_table.column(column_index).cast(pa.string()),
+                )
+
         try:
             catalog.create_namespace_if_not_exists(namespace)
             table = catalog.create_table(identifier, schema=arrow_table.schema)
