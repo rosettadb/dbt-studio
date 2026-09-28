@@ -608,12 +608,12 @@ const Sql = () => {
   const handleSetError = useCallback(
     (error: any) => {
       if (!activeTabId) return;
-      setTabError(activeTabId, error);
 
       const errorMessage =
         typeof error === 'string'
           ? error
           : (error?.message ?? String(error ?? 'Unknown error'));
+      setTabError(activeTabId, error == null ? undefined : errorMessage);
 
       const errorSnapshot: QueryResultSnapshot = {
         status: 'error',
