@@ -1,4 +1,34 @@
+/* eslint-disable import/first */
 import fs from 'fs';
+
+// Stub @aws-sdk (pulled in via cloudExplorer.service in the import graph;
+// the real dist-cjs bundle cannot be parsed by jest).
+jest.mock('@aws-sdk/client-s3', () => {
+  const Dummy = class {};
+  return {
+    S3Client: Dummy,
+    ListBucketsCommand: Dummy,
+    ListObjectsV2Command: Dummy,
+    ListObjectsCommand: Dummy,
+    GetObjectCommand: Dummy,
+    PutObjectCommand: Dummy,
+    CreateMultipartUploadCommand: Dummy,
+    UploadPartCommand: Dummy,
+    CompleteMultipartUploadCommand: Dummy,
+    AbortMultipartUploadCommand: Dummy,
+    DeleteObjectCommand: Dummy,
+    DeleteObjectsCommand: Dummy,
+    CreateBucketCommand: Dummy,
+    DeleteBucketCommand: Dummy,
+    ListObjectVersionsCommand: Dummy,
+    HeadBucketCommand: Dummy,
+  };
+});
+
+jest.mock('@aws-sdk/s3-request-presigner', () => ({
+  getSignedUrl: jest.fn(),
+}));
+
 import ConnectorsService from '../../../../src/main/services/connectors.service';
 import { ProjectsService } from '../../../../src/main/services';
 

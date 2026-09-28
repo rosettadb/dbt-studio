@@ -1,4 +1,5 @@
 import React from 'react';
+import { toast } from 'react-toastify';
 import { AppContextType } from '../../types/frontend';
 import { Splash } from '../components';
 import {
@@ -150,6 +151,11 @@ const AppProvider: React.FC<Props> = ({ children }) => {
           setLastFetchedProjectId(null);
           // eslint-disable-next-line no-console
           console.error('Failed to fetch schema:', error);
+          toast.error(
+            `Failed to fetch schema: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
+          );
         } finally {
           setIsLoadingSchema(false);
         }

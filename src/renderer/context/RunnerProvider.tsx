@@ -8,6 +8,7 @@ import React, {
 } from 'react';
 import { useSecureStorage } from '../hooks';
 import { useSetConnectionEnvVariable } from '../controllers';
+import { materializeSnowflakeToken } from '../services/connectors.service';
 
 export interface RunnerLogEntry {
   message: string;
@@ -202,6 +203,13 @@ export const RunnerProvider: React.FC<RunnerProviderProps> = ({ children }) => {
               value: token,
             }),
           );
+        }
+
+        // Snowflake OAuth: hand the live session token to dbt via process
+        // env (main-side; the token never enters the renderer). Self-gating
+        // main-side: no-op unless the named connection is snowflake+oauth.
+        if (connType === 'snowflake') {
+          await materializeSnowflakeToken(connectionName).catch(() => false);
         }
 
         if (connType) {

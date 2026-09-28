@@ -9,7 +9,7 @@
 import fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
-import { ConnectionInput } from '../../types/backend';
+import { ConnectionInput, SnowflakeConnection } from '../../types/backend';
 import { buildKineticaUrl } from '../../shared/kineticaUrl';
 import { buildKineticaProfileOutput } from './kineticaProfile';
 
@@ -61,17 +61,31 @@ function generateProfileOutputFields(
         schema: envVar('schema'),
       };
 
-    case 'snowflake':
-      return {
+    case 'snowflake': {
+      const isOauth = connection.authMethod === 'oauth_browser';
+      const result: any = {
         ...baseFields,
         account: envVar('account'),
         user: envVar('user'),
-        password: envVar('password'),
         role: envVar('role'),
         database: envVar('dbname'),
         warehouse: envVar('warehouse'),
         schema: envVar('schema'),
       };
+
+      if (isOauth) {
+        // Token comes from `db-token-<name>` process env, materialized
+        // main-side from the live SDK session at dbt run time (never written
+        // to files). Plain `oauth` never opens a browser: a missing/expired
+        // token fails fast with guidance instead.
+        result.authenticator = 'oauth';
+        result.token = envVar('token');
+      } else {
+        result.password = envVar('password');
+      }
+
+      return result;
+    }
 
     case 'bigquery':
       return {
@@ -151,8 +165,13 @@ function generateJdbcUrl(
     case 'postgres':
       return `jdbc:postgresql://${ev('host')}:${ev('port')}/${ev('dbname')}?currentSchema=${ev('schema')}`;
 
-    case 'snowflake':
-      return `jdbc:snowflake://${ev('account')}.snowflakecomputing.com/?warehouse=${ev('warehouse')}&db=${ev('dbname')}&schema=${ev('schema')}`;
+    case 'snowflake': {
+      let url = `jdbc:snowflake://${ev('account')}.snowflakecomputing.com/?warehouse=${ev('warehouse')}&db=${ev('dbname')}&schema=${ev('schema')}`;
+      if (connection.authMethod === 'oauth_browser') {
+        url += '&authenticator=oauth_authorization_code';
+      }
+      return url;
+    }
 
     case 'redshift':
       return `jdbc:redshift://${ev('host')}:${ev('port')}/${ev('dbname')}?currentSchema=${ev('schema')}`;
@@ -246,6 +265,25 @@ export async function updateProfilesYml(
       ...profiles[projectName].outputs.dev, // Keep existing custom fields
       ...newFields, // Override with new connection fields
     };
+
+    // For Snowflake: explicitly enforce password/token vs authenticator
+    // fields because the merge above may keep stale values from a previous
+    // profile (including the retired oauth_authorization_code form).
+    if (connection.type === 'snowflake') {
+      if ((connection as SnowflakeConnection).authMethod === 'oauth_browser') {
+        delete profiles[projectName].outputs.dev.password;
+        delete profiles[projectName].outputs.dev
+          .client_store_temporary_credential;
+        profiles[projectName].outputs.dev.authenticator = 'oauth';
+        profiles[projectName].outputs.dev.token =
+          `{{ env_var("db-token-${connection.name}") }}`;
+      } else {
+        delete profiles[projectName].outputs.dev.authenticator;
+        delete profiles[projectName].outputs.dev.token;
+        delete profiles[projectName].outputs.dev
+          .client_store_temporary_credential;
+      }
+    }
 
     // Write back to file
     const updatedContent = yaml.dump(profiles, {
@@ -342,11 +380,22 @@ export async function updateMainConf(
     const typesWithoutCredentials = ['bigquery', 'databricks', 'duckdb'];
     if (!typesWithoutCredentials.includes(connection.type)) {
       connectionEntry.userName = ev('user');
-      connectionEntry.password = ev('password');
+      if (
+        connection.type === 'snowflake' &&
+        (connection as SnowflakeConnection).authMethod === 'oauth_browser'
+      ) {
+        delete connectionEntry.password;
+        // Snowflake Local Application OAuth (SNOWFLAKE$LOCAL_APPLICATION built-in)
+        connectionEntry.authenticator = 'oauth_authorization_code';
+      } else {
+        connectionEntry.password = ev('password');
+        delete connectionEntry.authenticator;
+      }
     } else {
       // Remove userName/password if they exist but shouldn't for this type
       delete connectionEntry.userName;
       delete connectionEntry.password;
+      delete connectionEntry.authenticator;
     }
 
     // For Databricks, handle token
