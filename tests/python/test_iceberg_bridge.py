@@ -122,6 +122,74 @@ class LocalCatalogBridgeTest(unittest.TestCase):
             self.assertTrue(snapshots["ok"])
             self.assertEqual(len(snapshots["snapshots"]), 1)
 
+    def test_import_table_casts_null_only_csv_columns_to_string(self) -> None:
+        """All-null inferred columns remain importable with Iceberg format v2."""
+        with tempfile.TemporaryDirectory() as catalog_directory:
+            created = ICEBERG_BRIDGE.handle_create_metadata_file(
+                {"warehouse_path": catalog_directory}
+            )
+            self.assertTrue(created["ok"])
+
+            source = Path(catalog_directory) / "null-column.csv"
+            source.write_text("id,notes\n1,\n2,\n", encoding="utf-8")
+            properties = {
+                "type": "sql",
+                "uri": f"sqlite:///{created['metadata_path']}",
+                "warehouse": Path(created["warehouse_path"]).as_uri(),
+            }
+
+            imported = ICEBERG_BRIDGE.handle_import_table(
+                {
+                    "catalog_name": "local",
+                    "catalog_properties": properties,
+                    "namespace": ["default"],
+                    "table": "null_column_csv",
+                    "file_path": str(source),
+                    "file_format": "csv",
+                }
+            )
+
+            self.assertTrue(imported["ok"], imported.get("error"))
+            table = load_catalog("local", **properties).load_table(
+                ("default", "null_column_csv")
+            )
+            self.assertEqual(table.schema().find_field("notes").field_type, StringType())
+            self.assertEqual(
+                table.scan().to_arrow().column("notes").to_pylist(), [None, None]
+            )
+
+    def test_import_table_normalizes_empty_and_duplicate_column_names(self) -> None:
+        """CSV headers become valid, unique Iceberg field names."""
+        with tempfile.TemporaryDirectory() as catalog_directory:
+            created = ICEBERG_BRIDGE.handle_create_metadata_file(
+                {"warehouse_path": catalog_directory}
+            )
+            self.assertTrue(created["ok"])
+
+            source = Path(catalog_directory) / "invalid-headers.csv"
+            source.write_text("id,,,id\n1,,,2\n", encoding="utf-8")
+            properties = {
+                "type": "sql",
+                "uri": f"sqlite:///{created['metadata_path']}",
+                "warehouse": Path(created["warehouse_path"]).as_uri(),
+            }
+
+            imported = ICEBERG_BRIDGE.handle_import_table(
+                {
+                    "catalog_name": "local",
+                    "catalog_properties": properties,
+                    "namespace": ["default"],
+                    "table": "normalized_headers_csv",
+                    "file_path": str(source),
+                    "file_format": "csv",
+                }
+            )
+
+            self.assertTrue(imported["ok"], imported.get("error"))
+            self.assertEqual(
+                imported["columns"], ["id", "column_2", "column_3", "id_2"]
+            )
+
     def test_import_table_from_json_and_parquet(self) -> None:
         """JSON and Parquet sources import with the same persisted contract."""
         with tempfile.TemporaryDirectory() as catalog_directory:
@@ -500,6 +568,42 @@ class LocalCatalogBridgeTest(unittest.TestCase):
                 }
             )
             self.assertFalse(renamed["ok"])
+
+
+class LocalWarehouseLocationTest(unittest.TestCase):
+    def test_windows_drive_uri_becomes_drive_path(self) -> None:
+        self.assertEqual(
+            ICEBERG_BRIDGE.local_warehouse_location(
+                "file:///C:/Users/Arb%C3%ABr/My%20Catalog/warehouse", windows=True
+            ),
+            "C:/Users/Arbër/My Catalog/warehouse",
+        )
+
+    def test_windows_unc_uri_becomes_unc_path(self) -> None:
+        self.assertEqual(
+            ICEBERG_BRIDGE.local_warehouse_location(
+                "file://server/share/warehouse", windows=True
+            ),
+            "//server/share/warehouse",
+        )
+
+    def test_non_file_and_non_windows_locations_are_unchanged(self) -> None:
+        for location, windows in (
+            ("s3://bucket/warehouse", True),
+            ("C:/data/warehouse", True),
+            ("file:///Users/me/warehouse", False),
+        ):
+            self.assertEqual(
+                ICEBERG_BRIDGE.local_warehouse_location(location, windows=windows),
+                location,
+            )
+
+    def test_catalog_properties_normalizes_warehouse(self) -> None:
+        props = ICEBERG_BRIDGE.catalog_properties(
+            {"catalog_properties": {"warehouse": "file:///C:/w"}}
+        )
+        expected = "C:/w" if ICEBERG_BRIDGE.IS_WINDOWS else "file:///C:/w"
+        self.assertEqual(props["warehouse"], expected)
 
 
 if __name__ == "__main__":

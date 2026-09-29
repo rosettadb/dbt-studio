@@ -13,9 +13,16 @@ Supported commands:
 
 import json
 import os
+import re
 import sys
 from datetime import date, datetime
 from decimal import Decimal
+from urllib.parse import unquote, urlparse
+
+IS_WINDOWS = os.name == "nt"
+
+# PyIceberg accepts Windows drive-letter paths (C:/...) only from 0.12.0.
+MIN_PYICEBERG_VERSION = (0, 12, 0) if IS_WINDOWS else (0, 10, 0)
 
 
 def resolve_env_vars(props: dict) -> dict:
@@ -28,6 +35,32 @@ def resolve_env_vars(props: dict) -> dict:
         else:
             result[k] = v
     return result
+
+
+def local_warehouse_location(location: str, windows: bool = IS_WINDOWS) -> str:
+    """Return a local warehouse location that PyIceberg's FileIO can open.
+
+    PyIceberg parses ``file:///C:/data`` into the path ``/C:/data``, which is
+    not a valid Windows path. On Windows, local ``file:`` URIs are therefore
+    passed as plain ``C:/data`` paths, which PyIceberg 0.12+ treats as local.
+    """
+    if not windows or not location.lower().startswith("file:"):
+        return location
+    uri = urlparse(location)
+    path = unquote(uri.path)
+    if uri.netloc and uri.netloc.lower() != "localhost":
+        return f"//{uri.netloc}{path}"
+    if re.match(r"^/[A-Za-z]:", path):
+        path = path[1:]
+    return path
+
+
+def catalog_properties(cmd: dict) -> dict:
+    """Resolve the command's catalog properties for ``load_catalog``."""
+    props = resolve_env_vars(cmd.get("catalog_properties", {}))
+    if isinstance(props.get("warehouse"), str):
+        props["warehouse"] = local_warehouse_location(props["warehouse"])
+    return props
 
 
 def json_safe(value):
@@ -57,7 +90,7 @@ def handle_install_check(_cmd: dict) -> dict:
         version_parts = tuple(
             int(part) for part in pyiceberg.__version__.split(".")[:3]
         )
-        if version_parts < (0, 10, 0):
+        if version_parts < MIN_PYICEBERG_VERSION:
             return {"ok": True, "installed": False, "version": pyiceberg.__version__}
         return {"ok": True, "installed": True, "version": pyiceberg.__version__}
     except ImportError:
@@ -68,7 +101,7 @@ def handle_test_connection(cmd: dict) -> dict:
     """Test catalog access and, when a table exists, warehouse metadata access."""
     try:
         from pyiceberg.catalog import load_catalog  # noqa: PLC0415
-        props = resolve_env_vars(cmd.get("catalog_properties", {}))
+        props = catalog_properties(cmd)
         catalog = load_catalog(cmd["catalog_name"], **props)
         namespaces = catalog.list_namespaces()
         table_count = 0
@@ -94,7 +127,7 @@ def handle_list_namespaces(cmd: dict) -> dict:
     """List namespaces, optionally under a parent namespace."""
     try:
         from pyiceberg.catalog import load_catalog  # noqa: PLC0415
-        props = resolve_env_vars(cmd.get("catalog_properties", {}))
+        props = catalog_properties(cmd)
         catalog = load_catalog(cmd["catalog_name"], **props)
         parent = tuple(cmd["parent"]) if cmd.get("parent") else ()
         namespaces = catalog.list_namespaces(parent)
@@ -107,7 +140,7 @@ def handle_list_tables(cmd: dict) -> dict:
     """List tables within a given namespace."""
     try:
         from pyiceberg.catalog import load_catalog  # noqa: PLC0415
-        props = resolve_env_vars(cmd.get("catalog_properties", {}))
+        props = catalog_properties(cmd)
         catalog = load_catalog(cmd["catalog_name"], **props)
         namespace = tuple(cmd["namespace"])
         identifiers = catalog.list_tables(namespace)
@@ -121,7 +154,7 @@ def handle_get_schema(cmd: dict) -> dict:
     """Return the current schema (field list) for a table."""
     try:
         from pyiceberg.catalog import load_catalog  # noqa: PLC0415
-        props = resolve_env_vars(cmd.get("catalog_properties", {}))
+        props = catalog_properties(cmd)
         catalog = load_catalog(cmd["catalog_name"], **props)
         namespace = tuple(cmd["namespace"])
         table = catalog.load_table((*namespace, cmd["table"]))
@@ -148,7 +181,7 @@ def handle_get_snapshots(cmd: dict) -> dict:
     """Return the snapshot history for a table."""
     try:
         from pyiceberg.catalog import load_catalog  # noqa: PLC0415
-        props = resolve_env_vars(cmd.get("catalog_properties", {}))
+        props = catalog_properties(cmd)
         catalog = load_catalog(cmd["catalog_name"], **props)
         namespace = tuple(cmd["namespace"])
         table = catalog.load_table((*namespace, cmd["table"]))
@@ -173,7 +206,7 @@ def handle_preview_table(cmd: dict) -> dict:
     """Preview rows from a table using PyArrow scan."""
     try:
         from pyiceberg.catalog import load_catalog  # noqa: PLC0415
-        props = resolve_env_vars(cmd.get("catalog_properties", {}))
+        props = catalog_properties(cmd)
         catalog = load_catalog(cmd["catalog_name"], **props)
         namespace = tuple(cmd["namespace"])
         table = catalog.load_table((*namespace, cmd["table"]))
@@ -218,7 +251,7 @@ def handle_import_table(cmd: dict) -> dict:
         from pyiceberg.catalog import load_catalog  # noqa: PLC0415
         from pyiceberg.exceptions import TableAlreadyExistsError  # noqa: PLC0415
 
-        props = resolve_env_vars(cmd.get("catalog_properties", {}))
+        props = catalog_properties(cmd)
         catalog = load_catalog(cmd["catalog_name"], **props)
         namespace = tuple(cmd["namespace"])
         table_name = cmd["table"]
@@ -251,6 +284,42 @@ def handle_import_table(cmd: dict) -> dict:
 
         if arrow_table.num_columns == 0:
             return {"ok": False, "error": "The source file contains no columns."}
+
+        # Iceberg requires non-empty, unique field names. CSV files can contain
+        # repeated headers or trailing delimiters that PyArrow exposes as
+        # duplicate empty names, which makes PyIceberg's name mapping invalid.
+        normalized_names = []
+        used_names = set()
+        for column_index, original_name in enumerate(arrow_table.schema.names):
+            base_name = original_name.strip() or f"column_{column_index + 1}"
+            normalized_name = base_name
+            suffix = 2
+            while normalized_name in used_names:
+                normalized_name = f"{base_name}_{suffix}"
+                suffix += 1
+            normalized_names.append(normalized_name)
+            used_names.add(normalized_name)
+        if normalized_names != arrow_table.schema.names:
+            arrow_table = arrow_table.rename_columns(normalized_names)
+
+        # PyArrow represents columns containing only null values with pa.null().
+        # Iceberg format v2 cannot persist that logical type, so give those
+        # columns a concrete nullable type while preserving every null value.
+        # String is the least surprising fallback for schemaless CSV/JSON data
+        # because a later import may contain text in the same source column.
+        for column_index, field in enumerate(arrow_table.schema):
+            if pa.types.is_null(field.type):
+                string_field = pa.field(
+                    field.name,
+                    pa.string(),
+                    nullable=True,
+                    metadata=field.metadata,
+                )
+                arrow_table = arrow_table.set_column(
+                    column_index,
+                    string_field,
+                    arrow_table.column(column_index).cast(pa.string()),
+                )
 
         try:
             catalog.create_namespace_if_not_exists(namespace)
@@ -287,7 +356,7 @@ def handle_drop_table(cmd: dict) -> dict:
     """Drop a table from the catalog."""
     try:
         from pyiceberg.catalog import load_catalog  # noqa: PLC0415
-        props = resolve_env_vars(cmd.get("catalog_properties", {}))
+        props = catalog_properties(cmd)
         catalog = load_catalog(cmd["catalog_name"], **props)
         namespace = tuple(cmd["namespace"])
         catalog.drop_table((*namespace, cmd["table"]))
@@ -300,7 +369,7 @@ def handle_rename_table(cmd: dict) -> dict:
     """Rename a table within the same namespace."""
     try:
         from pyiceberg.catalog import load_catalog  # noqa: PLC0415
-        props = resolve_env_vars(cmd.get("catalog_properties", {}))
+        props = catalog_properties(cmd)
         catalog = load_catalog(cmd["catalog_name"], **props)
         namespace = tuple(cmd["namespace"])
         catalog.rename_table(
@@ -320,7 +389,7 @@ def handle_create_namespace(cmd: dict) -> dict:
     """Create a (possibly nested) namespace in the catalog."""
     try:
         from pyiceberg.catalog import load_catalog  # noqa: PLC0415
-        props = resolve_env_vars(cmd.get("catalog_properties", {}))
+        props = catalog_properties(cmd)
         catalog = load_catalog(cmd["catalog_name"], **props)
         namespace = tuple(cmd["namespace"])
         catalog.create_namespace(namespace)
@@ -333,7 +402,7 @@ def handle_drop_namespace(cmd: dict) -> dict:
     """Drop a namespace. The namespace must be empty (no tables)."""
     try:
         from pyiceberg.catalog import load_catalog  # noqa: PLC0415
-        props = resolve_env_vars(cmd.get("catalog_properties", {}))
+        props = catalog_properties(cmd)
         catalog = load_catalog(cmd["catalog_name"], **props)
         namespace = tuple(cmd["namespace"])
         catalog.drop_namespace(namespace)
@@ -363,7 +432,7 @@ def handle_create_metadata_file(cmd: dict) -> dict:
         properties = {
             "type": "sql",
             "uri": f"sqlite:///{catalog_path.as_posix()}",
-            "warehouse": warehouse_dir.as_uri(),
+            "warehouse": local_warehouse_location(warehouse_dir.as_uri()),
         }
         catalog = load_catalog("local", **properties)
         catalog.create_namespace_if_not_exists("default")
@@ -404,7 +473,9 @@ HANDLERS = {
 
 if __name__ == "__main__":
     try:
-        raw = sys.stdin.read()
+        # Node writes UTF-8; Windows would otherwise decode stdin with the ANSI
+        # code page and corrupt non-ASCII paths.
+        raw = sys.stdin.buffer.read().decode("utf-8")
         cmd = json.loads(raw)
         command_name = cmd.get("command")
         handler = HANDLERS.get(command_name)
