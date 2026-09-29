@@ -8,6 +8,7 @@
 
 import { test, expect } from '../../fixtures/electron-seeded.fixture';
 import { openProject } from '../../helpers/window.helper';
+import { NavigationSidebarComponent } from '../../page-objects/components/NavigationSidebar';
 
 const PROJECT = 'test_project';
 
@@ -63,7 +64,11 @@ test.describe('App Shell', () => {
   test('should open the AI assistant and point to provider settings', async ({
     electronApp,
   }) => {
+    // The assistant pane is mounted by the workspace screens (SQL/Notebooks/
+    // project details), so open it from the SQL editor.
     const window = await openProject(electronApp, PROJECT);
+    const nav = new NavigationSidebarComponent(window);
+    await nav.goToSqlEditor();
 
     await window.getByRole('button', { name: 'AI Assistant (beta)' }).click();
 
