@@ -427,7 +427,7 @@ const SelectProject: React.FC = () => {
             data-project-name={project.name}
             onClick={async () => {
               await selectProject({ projectId: project.id });
-              navigate('/app');
+              navigate('/app/dbt-project');
             }}
           >
             <ProjectCardContent>
