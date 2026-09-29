@@ -8,6 +8,8 @@ import {
   CircularProgress,
   IconButton,
   InputAdornment,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { toast } from 'react-toastify';
@@ -18,10 +20,18 @@ import {
   useTestConnection,
   useUpdateConnection,
   useGetConnections,
+  useHasSnowflakeToken,
+  useRevokeSnowflakeToken,
 } from '../../controllers';
+import {
+  startSnowflakeAuth,
+  cancelSnowflakeAuth,
+  onSnowflakeAuthEvent,
+} from '../../services/connectors.service';
 import ConnectionHeader from './connection-header';
 import useSecureStorage from '../../hooks/useSecureStorage';
 import { useConnectionNameValidation } from '../../utils/connectionValidation';
+import BrowserAuthenticationGate from './BrowserAuthenticationGate';
 
 type Props = {
   onCancel: () => void;
@@ -76,7 +86,59 @@ export const Snowflake: React.FC<Props> = ({
     username: '',
     password: '',
     role: existingConnection?.role ?? duplicateConnection?.role ?? 'SYSADMIN',
+    authMethod:
+      existingConnection?.authMethod ??
+      duplicateConnection?.authMethod ??
+      'password',
   });
+
+  const [gateState, setGateState] = React.useState<{
+    open: boolean;
+    status: any;
+    error?: string;
+    correlationId?: string;
+  }>({
+    open: false,
+    status: 'idle',
+  });
+
+  // Tracks the in-flight OAuth attempt so duplicate Test clicks are ignored
+  // and unmount/route-change can cancel before disposing local state.
+  const activeCorrelationIdRef = React.useRef<string | undefined>(undefined);
+
+  const validateOAuthFields = (): string | null => {
+    if (!formState.account.trim()) return 'Account identifier is required.';
+    if (!formState.username.trim()) return 'Username is required.';
+    if (!formState.warehouse.trim()) return 'Warehouse is required.';
+    if (!formState.database.trim()) return 'Database is required.';
+    if (!formState.schema.trim()) return 'Schema is required.';
+    if (!formState.role?.trim()) return 'Role is required.';
+    return null;
+  };
+
+  React.useEffect(() => {
+    const unsub = onSnowflakeAuthEvent((payload) => {
+      setGateState((prev) => {
+        if (prev.correlationId !== payload.correlationId) return prev;
+        return {
+          ...prev,
+          status: payload.status,
+          error: payload.error,
+        };
+      });
+    });
+    return () => {
+      unsub();
+      // Idempotent cleanup: cancel any in-flight attempt on unmount so an
+      // old callback cannot unlock a new attempt.
+      if (activeCorrelationIdRef.current) {
+        cancelSnowflakeAuth(activeCorrelationIdRef.current).catch(
+          () => undefined,
+        );
+        activeCorrelationIdRef.current = undefined;
+      }
+    };
+  }, []);
 
   const { mutate: testConnection, isLoading: isTesting } = useTestConnection({
     onSuccess: (success) => {
@@ -108,6 +170,28 @@ export const Snowflake: React.FC<Props> = ({
         toast.error(`Configuration failed: ${error}`);
       },
     });
+
+  const { data: hasToken, refetch: refetchHasToken } = useHasSnowflakeToken();
+  const { mutate: revokeToken, isLoading: isRevoking } =
+    useRevokeSnowflakeToken();
+
+  const handleRevokeToken = () => {
+    revokeToken(formState.name, {
+      onSuccess: (success) => {
+        if (success) {
+          toast.success(
+            'Snowflake cached token revoked. You will be prompted to log in again.',
+          );
+          refetchHasToken();
+        } else {
+          toast.error('Failed to revoke token. Cache file might not exist.');
+        }
+      },
+      onError: (err) => {
+        toast.error(`Error revoking token: ${(err as Error).message}`);
+      },
+    });
+  };
 
   const { mutate: updateConnection, isLoading: isUpdating } =
     useUpdateConnection({
@@ -192,8 +276,23 @@ export const Snowflake: React.FC<Props> = ({
       return;
     }
 
-    await setDatabaseUsername(formState.username, formState.name);
-    await setDatabasePassword(formState.password, formState.name);
+    // OAuth mode must never persist a password: tokens stay in the SDK
+    // temporary credential cache, never in secure storage / files / logs.
+    if (formState.authMethod === 'oauth_browser') {
+      if (connectionStatus !== 'success') {
+        toast.error('Test the browser connection successfully before saving.');
+        return;
+      }
+      const oauthError = validateOAuthFields();
+      if (oauthError) {
+        toast.error(oauthError);
+        return;
+      }
+      await setDatabaseUsername(formState.username, formState.name);
+    } else {
+      await setDatabaseUsername(formState.username, formState.name);
+      await setDatabasePassword(formState.password, formState.name);
+    }
     await setConnectionField('account', formState.account, formState.name);
     await setConnectionField('warehouse', formState.warehouse, formState.name);
     await setConnectionField('dbname', formState.database, formState.name);
@@ -220,9 +319,69 @@ export const Snowflake: React.FC<Props> = ({
     });
   };
 
-  const handleTest = () => {
+  const handleTest = async () => {
     setConnectionStatus('idle');
-    testConnection(formState);
+    if (formState.authMethod === 'oauth_browser') {
+      // Single-flight guard: ignore duplicate Test clicks while the gate
+      // (modal) is already blocking for an active attempt.
+      if (gateState.open || activeCorrelationIdRef.current) {
+        return;
+      }
+      const oauthError = validateOAuthFields();
+      if (oauthError) {
+        toast.error(oauthError);
+        return;
+      }
+      const correlationId = crypto.randomUUID();
+      activeCorrelationIdRef.current = correlationId;
+      setGateState({ open: true, status: 'started', correlationId });
+      try {
+        const result: any = await startSnowflakeAuth({
+          correlationId,
+          account: formState.account.trim(),
+          username: formState.username.trim(),
+          warehouse: formState.warehouse.trim(),
+          database: formState.database.trim(),
+          schema: formState.schema.trim(),
+          role: formState.role?.trim() || '',
+        });
+        if (activeCorrelationIdRef.current !== correlationId) return;
+        if (result.ok) {
+          toast.success(
+            'Connection test successful. Snowflake may reuse a cached OAuth session without opening the browser.',
+          );
+          setConnectionStatus('success');
+        } else {
+          toast.error(`Test failed: ${result.message}`);
+          setConnectionStatus('failed');
+        }
+      } catch (err: any) {
+        if (activeCorrelationIdRef.current !== correlationId) return;
+        toast.error(`Test failed: ${err.message}`);
+        setConnectionStatus('failed');
+        setGateState((prev) => ({
+          ...prev,
+          status: 'failed',
+          error: err.message,
+        }));
+      } finally {
+        if (activeCorrelationIdRef.current === correlationId) {
+          activeCorrelationIdRef.current = undefined;
+        }
+      }
+    } else {
+      testConnection(formState);
+    }
+  };
+
+  const handleCancelAuth = () => {
+    const correlationId =
+      activeCorrelationIdRef.current ?? gateState.correlationId;
+    if (correlationId) {
+      cancelSnowflakeAuth(correlationId).catch(() => undefined);
+      activeCorrelationIdRef.current = undefined;
+    }
+    setGateState((prev) => ({ ...prev, open: false }));
   };
 
   const getIndicatorColor = () => {
@@ -255,6 +414,13 @@ export const Snowflake: React.FC<Props> = ({
         onClose={onCancel}
         onSave={handleSubmit}
         isLoading={isUpdating || isConfiguring}
+      />
+
+      <BrowserAuthenticationGate
+        open={gateState.open}
+        status={gateState.status}
+        onCancel={handleCancelAuth}
+        error={gateState.error}
       />
 
       <Box
@@ -293,6 +459,21 @@ export const Snowflake: React.FC<Props> = ({
           required
           placeholder="xy12345.us-east-2.aws"
         />
+
+        <Tabs
+          value={formState.authMethod || 'password'}
+          onChange={(e, val) => {
+            setConnectionStatus('idle');
+            setFormState((prev) => ({ ...prev, authMethod: val }));
+          }}
+          indicatorColor="primary"
+          textColor="primary"
+          variant="fullWidth"
+          sx={{ mb: 1, borderBottom: 1, borderColor: 'divider' }}
+        >
+          <Tab label="Password Login" value="password" />
+          <Tab label="Web Browser" value="oauth_browser" />
+        </Tabs>
 
         <TextField
           label="Warehouse"
@@ -337,29 +518,31 @@ export const Snowflake: React.FC<Props> = ({
           fullWidth
         />
 
-        <TextField
-          label="Password"
-          name="password"
-          type={showPassword ? 'text' : 'password'}
-          value={formState.password}
-          onChange={handleChange}
-          fullWidth
-          slotProps={{
-            input: {
-              endAdornment: (
-                <InputAdornment position="end">
-                  <IconButton
-                    onClick={() => setShowPassword(!showPassword)}
-                    onMouseDown={(e) => e.preventDefault()}
-                    edge="end"
-                  >
-                    {showPassword ? <VisibilityOff /> : <Visibility />}
-                  </IconButton>
-                </InputAdornment>
-              ),
-            },
-          }}
-        />
+        {formState.authMethod !== 'oauth_browser' && (
+          <TextField
+            label="Password"
+            name="password"
+            type={showPassword ? 'text' : 'password'}
+            value={formState.password}
+            onChange={handleChange}
+            fullWidth
+            slotProps={{
+              input: {
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      onClick={() => setShowPassword(!showPassword)}
+                      onMouseDown={(e) => e.preventDefault()}
+                      edge="end"
+                    >
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              },
+            }}
+          />
+        )}
 
         <Box
           sx={{
@@ -373,7 +556,7 @@ export const Snowflake: React.FC<Props> = ({
             variant="contained"
             color="primary"
             onClick={handleTest}
-            disabled={isTesting}
+            disabled={isTesting || gateState.open}
             sx={{
               mr: 2,
               position: 'relative',
@@ -404,6 +587,19 @@ export const Snowflake: React.FC<Props> = ({
               }}
             />
           </Button>
+
+          {formState.authMethod === 'oauth_browser' && hasToken && (
+            <Button
+              type="button"
+              variant="outlined"
+              color="error"
+              onClick={handleRevokeToken}
+              disabled={isRevoking || isTesting}
+              sx={{ ml: 'auto' }}
+            >
+              {isRevoking ? 'Revoking...' : 'Revoke Token'}
+            </Button>
+          )}
         </Box>
       </Box>
     </Box>

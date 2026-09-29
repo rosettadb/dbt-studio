@@ -12,6 +12,12 @@ interface SideBarElementType {
 const baseElements: SideBarElementType[] = [
   {
     path: '/app',
+    text: 'Home',
+    icon: Icons.HomeIcon,
+    testId: 'nav-item-home',
+  },
+  {
+    path: '/app/dbt-project',
     text: 'DBT Studio',
     icon: Icons.DBTProjects,
     testId: 'nav-item-files',
@@ -52,7 +58,7 @@ export const getMainElements = (
   isProjectSelected: boolean,
 ): SideBarElementType[] => {
   return baseElements.map((element) => {
-    if (!isProjectSelected && element.path === '/app') {
+    if (!isProjectSelected && element.path === '/app/dbt-project') {
       return { ...element, disabled: true };
     }
     return element;
