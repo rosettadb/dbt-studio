@@ -5,8 +5,14 @@ import {
   QueryResponseType,
   BigQueryTestResponse,
   ConnectionModel,
+  ConnectorTestResponse,
 } from '../../types/backend';
-import { ConfigureConnectionBody, UpdateConnectionBody } from '../../types/ipc';
+import {
+  ConfigureConnectionBody,
+  UpdateConnectionBody,
+  StartSnowflakeAuthRequest,
+  SnowflakeAuthEventPayload,
+} from '../../types/ipc';
 
 export const configureConnection = async (
   body: ConfigureConnectionBody,
@@ -163,5 +169,67 @@ export const executeQueryForConnection = async (body: {
     { connectionId: string; query: string; queryId?: string },
     QueryResponseType
   >('connector:executeQuery', body);
+  return data;
+};
+
+export const startSnowflakeAuth = async (
+  request: StartSnowflakeAuthRequest,
+): Promise<ConnectorTestResponse> => {
+  const { data } = await client.post<
+    StartSnowflakeAuthRequest,
+    ConnectorTestResponse
+  >('connector:snowflake:auth:start', request);
+  return data;
+};
+
+export const cancelSnowflakeAuth = async (
+  correlationId: string,
+): Promise<void> => {
+  await client.post<string, void>(
+    'connector:snowflake:auth:cancel',
+    correlationId,
+  );
+};
+
+export const onSnowflakeAuthEvent = (
+  listener: (payload: SnowflakeAuthEventPayload) => void,
+) => {
+  const handler = (...args: unknown[]) => {
+    listener(args[0] as SnowflakeAuthEventPayload);
+  };
+  return window.electron.ipcRenderer.on(
+    'connector:snowflake:auth:event',
+    handler,
+  );
+};
+
+export const hasSnowflakeToken = async (): Promise<boolean> => {
+  const { data } = await client.post<void, boolean>(
+    'connector:snowflake:auth:hasToken',
+    undefined,
+  );
+  return data;
+};
+
+export const revokeSnowflakeToken = async (
+  connectionName: string,
+): Promise<boolean> => {
+  const { data } = await client.post<{ connectionName: string }, boolean>(
+    'connector:snowflake:auth:revoke',
+    { connectionName },
+  );
+  return data;
+};
+
+// Hands the live Snowflake OAuth access token to dbt via process env.
+// Only the connection name crosses IPC; the token itself never enters the
+// renderer. Returns true when a token was materialized.
+export const materializeSnowflakeToken = async (
+  connectionName: string,
+): Promise<boolean> => {
+  const { data } = await client.post<{ connectionName: string }, boolean>(
+    'connector:snowflake:auth:materialize',
+    { connectionName },
+  );
   return data;
 };

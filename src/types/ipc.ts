@@ -128,7 +128,13 @@ export type ConnectorChannels =
   | 'connector:updateQuery'
   | 'connector:getQuery'
   | 'connector:executeQuery'
-  | 'connector:save';
+  | 'connector:save'
+  | 'connector:snowflake:auth:start'
+  | 'connector:snowflake:auth:cancel'
+  | 'connector:snowflake:auth:revoke'
+  | 'connector:snowflake:auth:materialize'
+  | 'connector:snowflake:auth:hasToken'
+  | 'connector:snowflake:auth:event';
 
 export type SourcesChannels =
   | 'sources:create'
@@ -443,8 +449,44 @@ export type NotebookChannels =
   | 'notebooks:archived:delete'
   | 'notebooks:archived:deleteAll';
 
+export type PythonNotebookChannels =
+  // Managed interpreters (python-build-standalone) usable by notebooks
+  | 'pythonRuntimes:list'
+  | 'pythonRuntimes:install'
+  | 'pythonRuntimes:event' // main → renderer (install progress)
+  // Python notebooks (.ipynb files, connection scoped)
+  | 'pythonNotebooks:list'
+  | 'pythonNotebooks:get'
+  | 'pythonNotebooks:create'
+  | 'pythonNotebooks:update'
+  | 'pythonNotebooks:rename'
+  | 'pythonNotebooks:duplicate'
+  | 'pythonNotebooks:delete'
+  | 'pythonNotebooks:export'
+  | 'pythonNotebooks:selectImportFile'
+  | 'pythonNotebooks:import'
+  | 'pythonNotebooks:convertFromSql' // legacy SQL notebook (.json) → .ipynb
+  // Per-notebook virtualenv
+  | 'pythonNotebooks:env:status'
+  | 'pythonNotebooks:env:recreate'
+  | 'pythonNotebooks:env:packages:list'
+  | 'pythonNotebooks:env:packages:install'
+  | 'pythonNotebooks:env:packages:uninstall'
+  | 'pythonNotebooks:env:event' // main → renderer
+  // Kernel (ipykernel via bridge script)
+  | 'pythonNotebooks:kernel:start'
+  | 'pythonNotebooks:kernel:execute'
+  | 'pythonNotebooks:kernel:interrupt'
+  | 'pythonNotebooks:kernel:restart'
+  | 'pythonNotebooks:kernel:shutdown'
+  | 'pythonNotebooks:kernel:status'
+  | 'pythonNotebooks:kernel:event'; // main → renderer
+
 export type AgentChannels =
   | 'agent:run'
+  | 'agent:images:select'
+  | 'agent:images:preview'
+  | 'agent:images:release'
   | 'agent:cancel'
   | 'agent:context-overhead:get'
   | 'agent:tool-call'
@@ -585,6 +627,7 @@ export type Channels =
   | DuckLakeChannels
   | LineageChannels
   | NotebookChannels
+  | PythonNotebookChannels
   | AgentChannels
   | MCPChannels
   | SkillsChannels
@@ -754,3 +797,26 @@ export interface DeleteBucketRequest {
 export interface DeleteBucketResponse {
   success: boolean;
 }
+
+export type SnowflakeAuthLifecycleEvent =
+  | 'started'
+  | 'waiting_for_browser'
+  | 'completed'
+  | 'cancelled'
+  | 'failed';
+
+export type SnowflakeAuthEventPayload = {
+  correlationId: string;
+  status: SnowflakeAuthLifecycleEvent;
+  error?: string;
+};
+
+export type StartSnowflakeAuthRequest = {
+  correlationId: string;
+  account: string;
+  username: string;
+  warehouse: string;
+  database: string;
+  schema: string;
+  role: string;
+};

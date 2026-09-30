@@ -25,6 +25,7 @@ import {
   DuckLake as DataLake,
   Notebooks,
   Flows,
+  Dashboard,
 } from './screens';
 import { SelectProjectLayout, AppShell } from './layouts';
 import {
@@ -45,12 +46,14 @@ const App: React.FC = () => {
       <ScrollbarStyles />
       <Routes>
         <Route path="/" element={<SelectProjectLayout />}>
-          <Route path="/select-project" element={<SelectProject />} />
-          <Route path="/setup" element={<Setup />} />
-          <Route path="*" element={<Navigate to="/" />} />
+          <Route index element={<Navigate to="/app" replace />} />
+          <Route path="select-project" element={<SelectProject />} />
+          <Route path="setup" element={<Setup />} />
+          <Route path="*" element={<Navigate to="/app" />} />
         </Route>
         <Route path="/app" element={<AppShell />}>
-          <Route path="" element={<ProjectDetails />} />
+          <Route path="" element={<Dashboard />} />
+          <Route path="dbt-project" element={<ProjectDetails />} />
           <Route path="connections" element={<Connections />} />
           <Route path="select-project" element={<SelectProject />} />
           <Route path="edit-connection/:id" element={<EditConnection />} />

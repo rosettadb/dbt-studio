@@ -26,6 +26,12 @@ import {
   PythonPackageVersionListItem,
   PythonPackageVersionListResponse,
 } from '../../types/backend';
+import {
+  DBT_ADAPTER_PACKAGES,
+  getPackageInstallSource,
+  getPipInstallRequirement,
+  isSourceInstalledPackage,
+} from '../../shared/dbtAdapterPackages';
 
 type VersionTriple = {
   major: number;
@@ -52,14 +58,7 @@ type ProcessOptions = {
 
 const PROCESS_TIMEOUT_MS = 5 * 60 * 1000;
 
-const ADAPTER_PACKAGES = [
-  'dbt-postgres',
-  'dbt-snowflake',
-  'dbt-bigquery',
-  'dbt-redshift',
-  'dbt-databricks',
-  'dbt-duckdb',
-] as const;
+const ADAPTER_PACKAGES = DBT_ADAPTER_PACKAGES;
 
 const V2_ADAPTERS: Record<
   string,
@@ -113,6 +112,7 @@ const adapterDisplayName = (adapter: string | null): string => {
     bigquery: 'BigQuery',
     databricks: 'Databricks',
     duckdb: 'DuckDB',
+    kinetica: 'Kinetica',
     postgres: 'PostgreSQL',
     redshift: 'Redshift',
     snowflake: 'Snowflake',
@@ -385,6 +385,16 @@ export class DbtCoreVersionService {
       };
     }
 
+    // Source-installed adapters are not published on PyPI, so there is no
+    // version list to offer. The UI falls back to "install latest from source".
+    if (isSourceInstalledPackage(safeName)) {
+      return {
+        packageName: safeName,
+        versions: [],
+        latestStable: null,
+      };
+    }
+
     let projectJson: PypiProjectJson;
 
     try {
@@ -462,7 +472,7 @@ export class DbtCoreVersionService {
         'install',
         '--upgrade',
         '--no-cache-dir',
-        packageName,
+        getPipInstallRequirement(packageName),
       ]);
       if (install.exitCode !== 0) {
         return {
@@ -904,6 +914,13 @@ export class DbtCoreVersionService {
     if (!isValidPackageVersion(safeVersion)) {
       return { ok: false, error: `Invalid package version: ${safeVersion}` };
     }
+    const source = getPackageInstallSource(safeName);
+    if (source) {
+      return {
+        ok: false,
+        error: `${safeName} is installed from ${source.homepage} and does not publish versions on PyPI. Use "Install latest" instead.`,
+      };
+    }
 
     try {
       const python = await getPythonExecutable(req.pythonPath);
@@ -1097,10 +1114,12 @@ export class DbtCoreVersionService {
           };
         }
         if (target && target.major >= 2) {
-          const message =
-            packageName === 'dbt-postgres'
-              ? `Postgres is not supported safely by dbt-core ${targetVersion}. Rosetta blocks v2 Postgres execution; use a stable dbt-core v1 release for Postgres projects.`
-              : `Compatibility with dbt-core ${targetVersion} is not proven. A v2-capable adapter may be required.`;
+          let message = `Compatibility with dbt-core ${targetVersion} is not proven. A v2-capable adapter may be required.`;
+          if (packageName === 'dbt-postgres') {
+            message = `Postgres is not supported safely by dbt-core ${targetVersion}. Rosetta blocks v2 Postgres execution; use a stable dbt-core v1 release for Postgres projects.`;
+          } else if (packageName === 'dbt-kinetica') {
+            message = `dbt-kinetica requires dbt-core 1.8 to 1.x and does not support dbt-core ${targetVersion}. Rosetta blocks v2 Kinetica execution; use a stable dbt-core v1 release for Kinetica projects.`;
+          }
           return {
             packageName,
             installedVersion,

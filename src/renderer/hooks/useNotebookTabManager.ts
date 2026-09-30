@@ -8,6 +8,8 @@ export interface NotebookTabState {
   notebookName: string;
   connectionId: string;
   isModified: boolean;
+  /** Absent for tabs persisted before Python notebooks existed → 'sql'. */
+  kind?: 'sql' | 'python';
 }
 
 type PersistedNotebookTabsState = {
@@ -85,6 +87,11 @@ export interface UseNotebookTabManagerReturn {
   closeTab: (tabId: string) => void;
   markTabModified: (tabId: string, isModified: boolean) => void;
   updateTabName: (tabId: string, newName: string) => void;
+  /** Switch the editor a tab renders (e.g. after a SQL → Python conversion). */
+  updateTabKind: (
+    tabId: string,
+    kind: NonNullable<NotebookTabState['kind']>,
+  ) => void;
   reorderTabs: (fromIndex: number, toIndex: number) => void;
   reset: () => void;
   closeTabsByConnection: (connectionId: string) => void;
@@ -171,6 +178,17 @@ const useNotebookTabManager = (): UseNotebookTabManagerReturn => {
     );
   }, []);
 
+  const updateTabKind = React.useCallback(
+    (tabId: string, kind: NonNullable<NotebookTabState['kind']>) => {
+      setTabs((current) =>
+        current.map((tab) =>
+          tab.notebookId === tabId ? { ...tab, kind } : tab,
+        ),
+      );
+    },
+    [],
+  );
+
   const reorderTabs = React.useCallback(
     (fromIndex: number, toIndex: number) => {
       setTabs((current) => {
@@ -234,6 +252,7 @@ const useNotebookTabManager = (): UseNotebookTabManagerReturn => {
         notebookName: notebook.name,
         connectionId,
         isModified: false,
+        kind: notebook.kind ?? 'sql',
       };
 
       setTabs((current) => {
@@ -263,6 +282,7 @@ const useNotebookTabManager = (): UseNotebookTabManagerReturn => {
     closeTab,
     markTabModified,
     updateTabName,
+    updateTabKind,
     reorderTabs,
     reset,
     closeTabsByConnection,

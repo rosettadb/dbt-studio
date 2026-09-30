@@ -62,6 +62,8 @@ import { useSchemaForConnection, useMonacoAutocomplete } from '../../hooks';
 import { useNotebookBridge } from '../../hooks/useNotebookBridge';
 import useSecureStorage from '../../hooks/useSecureStorage';
 import { resolveConnectionCredentials } from '../../utils/notebookConnectionTransfer';
+import { useConvertSqlNotebook } from '../../controllers/pythonNotebooks.controller';
+import { pythonNotebookToSummary } from './python/PythonNotebookEditor';
 
 // Module-level singleton for SQL completion provider
 let sharedCompletionProvider: any = null;
@@ -84,6 +86,8 @@ interface NotebookEditorProps {
   onOpenNotebook?: (notebook: Notebook, connectionId: string) => void; // Callback to open notebook in new tab
   /** Called after a DDL/DML cell executes successfully so the parent can refresh the schema tree */
   onSchemaChange?: () => void;
+  /** Called after this (deprecated) SQL notebook was converted to a Python notebook with the same id */
+  onConverted?: (notebook: Notebook) => void;
 }
 
 export const NotebookEditor: React.FC<NotebookEditorProps> = ({
@@ -91,6 +95,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   notebookId,
   onOpenNotebook, // Callback to open notebook in new tab
   onSchemaChange,
+  onConverted,
 }) => {
   const navigate = useNavigate();
   const isIceberg = instanceId.startsWith('iceberg-');
@@ -117,6 +122,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   const runCell = useRunCell();
   const deleteNotebook = useDeleteNotebook();
   const duplicateNotebook = useDuplicateNotebook();
+  const convertSqlNotebook = useConvertSqlNotebook();
 
   const [executingCells, setExecutingCells] = useState<Set<string>>(new Set());
   const [isRunningAll, setIsRunningAll] = useState(false);
@@ -165,6 +171,25 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
       notebookSaveFlushers.delete(notebookId);
     };
   }, [notebookId, flushPendingSave]);
+
+  // SQL notebooks are deprecated: convert this one (same id) into a Python
+  // notebook. Pending cell edits are saved first so nothing is lost.
+  const handleConvert = useCallback(async () => {
+    await flushPendingSave();
+    convertSqlNotebook.mutate(
+      { connectionId, notebookId },
+      {
+        onSuccess: (converted) =>
+          onConverted?.(pythonNotebookToSummary(converted)),
+      },
+    );
+  }, [
+    connectionId,
+    notebookId,
+    flushPendingSave,
+    convertSqlNotebook,
+    onConverted,
+  ]);
 
   const { data: schemaData } = useSchemaForConnection(connectionId);
   const baseCompletions = useMonacoAutocomplete(
@@ -889,23 +914,29 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     <Box
       sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
     >
-      {icebergUnavailable && (
-        <Alert severity="warning">
-          {icebergLoading
-            ? 'Checking Iceberg connection…'
-            : (icebergInstance?.sqlUnavailableReason ??
-              'Iceberg connection unavailable.')}{' '}
-          You can view and edit this notebook, but cannot run it.
-        </Alert>
-      )}
-      {isIceberg && (isRunningAll || executingCells.size > 0) && (
-        <Button
-          color="warning"
-          onClick={() => icebergRuns.current.forEach((run) => run.abort())}
-        >
-          Stop Iceberg execution
-        </Button>
-      )}
+      {/* Deprecation notice */}
+      <Alert
+        severity="warning"
+        sx={{ borderRadius: 0, py: 0 }}
+        data-testid="sql-notebook-deprecated"
+        action={
+          <Button
+            color="inherit"
+            size="small"
+            onClick={handleConvert}
+            disabled={convertSqlNotebook.isLoading}
+            data-testid="sql-notebook-convert"
+          >
+            {convertSqlNotebook.isLoading
+              ? 'Converting…'
+              : 'Convert to Python notebook'}
+          </Button>
+        }
+      >
+        SQL notebooks are deprecated. Convert this notebook to the Python
+        notebook format (.ipynb) to keep using it.
+      </Alert>
+
       {/* Toolbar */}
       <NotebookToolbar
         notebook={notebook}

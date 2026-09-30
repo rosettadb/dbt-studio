@@ -62,6 +62,11 @@ import {
   useUninstallPackage,
 } from '../../controllers';
 import { ConfirmationModal } from '../modals';
+import {
+  DBT_ADAPTER_PACKAGES,
+  DBT_ADAPTER_PACKAGE_DESCRIPTIONS,
+  getPackageInstallSource,
+} from '../../../shared/dbtAdapterPackages';
 
 interface DbtSettingsProps {
   settings: SettingsType;
@@ -124,14 +129,11 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     string | null
   >(null);
 
-  const [selectedPackages, setSelectedPackages] = React.useState({
+  const [selectedPackages, setSelectedPackages] = React.useState<
+    Record<string, boolean>
+  >({
     'dbt-core': true,
-    'dbt-postgres': true,
-    'dbt-snowflake': true,
-    'dbt-bigquery': true,
-    'dbt-redshift': true,
-    'dbt-databricks': true,
-    'dbt-duckdb': true,
+    ...Object.fromEntries(DBT_ADAPTER_PACKAGES.map((pkg) => [pkg, true])),
     sqlglot: true,
   });
 
@@ -166,14 +168,9 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     false,
   );
 
-  const packageDescriptions = {
+  const packageDescriptions: Record<string, string> = {
     'dbt-core': 'The core dbt™ package (required)',
-    'dbt-postgres': 'Adapter for PostgreSQL databases',
-    'dbt-snowflake': 'Adapter for Snowflake databases',
-    'dbt-bigquery': 'Adapter for Google BigQuery',
-    'dbt-redshift': 'Adapter for Amazon Redshift',
-    'dbt-databricks': 'Adapter for Databricks',
-    'dbt-duckdb': 'Adapter for DuckDB - embedded analytics database',
+    ...DBT_ADAPTER_PACKAGE_DESCRIPTIONS,
     sqlglot: 'SQL Parser and Transpiler (Required for Lineage)',
   };
 
@@ -211,7 +208,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
 
     setSelectedPackages((prev) => ({
       ...prev,
-      [packageName]: !prev[packageName as keyof typeof prev],
+      [packageName]: !prev[packageName],
     }));
   };
 
@@ -231,20 +228,9 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
   }
 
   const handleInstallDbt = async () => {
-    const allPackages = [
-      'dbt-core',
-      'dbt-postgres',
-      'dbt-snowflake',
-      'dbt-bigquery',
-      'dbt-redshift',
-      'dbt-databricks',
-      'dbt-duckdb',
-      'sqlglot',
-    ];
+    const allPackages = ['dbt-core', ...DBT_ADAPTER_PACKAGES, 'sqlglot'];
 
-    const packages = allPackages.filter(
-      (pkg) => selectedPackages[pkg as keyof typeof selectedPackages],
-    );
+    const packages = allPackages.filter((pkg) => selectedPackages[pkg]);
 
     setIsLoadingInstall(true);
     setInstallProgress(0);
@@ -574,14 +560,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     }
   };
 
-  const ADAPTER_PACKAGES = [
-    'dbt-postgres',
-    'dbt-snowflake',
-    'dbt-bigquery',
-    'dbt-redshift',
-    'dbt-databricks',
-    'dbt-duckdb',
-  ] as const;
+  const ADAPTER_PACKAGES = DBT_ADAPTER_PACKAGES;
 
   const handleInstallAllAdapters = async () => {
     if (!settings.pythonPath) {
@@ -1200,20 +1179,12 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
         )}
 
         {!settings.dbtVersion?.startsWith('2.') &&
-          (
-            [
-              'dbt-postgres',
-              'dbt-snowflake',
-              'dbt-bigquery',
-              'dbt-redshift',
-              'dbt-databricks',
-              'dbt-duckdb',
-            ] as const
-          ).map((pkg) => {
+          ADAPTER_PACKAGES.map((pkg) => {
             const installed = installedPackages[pkg];
             const versions = packageVersions[pkg]?.versions ?? [];
             const latestStable = packageVersions[pkg]?.latestStable ?? null;
             const isLoading = isCheckingPackageVersions[pkg] ?? false;
+            const installSource = getPackageInstallSource(pkg);
 
             return (
               <Accordion
@@ -1259,19 +1230,39 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                       gap: 1,
                     }}
                   >
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      onClick={() => {
-                        fetchPackageVersions(pkg).catch(() => undefined);
-                      }}
-                      disabled={isLoading}
-                      startIcon={
-                        isLoading ? <CircularProgress size={16} /> : <Refresh />
-                      }
-                    >
-                      {isLoading ? 'Loading...' : 'Load Versions'}
-                    </Button>
+                    {installSource ? (
+                      <Button
+                        size="small"
+                        variant="contained"
+                        onClick={() => {
+                          handleInstallSinglePackage(pkg).catch(
+                            () => undefined,
+                          );
+                        }}
+                        disabled={isLoadingInstall || isLoadingDialog}
+                        startIcon={<Download />}
+                      >
+                        {installed ? 'Update from source' : 'Install'}
+                      </Button>
+                    ) : (
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => {
+                          fetchPackageVersions(pkg).catch(() => undefined);
+                        }}
+                        disabled={isLoading}
+                        startIcon={
+                          isLoading ? (
+                            <CircularProgress size={16} />
+                          ) : (
+                            <Refresh />
+                          )
+                        }
+                      >
+                        {isLoading ? 'Loading...' : 'Load Versions'}
+                      </Button>
+                    )}
 
                     {installed && (
                       <Button
@@ -1289,7 +1280,15 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                     )}
                   </Box>
 
-                  {versions.length > 0 ? (
+                  {installSource && (
+                    <Alert severity="info">
+                      {pkg} is not published on PyPI. It is installed directly
+                      from {installSource.homepage} and requires dbt Core 1.8 or
+                      newer (1.x).
+                    </Alert>
+                  )}
+
+                  {!installSource && versions.length > 0 && (
                     <List
                       sx={{
                         border: 1,
@@ -1395,7 +1394,9 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                         );
                       })}
                     </List>
-                  ) : (
+                  )}
+
+                  {!installSource && versions.length === 0 && (
                     <Alert severity="info">
                       Click &quot;Load Versions&quot; to view versions.
                     </Alert>
@@ -1519,9 +1520,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                 key={pkg}
                 control={
                   <Checkbox
-                    checked={
-                      selectedPackages[pkg as keyof typeof selectedPackages]
-                    }
+                    checked={selectedPackages[pkg] ?? false}
                     onChange={() => handlePackageToggle(pkg)}
                     disabled={pkg === 'dbt-core'} // dbt-core is always required
                   />

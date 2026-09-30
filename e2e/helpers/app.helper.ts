@@ -152,6 +152,38 @@ export class AppHelper {
   }
 
   /**
+   * Close the Quick Start tour overlay if it is showing.
+   *
+   * The tour renders a full-screen overlay that blocks all clicks. Prefer the
+   * fixture option `skipQuickStartTour` (on by default) so it never opens;
+   * this is a fallback for specs that opt out of that but still need to get
+   * past it.
+   */
+  async dismissQuickStartTourIfPresent(): Promise<void> {
+    const skipTour = this.mainWindow.getByTitle('Skip tour');
+    const visible = await skipTour
+      .isVisible({ timeout: 1500 })
+      .catch(() => false);
+    if (visible) {
+      await skipTour.click();
+      await skipTour.waitFor({ state: 'hidden', timeout: 5000 });
+    }
+  }
+
+  /**
+   * Dismiss the "Update Available" dialog if it appeared. electron-updater
+   * skips the check for unpackaged (dev) builds, so this is normally a no-op
+   * and exists only as a safety net.
+   */
+  async dismissUpdateDialogIfPresent(): Promise<void> {
+    const notNow = this.mainWindow.getByRole('button', { name: 'Not Now' });
+    const visible = await notNow.isVisible({ timeout: 500 }).catch(() => false);
+    if (visible) {
+      await notNow.click();
+    }
+  }
+
+  /**
    * Get the current screen/route
    */
   async getCurrentScreen(): Promise<string | null> {

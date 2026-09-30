@@ -9,10 +9,17 @@ import {
   useCheckProjectAdapterCompatibility,
   useSetConnectionEnvVariable,
 } from '../controllers';
-import { Project, DbtCommandType, ConnectionInput } from '../../types/backend';
+import {
+  Project,
+  DbtCommandType,
+  ConnectionInput,
+  SNOWFLAKE_REAUTH_MESSAGE,
+} from '../../types/backend';
+import { materializeSnowflakeToken } from '../services/connectors.service';
 import { useAppContext } from './index';
 import { extractCliErrorDetails } from '../utils/dbtCommandResult';
 import { useDbtRunHistory } from './useDbtRunHistory';
+import { buildKineticaUrl } from '../../shared/kineticaUrl';
 
 interface UseDbtReturn {
   run: (project: Project, path?: string) => Promise<void>;
@@ -31,6 +38,17 @@ interface UseDbtReturn {
   isRunning: boolean;
   activeCommand: DbtCommandType | null;
 }
+
+const hasSnowflakeOAuthSession = (connection: ConnectionInput) => {
+  if (
+    connection.type !== 'snowflake' ||
+    connection.authMethod !== 'oauth_browser'
+  ) {
+    return Promise.resolve(true);
+  }
+  // The token stays in main; only the connection name crosses IPC.
+  return materializeSnowflakeToken(connection.name).catch(() => false);
+};
 
 const useDbt = (
   successCallback?: () => void,
@@ -121,7 +139,7 @@ const useDbt = (
             snowflake: ['account', 'warehouse', 'dbname', 'schema', 'role'],
             bigquery: ['project', 'dataset'],
             databricks: ['host', 'httppath', 'catalog', 'schema'],
-            kinetica: ['host', 'port', 'dbname', 'schema'],
+            kinetica: ['host', 'port', 'url', 'dbname', 'schema'],
           };
 
           // Map field names to connection object values for fallback
@@ -130,6 +148,11 @@ const useDbt = (
             const valueMap: Record<string, string | undefined> = {
               host: c.host ? String(c.host) : undefined,
               port: c.port ? String(c.port) : undefined,
+              // dbt-kinetica takes the full head-node URL as `host`
+              url:
+                c.type === 'kinetica' && c.host
+                  ? buildKineticaUrl(c)
+                  : undefined,
               dbname: c.database,
               schema: c.schema,
               account: c.account,
@@ -276,6 +299,10 @@ const useDbt = (
           connection.connection.name,
           connection.connection,
         );
+        if (!(await hasSnowflakeOAuthSession(connection.connection))) {
+          if (options.showToast) toast.error(SNOWFLAKE_REAUTH_MESSAGE);
+          return;
+        }
 
         // Build command string
         const cmdString = buildCommand(command, project, args);
@@ -416,6 +443,10 @@ const useDbt = (
             connection.connection.name,
             connection.connection,
           );
+          if (!(await hasSnowflakeOAuthSession(connection.connection))) {
+            toast.error(SNOWFLAKE_REAUTH_MESSAGE);
+            return '';
+          }
 
           // Build command string
           const cmdString = buildCommand(
@@ -545,6 +576,10 @@ const useDbt = (
             connection.connection.name,
             connection.connection,
           );
+          if (!(await hasSnowflakeOAuthSession(connection.connection))) {
+            toast.error(SNOWFLAKE_REAUTH_MESSAGE);
+            return '';
+          }
           const cmdString = buildCommand('list', project, '');
           if (!cmdString) {
             return '';
