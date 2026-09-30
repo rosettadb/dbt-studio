@@ -92,7 +92,8 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
   const { data: projects = [] } = useGetProjects();
 
   const isProjectSelected = Boolean(project?.id);
-  const isOnProjectDetails = location.pathname === '/app';
+  const isOnHome = location.pathname === '/app';
+  const isOnProjectDetails = location.pathname === '/app/dbt-project';
 
   return (
     <StyledToolbar variant="dense">
@@ -113,7 +114,7 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
               </IconButton>
             </Tooltip>
           )}
-        {!isOnProjectDetails && (
+        {!isOnHome && (
           <SimpleDropdownMenu
             items={[
               {
@@ -164,7 +165,7 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
         )}
       </IconsContainer>
       <IconsContainer sx={{ gap: 2 }}>
-        {isProjectSelected && actions}
+        {isProjectSelected && !isOnHome && actions}
         {/* Authentication - Only show when not logged in */}
         {!apiKey && (
           <Tooltip
