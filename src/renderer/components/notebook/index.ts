@@ -4,10 +4,15 @@
  */
 
 export { NotebookEditor, flushNotebookPendingSave } from './NotebookEditor';
-export type { NotebookEditorHandle } from './NotebookEditor';
 export { NotebookCell } from './NotebookCell';
 export { SQLCell } from './SQLCell';
 export { MarkdownCell } from './MarkdownCell';
 export { OutputPanel } from './OutputPanel';
 export { NotebookToolbar } from './NotebookToolbar';
 export { NotebooksList } from './NotebooksList';
+export {
+  NotebookKindIcon,
+  PythonLogoIcon,
+  SqlNotebookIcon,
+} from './NotebookKindIcon';
+export * from './python';

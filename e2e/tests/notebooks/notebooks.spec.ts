@@ -74,39 +74,30 @@ test.describe('Notebooks', () => {
     await expect(dialog).toBeHidden();
   });
 
-  test('should create a notebook and add a cell', async ({ electronApp }) => {
+  test('should only create Python notebooks', async ({ electronApp }) => {
     const window = await openNotebooksWithConnection(electronApp);
 
     await window.getByRole('button', { name: 'Create New Notebook' }).click();
     const dialog = window.getByRole('dialog');
-    await dialog.getByLabel('Notebook Name').fill('E2E Notebook');
-    await dialog.getByRole('button', { name: 'Create' }).click();
+
+    // No SQL/Python choice any more: every notebook needs a managed
+    // interpreter, so the runtime picker is always shown.
+    await expect(
+      dialog.locator('[data-testid="create-notebook-kind"]'),
+    ).toBeHidden();
+    await expect(
+      dialog.locator('[data-testid="python-runtime-select"]'),
+    ).toBeVisible();
+
+    // Until an interpreter is installed the Create button stays disabled
+    // even with a name.
+    await dialog.getByLabel('Notebook Name').fill('Py Notebook');
+    await expect(
+      dialog.locator('[data-testid="create-notebook-confirm"]'),
+    ).toBeDisabled();
+    await expect(dialog.getByRole('button', { name: 'Install' })).toBeVisible();
+
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
     await expect(dialog).toBeHidden();
-
-    // The new notebook opens in a tab with its toolbar and no cells yet
-    await expect(
-      window.getByRole('tab', { name: /E2E Notebook/ }),
-    ).toBeVisible();
-    const addCell = window.getByRole('button', { name: 'Add new cell' });
-    await expect(addCell).toBeVisible();
-    await expect(window.getByText('[1]', { exact: true })).toBeHidden();
-
-    await addCell.click();
-
-    // A first SQL cell appears with its index badge and editor. (The
-    // "N cells" chip in the toolbar reflects the persisted notebook and lags
-    // behind local edits, so it is not asserted on.)
-    await expect(window.getByText('[1]', { exact: true })).toBeVisible();
-    await expect(
-      window.getByText('SQL', { exact: true }).first(),
-    ).toBeVisible();
-    await expect(
-      window.getByRole('button', { name: 'Add Cell', exact: true }),
-    ).toBeVisible();
-
-    // It is listed in the sidebar too
-    await expect(
-      window.getByRole('treeitem', { name: 'E2E Notebook' }),
-    ).toBeVisible();
   });
 });

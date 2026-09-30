@@ -23,6 +23,7 @@ import {
 import { SimpleTreeView } from '@mui/x-tree-view/SimpleTreeView';
 import { TreeItem } from '@mui/x-tree-view/TreeItem';
 import { Notebook } from '../../../types/notebooks';
+import { NotebookKindIcon } from './NotebookKindIcon';
 
 interface NotebooksTreeViewProps {
   notebooks: Notebook[];
@@ -313,8 +314,10 @@ export const NotebooksTreeView: React.FC<NotebooksTreeViewProps> = ({
                       }
                       role="button"
                       tabIndex={0}
+                      data-testid={`notebook-tree-item-${notebook.kind ?? 'sql'}`}
                     >
-                      <Description
+                      <NotebookKindIcon
+                        kind={notebook.kind}
                         sx={{ fontSize: 14, color: 'text.secondary' }}
                       />
                       <Typography
@@ -403,7 +406,8 @@ export const NotebooksTreeView: React.FC<NotebooksTreeViewProps> = ({
                                 )
                               }
                             >
-                              <Description
+                              <NotebookKindIcon
+                                kind={notebook.kind}
                                 sx={{ fontSize: 14, color: 'text.secondary' }}
                               />
                               <Typography

@@ -10,6 +10,7 @@ import { Command, CommandType, Project } from '../../types/backend';
 import { projectsServices } from '../services';
 import { getOpenAIKey } from '../services/settings.services';
 import { compileCommand } from '../helpers/utils';
+import { buildKineticaUrl } from '../../shared/kineticaUrl';
 
 const useRosettaDBT = (successCallback: () => Promise<void>) => {
   const { data: settings } = useGetSettings();
@@ -89,7 +90,7 @@ const useRosettaDBT = (successCallback: () => Promise<void>) => {
           snowflake: ['account', 'warehouse', 'dbname', 'schema', 'role'],
           bigquery: ['project', 'dataset'],
           databricks: ['host', 'httppath', 'catalog', 'schema'],
-          kinetica: ['host', 'port', 'dbname', 'schema'],
+          kinetica: ['host', 'port', 'url', 'dbname', 'schema'],
         };
 
         const c = conn as any;
@@ -97,6 +98,8 @@ const useRosettaDBT = (successCallback: () => Promise<void>) => {
           const valueMap: Record<string, string | undefined> = {
             host: c.host ? String(c.host) : undefined,
             port: c.port ? String(c.port) : undefined,
+            url:
+              c.type === 'kinetica' && c.host ? buildKineticaUrl(c) : undefined,
             dbname: c.database,
             schema: c.schema,
             account: c.account,

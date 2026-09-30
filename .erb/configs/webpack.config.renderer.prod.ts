@@ -148,6 +148,7 @@ const configuration: webpack.Configuration = {
         'javascript',
         'typescript',
         'markdown',
+        'python',
       ],
       filename: '[name].worker.[contenthash].js',
     }),

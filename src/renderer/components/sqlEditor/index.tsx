@@ -6,7 +6,12 @@ import { Inputs, RelativeContainer } from './styles';
 import { connectorsServices, projectsServices } from '../../services';
 import { DuckLakeService } from '../../services/duckLake.service';
 import { QueryHistoryType } from '../../../types/frontend';
-import { ConnectionInput, Project, Table } from '../../../types/backend';
+import {
+  ConnectionInput,
+  Project,
+  SNOWFLAKE_REAUTH_MESSAGE,
+  Table,
+} from '../../../types/backend';
 import { SqlEditorComponent } from './editorComponent';
 import { useAppContext } from '../../hooks';
 import { useSqlEditorBridge } from '../../controllers';
@@ -199,6 +204,12 @@ export const SqlEditor = React.forwardRef<SqlEditorHandle, Props>(
 
         if (result.error) {
           setError(result.error);
+          // Missing Snowflake session: toast the shared guidance so it is
+          // visible even when the results pane is out of view. All other
+          // query errors keep their existing inline-only display.
+          if (result.error === SNOWFLAKE_REAUTH_MESSAGE) {
+            toast.error(result.error);
+          }
           setLoadingQuery(false);
           return;
         }

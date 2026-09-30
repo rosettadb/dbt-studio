@@ -37,7 +37,7 @@ import {
   InsertChart,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { connectorsServices, DuckLakeService } from '../../services';
 import { QueryResultStore } from './queryResultStore';
 import { registerQueryResultBridge } from '../../services/agentEditorBridge.service';
@@ -120,6 +120,7 @@ const VerticalSash = (_: number, active: boolean) => (
 const Sql = () => {
   const theme = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
   const { selectedProject, projects, isChatOpen, setIsChatOpen } =
     useContext(AppContext);
   const tabManager = useSqlTabManager();
@@ -130,6 +131,17 @@ const Sql = () => {
     refetch: refetchDuckLakeInstances,
   } = useDuckLakeInstances();
   const [sidebarTab, setSidebarTab] = useState(0);
+
+  // Open the Analytics tab when navigated here with state { tab: 2 }
+  useEffect(() => {
+    const state = location.state as { tab?: number } | null;
+    if (state?.tab === 2) {
+      setSidebarTab(2);
+      // Clear the state so a back-navigation doesn't re-trigger
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [activeAnalyticsPageId, setActiveAnalyticsPageId] = useState<
     string | null
   >(null);
@@ -482,6 +494,7 @@ const Sql = () => {
         if (result.error) {
           // eslint-disable-next-line no-console
           console.error('Failed to fetch schema:', result.error);
+          toast.error(`Failed to fetch schema: ${result.error}`);
           setTabSchemas((prev) => ({ ...prev, [connectionId]: [] }));
         } else {
           setTabSchemas((prev) => ({ ...prev, [connectionId]: result.tables }));
@@ -489,6 +502,9 @@ const Sql = () => {
       } catch (error: any) {
         // eslint-disable-next-line no-console
         console.error('Failed to fetch schema:', error);
+        toast.error(
+          `Failed to fetch schema: ${error?.message ?? 'Unknown error'}`,
+        );
         setTabSchemas((prev) => ({ ...prev, [connectionId]: [] }));
       } finally {
         setLoadingSchemas((prev) => ({ ...prev, [connectionId]: false }));
@@ -601,12 +617,12 @@ const Sql = () => {
   const handleSetError = useCallback(
     (error: any) => {
       if (!activeTabId) return;
-      setTabError(activeTabId, error);
 
       const errorMessage =
         typeof error === 'string'
           ? error
           : (error?.message ?? String(error ?? 'Unknown error'));
+      setTabError(activeTabId, error == null ? undefined : errorMessage);
 
       const errorSnapshot: QueryResultSnapshot = {
         status: 'error',

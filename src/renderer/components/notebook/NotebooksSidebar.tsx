@@ -87,6 +87,8 @@ interface NotebooksSidebarProps {
   onExportAllNotebooks?: () => void;
   onExportSelected?: () => void;
   onImportAllNotebooks?: () => void;
+  /** Import a Jupyter `.ipynb` file as a Python notebook */
+  onImportPythonNotebook?: () => void;
   onTabChange?: (tabIndex: number) => void;
 
   // Analytics
@@ -127,6 +129,7 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
   onExportAllNotebooks,
   onExportSelected,
   onImportAllNotebooks,
+  onImportPythonNotebook,
   onTabChange,
   connectionId,
   activeAnalyticsPageId,
@@ -191,6 +194,11 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
     handleAddMenuClose();
     onImportAllNotebooks?.();
   }, [handleAddMenuClose, onImportAllNotebooks]);
+
+  const handleImportPythonNotebook = useCallback(() => {
+    handleAddMenuClose();
+    onImportPythonNotebook?.();
+  }, [handleAddMenuClose, onImportPythonNotebook]);
 
   const handleSearchChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -417,6 +425,14 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
           </ListItemIcon>
           <ListItemText>Import Notebooks (JSON)</ListItemText>
         </MenuItem>
+        {onImportPythonNotebook && (
+          <MenuItem onClick={handleImportPythonNotebook}>
+            <ListItemIcon>
+              <Upload fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Import Jupyter Notebook (.ipynb)</ListItemText>
+          </MenuItem>
+        )}
       </Menu>
 
       {/* Tab Panels */}

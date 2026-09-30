@@ -92,75 +92,80 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
   const { data: projects = [] } = useGetProjects();
 
   const isProjectSelected = Boolean(project?.id);
-  const isOnProjectDetails = location.pathname === '/app';
+  const isOnHome = location.pathname === '/app';
+  const isOnProjectDetails = location.pathname === '/app/dbt-project';
 
   return (
     <StyledToolbar variant="dense">
       <IconsContainer>
-        {!isSidebarOpen && (
-          <Tooltip title="Show panel">
-            <IconButton
-              size="small"
-              onClick={() => setIsSidebarOpen(true)}
-              sx={{
-                opacity: 0.5,
-                '&:hover': { opacity: 1 },
-              }}
-            >
-              <ExpandRightIcon />
-            </IconButton>
-          </Tooltip>
-        )}
-        <SimpleDropdownMenu
-          items={[
-            {
-              value: 'all',
-              label: (
-                <BranchDropdownToggle>
-                  <FormatListNumbered fontSize="small" />
-                  All Projects
-                </BranchDropdownToggle>
-              ),
-            },
-            ...projects.map((p) => ({
-              value: String(p.id),
-              label: (
-                <BranchDropdownToggle>
-                  <LetterAvatar name={p?.name ?? ''} size={16} />
-                  {p?.name}
-                </BranchDropdownToggle>
-              ),
-            })),
-          ]}
-          onSelect={async (value) => {
-            if (value === 'all') {
-              navigate('/app/select-project');
-            } else {
-              await selectProject({ projectId: value });
-              navigate('/app');
+        {!isSidebarOpen &&
+          location.pathname !== '/app' &&
+          !location.pathname.includes('flows') && (
+            <Tooltip title="Show panel">
+              <IconButton
+                size="small"
+                onClick={() => setIsSidebarOpen(true)}
+                sx={{
+                  opacity: 0.5,
+                  '&:hover': { opacity: 1 },
+                }}
+              >
+                <ExpandRightIcon />
+              </IconButton>
+            </Tooltip>
+          )}
+        {!isOnHome && (
+          <SimpleDropdownMenu
+            items={[
+              {
+                value: 'all',
+                label: (
+                  <BranchDropdownToggle>
+                    <FormatListNumbered fontSize="small" />
+                    All Projects
+                  </BranchDropdownToggle>
+                ),
+              },
+              ...projects.map((p) => ({
+                value: String(p.id),
+                label: (
+                  <BranchDropdownToggle>
+                    <LetterAvatar name={p?.name ?? ''} size={16} />
+                    {p?.name}
+                  </BranchDropdownToggle>
+                ),
+              })),
+            ]}
+            onSelect={async (value) => {
+              if (value === 'all') {
+                navigate('/app/select-project');
+              } else {
+                await selectProject({ projectId: value });
+                navigate('/app/dbt-project');
+              }
+            }}
+            selectedItem={project ? String(project.id) : 'all'}
+            anchorElement={
+              <BranchDropdownToggle>
+                {project ? (
+                  <>
+                    <LetterAvatar name={project.name ?? ''} size={16} />
+                    {project.name}
+                  </>
+                ) : (
+                  <>
+                    <FormatListNumbered fontSize="small" />
+                    Select Project
+                  </>
+                )}
+                <ArrowDownward style={{ fontSize: 9 }} />
+              </BranchDropdownToggle>
             }
-          }}
-          selectedItem={project ? String(project.id) : 'all'}
-          anchorElement={
-            <BranchDropdownToggle>
-              {project ? (
-                <>
-                  <LetterAvatar name={project.name ?? ''} size={16} />
-                  {project.name}
-                </>
-              ) : (
-                <>
-                  <FormatListNumbered fontSize="small" />
-                  Select Project
-                </>
-              )}
-              <ArrowDownward style={{ fontSize: 9 }} />
-            </BranchDropdownToggle>
-          }
-        />
+          />
+        )}
       </IconsContainer>
       <IconsContainer sx={{ gap: 2 }}>
-        {isProjectSelected && actions}
+        {isProjectSelected && !isOnHome && actions}
         {/* Authentication - Only show when not logged in */}
         {!apiKey && (
           <Tooltip

@@ -60,6 +60,7 @@ import {
   restoreFileMutation,
 } from '../../services/agent.service';
 import { PROJECT_AGENT_CONTEXT_FILE } from '../../../shared/agentMemoryConstants';
+import { CHAT_IMAGE_TOKEN_ESTIMATE } from '../../../types/chatAttachments';
 import {
   collectSuccessfulPipelineMutations,
   isSuccessfulGenericFileWrite,
@@ -94,6 +95,7 @@ const estimateMessagesTokens = (
   messages: Array<{
     content: unknown;
     contextItems?: Array<{ content?: string | null }>;
+    imageAttachments?: unknown[];
     toolCalls?: Array<{
       toolInput?: unknown;
       toolOutput?: unknown;
@@ -119,6 +121,8 @@ const estimateMessagesTokens = (
         return toolSum + estimateTokens(toolInput) + estimateTokens(toolOutput);
       }, 0);
     }
+
+    tokens += (msg.imageAttachments?.length ?? 0) * CHAT_IMAGE_TOKEN_ESTIMATE;
 
     return sum + tokens + 4;
   }, 0);
@@ -337,6 +341,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       estimatedMessages as Array<{
         content: unknown;
         contextItems?: Array<{ content?: string | null }>;
+        imageAttachments?: unknown[];
         toolCalls?: Array<{
           toolInput?: unknown;
           toolOutput?: unknown;
@@ -1266,11 +1271,17 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
         <GradientBorder loading={streamState.isStreaming}>
           <ChatInputBox
             sessionId={selectedSessionId}
+            screenKey={screenKey}
             contextManager={contextManager}
             isStreaming={streamState.isStreaming}
-            screenKey={screenKey}
             disabledReason={disabledReason}
-            onStartStream={(content, contextItems, toolMode) =>
+            onStartStream={(
+              content,
+              contextItems,
+              toolMode,
+              imageAttachmentIds,
+              imageAttachments,
+            ) =>
               // toolMode is now forwarded from ChatInputBox (owns the toggle state)
               startStream(
                 content,
@@ -1282,6 +1293,8 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
                 notebookId,
                 pageId,
                 projectMemoryEnabled,
+                imageAttachmentIds,
+                imageAttachments,
               )
             }
             onCancelStream={cancelStream}
