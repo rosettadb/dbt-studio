@@ -165,7 +165,7 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
         )}
       </IconsContainer>
       <IconsContainer sx={{ gap: 2 }}>
-        {isProjectSelected && actions}
+        {isProjectSelected && !isOnHome && actions}
         {/* Authentication - Only show when not logged in */}
         {!apiKey && (
           <Tooltip
