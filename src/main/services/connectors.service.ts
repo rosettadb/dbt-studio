@@ -8,6 +8,7 @@ import { NotebooksService } from './notebooks.service';
 import {
   BigQueryConnection,
   BigQueryTestResponse,
+  canUseAsDbtConnection,
   ConnectionInput,
   ConnectionModel,
   DatabricksConnection,
@@ -570,6 +571,10 @@ export default class ConnectorsService {
 
     if (projectIndex !== -1 && connection.type === 'sqlite') {
       throw new Error('SQLite connections cannot be used by dbt projects');
+    }
+
+    if (projectIndex !== -1 && !canUseAsDbtConnection(connection.type)) {
+      throw new Error('MySQL connections cannot be used by dbt projects');
     }
 
     await this.validateConnection(connection);

@@ -121,7 +121,7 @@ const AddConnection: React.FC = () => {
     () =>
       baseItems.filter(
         (item) =>
-          (!projectId || item.id !== 'sqlite') &&
+          (!projectId || canUseAsDbtConnection(item.id)) &&
           (!onlyDbtCompatible || canUseAsDbtConnection(item.id)),
       ),
     [projectId, onlyDbtCompatible],

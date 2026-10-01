@@ -1210,9 +1210,12 @@ export default class ProjectsService {
     });
 
     await extractor.connect();
-    const schema = await extractor.extractSchema();
-    await extractor.disconnect();
-    return schema.tables;
+    try {
+      const schema = await extractor.extractSchema();
+      return schema.tables;
+    } finally {
+      await extractor.disconnect();
+    }
   }
 
   static async extractSchema(project: Project): Promise<Table[]> {
