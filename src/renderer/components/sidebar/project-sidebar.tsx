@@ -272,6 +272,7 @@ interface ExplorerTabProps {
   onRenameFile?: (oldPath: string, newPath: string) => void;
   onRunPipeline?: (filePath: string) => void;
   onRunPipelineLocal?: (filePath: string) => void;
+  openCreatePipeline?: boolean;
 }
 
 const ExplorerTab: React.FC<ExplorerTabProps> = ({
@@ -288,9 +289,17 @@ const ExplorerTab: React.FC<ExplorerTabProps> = ({
   onRenameFile,
   onRunPipeline,
   onRunPipelineLocal,
+  openCreatePipeline,
 }) => {
   const theme = useTheme();
   const [createPipelineOpen, setCreatePipelineOpen] = React.useState(false);
+
+  // Open the modal when triggered externally (e.g. from the home screen pipeline card)
+  React.useEffect(() => {
+    if (openCreatePipeline) {
+      setCreatePipelineOpen(true);
+    }
+  }, [openCreatePipeline]);
 
   const { refetch: refetchPipelines } = useListPipelines(project?.id);
 
@@ -466,6 +475,7 @@ interface ProjectSidebarProps {
 
   // Pipeline
   onRunPipeline?: (filePath: string) => void;
+  openCreatePipeline?: boolean;
 
   // Search (find in files)
   onSearchResultSelect: (selection: SearchResultSelection) => void;
@@ -497,6 +507,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   onRunPipeline,
   onSearchResultSelect,
   onRunPipelineLocal,
+  openCreatePipeline,
 }) => {
   return (
     <Box
@@ -525,6 +536,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
             onRenameFile={onRenameFile}
             onRunPipeline={onRunPipeline}
             onRunPipelineLocal={onRunPipelineLocal}
+            openCreatePipeline={openCreatePipeline}
           />
         )}
 

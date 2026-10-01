@@ -9,6 +9,12 @@ const createProcessEnvironment = (environment?: CliProcessEnvironment) => ({
     : {}),
 });
 
+// String commands run through bash rather than Node's default /bin/sh: on
+// Debian/Ubuntu /bin/sh is dash, which silently drops env vars whose names
+// aren't valid shell identifiers - including the hyphenated
+// `db-<field>-<connection>` vars that profiles.yml reads via env_var().
+const commandShell = () => (process.platform === 'win32' ? true : 'bash');
+
 class CliAdapter {
   private process: ChildProcessWithoutNullStreams | null = null;
 
@@ -34,7 +40,7 @@ class CliAdapter {
         });
       } else {
         this.process = spawn(command, {
-          shell: true,
+          shell: commandShell(),
           env: createProcessEnvironment(environment),
         });
       }
@@ -80,7 +86,7 @@ class CliAdapter {
         });
       } else {
         this.process = spawn(command, {
-          shell: true,
+          shell: commandShell(),
           env: createProcessEnvironment(environment),
         });
       }

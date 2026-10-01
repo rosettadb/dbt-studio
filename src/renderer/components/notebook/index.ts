@@ -10,3 +10,9 @@ export { MarkdownCell } from './MarkdownCell';
 export { OutputPanel } from './OutputPanel';
 export { NotebookToolbar } from './NotebookToolbar';
 export { NotebooksList } from './NotebooksList';
+export {
+  NotebookKindIcon,
+  PythonLogoIcon,
+  SqlNotebookIcon,
+} from './NotebookKindIcon';
+export * from './python';

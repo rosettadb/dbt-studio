@@ -197,7 +197,7 @@ describe('DbtSettings version change flow', () => {
 
     fireEvent.click(
       await screen.findByRole('button', {
-        name: 'Install Selected Packages (8)',
+        name: 'Install Selected Packages (9)',
       }),
     );
 

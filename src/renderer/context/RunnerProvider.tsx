@@ -8,6 +8,7 @@ import React, {
 } from 'react';
 import { useSecureStorage } from '../hooks';
 import { useSetConnectionEnvVariable } from '../controllers';
+import { materializeSnowflakeToken } from '../services/connectors.service';
 
 export interface RunnerLogEntry {
   message: string;
@@ -204,6 +205,13 @@ export const RunnerProvider: React.FC<RunnerProviderProps> = ({ children }) => {
           );
         }
 
+        // Snowflake OAuth: hand the live session token to dbt via process
+        // env (main-side; the token never enters the renderer). Self-gating
+        // main-side: no-op unless the named connection is snowflake+oauth.
+        if (connType === 'snowflake') {
+          await materializeSnowflakeToken(connectionName).catch(() => false);
+        }
+
         if (connType) {
           const fieldMap: Record<string, string[]> = {
             postgres: ['host', 'port', 'dbname', 'schema'],
@@ -211,7 +219,7 @@ export const RunnerProvider: React.FC<RunnerProviderProps> = ({ children }) => {
             snowflake: ['account', 'warehouse', 'dbname', 'schema', 'role'],
             bigquery: ['project', 'dataset'],
             databricks: ['host', 'httppath', 'catalog', 'schema'],
-            kinetica: ['host', 'port', 'dbname', 'schema'],
+            kinetica: ['host', 'port', 'url', 'dbname', 'schema'],
             mysql: ['host', 'port', 'dbname', 'schema'],
           };
           const fields = fieldMap[connType] || [];

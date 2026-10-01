@@ -13,6 +13,7 @@ import { useCli } from '../../hooks';
 import { settingsServices } from '../../services';
 import { SettingsType } from '../../../types/backend';
 import { useInstallPython } from '../../controllers';
+import { getPipInstallRequirement } from '../../../shared/dbtAdapterPackages';
 
 type AdapterSelectionProps = {
   adapters: Array<{ name: string; description: string }>;
@@ -127,8 +128,11 @@ export const DbtSetup: React.FC<Props> = ({
         setCurrentPkg(pkg);
         setProgress((i / selectedAdapters.length) * 100);
         try {
+          // Source-installed adapters (e.g. dbt-kinetica) resolve to a
+          // "name @ url" requirement, which needs quoting for the shell.
+          const requirement = getPipInstallRequirement(pkg);
           // eslint-disable-next-line no-await-in-loop
-          await runCommand(`${python} -m pip install ${pkg}`);
+          await runCommand(`${python} -m pip install "${requirement}"`);
         } catch {
           // continue
         }

@@ -25,6 +25,7 @@ import {
 import ConnectionHeader from './connection-header';
 import useSecureStorage from '../../hooks/useSecureStorage';
 import { useConnectionNameValidation } from '../../utils/connectionValidation';
+import { buildKineticaUrl } from '../../../shared/kineticaUrl';
 
 type Props = {
   onCancel: () => void;
@@ -231,6 +232,12 @@ export const Kinetica: React.FC<Props> = ({
     await setDatabasePassword(formState.password, formState.name);
     await setConnectionField('host', formState.host, formState.name);
     await setConnectionField('port', String(formState.port), formState.name);
+    // dbt-kinetica and the Rosetta JDBC driver both take the full head-node URL
+    await setConnectionField(
+      'url',
+      buildKineticaUrl(formState),
+      formState.name,
+    );
     await setConnectionField('dbname', formState.database, formState.name);
     await setConnectionField('schema', formState.schema, formState.name);
 
@@ -356,7 +363,8 @@ export const Kinetica: React.FC<Props> = ({
             value={formState.schema}
             onChange={handleChange}
             fullWidth
-            placeholder="Default user schema"
+            placeholder="ki_home"
+            helperText="Default schema for dbt models (dbt-kinetica uses ki_home when empty)"
           />
         </Box>
 
