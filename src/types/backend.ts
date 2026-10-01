@@ -113,6 +113,16 @@ export type KineticaConnection = ConnectionBase & {
   bypassSslCertCheck?: boolean;
 };
 
+/** Db2 for LUW. Query-only: never a dbt connection. */
+export type Db2Connection = ConnectionBase & {
+  type: 'db2';
+  host: string;
+  port: number;
+  ssl?: boolean;
+  /** Optional CA certificate file used to verify the server (SSL only). */
+  sslCaPath?: string;
+};
+
 export type DuckLakeConnectionConfig = Omit<
   ConnectionBase,
   'username' | 'password' | 'database' | 'schema'
@@ -134,11 +144,12 @@ export type ConnectionInput =
   | DuckDBConnection
   | SQLiteConnection
   | KineticaConnection
+  | Db2Connection
   | DuckLakeConnectionConfig;
 
 export const canUseAsDbtConnection = (
   type: SupportedConnectionTypes,
-): boolean => type !== 'sqlite';
+): boolean => type !== 'sqlite' && type !== 'db2';
 
 export type ConnectionModel = {
   id: string;
@@ -718,6 +729,8 @@ export type QueryResponseType = {
   duration?: number;
   isCommand?: boolean;
   commandType?: string;
+  /** Set when the connector stopped reading rows at its limit (Db2 only today). */
+  truncated?: boolean;
 };
 
 export type CliUpdateItem = {

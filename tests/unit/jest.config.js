@@ -10,6 +10,7 @@ module.exports = {
     '^electron$': '<rootDir>/tests/unit/__setup__/electron.mock.ts',
     '^@databricks/sql$': '<rootDir>/tests/unit/__setup__/databricksSql.mock.ts',
     '^snowflake-sdk$': '<rootDir>/tests/unit/__setup__/snowflakeSdk.mock.ts',
+    '^ibm_db$': '<rootDir>/tests/unit/__setup__/ibmDb.mock.ts',
     '^@google-cloud/storage$':
       '<rootDir>/tests/unit/__setup__/googleCloudStorage.mock.ts',
     '^@azure/storage-blob$':

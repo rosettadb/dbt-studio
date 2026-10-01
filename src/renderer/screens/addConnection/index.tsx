@@ -6,7 +6,10 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ConnectionCard } from '../../components/connectionCards';
 import connectionIcons from '../../../../assets/connectionIcons';
 import { Connections } from '../../components';
-import { SupportedConnectionTypes } from '../../../types/backend';
+import {
+  SupportedConnectionTypes,
+  canUseAsDbtConnection,
+} from '../../../types/backend';
 import { AppLayout } from '../../layouts';
 import { ConnectionsSidebar } from '../../components/sidebarConnections';
 
@@ -87,6 +90,12 @@ const baseItems: ItemType[] = [
     id: 'kinetica',
     name: 'Kinetica',
     img: 'kinetica',
+    disabled: false,
+  },
+  {
+    id: 'db2',
+    name: 'IBM Db2',
+    img: 'db2',
     disabled: false,
   },
 ];
@@ -194,6 +203,15 @@ const AddConnection: React.FC = () => {
           />
         );
       }
+      case 'db2': {
+        return (
+          <Connections.Db2
+            onCancel={() => setSelectedItem(undefined)}
+            duplicateFrom={duplicateData}
+            suggestedName={suggestedName}
+          />
+        );
+      }
       default: {
         return (
           <Connections.Postgres
@@ -235,7 +253,7 @@ const AddConnection: React.FC = () => {
 
             <ConnectionCardsContainer>
               {baseItems
-                .filter((item) => !projectId || item.id !== 'sqlite')
+                .filter((item) => !projectId || canUseAsDbtConnection(item.id))
                 .map((item, index) => (
                   <ConnectionCard
                     itemDetails={item}

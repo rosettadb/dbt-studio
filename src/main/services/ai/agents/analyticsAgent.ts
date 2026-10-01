@@ -122,6 +122,10 @@ You are connected to a DuckLake lakehouse. DuckLake is a DuckDB extension (not a
       connectionHints =
         '\n\n## Dialect Specifics\nYou are connected to Kinetica. Ensure all queries use Kinetica SQL syntax and functions.';
       break;
+    case 'db2':
+      connectionHints =
+        '\n\n## Dialect Specifics\nYou are connected to IBM Db2 for LUW. Use Db2 SQL: limit rows with `FETCH FIRST n ROWS ONLY`, the dummy table is `SYSIBM.SYSDUMMY1`, unquoted identifiers fold to uppercase, and catalog metadata lives in `SYSCAT` views.';
+      break;
     default:
       connectionHints = `\n\n## Dialect Specifics\nYou are connected to a ${connectionMeta.type} database. Ensure all queries use the correct dialect for this database.`;
       break;
