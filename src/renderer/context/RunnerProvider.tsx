@@ -220,6 +220,7 @@ export const RunnerProvider: React.FC<RunnerProviderProps> = ({ children }) => {
             bigquery: ['project', 'dataset'],
             databricks: ['host', 'httppath', 'catalog', 'schema'],
             kinetica: ['host', 'port', 'url', 'dbname', 'schema'],
+            mysql: ['host', 'port', 'dbname', 'schema'],
           };
           const fields = fieldMap[connType] || [];
           const fieldPromises = fields.map(async (field) => {

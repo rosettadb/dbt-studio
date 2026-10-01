@@ -6,6 +6,7 @@ import { Databricks } from './databricks';
 import { DuckDB } from './duckdb';
 import { SQLite } from './sqlite';
 import { Kinetica } from './kinetica';
+import { MySql } from './mysql';
 
 export const Connections = {
   Postgres,
@@ -16,4 +17,5 @@ export const Connections = {
   DuckDB,
   SQLite,
   Kinetica,
+  MySql,
 };
