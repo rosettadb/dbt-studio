@@ -6,8 +6,10 @@
  */
 
 import React, {
+  forwardRef,
   useCallback,
   useEffect,
+  useImperativeHandle,
   useMemo,
   useRef,
   useState,
@@ -36,6 +38,7 @@ import {
 } from '@hello-pangea/dnd';
 import { toast } from 'react-toastify';
 import { v4 as uuidv4 } from 'uuid';
+import type { editor } from 'monaco-editor';
 import type { Notebook } from '../../../../types/notebooks';
 import type {
   KernelEvent,
@@ -61,12 +64,21 @@ import {
   useShutdownKernel,
   useUpdatePythonNotebook,
 } from '../../../controllers/pythonNotebooks.controller';
+import { useMonacoAutocomplete, useSchemaForConnection } from '../../../hooks';
+import { insertTextAtCursor } from '../../../lib/monaco/insertText';
+import type { SqlSchemaCompletionEntry } from '../../../lib/monaco/completions/sqlSchema';
+import {
+  buildDragSelectStatement,
+  hasSchemaDragData,
+  readSchemaDragData,
+} from '../../../utils/sql/schemaDragPayload';
+import { buildSelectStatement } from '../../../utils/sql/schemaObjectSql';
 import { KernelBar } from './KernelBar';
 import { PythonCell, CellRunState } from './PythonCell';
 import { CellInsertBar } from './CellInsertBar';
 import { PackagesDialog } from './PackagesDialog';
 import { PythonRuntimePicker } from './PythonRuntimePicker';
-import type { RunMode } from './PythonCodeCell';
+import type { RunMode, EditorMountHandler } from './PythonCodeCell';
 
 const SAVE_DEBOUNCE_MS = 600;
 const PYTHON_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -91,6 +103,21 @@ export function pythonNotebookToSummary(notebook: PythonNotebook): Notebook {
     cellCount: notebook.cellCount,
   };
 }
+
+/**
+ * Imperative surface exposed through `ref`, used by the Data tree context
+ * menu to act on the open notebook.
+ */
+export type NotebookEditorHandle = {
+  /**
+   * Insert text at the cursor of the selected SQL cell. When no SQL cell is
+   * selected, a new SQL cell is appended with the text instead.
+   * Returns false only when the notebook is not loaded.
+   */
+  insertText: (text: string) => boolean;
+  /** Append a SQL cell with `source`; optionally run it once saved. */
+  addSqlCell: (source: string, run?: boolean) => Promise<string | null>;
+};
 
 /** First of df, df_2, df_3… not used by another SQL cell. */
 function nextSqlVariable(cells: PythonNotebookCell[]): string {
@@ -163,13 +190,10 @@ interface PythonNotebookEditorProps {
   onDeleted?: (notebookId: string) => void;
 }
 
-export const PythonNotebookEditor: React.FC<PythonNotebookEditorProps> = ({
-  connectionId,
-  notebookId,
-  onOpenNotebook,
-  onRenamed,
-  onDeleted,
-}) => {
+export const PythonNotebookEditor = forwardRef<
+  NotebookEditorHandle,
+  PythonNotebookEditorProps
+>(({ connectionId, notebookId, onOpenNotebook, onRenamed, onDeleted }, ref) => {
   const {
     data: notebook,
     isLoading,
@@ -215,6 +239,28 @@ export const PythonNotebookEditor: React.FC<PythonNotebookEditorProps> = ({
   );
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedForRef = useRef<string | null>(null);
+
+  // Live Monaco instances by cell id, so the Data tree context menu can
+  // insert text into the selected cell.
+  const editorsRef = useRef(new Map<string, editor.IStandaloneCodeEditor>());
+  const handleEditorMount = useCallback<EditorMountHandler>(
+    (cellId, instance) => {
+      if (instance) editorsRef.current.set(cellId, instance);
+      else editorsRef.current.delete(cellId);
+    },
+    [],
+  );
+
+  // Schema completions for SQL cells (see lib/monaco/completions/sqlSchema).
+  const { data: schemaData } = useSchemaForConnection(connectionId);
+  const completions = useMonacoAutocomplete(
+    schemaData?.tables || null,
+    schemaData?.duckLakeSchema || null,
+  );
+  const sqlCompletions = useMemo<SqlSchemaCompletionEntry>(
+    () => ({ items: completions, tables: schemaData?.tables }),
+    [completions, schemaData?.tables],
+  );
 
   // ── Load ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -622,6 +668,95 @@ export const PythonNotebookEditor: React.FC<PythonNotebookEditorProps> = ({
     [connectionId, notebookId, executeCell, flushPendingSave, runtime],
   );
 
+  // Append a SQL cell from the Data tree (context menu / drop) and optionally
+  // run it. Saved first so the cell exists on disk before it executes.
+  const addSqlCell = useCallback(
+    async (source: string, run = false): Promise<string | null> => {
+      if (!notebook) return null;
+      cancelPendingSave();
+      const cell = { ...newCell('sql', cellsRef.current), source };
+      const next = [...cellsRef.current, cell];
+      cellsRef.current = next;
+      setCells(next);
+      focusCell(cell.id);
+      try {
+        await updateNotebook.mutateAsync({
+          connectionId,
+          notebookId,
+          updates: { cells: next },
+        });
+      } catch {
+        return cell.id; // handled by mutation
+      }
+      if (run) await runCell(cell.id);
+      return cell.id;
+    },
+    [
+      notebook,
+      cancelPendingSave,
+      focusCell,
+      updateNotebook,
+      connectionId,
+      notebookId,
+      runCell,
+    ],
+  );
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      insertText: (text: string) => {
+        if (!notebook) return false;
+        const selected = cellsRef.current.find((c) => c.id === selectedCellId);
+        const instance =
+          selected?.cell_type === 'sql'
+            ? editorsRef.current.get(selected.id)
+            : undefined;
+        if (instance && insertTextAtCursor(instance, text)) return true;
+        addSqlCell(text);
+        return true;
+      },
+      addSqlCell,
+    }),
+    [notebook, selectedCellId, addSqlCell],
+  );
+
+  // Dropping a table/column from the Data tree on empty space in the cell
+  // list appends a SQL cell with a SELECT for it. Drops onto a SQL cell's
+  // editor are claimed by the cell (useSchemaObjectDrop); drops on other
+  // cell chrome are ignored.
+  const handleSchemaDragOver = useCallback((event: React.DragEvent) => {
+    if (!hasSchemaDragData(event.dataTransfer)) return;
+    if ((event.target as HTMLElement).closest?.('[data-cell-id]')) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+  }, []);
+
+  const handleSchemaDrop = useCallback(
+    (event: React.DragEvent) => {
+      const payload = readSchemaDragData(event.dataTransfer);
+      if (!payload) return;
+      if ((event.target as HTMLElement).closest?.('[data-cell-id]')) return;
+      event.preventDefault();
+
+      let source: string | null = null;
+      if (
+        (payload.kind === 'table' || payload.kind === 'view') &&
+        payload.table
+      ) {
+        source = buildDragSelectStatement(payload);
+      } else if (payload.kind === 'column' && payload.table && payload.column) {
+        source = buildSelectStatement(
+          { schema: payload.schema, name: payload.table },
+          payload.connectionType,
+          { columns: [payload.column] },
+        );
+      }
+      if (source) addSqlCell(source);
+    },
+    [addSqlCell],
+  );
+
   const handleRun = useCallback(
     (cellId: string, mode: RunMode) => {
       const index = cellsRef.current.findIndex((c) => c.id === cellId);
@@ -904,7 +1039,11 @@ export const PythonNotebookEditor: React.FC<PythonNotebookEditorProps> = ({
         </Alert>
       )}
 
-      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', px: 3, py: 2 }}>
+      <Box
+        sx={{ flex: 1, minHeight: 0, overflowY: 'auto', px: 3, py: 2 }}
+        onDragOver={handleSchemaDragOver}
+        onDrop={handleSchemaDrop}
+      >
         {cells.length === 0 ? (
           <Box
             sx={{
@@ -994,6 +1133,8 @@ export const PythonNotebookEditor: React.FC<PythonNotebookEditorProps> = ({
                             onToggleCollapsed={() =>
                               toggleCellCollapsed(cell.id)
                             }
+                            onEditorMount={handleEditorMount}
+                            sqlCompletions={sqlCompletions}
                           />
                           <CellInsertBar
                             onAddCode={() => insertCell('code', index + 1)}
@@ -1149,6 +1290,8 @@ export const PythonNotebookEditor: React.FC<PythonNotebookEditorProps> = ({
       </Dialog>
     </Box>
   );
-};
+});
+
+PythonNotebookEditor.displayName = 'PythonNotebookEditor';
 
 export default PythonNotebookEditor;

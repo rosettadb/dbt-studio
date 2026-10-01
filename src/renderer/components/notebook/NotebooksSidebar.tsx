@@ -31,6 +31,7 @@ import { NotebooksTreeView } from './NotebooksTreeView';
 import { AnalyticsPagesTreeView } from '../analytics';
 import { Table, SupportedConnectionTypes } from '../../../types/backend';
 import { Notebook } from '../../../types/notebooks';
+import type { SchemaTreeNodeRef } from '../schemaTreeViewer/types';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -98,6 +99,12 @@ interface NotebooksSidebarProps {
 
   // Helper functions
   getConnectionName: (connectionKey: string) => string;
+
+  /** Right-click on a Data tree row (optional). */
+  onSchemaContextMenu?: (
+    event: React.MouseEvent<HTMLDivElement>,
+    node: SchemaTreeNodeRef,
+  ) => void;
 }
 
 export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
@@ -128,6 +135,7 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
   activeAnalyticsPageId,
   onOpenAnalyticsPage,
   onDeleteAnalyticsPage,
+  onSchemaContextMenu,
 }) => {
   const theme = useTheme();
   const [activeTab, setActiveTab] = useState(0);
@@ -474,6 +482,9 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
                 schema={schema}
                 isLoading={isLoadingSchema}
                 filter={searchQuery}
+                connectionId={connectionId}
+                draggable
+                onContextMenu={onSchemaContextMenu}
               />
             )}
             {!isLoadingSchema && schema.length === 0 && (
