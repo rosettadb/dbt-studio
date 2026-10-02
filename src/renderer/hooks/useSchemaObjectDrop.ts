@@ -67,6 +67,7 @@ export function useSchemaObjectDrop(
       // Claim the event so Monaco's default text/plain drop doesn't also fire.
       event.preventDefault();
       event.stopPropagation();
+      (editor as { removeDropIndicator?: () => void }).removeDropIndicator?.();
 
       const position =
         getPositionAtClientPoint(editor, event.clientX, event.clientY) ??
