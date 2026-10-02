@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   useMutation,
   UseMutationOptions,
@@ -7,6 +8,7 @@ import {
   UseQueryOptions,
 } from 'react-query';
 import type { CustomError } from '../../types/backend';
+import type { ChatGptAuthStatus } from '../../types/ipc';
 import { QUERY_KEYS } from '../config/constants';
 import { aiProvidersService } from '../services/aiProviders.service';
 
@@ -22,7 +24,8 @@ export interface AIProvider {
     | 'gemini'
     | 'anthropic'
     | 'openai-compatible'
-    | 'lmstudio';
+    | 'lmstudio'
+    | 'openai-codex';
   config: string;
   isActive: boolean;
   createdAt?: string;
@@ -37,7 +40,8 @@ export interface NewAIProvider {
     | 'gemini'
     | 'anthropic'
     | 'openai-compatible'
-    | 'lmstudio';
+    | 'lmstudio'
+    | 'openai-codex';
   config: string;
   isActive?: boolean;
 }
@@ -324,5 +328,132 @@ export const useGetAllProviderModels = (
       return aiProvidersService.getAllProviderModels();
     },
     ...customOptions,
+  });
+};
+
+// ChatGPT subscription sign-in (Plan 71)
+
+export type ChatGptSignInStatus = 'idle' | ChatGptAuthStatus;
+
+export type ChatGptLogin = {
+  loginId: string;
+  email: string | null;
+  planType: string | null;
+};
+
+/**
+ * Owns the ChatGPT browser sign-in for the Add/Edit AI Provider dialog:
+ * the lifecycle-event subscription (FE-03), the active correlation ID, and
+ * the pending login. The pending login is discarded by `reset()`, which the
+ * dialog calls when it closes. After Create Provider the main process has
+ * already moved the credential, so discarding is a harmless no-op.
+ */
+export const useChatGptSignIn = () => {
+  const [status, setStatus] = useState<ChatGptSignInStatus>('idle');
+  const [error, setError] = useState<string | undefined>();
+  const [login, setLogin] = useState<ChatGptLogin | null>(null);
+  const activeIdRef = useRef<string | null>(null);
+  const loginIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = aiProvidersService.onChatGptAuthEvent((payload) => {
+      if (payload.correlationId !== activeIdRef.current) return;
+      setStatus(payload.status);
+      if (payload.error) setError(payload.error);
+    });
+    return () => {
+      unsubscribe();
+      if (activeIdRef.current) {
+        aiProvidersService
+          .cancelChatGptAuth(activeIdRef.current)
+          .catch(() => {});
+      }
+    };
+  }, []);
+
+  const discardPending = useCallback(() => {
+    const loginId = loginIdRef.current;
+    loginIdRef.current = null;
+    setLogin(null);
+    if (loginId) {
+      aiProvidersService.discardChatGptPendingLogin(loginId).catch(() => {});
+    }
+  }, []);
+
+  const start = useCallback(async () => {
+    discardPending();
+    const correlationId = crypto.randomUUID();
+    activeIdRef.current = correlationId;
+    setError(undefined);
+    setStatus('started');
+    try {
+      const result = await aiProvidersService.startChatGptAuth({
+        correlationId,
+      });
+      if (activeIdRef.current !== correlationId) return;
+      if (result.ok) {
+        loginIdRef.current = result.loginId;
+        setLogin({
+          loginId: result.loginId,
+          email: result.email,
+          planType: result.planType,
+        });
+        setStatus('completed');
+      } else {
+        setError(result.message);
+        setStatus((current) =>
+          current === 'cancelled' ? 'cancelled' : 'failed',
+        );
+      }
+    } catch (e) {
+      if (activeIdRef.current !== correlationId) return;
+      setError((e as Error)?.message || 'ChatGPT sign-in failed.');
+      setStatus('failed');
+    } finally {
+      if (activeIdRef.current === correlationId) activeIdRef.current = null;
+    }
+  }, [discardPending]);
+
+  const cancel = useCallback(() => {
+    const correlationId = activeIdRef.current;
+    activeIdRef.current = null;
+    if (correlationId) {
+      aiProvidersService.cancelChatGptAuth(correlationId).catch(() => {});
+    }
+    setStatus('cancelled');
+    setError('Sign-in cancelled.');
+  }, []);
+
+  const reset = useCallback(() => {
+    if (activeIdRef.current) {
+      aiProvidersService.cancelChatGptAuth(activeIdRef.current).catch(() => {});
+      activeIdRef.current = null;
+    }
+    discardPending();
+    setStatus('idle');
+    setError(undefined);
+  }, [discardPending]);
+
+  return { status, error, login, start, cancel, reset };
+};
+
+export const useSignOutChatGpt = (
+  customOptions?: UseMutationOptions<void, CustomError, number>,
+): UseMutationResult<void, CustomError, number> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (providerId: number) =>
+      aiProvidersService.signOutChatGpt(providerId),
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_AI_PROVIDERS]);
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_ACTIVE_AI_PROVIDER]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => {
+      onCustomError?.(...args);
+    },
   });
 };
