@@ -74,7 +74,7 @@ describe('Iceberg AI connection tools', () => {
       },
     ]);
 
-    const tools = createStudioConnectionsTools() as any;
+    const tools = createStudioConnectionsTools({ includeIceberg: true }) as any;
     const result = await tools.studio_connections_list.execute({
       includeDatabases: false,
       includeHealth: false,
@@ -90,6 +90,17 @@ describe('Iceberg AI connection tools', () => {
       },
     ]);
     expect(ConnectorsService.loadConnections).not.toHaveBeenCalled();
+  });
+
+  it('omits Iceberg catalogs unless the agent opts in', async () => {
+    const tools = createStudioConnectionsTools() as any;
+    const result = await tools.studio_connections_list.execute({
+      includeDatabases: false,
+      includeHealth: false,
+    });
+
+    expect(result.data.connections).toEqual([]);
+    expect(IcebergDatalakeService.listInstances).not.toHaveBeenCalled();
   });
 
   it('routes Iceberg schema extraction without calling the database resolver', async () => {

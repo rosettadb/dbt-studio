@@ -235,7 +235,7 @@ ${mcpToolsList}`;
   const isDuckLake = connectionMeta.type === 'ducklake';
 
   const studioAnalyticsTools: Record<string, any> = {
-    ...createStudioConnectionsTools(),
+    ...createStudioConnectionsTools({ includeIceberg: true }),
     ...(isDuckLake
       ? createStudioDuckLakeTools(options.conversationId)
       : createStudioSqlTools(options.conversationId)),

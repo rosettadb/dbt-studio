@@ -338,7 +338,6 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
   };
 
   const handleExportParquet = async () => {
-    if (connectionId.startsWith('iceberg-')) return;
     handleExportMenuClose();
 
     try {
@@ -557,9 +556,7 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
               color="text.secondary"
               sx={{ fontSize: 11 }}
             >
-              {output.statementClass && output.statementClass !== 'select'
-                ? `${output.statementClass.toUpperCase()} completed (${output.rowCount ?? 0} rows affected)`
-                : 'Query executed successfully (no results)'}
+              Query executed successfully (no results)
             </Typography>
             <Typography
               variant="caption"
@@ -816,7 +813,7 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
 
             <MenuItem
               onClick={handleExportParquet}
-              disabled={isExporting || connectionId.startsWith('iceberg-')}
+              disabled={isExporting}
               dense
             >
               <ListItemIcon>

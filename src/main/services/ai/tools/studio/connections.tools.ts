@@ -183,7 +183,11 @@ async function hydrateCloudConfig(
   throw new Error(`Unsupported cloud provider: ${provider}`);
 }
 
-export function createStudioConnectionsTools() {
+/** Iceberg catalogs are listed only for agents that can query them (SQL
+ * Editor and Analytics); Notebooks do not support Iceberg connections yet. */
+export function createStudioConnectionsTools(
+  options: { includeIceberg?: boolean } = {},
+) {
   const listEnabled = isToolEnabled(STUDIO_CONNECTIONS_LIST_FLAG);
   const testEnabled = isToolEnabled('studio.connections.test');
   const cloudTestEnabled = isToolEnabled(STUDIO_CLOUD_CONNECTION_TEST_FLAG);
@@ -267,18 +271,21 @@ export function createStudioConnectionsTools() {
           // Iceberg instances are distinct from database connections. Only
           // list instances already verified for SQL, and expose no catalog or
           // storage credentials to the agent.
-          const icebergInstances = await IcebergDatalakeService.listInstances();
-          rows.push(
-            ...icebergInstances
-              .filter((instance) => instance.sqlAvailable)
-              .map((instance) => ({
-                id: `iceberg-${instance.id}`,
-                name: instance.name,
-                type: `iceberg (${instance.catalogType})`,
-                kind: 'iceberg' as const,
-                health: 'healthy' as const,
-              })),
-          );
+          if (options.includeIceberg) {
+            const icebergInstances =
+              await IcebergDatalakeService.listInstances();
+            rows.push(
+              ...icebergInstances
+                .filter((instance) => instance.sqlAvailable)
+                .map((instance) => ({
+                  id: `iceberg-${instance.id}`,
+                  name: instance.name,
+                  type: `iceberg (${instance.catalogType})`,
+                  kind: 'iceberg' as const,
+                  health: 'healthy' as const,
+                })),
+            );
+          }
 
           return {
             ok: true,

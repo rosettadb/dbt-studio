@@ -170,7 +170,6 @@ export const SqlEditor: React.FC<Props> = ({
         result = {
           success: true,
           data: icebergResult.rows,
-          truncated: icebergResult.truncated,
           fields: icebergResult.columns.map((name) => ({ name, type: 0 })),
           rowCount:
             icebergResult.statementClass === 'select'
@@ -288,7 +287,7 @@ export const SqlEditor: React.FC<Props> = ({
       }
     } catch (error) {
       toast.error('An unexpected error occurred while executing the query');
-      setError(error instanceof Error ? error.message : String(error));
+      setError(error);
     } finally {
       setLoadingQuery(false);
     }

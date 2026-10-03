@@ -47,11 +47,7 @@ import type {
   IcebergInstanceConfig,
   IcebergStorageType,
 } from '../../../types/iceberg';
-import {
-  useFilePicker,
-  useGetConnections,
-  useGetSettings,
-} from '../../controllers';
+import { useFilePicker, useGetConnections } from '../../controllers';
 import {
   useCreateIcebergMetadataFile,
   useIcebergCapabilities,
@@ -212,7 +208,7 @@ function validateStep(
       data.catalog.catalogType === 'sql' &&
       !data.catalog.databaseConnectionId
     ) {
-      return 'A PostgreSQL connection is required.';
+      return 'A PostgreSQL or Neon connection is required.';
     }
     if (data.catalog.catalogType === 'sql' && !data.catalog.catalogName) {
       return 'SQL catalog name is required.';
@@ -330,8 +326,6 @@ export const IcebergConnectionWizard: React.FC<
     message: string;
   } | null>(null);
   const initializedInstanceIdRef = useRef<string | null>(null);
-  const { data: settings } = useGetSettings();
-  const defaultProjectPath = settings?.projectsDirectory?.trim() || '';
 
   useEffect(() => {
     if (!initialData || initializedInstanceIdRef.current === initialData.id) {
@@ -431,7 +425,7 @@ export const IcebergConnectionWizard: React.FC<
 
   const pickFolder = (setter: (path: string) => void) => {
     getFiles(
-      { properties: ['openDirectory'], defaultPath: defaultProjectPath },
+      { properties: ['openDirectory'] },
       {
         onSuccess: (filePaths) => {
           if (filePaths && filePaths.length > 0) {
@@ -486,24 +480,6 @@ export const IcebergConnectionWizard: React.FC<
 
   const patchCatalog = (patch: Partial<IcebergWizardData['catalog']>) =>
     setData((d) => ({ ...d, catalog: { ...d.catalog, ...patch } }));
-
-  useEffect(() => {
-    if (
-      mode === 'create' &&
-      activeStep === 1 &&
-      data.catalog.catalogType === 'sqlite' &&
-      !data.catalog.catalogPath &&
-      defaultProjectPath
-    ) {
-      patchCatalog({ catalogPath: defaultProjectPath });
-    }
-  }, [
-    activeStep,
-    data.catalog.catalogPath,
-    data.catalog.catalogType,
-    defaultProjectPath,
-    mode,
-  ]);
 
   const patchStorage = (patch: Partial<IcebergWizardData['storage']>) =>
     setData((d) => ({ ...d, storage: { ...d.storage, ...patch } }));
@@ -779,11 +755,14 @@ export const IcebergConnectionWizard: React.FC<
         helperText="A unique name to identify this Iceberg instance (max 80 chars)"
       />
       <TextField
-        label="Description (Optional)"
-        placeholder="Describe the purpose of this Iceberg instance..."
+        label="Description (optional)"
+        placeholder="Production Iceberg catalog for analytics"
         value={data.basics.description ?? ''}
         onChange={(e) => patchBasics({ description: e.target.value })}
         fullWidth
+        multiline
+        rows={2}
+        helperText="Optional human-readable description"
       />
     </Box>
   );
@@ -908,8 +887,8 @@ export const IcebergConnectionWizard: React.FC<
           onChange={(e) => patchCatalog({ catalogPath: e.target.value })}
           fullWidth
           required
-          placeholder="Local project folder path"
-          helperText="Defaults to the current project folder"
+          placeholder="/data/my-catalog/pyiceberg_catalog.db"
+          helperText="Choose a folder to initialize a SQLite catalog and local warehouse"
           slotProps={{
             input: {
               endAdornment: (
@@ -937,10 +916,10 @@ export const IcebergConnectionWizard: React.FC<
       {data.catalog.catalogType === 'sql' && (
         <>
           <FormControl fullWidth required>
-            <InputLabel>PostgreSQL Connection</InputLabel>
+            <InputLabel>PostgreSQL / Neon Connection</InputLabel>
             <Select
               value={data.catalog.databaseConnectionId ?? ''}
-              label="PostgreSQL Connection"
+              label="PostgreSQL / Neon Connection"
               onChange={(event) =>
                 patchCatalog({ databaseConnectionId: event.target.value })
               }
@@ -958,7 +937,7 @@ export const IcebergConnectionWizard: React.FC<
                 sx={{ mt: 1 }}
               >
                 Create and test a PostgreSQL connection in Connections first.
-                Use a PostgreSQL connection with SSL enabled when required.
+                Neon uses the same PostgreSQL connection type with SSL enabled.
               </Typography>
             )}
           </FormControl>
@@ -1221,34 +1200,6 @@ export const IcebergConnectionWizard: React.FC<
       </Box>
     </Box>
   );
-
-  const hasUnsavedSqlAttachmentChanges =
-    mode === 'edit' &&
-    !!initialData &&
-    [
-      [data.catalog.catalogType, initialData.catalogType],
-      [data.catalog.endpoint, initialData.endpoint],
-      [data.catalog.catalogName, initialData.catalogName],
-      [data.catalog.authMode, initialData.catalogAuthMode ?? 'none'],
-      [data.catalog.oauthClientId, initialData.oauthClientId],
-      [data.catalog.oauthServerUri, initialData.oauthServerUri],
-      [data.catalog.oauthScope, initialData.oauthScope],
-      [data.catalog.nessieReference, initialData.nessieReference],
-      [data.catalog.nessieWarehouse, initialData.nessieWarehouse],
-      [data.sql.enabled, initialData.sqlEnabled ?? false],
-      [data.sql.connectionId, initialData.sqlStorageConnectionId],
-      [data.sql.provider, initialData.sqlStorageProvider],
-      [data.sql.bucket, initialData.sqlStorageBucket],
-      [data.sql.prefix, initialData.sqlStoragePrefix],
-      [
-        data.sql.warehouseMatchAcknowledged,
-        initialData.sqlWarehouseMatchAcknowledged ?? false,
-      ],
-    ].some(
-      ([draftValue, savedValue]) =>
-        (typeof draftValue === 'string' ? draftValue.trim() : draftValue) !==
-        (typeof savedValue === 'string' ? savedValue.trim() : savedValue),
-    );
 
   const renderStorageStep = () => {
     const isRestCatalog =
@@ -1524,49 +1475,6 @@ export const IcebergConnectionWizard: React.FC<
               )}
             </Box>
           </>
-        )}
-        {data.sql.enabled && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Button
-              variant="outlined"
-              startIcon={
-                verifySqlMutation.isLoading ? (
-                  <CircularProgress size={16} />
-                ) : (
-                  <img
-                    src={databaseIcons.duckdb}
-                    alt=""
-                    style={{ width: 18, height: 18, objectFit: 'contain' }}
-                  />
-                )
-              }
-              onClick={handleVerifySqlAccess}
-              disabled={verifySqlMutation.isLoading || !initialData?.id}
-              size="small"
-            >
-              {verifySqlMutation.isLoading ? 'Testing…' : 'Test SQL Access'}
-            </Button>
-            {sqlTestResult && (
-              <Alert
-                severity={sqlTestResult.success ? 'success' : 'error'}
-                sx={{ py: 0, flex: 1 }}
-                icon={sqlTestResult.success ? <CheckCircle /> : undefined}
-              >
-                {sqlTestResult.message}
-              </Alert>
-            )}
-            {hasUnsavedSqlAttachmentChanges && (
-              <Alert severity="warning" sx={{ py: 0, flex: 1 }}>
-                Save these attachment changes, reopen the instance, then test
-                SQL access.
-              </Alert>
-            )}
-            {mode === 'create' && !initialData?.id && (
-              <Alert severity="info" sx={{ py: 0, flex: 1 }}>
-                Save the instance before testing SQL access.
-              </Alert>
-            )}
-          </Box>
         )}
       </Box>
     );

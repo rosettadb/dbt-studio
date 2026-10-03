@@ -38,7 +38,11 @@ import {
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { connectorsServices, DuckLakeService } from '../../services';
+import {
+  connectorsServices,
+  DuckLakeService,
+  icebergService,
+} from '../../services';
 import { QueryResultStore } from './queryResultStore';
 import { icebergQualifiedName } from '../../services/iceberg.service';
 import { registerQueryResultBridge } from '../../services/agentEditorBridge.service';
@@ -214,11 +218,7 @@ const Sql = () => {
 
   // Get active connection
   const { data: activeConnection, isLoading: isLoadingConnection } =
-    useGetConnectionById(
-      isDuckLakeConnection || isIcebergConnection
-        ? undefined
-        : activeConnectionId,
-    );
+    useGetConnectionById(isIcebergConnection ? undefined : activeConnectionId);
 
   // Schema state for active tab
   const [tabSchemas, setTabSchemas] = useState<Record<string, Table[]>>({});
@@ -540,7 +540,8 @@ const Sql = () => {
     async (connectionId: string) => {
       if (loadingSchemas[connectionId]) return;
 
-      // DuckLake schema is loaded through its existing completion path.
+      // Skip regular schema loading for DuckLake connections
+      // DuckLake schema is loaded via extractSchema in loadDuckLakeCompletions
       if (connectionId.startsWith('ducklake-')) {
         // Mark as loaded (empty schema) to prevent loading state
         setTabSchemas((prev) => ({ ...prev, [connectionId]: [] }));

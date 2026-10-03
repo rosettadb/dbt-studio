@@ -3,13 +3,7 @@
  * Main container for notebook editing with cells and toolbar
  */
 
-import React, {
-  useState,
-  useCallback,
-  useEffect,
-  useRef,
-  useMemo,
-} from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Box,
   Button,
@@ -38,9 +32,6 @@ import {
   DraggableStateSnapshot,
 } from '@hello-pangea/dnd';
 import * as monaco from 'monaco-editor';
-import { icebergQualifiedName } from '../../services/iceberg.service';
-import { MonacoAutocompleteSQLKeywords } from '../../config/constants';
-import { useListIcebergInstances } from '../../controllers/icebergDatalake.controller';
 import {
   useNotebook,
   useUpdateNotebook,
@@ -98,20 +89,6 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   onConverted,
 }) => {
   const navigate = useNavigate();
-  const isIceberg = instanceId.startsWith('iceberg-');
-  const { data: icebergInstances = [], isLoading: icebergLoading } =
-    useListIcebergInstances();
-  const icebergInstance = icebergInstances.find(
-    (item) => item.id === instanceId.slice(8),
-  );
-  const icebergUnavailable = isIceberg && !icebergInstance?.sqlAvailable;
-  const icebergRuns = useRef(new Map<string, AbortController>());
-  useEffect(
-    () => () => {
-      icebergRuns.current.forEach((run) => run.abort());
-    },
-    [instanceId, notebookId],
-  );
   const connectionId = instanceId; // Use connectionId internally for clarity
   const {
     data: notebook,
@@ -192,38 +169,10 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   ]);
 
   const { data: schemaData } = useSchemaForConnection(connectionId);
-  const baseCompletions = useMonacoAutocomplete(
+  const completions = useMonacoAutocomplete(
     schemaData?.tables || null,
     schemaData?.duckLakeSchema || null,
   );
-
-  const completions = useMemo(() => {
-    if (!isIceberg) return baseCompletions;
-    return [
-      ...MonacoAutocompleteSQLKeywords.map((keyword) => ({
-        label: keyword,
-        insertText: keyword,
-        kind: monaco.languages.CompletionItemKind.Keyword,
-        detail: 'SQL keyword',
-      })),
-      ...(schemaData?.tables ?? []).flatMap((table) => [
-        {
-          label: `iceberg.${table.schema}.${table.name}`,
-          insertText: icebergQualifiedName(table.schema, table.name),
-          kind: monaco.languages.CompletionItemKind.Class,
-        },
-        ...table.columns.map((column) => ({
-          label: `iceberg.${table.schema}.${table.name}.${column.name}`,
-          insertText: icebergQualifiedName(
-            table.schema,
-            table.name,
-            column.name,
-          ),
-          kind: monaco.languages.CompletionItemKind.Field,
-        })),
-      ]),
-    ];
-  }, [isIceberg, baseCompletions, schemaData]);
 
   // Store completions in a ref so the provider can access the latest without re-registering
   const completionsRef = useRef(completions);
@@ -287,12 +236,6 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   const handleRunAll = useCallback(async () => {
     if (!notebook || localCells.length === 0) return;
 
-    if (icebergUnavailable) {
-      toast.error('Iceberg SQL connection is unavailable.');
-      return;
-    }
-    const batch = new AbortController();
-    if (isIceberg) icebergRuns.current.set('batch', batch);
     setIsRunningAll(true);
     setRunningCellIndex(0);
 
@@ -309,25 +252,18 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
           setRunningCellIndex(i);
 
           try {
-            if (batch.signal.aborted)
-              throw new Error('Iceberg execution cancelled.');
             // eslint-disable-next-line no-await-in-loop
-            const output = await runCell.mutateAsync({
+            await runCell.mutateAsync({
               connectionId,
               notebookId,
               cellId: cell.id,
               sql: cell.content,
-              options: isIceberg ? { signal: batch.signal } : undefined,
             });
-
-            if (isIceberg && output.type === 'error')
-              throw new Error(output.error);
 
             // Small delay between cells for better UX
             // eslint-disable-next-line no-await-in-loop, no-promise-executor-return
             await new Promise((resolve) => setTimeout(resolve, 100));
           } catch (cellError) {
-            if (isIceberg) throw cellError;
             // eslint-disable-next-line no-console
             console.error(`Failed to execute cell ${i + 1}:`, cellError);
 
@@ -350,19 +286,10 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
       console.error('Run all failed:', runAllError);
       toast.error('Failed to execute all cells');
     } finally {
-      icebergRuns.current.delete('batch');
       setIsRunningAll(false);
       setRunningCellIndex(null);
     }
-  }, [
-    notebook,
-    localCells,
-    connectionId,
-    notebookId,
-    runCell,
-    isIceberg,
-    icebergUnavailable,
-  ]);
+  }, [notebook, localCells, connectionId, notebookId, runCell]);
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -583,32 +510,22 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
 
   const handleRunCell = useCallback(
     async (cellId: string, content: string) => {
-      if (icebergUnavailable) {
-        toast.error('Iceberg SQL connection is unavailable.');
-        return;
-      }
-      const run = new AbortController();
-      if (isIceberg) icebergRuns.current.set(cellId, run);
       setExecutingCells((prev) => new Set(prev).add(cellId));
 
       try {
-        const output = await runCell.mutateAsync({
+        await runCell.mutateAsync({
           connectionId,
           notebookId,
           cellId,
           sql: content,
           limit: 10, // Default pagination: first 10 rows
           offset: 0,
-          options: isIceberg ? { signal: run.signal } : undefined,
         });
 
         // If the executed statement may have changed the schema, notify the parent
         if (
           onSchemaChange &&
-          (isIceberg
-            ? ['create', 'drop'].includes(output.statementClass ?? '') &&
-              output.type !== 'error'
-            : /^\s*(CREATE|DROP|ALTER|RENAME|TRUNCATE)/i.test(content.trim()))
+          /^\s*(CREATE|DROP|ALTER|RENAME|TRUNCATE)/i.test(content.trim())
         ) {
           onSchemaChange();
         }
@@ -618,7 +535,6 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
         // eslint-disable-next-line no-console
         console.error('Cell execution error:', err);
       } finally {
-        icebergRuns.current.delete(cellId);
         setExecutingCells((prev) => {
           const next = new Set(prev);
           next.delete(cellId);
@@ -626,14 +542,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
         });
       }
     },
-    [
-      connectionId,
-      notebookId,
-      runCell,
-      onSchemaChange,
-      isIceberg,
-      icebergUnavailable,
-    ],
+    [connectionId, notebookId, runCell, onSchemaChange],
   );
 
   const handleExport = useCallback(() => {

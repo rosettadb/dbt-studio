@@ -1211,24 +1211,6 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
               New Namespace
             </Button>
             <Button
-              variant="outlined"
-              size="small"
-              startIcon={<TableChart />}
-              disabled
-              sx={{ height: '32px' }}
-            >
-              Create Table
-            </Button>
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={<Inventory2 />}
-              disabled
-              sx={{ height: '32px' }}
-            >
-              Register Table
-            </Button>
-            <Button
               variant="contained"
               size="small"
               startIcon={<Add />}
@@ -1308,24 +1290,6 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
               sx={{ height: '32px' }}
             >
               New Namespace
-            </Button>
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={<TableChart />}
-              disabled
-              sx={{ height: '32px' }}
-            >
-              Create Table
-            </Button>
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={<Inventory2 />}
-              disabled
-              sx={{ height: '32px' }}
-            >
-              Register Table
             </Button>
             <Button
               variant="contained"

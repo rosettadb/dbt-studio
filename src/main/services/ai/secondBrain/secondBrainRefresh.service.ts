@@ -215,9 +215,8 @@ const operationZodSchema: z.ZodType<SecondBrainRefreshProposal> = z.object({
 // Present a shallow AI SDK Schema to generateObject. Passing the nested Zod
 // type directly makes TypeScript recursively infer the entire provider/schema
 // result graph and can trigger TS2589 in the editor language service.
-const operationSchema: Schema<SecondBrainRefreshProposal> = zodSchema(
-  operationZodSchema as any,
-) as any as Schema<SecondBrainRefreshProposal>;
+const operationSchema: Schema<SecondBrainRefreshProposal> =
+  zodSchema<SecondBrainRefreshProposal>(operationZodSchema);
 
 const stableJson = (value: unknown): string => {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
@@ -1142,26 +1141,17 @@ export default class SecondBrainRefreshService {
   private async collectNotebookBatch(
     abortSignal?: AbortSignal,
   ): Promise<SecondBrainSourceBatch> {
-    const [connections, icebergInstances] = await Promise.all([
-      this.loadConnections(true),
-      this.listIcebergInstances(),
-    ]);
-    const notebookConnections = [
-      ...connections.map((connection) => connection.id),
-      ...icebergInstances
-        .filter((instance) => instance.sqlAvailable)
-        .map((instance) => `iceberg-${instance.id}`),
-    ];
+    const connections = await this.loadConnections(true);
     const items: SecondBrainEvidenceItem[] = [];
     let truncated = false;
-    for (const connectionId of notebookConnections) {
+    for (const connection of connections) {
       assertNotCancelled(abortSignal);
       let notebooks;
       try {
-        notebooks = await this.listNotebooks(connectionId);
+        notebooks = await this.listNotebooks(connection.id);
       } catch (error) {
         warnRefresh('notebook-source-skipped', {
-          connectionId,
+          connectionId: connection.id,
           code: error instanceof Error ? error.name : 'UNKNOWN',
         });
         continue;
@@ -1181,18 +1171,18 @@ export default class SecondBrainRefreshService {
           description: notebook.description
             ? redactSecondBrainEvidence(notebook.description).slice(0, 500)
             : undefined,
-          connectionId,
+          connectionId: connection.id,
           cellCount: notebook.cellCount,
           cells: projectedCells,
         };
         items.push({
           sourceId: 'notebooks',
           sourceKind: 'notebook',
-          stableId: `${connectionId}:${notebook.id}`,
+          stableId: `${connection.id}:${notebook.id}`,
           updatedAt: notebook.updatedAt,
           contentHash: hashValue(projection),
-          scope: { connectionId, notebookId: notebook.id },
-          provenance: `notebook:${connectionId}:${notebook.id}`,
+          scope: { connectionId: connection.id, notebookId: notebook.id },
+          provenance: `notebook:${connection.id}:${notebook.id}`,
           projection,
           truncated: notebook.cells.length > projectedCells.length,
         });

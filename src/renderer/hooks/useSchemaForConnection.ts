@@ -5,7 +5,7 @@
 
 import { useQuery } from 'react-query';
 import { connectorsServices } from '../services';
-import { getIcebergNotebookTables } from '../services/iceberg.service';
+import { getIcebergSqlTables } from '../services/iceberg.service';
 import { DuckLakeService } from '../services/duckLake.service';
 import { Table } from '../../types/backend';
 import { DuckLakeSchemaInfo } from '../../types/duckLake';
@@ -26,7 +26,7 @@ export function useSchemaForConnection(connectionId: string | undefined) {
 
       if (connectionId.startsWith('iceberg-')) {
         return {
-          tables: await getIcebergNotebookTables(connectionId),
+          tables: await getIcebergSqlTables(connectionId),
           duckLakeSchema: null,
           isDuckLake: false,
         };

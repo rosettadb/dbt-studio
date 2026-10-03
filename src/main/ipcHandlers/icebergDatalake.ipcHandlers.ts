@@ -46,10 +46,6 @@ export const registerIcebergDatalakeHandlers = () => {
     IcebergDatalakeService.testInstanceConnection(id),
   );
 
-  ipcMain.handle('iceberg:sqlCapability', (_e, id: string) =>
-    IcebergDatalakeService.getSqlCapability(id),
-  );
-
   ipcMain.handle('iceberg:sqlSchema', (_e, id: string) =>
     IcebergDatalakeService.getSqlSchema(id),
   );

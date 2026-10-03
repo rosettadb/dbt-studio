@@ -4,10 +4,6 @@
  */
 
 import { ipcMain } from 'electron';
-import type {
-  NotebookExecutionOptions,
-  NotebookRunAllCell,
-} from '../../types/notebooks';
 import { NotebooksService } from '../services/notebooks.service';
 
 export function registerNotebooksHandlers() {
@@ -123,7 +119,6 @@ export function registerNotebooksHandlers() {
       sql: string,
       limit?: number,
       offset?: number,
-      options?: NotebookExecutionOptions,
     ) => {
       return NotebooksService.runCell(
         connectionId,
@@ -132,7 +127,6 @@ export function registerNotebooksHandlers() {
         sql,
         limit,
         offset,
-        options,
       );
     },
   );
@@ -163,18 +157,9 @@ export function registerNotebooksHandlers() {
   // Run all cells
   ipcMain.handle(
     'notebooks:runAll',
-    async (
-      _event,
-      connectionId: string,
-      notebookId: string,
-      cellRun?: NotebookRunAllCell,
-    ) => {
-      return NotebooksService.runAllCells(connectionId, notebookId, cellRun);
+    async (_event, connectionId: string, notebookId: string) => {
+      return NotebooksService.runAllCells(connectionId, notebookId);
     },
-  );
-
-  ipcMain.handle('notebooks:cancelIcebergCell', (_event, executionId: string) =>
-    NotebooksService.cancelIcebergCell(executionId),
   );
 
   // List archived notebooks

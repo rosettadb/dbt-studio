@@ -22,7 +22,6 @@ import type {
   IcebergImportFileFormat,
   IcebergTableOperationResult,
   IcebergNamespaceOperationResult,
-  IcebergSqlCapability,
   IcebergSqlExecutionParams,
   IcebergSqlExecutionResult,
   IcebergSqlSchemaInfo,
@@ -70,11 +69,6 @@ export const listIcebergStorageBuckets = (
 
 export const testIcebergInstance = (id: string): Promise<IcebergTestResult> =>
   window.electron.ipcRenderer.invoke('iceberg:testInstance', id);
-
-export const getIcebergSqlCapability = (
-  id: string,
-): Promise<IcebergSqlCapability> =>
-  window.electron.ipcRenderer.invoke('iceberg:sqlCapability', id);
 
 export const getIcebergSqlSchema = (
   id: string,
@@ -238,8 +232,8 @@ export const executeConfirmedIcebergSql = async (
   });
 };
 
-/** Shared Notebook schema adapter; identifiers stay separate until SQL insertion. */
-export const getIcebergNotebookTables = async (
+/** Maps the attached catalog schema to the shared Table model (Analytics). */
+export const getIcebergSqlTables = async (
   connectionId: string,
 ): Promise<Table[]> => {
   const schema = await getIcebergSqlSchema(connectionId.slice(8));
@@ -265,6 +259,7 @@ export const getIcebergNotebookTables = async (
     })),
   );
 };
+
 export const icebergQualifiedName = (...parts: string[]) =>
   ['iceberg', ...parts]
     .map((part) =>

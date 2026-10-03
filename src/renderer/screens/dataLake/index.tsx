@@ -12,7 +12,6 @@ import {
   Alert,
   CircularProgress,
 } from '@mui/material';
-import { Close, Delete } from '@mui/icons-material';
 import { useLocation, useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { AppLayout } from '../../layouts';
@@ -669,37 +668,17 @@ const DataLake: React.FC = () => {
       >
         <DialogTitle>Delete Iceberg Instance</DialogTitle>
         <DialogContent>
-          <DialogContentText component="div">
+          <DialogContentText>
             Delete Iceberg instance <strong>{icebergDeleteTarget?.name}</strong>
-            ?
-            <Box component="ul" sx={{ pl: 3, mb: 0 }}>
-              <Box component="li" sx={{ mb: 0.75 }}>
-                Only the Rosetta DBT Studio connection to this Iceberg catalog
-                will be removed.
-              </Box>
-              <Box component="li" sx={{ mb: 0.75 }}>
-                Instance-specific catalog credentials will be removed from
-                Keytar.
-              </Box>
-              <Box component="li" sx={{ mb: 0.75 }}>
-                The Iceberg catalog, namespaces, tables, snapshots, and data
-                files will not be changed.
-              </Box>
-              <Box component="li">
-                The Cloud Explorer connection, bucket, and stored cloud
-                credentials will not be changed. You can connect to this Iceberg
-                catalog again later.
-              </Box>
-            </Box>
+            ? This cannot be undone. Keytar credentials for this instance will
+            also be removed.
           </DialogContentText>
         </DialogContent>
         <DialogActions>
           <Button
             onClick={() => setIcebergDeleteTarget(null)}
             color="inherit"
-            variant="outlined"
             disabled={deleteIcebergMutation.isLoading}
-            startIcon={<Close />}
           >
             Cancel
           </Button>
@@ -711,12 +690,10 @@ const DataLake: React.FC = () => {
             startIcon={
               deleteIcebergMutation.isLoading ? (
                 <CircularProgress size={16} color="inherit" />
-              ) : (
-                <Delete />
-              )
+              ) : undefined
             }
           >
-            {deleteIcebergMutation.isLoading ? 'Deleting…' : 'Delete Instance'}
+            {deleteIcebergMutation.isLoading ? 'Deleting…' : 'Delete'}
           </Button>
         </DialogActions>
       </Dialog>

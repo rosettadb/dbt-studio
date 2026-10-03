@@ -560,9 +560,12 @@ describe('IcebergDatalakeService DuckDB Iceberg lifecycle', () => {
   });
 
   it('preserves cancellation during attachment even if interrupt does not reject', async () => {
+    let cancelledDuringAttach: boolean | undefined;
     mockRun.mockImplementation(async (sql: string) => {
-      if (sql.startsWith('ATTACH '))
-        expect(IcebergDatalakeService.cancelSql('attaching-query')).toBe(true);
+      if (sql.startsWith('ATTACH ')) {
+        cancelledDuringAttach =
+          IcebergDatalakeService.cancelSql('attaching-query');
+      }
     });
     const callback = jest.fn();
     await expect(
@@ -572,6 +575,7 @@ describe('IcebergDatalakeService DuckDB Iceberg lifecycle', () => {
         callback,
       ),
     ).rejects.toThrow('ICEBERG_SQL_CANCELLED');
+    expect(cancelledDuringAttach).toBe(true);
     expect(mockInterrupt).toHaveBeenCalled();
     expect(callback).not.toHaveBeenCalled();
     expect(mockCloseConnection).toHaveBeenCalled();
