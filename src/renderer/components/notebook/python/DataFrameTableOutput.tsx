@@ -109,11 +109,17 @@ interface DataFrameTableOutputProps {
   info: DataFrameTableInfo;
   /** pandas' own HTML for the same DataFrame, shown by the toggle button. */
   html?: React.ReactNode;
+  /**
+   * Fill the parent's height (fullscreen view): the rows scroll inside and
+   * the pagination footer stays at the bottom.
+   */
+  fillHeight?: boolean;
 }
 
 export const DataFrameTableOutput: React.FC<DataFrameTableOutputProps> = ({
   info,
   html,
+  fillHeight = false,
 }) => {
   const [showHtml, setShowHtml] = useState(false);
   const [keyword, setKeyword] = useState('');
@@ -225,6 +231,11 @@ export const DataFrameTableOutput: React.FC<DataFrameTableOutputProps> = ({
         borderColor: 'divider',
         borderRadius: 1,
         overflow: 'hidden',
+        ...(fillHeight && {
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+        }),
       }}
     >
       <Box
@@ -272,7 +283,9 @@ export const DataFrameTableOutput: React.FC<DataFrameTableOutputProps> = ({
         </Typography>
         {toggle}
       </Box>
-      <TableContainer sx={{ maxHeight: 440 }}>
+      <TableContainer
+        sx={fillHeight ? { flex: 1, minHeight: 0 } : { maxHeight: 440 }}
+      >
         <Table size="small" stickyHeader>
           <TableHead>
             <TableRow>

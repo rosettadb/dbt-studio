@@ -304,6 +304,8 @@ interface OutputListProps {
   /** Install pandas into the notebook env and re-run the cell (sql cells). */
   onInstallPandas?: () => void;
   installingPandas?: boolean;
+  /** Fullscreen: stretch a single DataFrame output to the full height. */
+  fillHeight?: boolean;
 }
 
 /** The outputs themselves, one under the other. */
@@ -311,7 +313,10 @@ const OutputList: React.FC<OutputListProps> = ({
   outputs,
   onInstallPandas,
   installingPandas,
+  fillHeight = false,
 }) => {
+  // Fullscreen: a single DataFrame output takes all the available height.
+  const fill = fillHeight && outputs.length === 1;
   const ansi = useAnsi();
   const theme = useTheme();
   return (
@@ -389,7 +394,12 @@ const OutputList: React.FC<OutputListProps> = ({
             return (
               <Box
                 key={key}
-                sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 1,
+                  ...(fill && { flex: 1, minHeight: 0 }),
+                }}
               >
                 {fallback && (
                   <PandasMissingNotice
@@ -400,9 +410,12 @@ const OutputList: React.FC<OutputListProps> = ({
                 )}
                 {/* No `Out[n]:` label (as in Colab): every output starts at
                         the same left edge; the cell gutter shows the count. */}
-                <Box sx={{ minWidth: 0 }}>
+                <Box
+                  sx={{ minWidth: 0, ...(fill && { flex: 1, minHeight: 0 }) }}
+                >
                   {dataFrame ? (
                     <DataFrameTableOutput
+                      fillHeight={fill}
                       info={dataFrame}
                       html={
                         typeof html === 'string' ? (
@@ -425,7 +438,7 @@ const OutputList: React.FC<OutputListProps> = ({
   );
 };
 
-interface PythonCellOutputsProps extends OutputListProps {
+interface PythonCellOutputsProps extends Omit<OutputListProps, 'fillHeight'> {
   /** Outputs are hidden behind a one-line summary (Colab-style). */
   collapsed?: boolean;
   /** Clicking the "N outputs hidden" summary shows the outputs again. */
@@ -590,8 +603,18 @@ export const PythonCellOutputs: React.FC<PythonCellOutputsProps> = ({
             </IconButton>
           </Tooltip>
         </Box>
-        <Box sx={{ p: 2, flex: 1, overflow: 'auto' }}>
+        <Box
+          sx={{
+            p: 2,
+            flex: 1,
+            minHeight: 0,
+            overflow: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
           <OutputList
+            fillHeight
             outputs={outputs}
             onInstallPandas={onInstallPandas}
             installingPandas={installingPandas}
