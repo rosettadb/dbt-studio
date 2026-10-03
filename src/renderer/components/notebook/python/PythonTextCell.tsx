@@ -6,6 +6,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Box, TextField, Typography, useTheme } from '@mui/material';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -35,6 +36,12 @@ interface PythonTextCellProps {
   /** Increment to leave the preview and show the raw markdown for editing */
   editRequest?: number;
   onEditingChange?: (editing: boolean) => void;
+  /**
+   * Cell header element the formatting toolbar is rendered into (same row as
+   * the cell type badge). `null` while the header is mounting. Without this
+   * prop the toolbar sits above the textarea.
+   */
+  toolbarContainer?: HTMLElement | null;
 }
 
 export const PythonTextCell: React.FC<PythonTextCellProps> = ({
@@ -47,6 +54,7 @@ export const PythonTextCell: React.FC<PythonTextCellProps> = ({
   renderRequest,
   editRequest,
   onEditingChange,
+  toolbarContainer,
 }) => {
   const theme = useTheme();
   const [isEditing, setIsEditing] = useState(Boolean(startEditing) || !source);
@@ -96,9 +104,19 @@ export const PythonTextCell: React.FC<PythonTextCellProps> = ({
   );
 
   if (isEditing) {
+    const inHeader = toolbarContainer !== undefined;
+    const toolbar = (
+      <MarkdownToolbar onFormat={handleFormat} inline={inHeader} />
+    );
+    let toolbarNode: React.ReactNode = toolbar;
+    if (inHeader) {
+      toolbarNode = toolbarContainer
+        ? createPortal(toolbar, toolbarContainer)
+        : null;
+    }
     return (
       <Box>
-        <MarkdownToolbar onFormat={handleFormat} />
+        {toolbarNode}
         <TextField
           inputRef={inputRef}
           multiline
