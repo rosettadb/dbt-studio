@@ -23,8 +23,10 @@ import ConnectorsService from './connectors.service';
 import DuckLakeService from './duckLake.service';
 import NotebookEnvService from './notebookEnv.service';
 import NotebookKernelService from './notebookKernel.service';
-import { SQL_FALLBACK_MIME } from '../../types/pythonNotebooks';
+import { DATAFRAME_MIME, SQL_FALLBACK_MIME } from '../../types/pythonNotebooks';
 import type {
+  DataFrameCellValue,
+  DataFrameTableInfo,
   CreatePythonNotebookInput,
   ExecuteCellOptions,
   ExecuteCellResult,
@@ -372,9 +374,91 @@ function renderFallbackTable(
   return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>${note}`;
 }
 
+/** Leading whitespace, `--` line comments and block comments. */
+const LEADING_SQL_COMMENTS = /^(?:\s+|--[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/)+/;
+/** DML inside a WITH (e.g. Postgres data-modifying CTEs) can't be wrapped. */
+const SQL_DML_KEYWORD = /\b(?:insert|update|delete|merge)\b/i;
+
+/**
+ * Wrap a row-returning statement so the database sends back at most
+ * `maxRows` rows: `SELECT * FROM (<query>) AS _rs LIMIT <maxRows>`.
+ *
+ * Only single SELECT / WITH statements are wrapped. Anything else (DDL, DML,
+ * SHOW, DESCRIBE, PRAGMA, several statements) is returned unchanged. The
+ * user's own ORDER BY and LIMIT stay inside the subquery, so aliases they
+ * reference keep working.
+ */
+export function boundSqlQuery(query: string, maxRows: number): string {
+  let body = query.trim();
+  // Drop trailing semicolons and trailing full-line `--` comments.
+  let previous = '';
+  while (previous !== body) {
+    previous = body;
+    body = body
+      .replace(/\n[ \t]*--[^\n]*$/, '')
+      .replace(/;\s*$/, '')
+      .trimEnd();
+  }
+  const statement = body.replace(LEADING_SQL_COMMENTS, '');
+  if (!/^(?:select|with)\b/i.test(statement) || body.includes(';')) {
+    return query;
+  }
+  if (/^with\b/i.test(statement) && SQL_DML_KEYWORD.test(statement)) {
+    return query;
+  }
+  const limit = Math.max(1, Math.floor(maxRows));
+  // Newlines keep a trailing `-- comment` from swallowing the closing paren.
+  return `SELECT * FROM (\n${body}\n) AS _rs LIMIT ${limit}`;
+}
+
 /** A Python string literal holding `value` (JSON escapes are valid in Python). */
 function pyString(value: string): string {
   return JSON.stringify(value);
+}
+
+/** Same limits as the kernel's DataFrame formatter (notebook_kernel_bridge.py). */
+const TABLE_MAX_ROWS = 20_000;
+const TABLE_MAX_CHARS = 5_000_000;
+
+function tableCellValue(value: unknown): DataFrameCellValue {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : String(value);
+  }
+  if (typeof value === 'string' || typeof value === 'boolean') return value;
+  return cellText(value);
+}
+
+/**
+ * Interactive-table payload (DATAFRAME_MIME) for a SQL result shown without
+ * pandas, so the cell gets the same paginated table as a DataFrame would.
+ * No dtypes are known here, so they are left empty.
+ */
+export function buildFallbackTable(
+  columns: string[],
+  rows: Record<string, unknown>[],
+): DataFrameTableInfo {
+  let rowCount = Math.min(rows.length, TABLE_MAX_ROWS);
+  const data = rows
+    .slice(0, rowCount)
+    .map((row) => columns.map((column) => tableCellValue(row[column])));
+  while (
+    rowCount > 100 &&
+    JSON.stringify(data.slice(0, rowCount)).length > TABLE_MAX_CHARS
+  ) {
+    rowCount = Math.floor(rowCount / 2);
+  }
+  return {
+    version: 1,
+    columns,
+    dtypes: columns.map(() => ''),
+    indexName: '',
+    index: Array.from({ length: rowCount }, (_, position) => position),
+    data: data.slice(0, rowCount),
+    rowCount,
+    totalRows: rows.length,
+    totalColumns: columns.length,
+  };
 }
 
 /**
@@ -392,6 +476,8 @@ function buildSqlInjectionCode(
   const fallback = {
     'text/html': renderFallbackTable(columns, rows),
     [SQL_FALLBACK_MIME]: { variable, rowCount: rows.length },
+    // Rendered as the interactive table (the HTML stays for Jupyter).
+    [DATAFRAME_MIME]: buildFallbackTable(columns, rows),
   };
   return [
     'import json as _rs_json, importlib as _rs_importlib',
@@ -902,9 +988,23 @@ export default class PythonNotebooksService {
       return fail(`"${variable}" is not a valid Python variable name`);
     }
 
+    // Fetch one row more than the cap so truncation can be detected without
+    // loading the whole result into the main process.
+    const bounded = boundSqlQuery(query, MAX_SQL_ROWS + 1);
     let result: SqlQueryResult;
     try {
-      result = await runSqlQuery(connectionId, query);
+      result = await runSqlQuery(connectionId, bounded).catch(
+        (error): SqlQueryResult => ({
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+      // Some engines reject the wrapper (MySQL refuses duplicate column names
+      // in a derived table, e.g. `SELECT *` over a join). Fall back to the
+      // query as written so the cell behaves as it did before.
+      if (bounded !== query && (!result.success || result.error)) {
+        result = await runSqlQuery(connectionId, query);
+      }
     } catch (error) {
       return fail(error instanceof Error ? error.message : String(error));
     }
@@ -954,7 +1054,7 @@ export default class PythonNotebooksService {
       kernelResult.outputs.unshift({
         output_type: 'stream',
         name: 'stderr',
-        text: `Result truncated to the first ${MAX_SQL_ROWS} of ${allRows.length} rows.\n`,
+        text: `Result truncated to the first ${MAX_SQL_ROWS.toLocaleString('en-US')} rows. The query returned more; filter or aggregate in SQL to work with all of them.\n`,
       });
     }
     return kernelResult;

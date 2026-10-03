@@ -385,9 +385,10 @@ describe('PythonNotebooksService', () => {
       { cellType: 'sql', variable: 'orders' },
     );
     expect(result.status).toBe('ok');
+    // The query is wrapped so the database returns at most cap + 1 rows
     expect(executeQueryForConnection).toHaveBeenCalledWith({
       connectionId,
-      query: 'select * from t',
+      query: 'SELECT * FROM (\nselect * from t\n) AS _rs LIMIT 100001',
     });
 
     const [, cellId, code] = (kernelService.execute as jest.Mock).mock.calls[0];
@@ -397,6 +398,8 @@ describe('PythonNotebooksService', () => {
     );
     expect(code).toContain('orders = _rs_rows');
     expect(code).toContain('application/vnd.rosetta.sql-fallback+json');
+    // Without pandas the fallback still carries the interactive-table data
+    expect(code).toContain('application/vnd.rosetta.dataframe+json');
     // Driver values are made JSON-safe before they reach the kernel
     expect(code).toContain('2026-01-02T03:04:05.000Z');
     expect(code).toContain('\\"big\\":42');
@@ -416,7 +419,7 @@ describe('PythonNotebooksService', () => {
       .catch(() => undefined);
     expect(duckLakeExecuteQuery).toHaveBeenCalledWith({
       instanceId: 'inst',
-      query: 'select 1 as n',
+      query: 'SELECT * FROM (\nselect 1 as n\n) AS _rs LIMIT 100001',
     });
   });
 
@@ -429,10 +432,16 @@ describe('PythonNotebooksService', () => {
     (kernelService.execute as jest.Mock).mockClear();
     executeQueryForConnection.mockClear();
 
-    executeQueryForConnection.mockResolvedValueOnce({
-      success: false,
-      error: 'relation "nope" does not exist',
-    });
+    // The bounded query fails, then the query as written is retried once
+    executeQueryForConnection
+      .mockResolvedValueOnce({
+        success: false,
+        error: 'relation "nope" does not exist',
+      })
+      .mockResolvedValueOnce({
+        success: false,
+        error: 'relation "nope" does not exist',
+      });
     const failed = await service.executeCell(
       connectionId,
       notebook.id,
@@ -455,7 +464,11 @@ describe('PythonNotebooksService', () => {
       { cellType: 'sql', variable: 'not valid' },
     );
     expect(badName.status).toBe('error');
-    expect(executeQueryForConnection).toHaveBeenCalledTimes(1);
+    expect(executeQueryForConnection).toHaveBeenCalledTimes(2);
+    expect(executeQueryForConnection).toHaveBeenLastCalledWith({
+      connectionId,
+      query: 'select * from nope',
+    });
 
     executeQueryForConnection.mockResolvedValueOnce({
       success: true,
@@ -475,6 +488,149 @@ describe('PythonNotebooksService', () => {
       text: 'Statement executed. 3 row(s) affected.\n',
     });
     expect(kernelService.execute).not.toHaveBeenCalled();
+  });
+
+  it('caps SQL results at 100,000 rows and falls back when the wrapper is rejected', async () => {
+    const service = await load();
+    const kernelService = (
+      await import('../../../../src/main/services/notebookKernel.service')
+    ).default;
+    const [notebook] = await service.listNotebooks(connectionId);
+    (kernelService.execute as jest.Mock).mockClear();
+    executeQueryForConnection.mockClear();
+
+    executeQueryForConnection.mockResolvedValueOnce({
+      success: true,
+      fields: [{ name: 'i' }],
+      data: Array.from({ length: 100_001 }, (_, i) => ({ i })),
+    });
+    const capped = await service.executeCell(
+      connectionId,
+      notebook.id,
+      'cell-sql',
+      'select i from big',
+      { cellType: 'sql', variable: 'df' },
+    );
+    expect(capped.outputs[0]).toMatchObject({
+      output_type: 'stream',
+      name: 'stderr',
+      text: expect.stringContaining('first 100,000 rows'),
+    });
+    const [, , code] = (kernelService.execute as jest.Mock).mock.calls[0];
+    expect(code).toContain('\\"i\\":99999');
+    expect(code).not.toContain('\\"i\\":100000');
+
+    // e.g. MySQL: duplicate column names in the derived table
+    executeQueryForConnection
+      .mockResolvedValueOnce({
+        success: false,
+        error: "Duplicate column name 'id'",
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        fields: [{ name: 'id' }],
+        data: [{ id: 1 }],
+      });
+    const fallback = await service.executeCell(
+      connectionId,
+      notebook.id,
+      'cell-sql',
+      'select * from a join b on a.id = b.id',
+      { cellType: 'sql', variable: 'df' },
+    );
+    expect(fallback.status).toBe('ok');
+    expect(executeQueryForConnection).toHaveBeenLastCalledWith({
+      connectionId,
+      query: 'select * from a join b on a.id = b.id',
+    });
+  });
+
+  describe('buildFallbackTable', () => {
+    it('turns rows into the interactive-table payload', async () => {
+      const { buildFallbackTable } = await import(
+        '../../../../src/main/services/pythonNotebooks.service'
+      );
+      const info = buildFallbackTable(
+        ['id', 'first_order', 'name'],
+        [
+          { id: 1, first_order: { days: 17532 }, name: 'Michael' },
+          { id: 2, first_order: null, name: undefined },
+        ],
+      );
+      expect(info).toMatchObject({
+        columns: ['id', 'first_order', 'name'],
+        dtypes: ['', '', ''],
+        index: [0, 1],
+        data: [
+          [1, '{"days":17532}', 'Michael'],
+          [2, null, null],
+        ],
+        rowCount: 2,
+        totalRows: 2,
+        totalColumns: 3,
+      });
+    });
+
+    it('caps rows at 20,000', async () => {
+      const { buildFallbackTable } = await import(
+        '../../../../src/main/services/pythonNotebooks.service'
+      );
+      const rows = Array.from({ length: 25_000 }, (_, i) => ({ i }));
+      const info = buildFallbackTable(['i'], rows);
+      expect(info.rowCount).toBe(20_000);
+      expect(info.totalRows).toBe(25_000);
+    });
+  });
+
+  describe('boundSqlQuery', () => {
+    // Loaded lazily, like the service, so the mocks above are in place.
+    let boundSqlQuery: (query: string, maxRows: number) => string;
+    beforeAll(async () => {
+      ({ boundSqlQuery } = await import(
+        '../../../../src/main/services/pythonNotebooks.service'
+      ));
+    });
+
+    const wrap = (sql: string) => `SELECT * FROM (\n${sql}\n) AS _rs LIMIT 11`;
+
+    it('wraps single SELECT and WITH statements', () => {
+      expect(boundSqlQuery('select * from t', 11)).toBe(
+        wrap('select * from t'),
+      );
+      expect(
+        boundSqlQuery('  WITH x AS (select 1) select * from x;  ', 11),
+      ).toBe(wrap('WITH x AS (select 1) select * from x'));
+    });
+
+    it('keeps the user ORDER BY and LIMIT inside the subquery', () => {
+      const sql = 'select o.id from orders o order by o.id limit 5';
+      expect(boundSqlQuery(sql, 11)).toBe(wrap(sql));
+    });
+
+    it('handles leading and trailing comments', () => {
+      expect(boundSqlQuery('-- top\n/* note */ select 1\n-- end', 11)).toBe(
+        wrap('-- top\n/* note */ select 1'),
+      );
+      // A trailing comment on the code line can't swallow the closing paren
+      expect(boundSqlQuery('select 1 -- why', 11)).toBe(
+        wrap('select 1 -- why'),
+      );
+    });
+
+    it('leaves everything else unchanged', () => {
+      [
+        'update t set x = 1',
+        'insert into t values (1)',
+        'create table t as select 1',
+        'show tables',
+        'describe t',
+        'pragma table_info(t)',
+        'select 1; select 2',
+        'with x as (delete from t returning *) select * from x',
+      ].forEach((sql) => {
+        expect(boundSqlQuery(sql, 11)).toBe(sql);
+      });
+    });
   });
 
   it('deletes the file, the kernel and the environment together', async () => {

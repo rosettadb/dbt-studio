@@ -222,6 +222,11 @@ export const PythonNotebookEditor = forwardRef<
   );
   const [freshCellId, setFreshCellId] = useState<string | null>(null);
   const [isRunningAll, setIsRunningAll] = useState(false);
+  // Cells whose execute request is still in flight. Live kernel events can
+  // arrive after the request's final result (separate IPC channels, no
+  // ordering guarantee); events for cells that are not running are ignored so
+  // a late output isn't appended on top of the final list.
+  const runningCellsRef = useRef(new Set<string>());
   const [packagesOpen, setPackagesOpen] = useState(false);
   const [versionDialogOpen, setVersionDialogOpen] = useState(false);
   const [newVersion, setNewVersion] = useState('');
@@ -407,6 +412,7 @@ export const PythonNotebookEditor = forwardRef<
         );
         break;
       case 'output':
+        if (!runningCellsRef.current.has(event.cellId)) break;
         setCells((prev) => {
           const next = prev.map((c) =>
             c.id === event.cellId
@@ -418,6 +424,7 @@ export const PythonNotebookEditor = forwardRef<
         });
         break;
       case 'clear_output':
+        if (!runningCellsRef.current.has(event.cellId)) break;
         setCells((prev) => {
           const next = prev.map((c) =>
             c.id === event.cellId ? { ...c, outputs: [] } : c,
@@ -632,6 +639,7 @@ export const PythonNotebookEditor = forwardRef<
         return next;
       });
 
+      runningCellsRef.current.add(cellId);
       try {
         const result = await executeCell.mutateAsync({
           connectionId,
@@ -643,6 +651,8 @@ export const PythonNotebookEditor = forwardRef<
               ? { cellType: 'sql', variable }
               : undefined,
         });
+        // From here on the final result is the source of truth.
+        runningCellsRef.current.delete(cellId);
         setCells((prev) => {
           const next = prev.map((c) =>
             c.id === cellId
@@ -662,6 +672,7 @@ export const PythonNotebookEditor = forwardRef<
         toast.error(`Execution failed: ${message}`);
         return false;
       } finally {
+        runningCellsRef.current.delete(cellId);
         setActiveCells((prev) => prev.filter((id) => id !== cellId));
       }
     },
@@ -1040,7 +1051,15 @@ export const PythonNotebookEditor = forwardRef<
       )}
 
       <Box
-        sx={{ flex: 1, minHeight: 0, overflowY: 'auto', px: 3, py: 2 }}
+        // Extra bottom space so the last cell isn't stuck to the window edge
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+          px: 3,
+          pt: 2,
+          pb: 16,
+        }}
         onDragOver={handleSchemaDragOver}
         onDrop={handleSchemaDrop}
       >
@@ -1137,6 +1156,8 @@ export const PythonNotebookEditor = forwardRef<
                             sqlCompletions={sqlCompletions}
                           />
                           <CellInsertBar
+                            // Always visible after the last cell
+                            persistent={index === cells.length - 1}
                             onAddCode={() => insertCell('code', index + 1)}
                             onAddSql={() => insertCell('sql', index + 1)}
                             onAddText={() => insertCell('markdown', index + 1)}

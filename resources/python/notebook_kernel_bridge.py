@@ -59,6 +59,118 @@ except Exception as exc:  # pragma: no cover - reported to the app
     sys.exit(2)
 
 
+# --------------------------------------------------------------------------
+# Kernel setup, run once per kernel start (silently: no output, no history,
+# no execution count). It registers a display formatter so pandas DataFrames
+# also carry their rows as JSON (KERNEL_DATAFRAME_MIME). The app renders that
+# as an interactive table with pagination, sort and search. pandas is matched
+# lazily by type name, so it is never imported here and envs without pandas
+# are unaffected. Any failure inside the formatter falls back to pandas' own
+# HTML output.
+# --------------------------------------------------------------------------
+KERNEL_DATAFRAME_MIME = "application/vnd.rosetta.dataframe+json"
+
+KERNEL_SETUP_CODE = r"""
+def _rosetta_setup():
+    import json
+    import math
+
+    from IPython import get_ipython
+    from IPython.core.formatters import BaseFormatter
+    from traitlets import ObjectName, Unicode
+
+    mime = "%(mime)s"
+    max_rows = 20000
+    max_cols = 50
+    max_chars = 5000000
+    max_safe_int = 2 ** 53
+
+    class RosettaDataFrameFormatter(BaseFormatter):
+        format_type = Unicode(mime)
+        print_method = ObjectName("_repr_rosetta_dataframe_")
+        _return_type = dict
+
+    def label(value):
+        if isinstance(value, tuple):
+            return " / ".join(str(part) for part in value)
+        return str(value)
+
+    def column_values(series):
+        # JSON-safe values: numbers and booleans stay typed, everything else
+        # is shown the way str() prints it; missing values become None.
+        kind = series.dtype.kind
+        missing = series.isna().tolist()
+        if kind in "iubf":
+            values = [
+                None if m else v
+                for v, m in zip(series.astype(object).tolist(), missing)
+            ]
+            if kind == "f":
+                return [
+                    str(v) if isinstance(v, float) and not math.isfinite(v) else v
+                    for v in values
+                ]
+            if kind in "iu":
+                return [
+                    str(v) if isinstance(v, int) and abs(v) > max_safe_int else v
+                    for v in values
+                ]
+            return values
+        return [
+            None if m else v for v, m in zip(series.astype(str).tolist(), missing)
+        ]
+
+    def format_dataframe(df):
+        try:
+            total_rows, total_cols = df.shape
+            if total_cols > max_cols:
+                return None
+            rows = min(total_rows, max_rows)
+            part = df.iloc[:rows]
+            columns = [column_values(part.iloc[:, i]) for i in range(total_cols)]
+            index = column_values(part.index.to_series().reset_index(drop=True))
+            index_name = " / ".join(
+                str(name) for name in part.index.names if name is not None
+            )
+            while True:
+                if total_cols:
+                    data = [list(row) for row in zip(*(c[:rows] for c in columns))]
+                else:
+                    data = [[] for _ in range(rows)]
+                payload = {
+                    "version": 1,
+                    "columns": [label(c) for c in part.columns],
+                    "dtypes": [str(t) for t in part.dtypes],
+                    "indexName": index_name,
+                    "index": index[:rows],
+                    "data": data,
+                    "rowCount": rows,
+                    "totalRows": int(total_rows),
+                    "totalColumns": int(total_cols),
+                }
+                text = json.dumps(payload, allow_nan=False)
+                if len(text) <= max_chars or rows <= 100:
+                    return payload
+                rows //= 2
+        except Exception:
+            return None
+
+    shell = get_ipython()
+    if shell is None:
+        return
+    formatter = RosettaDataFrameFormatter(parent=shell.display_formatter)
+    shell.display_formatter.formatters[mime] = formatter
+    # pandas < 3 reports DataFrame.__module__ as "pandas.core.frame",
+    # pandas >= 3 as "pandas".
+    for module in ("pandas.core.frame", "pandas"):
+        formatter.for_type_by_name(module, "DataFrame", format_dataframe)
+
+
+_rosetta_setup()
+del _rosetta_setup
+""" % {"mime": KERNEL_DATAFRAME_MIME}
+
+
 def _join(value):
     if isinstance(value, list):
         return "".join(value)
@@ -91,6 +203,7 @@ class Bridge:
         self.kc = self.km.client()
         self.kc.start_channels()
         self.kc.wait_for_ready(timeout=120)
+        self._run_setup()
         info = {}
         try:
             reply = self.kc.kernel_info(reply=True, timeout=30)
@@ -110,6 +223,26 @@ class Bridge:
         ]
         for thread in self.threads:
             thread.start()
+
+    def _run_setup(self):
+        """Run KERNEL_SETUP_CODE once. Failures are logged, never fatal."""
+        try:
+            reply = self.kc.execute_interactive(
+                KERNEL_SETUP_CODE,
+                silent=True,
+                store_history=False,
+                allow_stdin=False,
+                timeout=30,
+                output_hook=lambda _msg: None,
+            )
+            content = reply.get("content", {})
+            if content.get("status") != "ok":
+                log(
+                    "kernel setup failed: %s: %s"
+                    % (content.get("ename"), content.get("evalue"))
+                )
+        except Exception as exc:  # pragma: no cover - logged to the app
+            log("kernel setup failed: %s" % exc)
 
     # ------------------------------------------------------------ execution
     def execute(self, request_id, code):
