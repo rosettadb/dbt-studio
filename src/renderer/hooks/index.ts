@@ -15,6 +15,7 @@ import useTabManager from './useTabManager';
 import useDuckLakeConnection from './useDuckLakeConnection';
 import { useMonacoAutocomplete } from './useMonacoAutocomplete';
 import { useSchemaForConnection } from './useSchemaForConnection';
+import { useSchemaObjectDrop } from './useSchemaObjectDrop';
 import { useNotebookConnectionState } from './useNotebookConnectionState';
 import { useNotebookSidebarState } from './useNotebookSidebarState';
 import { useToolMode } from './useToolMode';
@@ -42,6 +43,7 @@ export {
   useDuckLakeConnection,
   useMonacoAutocomplete,
   useSchemaForConnection,
+  useSchemaObjectDrop,
   useNotebookConnectionState,
   useNotebookSidebarState,
   useToolMode,

@@ -18,6 +18,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     dbus dbus-x11 gnome-keyring \
     && rm -rf /var/lib/apt/lists/*
 
+# Chromium system deps baked in so the per-run `playwright install --with-deps`
+# finds them already installed instead of unpacking them on every run. Keep the
+# version in line with the app's package-lock; the entrypoint's --with-deps
+# still covers anything a future Playwright upgrade adds.
+RUN npx -y playwright@1.57.0 install-deps chromium \
+    && rm -rf /var/lib/apt/lists/* /root/.npm
+
 COPY test-entrypoint.sh /usr/local/bin/test-entrypoint.sh
 RUN chmod +x /usr/local/bin/test-entrypoint.sh
 

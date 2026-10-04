@@ -53,6 +53,13 @@ import { AppLayout } from '../../layouts';
 import { utils } from '../../helpers';
 import { SchemaViewContainer, SchemaViewGrid } from './styles';
 import { ErrorMessage, SqlEditor } from '../../components';
+import type { SqlEditorHandle } from '../../components/sqlEditor';
+import { useSchemaTreeContextMenu } from '../../components/schemaTreeViewer/useSchemaTreeContextMenu';
+import type { SchemaTreeNodeRef } from '../../components/schemaTreeViewer/types';
+import {
+  buildRenameColumnStatement,
+  buildRenameTableStatement,
+} from '../../utils/sql/schemaObjectSql';
 import { ChatWindow } from '../../components/chat';
 import { QueryResult } from './queryResult';
 import { ConnectionInput, Table } from '../../../types/backend';
@@ -67,6 +74,8 @@ import {
   useGetConnectionById,
   useGetConnections,
   useDuckLakeInstances,
+  useRenameDuckLakeTable,
+  useRenameDuckLakeColumn,
 } from '../../controllers';
 import { useListIcebergInstances } from '../../controllers/icebergDatalake.controller';
 import { SchemaTreeViewerWithSchema } from './SchemaTreeViewerWithSchema';
@@ -799,6 +808,105 @@ const Sql = () => {
     refetchDuckLakeInstances,
   ]);
 
+  // --- Data tree → editor interactions (context menu) ---
+  const sqlEditorRef = useRef<SqlEditorHandle>(null);
+  const renameDuckLakeTable = useRenameDuckLakeTable();
+  const renameDuckLakeColumn = useRenameDuckLakeColumn();
+
+  const handleSchemaInsertText = useCallback((text: string) => {
+    if (!sqlEditorRef.current?.insertText(text)) {
+      toast.info('Open a SQL editor tab to insert text');
+    }
+  }, []);
+
+  const handleSchemaPreview = useCallback((sql: string) => {
+    if (!sqlEditorRef.current) {
+      toast.info('Open a SQL editor tab to preview data');
+      return;
+    }
+    sqlEditorRef.current.runQuery(sql);
+  }, []);
+
+  // DuckLake tables in the default schema can be renamed through the existing
+  // IPC. Everything else gets an ALTER statement inserted for the user to
+  // review and run — the tree never executes DDL on external databases.
+  const canRenameNatively = useCallback(
+    (node: SchemaTreeNodeRef) =>
+      isDuckLakeConnection &&
+      !!(connectionInput as any)?.instanceId &&
+      (!node.schema || node.schema === 'main'),
+    [isDuckLakeConnection, connectionInput],
+  );
+
+  const describeSchemaRename = useCallback(
+    (node: SchemaTreeNodeRef) =>
+      canRenameNatively(node)
+        ? 'The object is renamed immediately in this DuckLake instance.'
+        : 'A rename statement is inserted into the editor for you to review and run.',
+    [canRenameNatively],
+  );
+
+  const handleSchemaRename = useCallback(
+    (node: SchemaTreeNodeRef, newName: string) => {
+      if (!node.table) return;
+
+      if (canRenameNatively(node)) {
+        const instanceId = (connectionInput as any).instanceId as string;
+        if (node.kind === 'column' && node.column) {
+          renameDuckLakeColumn.mutate(
+            {
+              instanceId,
+              tableName: node.table,
+              oldColumnName: node.column,
+              newColumnName: newName,
+            },
+            { onSuccess: handleRefreshSchema },
+          );
+        } else {
+          renameDuckLakeTable.mutate(
+            { instanceId, oldName: node.table, newName },
+            { onSuccess: handleRefreshSchema },
+          );
+        }
+        return;
+      }
+
+      const ref = { schema: node.schema ?? '', name: node.table };
+      const sql =
+        node.kind === 'column' && node.column
+          ? buildRenameColumnStatement(
+              ref,
+              node.column,
+              newName,
+              connectionInput?.type,
+            )
+          : buildRenameTableStatement(ref, newName, connectionInput?.type);
+
+      if (sqlEditorRef.current?.insertText(sql)) {
+        toast.info('Rename statement inserted. Review it, then run it.');
+      } else {
+        toast.info('Open a SQL editor tab to insert the rename statement');
+      }
+    },
+    [
+      canRenameNatively,
+      connectionInput,
+      renameDuckLakeColumn,
+      renameDuckLakeTable,
+      handleRefreshSchema,
+    ],
+  );
+
+  const { onContextMenu: handleSchemaContextMenu, menu: schemaContextMenu } =
+    useSchemaTreeContextMenu({
+      connectionType: connectionInput?.type,
+      onInsertText: handleSchemaInsertText,
+      onPreviewSql: handleSchemaPreview,
+      onRename: handleSchemaRename,
+      describeRename: describeSchemaRename,
+      onRefresh: handleRefreshSchema,
+    });
+
   const renderSash = () => (
     <Box
       sx={{
@@ -1333,6 +1441,9 @@ const Sql = () => {
                           schemaNames={duckLakeSchemaNames}
                           isLoading={duckLakeSchemaLoading}
                           filter={filter}
+                          connectionId={activeConnectionId}
+                          draggable
+                          onContextMenu={handleSchemaContextMenu}
                         />
                       ))}
                     {activeTab && connectionInput && !isDuckLakeConnection && (
@@ -1346,6 +1457,9 @@ const Sql = () => {
                         schema={activeSchema}
                         isLoading={isLoadingSchema}
                         filter={filter}
+                        connectionId={activeConnectionId}
+                        draggable
+                        onContextMenu={handleSchemaContextMenu}
                         databaseIcon={
                           activeIcebergInstance
                             ? getIcebergCatalogIcon(
@@ -1409,6 +1523,7 @@ const Sql = () => {
               />
             </Box>
           )}
+          {schemaContextMenu}
         </Box>
       }
     >
@@ -1609,7 +1724,13 @@ const Sql = () => {
                           >
                             <SqlEditor
                               key={activeTabId}
+                              ref={sqlEditorRef}
                               completions={completions}
+                              schemaTables={
+                                isDuckLakeConnection
+                                  ? duckLakeTables
+                                  : activeSchema
+                              }
                               connectionInput={
                                 connectionInput as ConnectionInput
                               }
@@ -1705,7 +1826,13 @@ const Sql = () => {
                         >
                           <SqlEditor
                             key={activeTabId}
+                            ref={sqlEditorRef}
                             completions={completions}
+                            schemaTables={
+                              isDuckLakeConnection
+                                ? duckLakeTables
+                                : activeSchema
+                            }
                             connectionInput={connectionInput as ConnectionInput}
                             connectionId={activeTab.connectionId}
                             initialQuery={activeTab.query}
