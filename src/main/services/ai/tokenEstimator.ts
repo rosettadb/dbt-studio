@@ -6,10 +6,17 @@
  * We use 3 chars/token to slightly over-estimate, which is safer for context management.
  *
  * Context window resolution order:
+ *   0. ChatGPT sign-in models (provider 'chatgpt'): their own caps only
  *   1. Live cache populated by fetchAndCacheContextWindows() (called by providerManager on save)
  *   2. Static fallback table below (covers known models at build time)
  *   3. 'default' entry (32K) if nothing matches
  */
+
+import {
+  CHATGPT_CONTEXT_WINDOWS,
+  CHATGPT_INPUT_TOKEN_LIMIT,
+  CHATGPT_PROVIDER_ID,
+} from './chatgpt/chatgptModels';
 
 // ─── Static Fallback Table ────────────────────────────────────────────────────
 // Last updated: April 2026. Used when the provider API is unreachable.
@@ -97,18 +104,6 @@ const liveCache: Record<string, number> = {};
  *
  * Failures are silenced — the static fallback table is always available.
  */
-/**
- * Puts known context windows into the live cache, for providers that have
- * no models API (the ChatGPT sign-in, Plan 71). The live cache wins over
- * the static table, so ChatGPT's lower input cap replaces the API-key
- * value for the same model ID while that provider is active.
- */
-export function cacheContextWindows(windows: Record<string, number>): void {
-  Object.entries(windows).forEach(([modelId, tokens]) => {
-    liveCache[modelId.toLowerCase()] = tokens;
-  });
-}
-
 export async function fetchAndCacheContextWindows(opts: {
   providerType: 'openai' | 'anthropic' | 'gemini' | 'ollama';
   apiKey?: string;
@@ -240,11 +235,19 @@ export function estimateMessagesTokens(
 
 /**
  * Returns the context window size for a given model ID.
- * Checks the live cache (populated from provider APIs) first,
- * then falls back to substring matching against the static table.
+ * `provider` is the AI SDK model's `provider` string; pass it so a ChatGPT
+ * sign-in model gets its own caps. Otherwise checks the live cache
+ * (populated from provider APIs) first, then falls back to substring
+ * matching against the static table.
  */
-export function getContextWindow(modelId: string): number {
+export function getContextWindow(modelId: string, provider?: string): number {
   const normalized = (modelId || '').toLowerCase();
+
+  // 0. ChatGPT sign-in (Plan 71): its caps apply to its own model only.
+  //    Kept out of the live cache so they never leak to an API-key provider.
+  if (provider === CHATGPT_PROVIDER_ID) {
+    return CHATGPT_CONTEXT_WINDOWS[normalized] ?? CHATGPT_INPUT_TOKEN_LIMIT;
+  }
 
   // 1. Exact match in live cache
   if (liveCache[normalized]) return liveCache[normalized];

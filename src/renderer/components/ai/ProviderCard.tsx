@@ -10,21 +10,15 @@ import {
   Chip,
   CircularProgress,
   useTheme,
+  Switch,
+  Tooltip,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   DialogContentText,
 } from '@mui/material';
-import {
-  Edit,
-  Delete,
-  CheckCircle,
-  RadioButtonUnchecked,
-  Cable,
-  Logout,
-  Login,
-} from '@mui/icons-material';
+import { Edit, Delete, Cable, Logout, Login } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import {
   aiProviderImages,
@@ -237,10 +231,26 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
 
   const isChatGpt = provider.type === 'openai-codex';
   const chatGptConfig = isChatGpt ? getProviderConfig() : {};
+  // A signed-out ChatGPT provider can't run anything, so it can't be made
+  // active until the user signs in. Deactivating stays allowed.
+  const isSignedOutChatGpt = isChatGpt && chatGptConfig.signedOut === true;
+  const isActiveSwitchDisabled =
+    isSettingActive || isDeactivating || (!isActive && isSignedOutChatGpt);
+  const getActiveSwitchTooltip = () => {
+    if (isActive) return 'Active — click to deactivate';
+    if (isSignedOutChatGpt) return 'Sign in to activate';
+    return 'Set active';
+  };
+  const activeSwitchTooltip = getActiveSwitchTooltip();
 
   return (
     <Card
       sx={{
+        // Fill the grid row and keep the action buttons at the bottom, so
+        // cards in one row line up even when their content heights differ.
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
         boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
         transition: 'all 0.3s ease',
         border: isActive ? 2 : 1,
@@ -248,6 +258,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
         '&:hover': {
           boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
           transform: 'translateY(-2px)',
+          borderColor: 'primary.main',
         },
       }}
     >
@@ -258,8 +269,8 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
           alignItems: 'center',
           justifyContent: 'space-between',
           px: 2,
-          pt: 2,
-          pb: 2,
+          pt: 1.5,
+          pb: 1.5,
         }}
       >
         <Box
@@ -319,21 +330,33 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
           </Box>
         </Box>
 
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          {isActive ? (
-            <Chip
-              label="Active"
-              size="small"
-              color="success"
-              sx={{ fontWeight: 'bold' }}
-            />
-          ) : null}
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          {isActive && (
+            <Typography
+              variant="caption"
+              sx={{ color: 'success.main', fontWeight: 600 }}
+            >
+              Active
+            </Typography>
+          )}
+          <Tooltip title={activeSwitchTooltip}>
+            {/* span: a disabled Switch fires no events, so the tooltip needs a wrapper */}
+            <span>
+              <Switch
+                checked={isActive}
+                onChange={handleSetActive}
+                disabled={isActiveSwitchDisabled}
+                color="success"
+                inputProps={{ 'aria-label': activeSwitchTooltip }}
+              />
+            </span>
+          </Tooltip>
         </Box>
       </Box>
 
-      <CardContent sx={{ pt: 0 }}>
+      <CardContent sx={{ pt: 0, pb: 1, flexGrow: 1 }}>
         {/* Model Information */}
-        <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
           <Typography variant="body2" color="text.secondary">
             Model:
           </Typography>
@@ -350,40 +373,48 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
         </Box>
 
         {isChatGpt && (
-          <Box sx={{ mb: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <Box sx={{ mb: 1, display: 'flex', flexDirection: 'column' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Typography variant="body2" color="text.secondary">
                 Account:
               </Typography>
-              <Typography variant="body2">
-                {chatGptConfig.signedOut
-                  ? 'Signed out'
-                  : chatGptConfig.accountEmail || 'ChatGPT account'}
-                {!chatGptConfig.signedOut && chatGptConfig.planType
-                  ? ` · ${chatGptConfig.planType}`
-                  : ''}
-              </Typography>
-              <Chip label="Experimental" size="small" variant="outlined" />
+              {isSignedOutChatGpt ? (
+                <>
+                  <Chip
+                    label="Signed out"
+                    size="small"
+                    color="warning"
+                    variant="outlined"
+                  />
+                  <Button
+                    size="small"
+                    startIcon={<Login />}
+                    onClick={handleEdit}
+                  >
+                    Sign in
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Typography variant="body2" noWrap>
+                    {chatGptConfig.accountEmail || 'ChatGPT account'}
+                  </Typography>
+                  <Button
+                    size="small"
+                    startIcon={<Logout />}
+                    onClick={() => provider.id && signOutChatGpt(provider.id)}
+                    disabled={isSigningOut}
+                  >
+                    Sign out
+                  </Button>
+                </>
+              )}
             </Box>
-            <Typography variant="caption" color="text.secondary">
-              Included in your ChatGPT plan. Plan usage limits apply.
-            </Typography>
           </Box>
         )}
-
-        <Button
-          size="small"
-          variant={isActive ? 'contained' : 'outlined'}
-          color={isActive ? 'success' : 'primary'}
-          onClick={handleSetActive}
-          disabled={isSettingActive || isDeactivating}
-          startIcon={isActive ? <CheckCircle /> : <RadioButtonUnchecked />}
-        >
-          {isActive ? 'Deactivate' : 'Set Active'}
-        </Button>
       </CardContent>
 
-      <CardActions sx={{ justifyContent: 'space-between', px: 2, pb: 2 }}>
+      <CardActions sx={{ justifyContent: 'space-between', px: 2, pb: 1.5 }}>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Button
             size="small"
@@ -421,28 +452,6 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
               }}
             />
           </Button>
-          {isChatGpt &&
-            (chatGptConfig.signedOut ? (
-              <Button
-                size="small"
-                variant="outlined"
-                color="warning"
-                startIcon={<Login />}
-                onClick={handleEdit}
-              >
-                Sign in again
-              </Button>
-            ) : (
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={<Logout />}
-                onClick={() => provider.id && signOutChatGpt(provider.id)}
-                disabled={isSigningOut}
-              >
-                Sign out
-              </Button>
-            ))}
         </Box>
 
         <Box sx={{ display: 'flex', gap: 1 }}>
@@ -454,26 +463,29 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
           >
             Edit
           </Button>
-          {!isActive && (
-            <Button
-              size="small"
-              variant="outlined"
-              color="error"
-              startIcon={<Delete />}
-              onClick={handleDelete}
-              disabled={isDeleting}
-              sx={{
-                borderRadius: '8px',
-                '&:hover': {
-                  backgroundColor: 'error.light',
-                  color: 'error.contrastText',
-                  borderColor: 'error.light',
-                },
-              }}
-            >
-              Delete
-            </Button>
-          )}
+          {/* Always shown so every card has the same action row. */}
+          <Tooltip title={isActive ? 'Deactivate before deleting' : ''}>
+            <span>
+              <Button
+                size="small"
+                variant="outlined"
+                color="error"
+                startIcon={<Delete />}
+                onClick={handleDelete}
+                disabled={isDeleting || isActive}
+                sx={{
+                  borderRadius: '8px',
+                  '&:hover': {
+                    backgroundColor: 'error.light',
+                    color: 'error.contrastText',
+                    borderColor: 'error.light',
+                  },
+                }}
+              >
+                Delete
+              </Button>
+            </span>
+          </Tooltip>
         </Box>
       </CardActions>
 

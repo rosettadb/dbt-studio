@@ -13,6 +13,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { defaultSettingsMiddleware, wrapLanguageModel } from 'ai';
 import { CHATGPT_BASE_URL } from './chatgptOAuth';
 import { createChatGptFetch, ChatGptCredentialSource } from './chatgptFetch';
+import { CHATGPT_PROVIDER_ID } from './chatgptModels';
 
 export function createChatGptModel(
   getCredential: ChatGptCredentialSource,
@@ -28,6 +29,9 @@ export function createChatGptModel(
 
   return wrapLanguageModel({
     model: provider.responses(modelId),
+    // Reported as `model.provider`; getContextWindow() keys the ChatGPT
+    // caps on it. Provider options still use the `openai` key below.
+    providerId: CHATGPT_PROVIDER_ID,
     middleware: defaultSettingsMiddleware({
       settings: {
         providerOptions: {

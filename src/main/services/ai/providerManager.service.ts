@@ -4,17 +4,10 @@ import SecureStorageService, { AIProviderType } from '../secureStorage.service';
 import { AIProvider, NewAIProvider } from '../../schemas/mainDatabase.schema';
 import { getVercelModel } from './agentAdapter';
 import { HealthStatus } from './types/provider.types';
-import {
-  cacheContextWindows,
-  fetchAndCacheContextWindows,
-} from './tokenEstimator';
+import { fetchAndCacheContextWindows } from './tokenEstimator';
 import ChatGptAuthService from './chatgpt/chatgptAuth.service';
 import { createChatGptModel } from './chatgpt/chatgptModel';
-import {
-  CHATGPT_CONTEXT_WINDOWS,
-  CHATGPT_DEFAULT_MODEL,
-  CHATGPT_MODELS,
-} from './chatgpt/chatgptModels';
+import { CHATGPT_DEFAULT_MODEL, CHATGPT_MODELS } from './chatgpt/chatgptModels';
 import {
   buildOllamaHeaders,
   buildOllamaTagsUrl,
@@ -355,9 +348,9 @@ export class AIProviderManager {
           'gemini',
           'ollama',
         ];
-        if (provider.type === 'openai-codex') {
-          cacheContextWindows(CHATGPT_CONTEXT_WINDOWS);
-        } else if (supportedForCacheWarmup.includes(provider.type)) {
+        // openai-codex has no models API; its caps come from the model's
+        // provider tag in getContextWindow().
+        if (supportedForCacheWarmup.includes(provider.type)) {
           fetchAndCacheContextWindows({
             providerType: provider.type as
               | 'openai'

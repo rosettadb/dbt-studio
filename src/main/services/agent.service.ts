@@ -1033,6 +1033,7 @@ COMBINED SUMMARY:`,
       mcpTools: number;
       secondBrain?: number;
     },
+    modelProvider?: string,
   ): Promise<{
     messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
     breakdown: ContextUsageBreakdown;
@@ -1066,7 +1067,7 @@ COMBINED SUMMARY:`,
       ? [systemSummaryMessage, ...activeMessages]
       : activeMessages;
 
-    const contextWindow = getContextWindow(modelId);
+    const contextWindow = getContextWindow(modelId, modelProvider);
     const compactThreshold = contextWindow * 0.7;
     const newMsgTokens = estimateTokens(newContent);
     const ctxItemTokens = estimateTokens(contextItems);
@@ -1228,7 +1229,7 @@ COMBINED SUMMARY:`,
     );
     return {
       ...fixedOverheadTokens,
-      contextWindow: getContextWindow(modelId),
+      contextWindow: getContextWindow(modelId, (model as any).provider),
     };
   }
 
@@ -1329,7 +1330,11 @@ COMBINED SUMMARY:`,
         (model as any).model ||
         requestedModel ||
         'default';
-      this.assertUserMessageWithinLimit(content, getContextWindow(modelId));
+      const modelProvider: string | undefined = (model as any).provider;
+      this.assertUserMessageWithinLimit(
+        content,
+        getContextWindow(modelId, modelProvider),
+      );
 
       // 3. Persist user message
       await MainDatabaseService.addMessageWithContext(
@@ -1356,6 +1361,7 @@ COMBINED SUMMARY:`,
         modelId,
         event,
         fixedOverheadTokens,
+        modelProvider,
       );
 
       // 4. Filter tools by enabled settings

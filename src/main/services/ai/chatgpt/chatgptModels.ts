@@ -9,7 +9,14 @@
  */
 export const CHATGPT_DEFAULT_MODEL = 'gpt-5.5';
 
-const CHATGPT_INPUT_TOKEN_LIMIT = 272_000;
+/**
+ * The `provider` reported by the ChatGPT model (chatgptModel.ts). It lets
+ * getContextWindow() apply the ChatGPT caps to this model only, so the same
+ * model ID on an OpenAI API key keeps its own context window.
+ */
+export const CHATGPT_PROVIDER_ID = 'chatgpt';
+
+export const CHATGPT_INPUT_TOKEN_LIMIT = 272_000;
 
 export const CHATGPT_MODELS = [
   { id: 'gpt-5.5', name: 'GPT-5.5' },

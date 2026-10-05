@@ -278,20 +278,6 @@ export const AIProvidersSettings: React.FC = () => {
             </Box>
           </Box>
 
-          {/* Active Provider */}
-          {activeProvider && (
-            <Box display="flex" alignItems="center" gap={2} mb={2}>
-              <Typography variant="subtitle2" fontWeight="bold">
-                Active Provider:
-              </Typography>
-              <Chip
-                label={`${activeProvider.name} (${activeProvider.type})`}
-                color="primary"
-                size="small"
-              />
-            </Box>
-          )}
-
           {/* No Providers */}
           {providers.length === 0 && (
             <Box sx={{ mt: 4, textAlign: 'center' }}>

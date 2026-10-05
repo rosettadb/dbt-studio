@@ -7,8 +7,9 @@
  * Structure follows SnowflakeAuthManager from PR #465: attempts keyed by a
  * renderer-created correlation ID, lifecycle events, synchronous cancel.
  *
- * Tokens stay in the main process: keytar only, never logged, never
- * returned over IPC. The renderer gets `{ loginId, email, planType }`.
+ * Tokens stay in the main process: never logged, never returned over IPC.
+ * A saved provider's tokens live in keytar; a pending login (dialog still
+ * open) lives in memory only. The renderer gets `{ loginId, email, planType }`.
  */
 import * as http from 'http';
 import { randomUUID } from 'crypto';
@@ -40,11 +41,12 @@ import {
 } from './chatgptOAuth';
 
 const PROVIDER_TYPE = 'openai-codex';
-const PENDING_KEY_PREFIX = `${PROVIDER_TYPE}-pending-`;
-const pendingKey = (loginId: string) => `${PENDING_KEY_PREFIX}${loginId}-oauth`;
 // Refresh this long before the access token expires, so a request never
 // starts with a token that runs out mid-stream.
 const REFRESH_MARGIN_MS = 5 * 60 * 1000;
+
+const isFresh = (credential: ChatGptCredential) =>
+  credential.expiresAt - Date.now() > REFRESH_MARGIN_MS;
 
 const MESSAGES = {
   cancelled: 'Sign-in cancelled.',
@@ -52,6 +54,8 @@ const MESSAGES = {
   portInUse:
     'Port 1455 is in use, probably by another ChatGPT or Codex sign-in. Close it and try again.',
   failed: 'ChatGPT sign-in failed. Try again, or use an OpenAI API key.',
+  pendingExpired: 'The ChatGPT sign-in expired. Sign in again.',
+  invalidProviderId: 'Invalid provider ID.',
   alreadyRunning: 'A ChatGPT sign-in is already in progress.',
   missingCorrelationId: 'Missing correlation ID for ChatGPT sign-in.',
 } as const;
@@ -67,6 +71,7 @@ type CallbackOutcome =
 
 type Attempt = {
   correlationId: string;
+  /** Ends the wait for the browser and aborts a running code exchange. */
   cancel: () => void;
 };
 
@@ -84,10 +89,24 @@ export default class ChatGptAuthService {
 
   private static refreshing = new Map<number, Promise<ChatGptCredential>>();
 
+  /**
+   * Pending logins (signed in, provider not saved yet), keyed by loginId.
+   * Memory only: they belong to an open dialog, so none survive a restart
+   * and startup needs no keytar scan. On macOS, keytar.findCredentials()
+   * reads every secret and can show one Keychain prompt per item.
+   */
+  private static pendingLogins = new Map<string, ChatGptCredential>();
+
   /** Overridable in tests only; the redirect URI fixes it to 1455. */
   static callbackPort = CHATGPT_CALLBACK_PORT;
 
   static loginTimeoutMs = 5 * 60 * 1000;
+
+  /**
+   * A hung auth.openai.com request would otherwise hold the shared refresh
+   * promise forever and block every chat request for the provider.
+   */
+  static tokenRequestTimeoutMs = 30 * 1000;
 
   static async startLogin(
     request: StartChatGptAuthRequest,
@@ -125,12 +144,16 @@ export default class ChatGptAuthService {
       server.close();
       server.closeAllConnections?.();
     };
+    // Aborted by Cancel. After the browser callback the outcome is already
+    // settled, so this is the only way Cancel can stop the code exchange.
+    const exchange = new AbortController();
     // Register before listening so a Cancel that arrives early still finds
     // the attempt (the race PR #465 fixed for Snowflake).
     const attempt: Attempt = {
       correlationId,
       cancel: () => {
         finish({ kind: 'cancelled', message: MESSAGES.cancelled });
+        exchange.abort();
         closeServer();
       },
     };
@@ -165,12 +188,16 @@ export default class ChatGptAuthService {
 
       const credential = await this.requestTokens(
         buildCodeExchangeBody(result.code, verifier),
+        undefined,
+        exchange.signal,
       );
+      // Cancel can land after the response arrived: keep no tokens.
+      if (exchange.signal.aborted) {
+        send('cancelled', MESSAGES.cancelled);
+        return { ok: false, message: MESSAGES.cancelled };
+      }
       const loginId = randomUUID();
-      await SecureStorageService.setCredential(
-        pendingKey(loginId),
-        JSON.stringify(credential),
-      );
+      this.pendingLogins.set(loginId, credential);
 
       send('completed');
       return {
@@ -180,6 +207,10 @@ export default class ChatGptAuthService {
         planType: credential.planType,
       };
     } catch (error) {
+      if (exchange.signal.aborted) {
+        send('cancelled', MESSAGES.cancelled);
+        return { ok: false, message: MESSAGES.cancelled };
+      }
       const message =
         error instanceof ChatGptAuthError ? error.message : MESSAGES.failed;
       // Log the error kind only: responses can echo codes or tokens.
@@ -241,37 +272,70 @@ export default class ChatGptAuthService {
     finish({ kind: 'code', code });
   }
 
+  /**
+   * POSTs to the token endpoint with a timeout (tokenRequestTimeoutMs).
+   * `signal` lets the caller abort too; it covers reading the body as well.
+   */
   private static async requestTokens(
     body: URLSearchParams,
     previous?: ChatGptCredential,
+    signal?: AbortSignal,
   ): Promise<ChatGptCredential> {
-    let response: Response;
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    const timer = setTimeout(abort, this.tokenRequestTimeoutMs);
+    if (signal?.aborted) abort();
+    signal?.addEventListener('abort', abort, { once: true });
+    const failed = () =>
+      new ChatGptAuthError('token_request_failed', MESSAGES.failed);
+
     try {
-      response = await fetch(CHATGPT_TOKEN_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: body.toString(),
-      });
-    } catch {
-      throw new ChatGptAuthError('token_request_failed', MESSAGES.failed);
-    }
-
-    if (!response.ok) {
-      const errorBody = await response.json().catch(() => null);
-      const errorCode =
-        typeof errorBody?.error === 'string'
-          ? errorBody.error
-          : errorBody?.error?.code;
-      if (
-        errorCode === 'invalid_grant' ||
-        errorCode === 'refresh_token_expired'
-      ) {
-        throw new ChatGptAuthError('signed_out', SIGNED_OUT_MESSAGE);
+      let response: Response;
+      try {
+        response = await fetch(CHATGPT_TOKEN_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body.toString(),
+          signal: controller.signal,
+        });
+      } catch {
+        throw failed();
       }
-      throw new ChatGptAuthError('token_request_failed', MESSAGES.failed);
-    }
 
-    return credentialFromTokenResponse(await response.json(), previous);
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => null);
+        const errorCode =
+          typeof errorBody?.error === 'string'
+            ? errorBody.error
+            : errorBody?.error?.code;
+        if (
+          errorCode === 'invalid_grant' ||
+          errorCode === 'refresh_token_expired'
+        ) {
+          throw new ChatGptAuthError('signed_out', SIGNED_OUT_MESSAGE);
+        }
+        throw failed();
+      }
+
+      const json = await response.json().catch(() => {
+        throw failed();
+      });
+      return credentialFromTokenResponse(json, previous);
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', abort);
+    }
+  }
+
+  private static async readStoredCredential(
+    providerId: number,
+  ): Promise<ChatGptCredential | null> {
+    return parseCredential(
+      await SecureStorageService.getAIProviderOAuthCredential(
+        providerId,
+        PROVIDER_TYPE,
+      ),
+    );
   }
 
   /**
@@ -284,40 +348,44 @@ export default class ChatGptAuthService {
     providerId: number,
     options: { forceRefresh?: boolean } = {},
   ): Promise<ChatGptCredential> {
-    const credential = parseCredential(
-      await SecureStorageService.getAIProviderOAuthCredential(
-        providerId,
-        PROVIDER_TYPE,
-      ),
-    );
+    const credential = await this.readStoredCredential(providerId);
     if (!credential) {
       throw new ChatGptAuthError('signed_out', SIGNED_OUT_MESSAGE);
     }
-    if (
-      !options.forceRefresh &&
-      credential.expiresAt - Date.now() > REFRESH_MARGIN_MS
-    ) {
-      return credential;
-    }
-    return this.refresh(providerId, credential);
+    if (!options.forceRefresh && isFresh(credential)) return credential;
+    return this.refresh(providerId, credential.accessToken);
   }
 
   /**
    * Single-flight: refresh tokens rotate, so two parallel refreshes would
    * invalidate each other. Concurrent callers share one request.
+   *
+   * The refresh re-reads the stored credential instead of using the
+   * caller's copy. A caller that read storage before an earlier refresh
+   * finished holds a refresh token that was already used; sending it gets
+   * invalid_grant, and signing out on that would delete the new, valid
+   * credential. `seenAccessToken` is the token the caller had: if storage
+   * now holds a different fresh one, another refresh already did the work.
    */
   private static refresh(
     providerId: number,
-    credential: ChatGptCredential,
+    seenAccessToken: string,
   ): Promise<ChatGptCredential> {
     const inFlight = this.refreshing.get(providerId);
     if (inFlight) return inFlight;
 
     const promise = (async () => {
+      const current = await this.readStoredCredential(providerId);
+      if (!current) {
+        throw new ChatGptAuthError('signed_out', SIGNED_OUT_MESSAGE);
+      }
+      if (current.accessToken !== seenAccessToken && isFresh(current)) {
+        return current;
+      }
       try {
         const next = await this.requestTokens(
-          buildRefreshBody(credential.refreshToken),
-          credential,
+          buildRefreshBody(current.refreshToken),
+          current,
         );
         await SecureStorageService.setAIProviderOAuthCredential(
           providerId,
@@ -327,6 +395,12 @@ export default class ChatGptAuthService {
         return next;
       } catch (error) {
         if (error instanceof ChatGptAuthError && error.code === 'signed_out') {
+          // Sign out only if the rejected token is still the stored one.
+          // Otherwise something else saved a newer credential: use it.
+          const latest = await this.readStoredCredential(providerId);
+          if (latest && latest.refreshToken !== current.refreshToken) {
+            return latest;
+          }
           await this.markSignedOut(providerId);
         }
         throw error;
@@ -344,50 +418,49 @@ export default class ChatGptAuthService {
     loginId: string,
     providerId: number,
   ): Promise<void> {
-    const raw = await SecureStorageService.getCredential(pendingKey(loginId));
-    if (!parseCredential(raw)) {
-      throw new Error('The ChatGPT sign-in expired. Sign in again.');
-    }
+    const credential = this.pendingLogins.get(loginId);
+    if (!credential) throw new Error(MESSAGES.pendingExpired);
     await SecureStorageService.setAIProviderOAuthCredential(
       providerId,
       PROVIDER_TYPE,
-      raw!,
+      JSON.stringify(credential),
     );
-    await SecureStorageService.deleteCredential(pendingKey(loginId));
+    this.pendingLogins.delete(loginId);
   }
 
   /** Deletes a pending login (dialog cancelled or closed before saving). */
   static async discardPendingLogin(loginId: string): Promise<void> {
     if (typeof loginId !== 'string' || !loginId) return;
-    await SecureStorageService.deleteCredential(pendingKey(loginId));
+    this.pendingLogins.delete(loginId);
   }
 
   /** Test Connection before the provider is saved. */
   static async getPendingCredential(
     loginId: string,
   ): Promise<ChatGptCredential> {
-    const credential = parseCredential(
-      await SecureStorageService.getCredential(pendingKey(loginId)),
-    );
+    const credential = this.pendingLogins.get(loginId);
     if (!credential) {
-      throw new ChatGptAuthError(
-        'signed_out',
-        'The ChatGPT sign-in expired. Sign in again.',
-      );
+      throw new ChatGptAuthError('signed_out', MESSAGES.pendingExpired);
     }
     return credential;
   }
 
+  /** IPC entry point: the ID comes from the renderer, so validate it here. */
   static async signOut(providerId: number): Promise<void> {
+    if (!Number.isInteger(providerId) || providerId <= 0) {
+      throw new Error(MESSAGES.invalidProviderId);
+    }
     await this.markSignedOut(providerId);
   }
 
   private static async markSignedOut(providerId: number): Promise<void> {
+    const provider = await MainDatabaseService.getProvider(providerId);
+    // Never flag another provider type as signed out.
+    if (provider && provider.type !== PROVIDER_TYPE) return;
     await SecureStorageService.deleteAIProviderOAuthCredential(
       providerId,
       PROVIDER_TYPE,
     );
-    const provider = await MainDatabaseService.getProvider(providerId);
     if (!provider) return;
     const config =
       typeof provider.config === 'string'
@@ -399,15 +472,11 @@ export default class ChatGptAuthService {
   }
 
   /**
-   * Called once at app start: a pending login belongs to a dialog that no
-   * longer exists.
+   * Called once at app start (main.ts). Pending logins are memory-only, so
+   * this only clears the map. It must not scan keytar: on macOS,
+   * findCredentials() can show one Keychain prompt per stored item.
    */
   static async cleanupPendingLogins(): Promise<void> {
-    const accounts = await SecureStorageService.findCredentials();
-    await Promise.all(
-      accounts
-        .filter((account) => account.startsWith(PENDING_KEY_PREFIX))
-        .map((account) => SecureStorageService.deleteCredential(account)),
-    );
+    this.pendingLogins.clear();
   }
 }

@@ -367,6 +367,7 @@ export const useChatGptSignIn = () => {
         aiProvidersService
           .cancelChatGptAuth(activeIdRef.current)
           .catch(() => {});
+        activeIdRef.current = null;
       }
     };
   }, []);
@@ -390,7 +391,15 @@ export const useChatGptSignIn = () => {
       const result = await aiProvidersService.startChatGptAuth({
         correlationId,
       });
-      if (activeIdRef.current !== correlationId) return;
+      if (activeIdRef.current !== correlationId) {
+        // Cancelled or replaced while the sign-in finished: drop its tokens.
+        if (result.ok) {
+          aiProvidersService
+            .discardChatGptPendingLogin(result.loginId)
+            .catch(() => {});
+        }
+        return;
+      }
       if (result.ok) {
         loginIdRef.current = result.loginId;
         setLogin({
