@@ -277,25 +277,32 @@ export function outputsToText(outputs: PythonCellOutput[]): string {
 }
 
 /**
- * Copy through a hidden textarea. `navigator.clipboard` is unreliable in the
- * context-isolated renderer (FE-04) and there is no clipboard IPC bridge yet;
- * `execCommand('copy')` works inside a user gesture such as a menu click.
+ * Copy by setting the text in a one-off `copy` listener. `navigator.clipboard`
+ * is unreliable in the context-isolated renderer (FE-04) and there is no
+ * clipboard IPC bridge yet; `execCommand('copy')` works inside a user gesture
+ * such as a menu click. Selecting a hidden textarea instead doesn't work here:
+ * the still-open menu's focus trap takes focus back, so nothing is selected.
+ * The listener runs in the capture phase and stops the event: if a code editor
+ * holds the selection, its own copy handler would add the code as HTML, which
+ * Excel pastes instead of the text.
  */
 function copyText(text: string): boolean {
-  const area = document.createElement('textarea');
-  area.value = text;
-  area.setAttribute('readonly', '');
-  area.style.position = 'fixed';
-  area.style.opacity = '0';
-  document.body.appendChild(area);
-  area.select();
   let copied = false;
+  const onCopy = (event: ClipboardEvent) => {
+    if (!event.clipboardData) return;
+    event.clipboardData.setData('text/plain', text);
+    event.preventDefault();
+    event.stopPropagation();
+    copied = true;
+  };
+  document.addEventListener('copy', onCopy, true);
   try {
-    copied = document.execCommand('copy');
+    document.execCommand('copy');
   } catch {
     copied = false;
+  } finally {
+    document.removeEventListener('copy', onCopy, true);
   }
-  area.remove();
   return copied;
 }
 

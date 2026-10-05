@@ -256,10 +256,29 @@ describe('PythonCellOutputs output section', () => {
     expect(onExpand).toHaveBeenCalledTimes(1);
   });
 
-  it('copies the outputs as text from the ••• menu', () => {
-    const execCommand = jest.fn(() => true);
+  it('copies the outputs, not the code, when a code editor holds the selection', () => {
+    // Monaco answers copy events on its textarea with the code as plain text
+    // and HTML; Excel pastes the HTML.
+    const editor = document.createElement('textarea');
+    document.body.appendChild(editor);
+    editor.addEventListener('copy', (event) => {
+      event.clipboardData?.setData('text/plain', 'df');
+      event.clipboardData?.setData('text/html', '<span>df</span>');
+      event.preventDefault();
+    });
+    const clipboard = new Map<string, string>();
     Object.defineProperty(document, 'execCommand', {
-      value: execCommand,
+      value: jest.fn(() => {
+        const event = new Event('copy', { bubbles: true, cancelable: true });
+        Object.defineProperty(event, 'clipboardData', {
+          value: {
+            setData: (type: string, value: string) =>
+              clipboard.set(type, value),
+          },
+        });
+        editor.dispatchEvent(event);
+        return true;
+      }),
       configurable: true,
     });
     renderOutputs();
@@ -267,7 +286,8 @@ describe('PythonCellOutputs output section', () => {
     act(() => {
       fireEvent.click(screen.getByTestId('python-cell-output-copy'));
     });
-    expect(execCommand).toHaveBeenCalledWith('copy');
+    expect(Object.fromEntries(clipboard)).toEqual({ 'text/plain': 'hi\nx' });
+    editor.remove();
   });
 
   it('clears the outputs only when the cell handles it', () => {
