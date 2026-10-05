@@ -82,6 +82,18 @@ const getConnectionInput = (conn: ConnectionModel) => {
         schema: duck.schema || 'main',
         name: connection.name,
       };
+    case 'mysql':
+      const mysql = connection as any;
+      return {
+        type,
+        host: mysql.host,
+        port: mysql.port,
+        username: mysql.username,
+        password: mysql.password,
+        database: mysql.database || '',
+        schema: mysql.schema || '',
+        ssl: mysql.ssl,
+      };
     default:
       return undefined;
   }

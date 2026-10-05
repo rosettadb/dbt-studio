@@ -14,6 +14,7 @@ import {
   UploadFile,
   ExpandMore,
   Terminal,
+  ImageOutlined,
 } from '@mui/icons-material';
 import Collapse from '@mui/material/Collapse';
 import { useAppContext } from '../../hooks';
@@ -25,13 +26,132 @@ import { ThinkingRow } from './ThinkingRow';
 import { ResponseActions } from './ResponseActions';
 import { AgentStepBlock } from './AgentStepBlock';
 import { ToolCallRow } from './ToolCallRow';
+import { ImageLightbox } from './ImageLightbox';
 import { isVisibleUserContextItem } from './userContextVisibility';
+import { previewChatImage } from '../../services/agent.service';
 import type {
   AgentStep,
   ToolCallState,
   StreamContentPart,
   ToolCallContentPart,
 } from '../../hooks/useAgentStream';
+
+// ---------------------------------------------------------------------------
+// MessageImageRow — thumbnail row inside the collapsed context ToggleSection
+// ---------------------------------------------------------------------------
+
+interface MessageImageRowProps {
+  id: string;
+  conversationId: number;
+  name: string;
+  width: number;
+  height: number;
+}
+
+const MessageImageRow: React.FC<MessageImageRowProps> = ({
+  id,
+  conversationId,
+  name,
+  width,
+  height,
+}) => {
+  const [dataUrl, setDataUrl] = React.useState<string | null>(null);
+  const [lightboxOpen, setLightboxOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await previewChatImage(id, conversationId);
+        if (!cancelled) setDataUrl(res.dataUrl);
+      } catch {
+        // silently ignore — image just won't show
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, conversationId]);
+
+  return (
+    <>
+      <Box
+        onClick={() => setLightboxOpen(true)}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          px: 1,
+          py: 0.5,
+          borderRadius: 0.5,
+          minWidth: 0,
+          cursor: 'pointer',
+          '&:hover': { bgcolor: 'action.hover' },
+        }}
+      >
+        {/* Thumbnail */}
+        <Box
+          sx={{
+            width: 32,
+            height: 32,
+            borderRadius: 0.5,
+            border: '1px solid',
+            borderColor: 'divider',
+            overflow: 'hidden',
+            flexShrink: 0,
+            bgcolor: 'action.hover',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {dataUrl ? (
+            <Box
+              component="img"
+              src={dataUrl}
+              alt={name}
+              sx={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                display: 'block',
+              }}
+            />
+          ) : (
+            <ImageOutlined sx={{ fontSize: 14, color: 'text.disabled' }} />
+          )}
+        </Box>
+
+        <Typography variant="caption" sx={{ fontWeight: 500, flexShrink: 0 }}>
+          {name}
+        </Typography>
+        {width > 0 && height > 0 && (
+          <Typography
+            variant="caption"
+            color="text.disabled"
+            sx={{
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              minWidth: 0,
+            }}
+          >
+            {width}×{height}
+          </Typography>
+        )}
+      </Box>
+
+      <ImageLightbox
+        id={id}
+        conversationId={conversationId}
+        name={name}
+        open={lightboxOpen}
+        onClose={() => setLightboxOpen(false)}
+      />
+    </>
+  );
+};
 
 interface MessageRendererProps {
   content: string;
@@ -63,6 +183,14 @@ interface MessageRendererProps {
   } | null;
   showTokenCount?: boolean;
   orderedParts?: StreamContentPart[];
+  imageAttachments?: Array<{
+    id: string;
+    conversationId: number;
+    name: string;
+    mediaType: string;
+    width: number;
+    height: number;
+  }>;
 }
 
 type RenderToolStatus = ToolCallState['status'];
@@ -627,6 +755,7 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
   tokenUsage,
   showTokenCount,
   orderedParts,
+  imageAttachments,
 }) => {
   const Container = role === 'user' ? UserMessage : AssistantMessage;
   const { setEditingFilePath } = useAppContext();
@@ -672,11 +801,12 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
     // Full-width row that right-aligns the bubble with symmetric spacing
     <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
       <Container>
-        {/* Show context items for user messages */}
-        {visibleContextItems.length > 0 && (
+        {/* Show context items (files + images) for user messages */}
+        {(visibleContextItems.length > 0 ||
+          (imageAttachments && imageAttachments.length > 0)) && (
           <Box sx={{ mb: 1 }}>
             <ToggleSection
-              title={`${visibleContextItems.length} context ${visibleContextItems.length > 1 ? 'items' : 'item'}`}
+              title={`${visibleContextItems.length + (imageAttachments?.length ?? 0)} context ${visibleContextItems.length + (imageAttachments?.length ?? 0) > 1 ? 'items' : 'item'}`}
               defaultOpen={false}
             >
               {visibleContextItems.map((item) => (
@@ -688,6 +818,16 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
                   onOpen={(filePath) => {
                     if (filePath) setEditingFilePath?.(filePath);
                   }}
+                />
+              ))}
+              {imageAttachments?.map((image) => (
+                <MessageImageRow
+                  key={image.id}
+                  id={image.id}
+                  conversationId={image.conversationId}
+                  name={image.name}
+                  width={image.width}
+                  height={image.height}
                 />
               ))}
             </ToggleSection>

@@ -7,12 +7,23 @@ import { projectsServices } from '../../../services';
 import { Container } from './styles';
 import { Shimmer } from '../../shimmer';
 import { CompletionItem } from '../../../../types/frontend';
+import type { Table } from '../../../../types/backend';
+import { useSchemaObjectDrop } from '../../../hooks/useSchemaObjectDrop';
+import {
+  clearSqlSchemaCompletions,
+  setSqlSchemaCompletions,
+} from '../../../lib/monaco/completions/sqlSchema';
 
 type Props = {
   filePath?: string;
   content: string;
   setContent: (value: string) => void;
   completions?: Omit<CompletionItem, 'range'>[];
+  /**
+   * Raw table list behind `completions`. Optional; when present the shared
+   * completion provider becomes context aware (`alias.` → columns, …).
+   */
+  schemaTables?: Table[];
   editorRef?: React.MutableRefObject<monaco.editor.IStandaloneCodeEditor | null>;
   onRunSelected?: (query: string) => void;
   isLoading?: boolean;
@@ -183,6 +194,7 @@ export const SqlEditorComponent: React.FC<Props> = ({
   content,
   setContent,
   completions = [],
+  schemaTables,
   editorRef,
   onRunSelected,
   isLoading,
@@ -194,11 +206,20 @@ export const SqlEditorComponent: React.FC<Props> = ({
   const saveDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const decorationIdsRef = useRef<string[]>([]);
   const monacoInstanceRef = useRef<typeof monaco | null>(null);
-  const completionProviderRef = useRef<monaco.IDisposable | null>(null);
   const editorInstanceRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(
     null,
   );
   const statementsRef = useRef<ParsedStatement[]>([]);
+  // Monaco model id this editor publishes its completions under.
+  const modelIdRef = useRef<string | null>(null);
+
+  // Accept tables/columns dragged from the Data tree (see useSchemaObjectDrop).
+  const containerRef = useRef<HTMLDivElement>(null);
+  const getEditorInstance = React.useCallback(
+    () => editorInstanceRef.current,
+    [],
+  );
+  useSchemaObjectDrop(containerRef, getEditorInstance);
 
   const handleChange: OnChange = (value) => {
     if (value === undefined) return;
@@ -522,49 +543,29 @@ export const SqlEditorComponent: React.FC<Props> = ({
     );
   };
 
-  // Register completion provider (can be called multiple times safely)
-  const registerCompletionProvider = () => {
-    const monacoInstance = monacoInstanceRef.current;
-    if (!monacoInstance) return;
+  // Publish this editor's completions to the shared `sql` provider (see
+  // lib/monaco/completions/sqlSchema). Keyed by model id so several SQL
+  // editors can coexist without duplicating each other's suggestions.
+  const publishCompletions = React.useCallback(() => {
+    const model = editorInstanceRef.current?.getModel();
+    if (!model) return;
+    modelIdRef.current = model.id;
+    setSqlSchemaCompletions(model.id, {
+      items: completions,
+      tables: schemaTables,
+    });
+  }, [completions, schemaTables]);
 
-    // Dispose existing provider
-    if (completionProviderRef.current) {
-      completionProviderRef.current.dispose();
-    }
-
-    // Register new completion provider
-    completionProviderRef.current =
-      monacoInstance.languages.registerCompletionItemProvider('sql', {
-        provideCompletionItems: (model, position) => {
-          const word = model.getWordUntilPosition(position);
-          const range = {
-            startLineNumber: position.lineNumber,
-            endLineNumber: position.lineNumber,
-            startColumn: word.startColumn,
-            endColumn: word.endColumn,
-          };
-
-          const suggestions = completions.map((item) => ({
-            ...item,
-            range,
-          }));
-          return { suggestions };
-        },
-      });
-  };
-
-  // Update completion provider when completions change
   useEffect(() => {
-    registerCompletionProvider();
-  }, [completions]);
+    publishCompletions();
+  }, [publishCompletions]);
 
   const handleEditorMount: OnMount = (editor, monacoInstance) => {
     monacoInstanceRef.current = monacoInstance;
     editorInstanceRef.current = editor;
     if (editorRef) editorRef.current = editor;
 
-    // Register initial completion provider after monaco is ready
-    registerCompletionProvider();
+    publishCompletions();
 
     refreshRunIcons(editor);
 
@@ -590,14 +591,15 @@ export const SqlEditorComponent: React.FC<Props> = ({
   useEffect(() => {
     return () => {
       if (saveDebounce.current) clearTimeout(saveDebounce.current);
-      if (completionProviderRef.current) {
-        completionProviderRef.current.dispose();
+      if (modelIdRef.current) {
+        clearSqlSchemaCompletions(modelIdRef.current);
+        modelIdRef.current = null;
       }
     };
   }, []);
 
   return (
-    <Container>
+    <Container ref={containerRef}>
       <MonacoEditor
         height="100%"
         width="100%"

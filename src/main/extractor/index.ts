@@ -5,6 +5,7 @@ import BigQueryExtractor from './bigquery.extractor';
 import DuckDBExtractor from './duckdb.extractor';
 import RedshiftExtractor from './redshift.extractor';
 import KineticaExtractor from './kinetica.extractor';
+import MySqlExtractor from './mysql.extractor';
 
 export {
   PGSchemaExtractor,
@@ -14,4 +15,5 @@ export {
   DuckDBExtractor,
   RedshiftExtractor,
   KineticaExtractor,
+  MySqlExtractor,
 };

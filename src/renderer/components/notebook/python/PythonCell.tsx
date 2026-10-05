@@ -39,7 +39,8 @@ import type {
   PythonCellType,
   PythonNotebookCell,
 } from '../../../../types/pythonNotebooks';
-import { PythonCodeCell, RunMode } from './PythonCodeCell';
+import type { SqlSchemaCompletionEntry } from '../../../lib/monaco/completions/sqlSchema';
+import { PythonCodeCell, RunMode, EditorMountHandler } from './PythonCodeCell';
 import { PythonTextCell } from './PythonTextCell';
 import { PythonCellOutputs } from './PythonCellOutputs';
 
@@ -79,6 +80,9 @@ interface PythonCellProps {
   /** Collapsed cells show a one-line summary instead of editor and outputs */
   collapsed?: boolean;
   onToggleCollapsed: () => void;
+  onEditorMount?: EditorMountHandler;
+  /** SQL cells: schema completions for the shared `sql` provider */
+  sqlCompletions?: SqlSchemaCompletionEntry;
 }
 
 /** First non-empty line of the source, for the collapsed summary. */
@@ -115,6 +119,8 @@ const PythonCellComponent: React.FC<PythonCellProps> = ({
   onInstallPandas,
   collapsed = false,
   onToggleCollapsed,
+  onEditorMount,
+  sqlCompletions,
 }) => {
   const theme = useTheme();
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
@@ -354,6 +360,8 @@ const PythonCellComponent: React.FC<PythonCellProps> = ({
             onRun={onRun}
             onFocus={onSelect}
             focusRequest={focusRequest}
+            onEditorMount={onEditorMount}
+            sqlCompletions={sqlCompletions}
           />
         )}
         {!collapsed && !isCode && (
@@ -546,7 +554,9 @@ export const PythonCell = memo(
     prev.collapsed === next.collapsed &&
     prev.onRun === next.onRun &&
     prev.onChange === next.onChange &&
-    prev.onChangeVariable === next.onChangeVariable,
+    prev.onChangeVariable === next.onChangeVariable &&
+    prev.onEditorMount === next.onEditorMount &&
+    prev.sqlCompletions === next.sqlCompletions,
 );
 
 PythonCell.displayName = 'PythonCell';

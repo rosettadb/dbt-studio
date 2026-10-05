@@ -2,7 +2,10 @@
 import React from 'react';
 import { TreeItem } from '@mui/x-tree-view';
 import { Box, CircularProgress } from '@mui/material';
-import { RenderTree } from '../../components/schemaTreeViewer/RenderTree';
+import {
+  RenderTree,
+  useTreeRowProps,
+} from '../../components/schemaTreeViewer/RenderTree';
 import { dedupeTables } from '../../components/schemaTreeViewer/dedupeTables';
 import {
   schemaTreeKey,
@@ -13,6 +16,10 @@ import {
   NoDataMessage,
   StyledTreeView,
 } from '../../components/schemaTreeViewer/styles';
+import type {
+  SchemaTreeDragContext,
+  SchemaTreeNodeRef,
+} from '../../components/schemaTreeViewer/types';
 import { SupportedConnectionTypes, Table } from '../../../types/backend';
 import { TreeItems } from '../../components/schemaTreeViewer/TreeItems';
 import connectionIcons, {
@@ -27,6 +34,21 @@ type Props = {
   isLoading: boolean;
   filter?: string;
   hideSchemaLevel?: boolean;
+  /**
+   * Connection the schema belongs to. Written into drag payloads so drop
+   * targets can tell which connection an object came from.
+   */
+  connectionId?: string;
+  /**
+   * Enable dragging schema/table/view/column rows into editors. Defaults to
+   * false so existing callers are unaffected.
+   */
+  draggable?: boolean;
+  /** Right-click handler for rows. Nothing is attached when omitted. */
+  onContextMenu?: (
+    event: React.MouseEvent<HTMLDivElement>,
+    node: SchemaTreeNodeRef,
+  ) => void;
 };
 
 /**
@@ -43,6 +65,9 @@ export const SchemaTreeViewerWithSchema: React.FC<Props> = React.memo(
     isLoading,
     filter = '',
     hideSchemaLevel = false,
+    connectionId,
+    draggable = false,
+    onContextMenu,
   }) => {
     const [expandedItems, setExpandedItems] = React.useState<string[]>([
       databaseName,
@@ -97,8 +122,15 @@ export const SchemaTreeViewerWithSchema: React.FC<Props> = React.memo(
       setExpandedItems([databaseName]);
     }, [databaseName]);
 
+    const dragContext = React.useMemo<SchemaTreeDragContext>(
+      () => ({ connectionId, connectionType: type }),
+      [connectionId, type],
+    );
+
+    const rowProps = useTreeRowProps(draggable, dragContext, onContextMenu);
+
     return (
-      <Container>
+      <Container data-testid="schema-tree">
         {isLoading && (
           <Box
             sx={{
@@ -127,22 +159,44 @@ export const SchemaTreeViewerWithSchema: React.FC<Props> = React.memo(
                 <TreeItems.Database
                   label={databaseName || 'Database'}
                   icon={connectionIcons.images[type] || defaultIcon}
+                  rootProps={rowProps({ kind: 'database', databaseName })}
                 />
               }
             >
               {hideSchemaLevel &&
                 filteredTables.map((table) => (
-                  <RenderTree key={tableTreeKey(table)} table={table} />
+                  <RenderTree
+                    key={tableTreeKey(table)}
+                    table={table}
+                    draggable={draggable}
+                    dragContext={dragContext}
+                    onContextMenu={onContextMenu}
+                  />
                 ))}
               {!hideSchemaLevel &&
                 Object.entries(schemaMap).map(([schemaName, schemaTables]) => (
                   <TreeItem
                     key={schemaTreeKey(databaseName, schemaName)}
                     itemId={schemaTreeKey(databaseName, schemaName)}
-                    label={<TreeItems.Schema label={schemaName} />}
+                    label={
+                      <TreeItems.Schema
+                        label={schemaName}
+                        rootProps={rowProps({
+                          kind: 'schema',
+                          databaseName,
+                          schema: schemaName,
+                        })}
+                      />
+                    }
                   >
                     {schemaTables.map((table) => (
-                      <RenderTree key={tableTreeKey(table)} table={table} />
+                      <RenderTree
+                        key={tableTreeKey(table)}
+                        table={table}
+                        draggable={draggable}
+                        dragContext={dragContext}
+                        onContextMenu={onContextMenu}
+                      />
                     ))}
                   </TreeItem>
                 ))}
