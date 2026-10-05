@@ -97,6 +97,17 @@ class DataFrameFormatterTest(unittest.TestCase):
         self.assertLess(len(json.dumps(info)), 5_000_001)
         self.assertLess(info["rowCount"], 20_000)
 
+    def test_safe_integer_boundary_matches_javascript(self):
+        info = self.bundle(pd.DataFrame({"i": [2**53 - 1, 2**53, -(2**53)]}))[MIME]
+        self.assertEqual(
+            [row[0] for row in info["data"]], [2**53 - 1, str(2**53), str(-(2**53))]
+        )
+
+    def test_oversized_floor_drops_table_payload(self):
+        data = self.bundle(pd.DataFrame({"s": ["x" * 60_000] * 200}))
+        self.assertNotIn(MIME, data)
+        self.assertIn("text/html", data)
+
     def test_wide_frames_and_other_objects_keep_plain_output(self):
         wide = pd.DataFrame({f"c{i}": [1] for i in range(60)})
         self.assertNotIn(MIME, self.bundle(wide))

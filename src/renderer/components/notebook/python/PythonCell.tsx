@@ -526,6 +526,7 @@ const PythonCellComponent: React.FC<PythonCellProps> = ({
                 setCodeHidden(false);
               }}
               onKeyDown={(e) => {
+                if (e.key === ' ') e.preventDefault();
                 if (e.key === 'Enter' || e.key === ' ') setCodeHidden(false);
               }}
               data-testid={`python-cell-code-hidden-${index}`}

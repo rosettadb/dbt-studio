@@ -112,7 +112,7 @@ def _rosetta_setup():
                 ]
             if kind in "iu":
                 return [
-                    str(v) if isinstance(v, int) and abs(v) > max_safe_int else v
+                    str(v) if isinstance(v, int) and abs(v) >= max_safe_int else v
                     for v in values
                 ]
             return values
@@ -149,8 +149,12 @@ def _rosetta_setup():
                     "totalColumns": int(total_cols),
                 }
                 text = json.dumps(payload, allow_nan=False)
-                if len(text) <= max_chars or rows <= 100:
+                if len(text) <= max_chars:
                     return payload
+                if rows <= 100:
+                    # Still too large at the floor: let IPython fall back to
+                    # the plain HTML / text repr instead.
+                    return None
                 rows //= 2
         except Exception:
             return None

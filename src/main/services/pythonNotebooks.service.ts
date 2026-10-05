@@ -388,6 +388,18 @@ const SQL_DML_KEYWORD = /\b(?:insert|update|delete|merge)\b/i;
  * user's own ORDER BY and LIMIT stay inside the subquery, so aliases they
  * reference keep working.
  */
+/**
+ * Errors an engine raises because of the `SELECT * FROM (…) AS _rs LIMIT n`
+ * wrapper itself (duplicate or ambiguous column names in the derived table,
+ * a statement that cannot be nested). Only these retry the query unbounded.
+ */
+const WRAPPER_REJECTION =
+  /duplicate column|ambiguous|derived table|subquer|must have (its own )?(an )?alias|syntax error|cannot be (used|nested)|not (allowed|supported) in (a )?(subquery|derived)/i;
+
+export function isWrapperRejection(error: string | undefined): boolean {
+  return !!error && WRAPPER_REJECTION.test(error);
+}
+
 export function boundSqlQuery(query: string, maxRows: number): string {
   let body = query.trim();
   // Drop trailing semicolons and trailing full-line `--` comments.
@@ -447,6 +459,11 @@ export function buildFallbackTable(
     JSON.stringify(data.slice(0, rowCount)).length > TABLE_MAX_CHARS
   ) {
     rowCount = Math.floor(rowCount / 2);
+  }
+  // Large cell values can keep even the floor above the cap: send no rows
+  // rather than an oversized structured payload.
+  if (JSON.stringify(data.slice(0, rowCount)).length > TABLE_MAX_CHARS) {
+    rowCount = 0;
   }
   return {
     version: 1,
@@ -1001,8 +1018,13 @@ export default class PythonNotebooksService {
       );
       // Some engines reject the wrapper (MySQL refuses duplicate column names
       // in a derived table, e.g. `SELECT *` over a join). Fall back to the
-      // query as written so the cell behaves as it did before.
-      if (bounded !== query && (!result.success || result.error)) {
+      // query as written only for those errors: a timeout or connection
+      // failure must not trigger an unbounded retry.
+      if (
+        bounded !== query &&
+        (!result.success || result.error) &&
+        isWrapperRejection(result.error)
+      ) {
         result = await runSqlQuery(connectionId, query);
       }
     } catch (error) {

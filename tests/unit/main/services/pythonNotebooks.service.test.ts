@@ -432,16 +432,11 @@ describe('PythonNotebooksService', () => {
     (kernelService.execute as jest.Mock).mockClear();
     executeQueryForConnection.mockClear();
 
-    // The bounded query fails, then the query as written is retried once
-    executeQueryForConnection
-      .mockResolvedValueOnce({
-        success: false,
-        error: 'relation "nope" does not exist',
-      })
-      .mockResolvedValueOnce({
-        success: false,
-        error: 'relation "nope" does not exist',
-      });
+    // Not a wrapper rejection: the query as written is not retried
+    executeQueryForConnection.mockResolvedValueOnce({
+      success: false,
+      error: 'relation "nope" does not exist',
+    });
     const failed = await service.executeCell(
       connectionId,
       notebook.id,
@@ -464,10 +459,11 @@ describe('PythonNotebooksService', () => {
       { cellType: 'sql', variable: 'not valid' },
     );
     expect(badName.status).toBe('error');
-    expect(executeQueryForConnection).toHaveBeenCalledTimes(2);
+    // Only the bounded query ran; badName never reached the connection
+    expect(executeQueryForConnection).toHaveBeenCalledTimes(1);
     expect(executeQueryForConnection).toHaveBeenLastCalledWith({
       connectionId,
-      query: 'select * from nope',
+      query: 'SELECT * FROM (\nselect * from nope\n) AS _rs LIMIT 100001',
     });
 
     executeQueryForConnection.mockResolvedValueOnce({
@@ -579,6 +575,34 @@ describe('PythonNotebooksService', () => {
       const info = buildFallbackTable(['i'], rows);
       expect(info.rowCount).toBe(20_000);
       expect(info.totalRows).toBe(25_000);
+    });
+
+    it('sends no rows when the floor still exceeds the size cap', async () => {
+      const { buildFallbackTable } = await import(
+        '../../../../src/main/services/pythonNotebooks.service'
+      );
+      const big = 'x'.repeat(60_000);
+      const rows = Array.from({ length: 200 }, () => ({ s: big }));
+      const info = buildFallbackTable(['s'], rows);
+      expect(info.rowCount).toBe(0);
+      expect(info.data).toEqual([]);
+      expect(info.index).toEqual([]);
+      expect(info.totalRows).toBe(200);
+    });
+  });
+
+  describe('isWrapperRejection', () => {
+    it('matches wrapper errors only', async () => {
+      const { isWrapperRejection } = await import(
+        '../../../../src/main/services/pythonNotebooks.service'
+      );
+      expect(isWrapperRejection("Duplicate column name 'id'")).toBe(true);
+      expect(
+        isWrapperRejection('Every derived table must have its own alias'),
+      ).toBe(true);
+      expect(isWrapperRejection('Query timed out after 30s')).toBe(false);
+      expect(isWrapperRejection('ECONNRESET')).toBe(false);
+      expect(isWrapperRejection(undefined)).toBe(false);
     });
   });
 
