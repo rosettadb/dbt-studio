@@ -10,8 +10,10 @@
 import React, { memo, useEffect, useState } from 'react';
 import {
   Box,
+  Button,
   Chip,
   CircularProgress,
+  Divider,
   IconButton,
   InputBase,
   Menu,
@@ -253,17 +255,23 @@ const PythonCellComponent: React.FC<PythonCellProps> = ({
         : 'rgba(0,0,0,0.02)',
   } as const;
 
-  // Top of the gutter, right below the execution count.
+  // Top of the gutter, level with the header: the execution count, swapped
+  // for the drag handle while the pointer is over the gutter.
   const dragHandle = (
     <Box
       className="cell-drag-handle"
       // eslint-disable-next-line react/jsx-props-no-spreading
       {...dragHandleProps}
       sx={{
+        position: 'absolute',
+        inset: 0,
         display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
         opacity: 0,
         cursor: 'grab',
         color: 'text.disabled',
+        transition: 'opacity 120ms ease',
         '&:active': { cursor: 'grabbing' },
       }}
     >
@@ -271,40 +279,69 @@ const PythonCellComponent: React.FC<PythonCellProps> = ({
     </Box>
   );
 
+  const executionCount = isCode ? (
+    <Typography
+      variant="caption"
+      className="cell-gutter-count"
+      data-testid={`python-cell-count-${index}`}
+      sx={{
+        boxSizing: 'border-box',
+        height: 20,
+        minWidth: 28,
+        px: 0.75,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        border: '1px solid',
+        borderColor: 'divider',
+        borderRadius: '10px',
+        fontFamily: 'monospace',
+        fontSize: 11,
+        lineHeight: 1,
+        color: 'text.secondary',
+        transition: 'opacity 120ms ease',
+      }}
+    >
+      {gutterLabel}
+    </Typography>
+  ) : null;
+
   const runButton = isCode ? (
     <Tooltip
       title={isRunning ? 'Interrupt (running)' : 'Run cell (Shift+Enter)'}
     >
-      {/* Colab-style filled circle, colored from the theme: primary to run,
-          error while running (click to interrupt). */}
-      <IconButton
-        size="small"
-        onClick={(e) => {
-          e.stopPropagation();
-          if (isRunning) onInterrupt();
-          else onRun('stay');
-        }}
-        disabled={runState === 'queued'}
-        data-testid={`python-cell-run-${index}`}
-        sx={{
-          width: 20,
-          height: 20,
-          p: 0,
-          bgcolor: isRunning ? 'error.main' : 'primary.main',
-          color: isRunning ? 'error.contrastText' : 'primary.contrastText',
-          '&:hover': { bgcolor: isRunning ? 'error.dark' : 'primary.dark' },
-          '&.Mui-disabled': {
-            bgcolor: 'action.disabledBackground',
-            color: 'action.disabled',
-          },
-        }}
-      >
-        {isRunning ? (
-          <Stop sx={{ fontSize: 13 }} />
-        ) : (
-          <PlayArrow sx={{ fontSize: 15 }} />
-        )}
-      </IconButton>
+      {/* MotherDuck-style: borderless, icon + label in the theme color —
+          primary to run, error while running (click to interrupt). */}
+      <span>
+        <Button
+          size="small"
+          variant="text"
+          color={isRunning ? 'error' : 'primary'}
+          startIcon={isRunning ? <Stop /> : <PlayArrow />}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (isRunning) onInterrupt();
+            else onRun('stay');
+          }}
+          disabled={runState === 'queued'}
+          data-testid={`python-cell-run-${index}`}
+          sx={{
+            height: 24,
+            minWidth: 0,
+            px: 1,
+            py: 0,
+            fontSize: 12,
+            fontWeight: 500,
+            lineHeight: 1,
+            textTransform: 'none',
+            flexShrink: 0,
+            '& .MuiButton-startIcon': { mr: 0.5, ml: -0.25 },
+            '& .MuiButton-startIcon > svg': { fontSize: 20 },
+          }}
+        >
+          {isRunning ? 'Stop' : 'Run'}
+        </Button>
+      </span>
     </Tooltip>
   ) : null;
 
@@ -327,13 +364,33 @@ const PythonCellComponent: React.FC<PythonCellProps> = ({
         position: 'relative',
         transition: 'border-color 120ms ease',
         '&:hover .cell-hover-toolbar': { opacity: 1 },
-        '&:hover .cell-drag-handle': { opacity: 1 },
       }}
     >
       {/* Editor row: gutter (drag handle, hide / show code) + header and editor */}
       <Box sx={{ display: 'flex' }}>
-        <Box sx={gutterSx}>
-          {dragHandle}
+        <Box
+          data-testid={`python-cell-gutter-${index}`}
+          sx={{
+            ...gutterSx,
+            pt: 0,
+            '&:hover .cell-drag-handle': { opacity: 1 },
+            '&:hover .cell-gutter-count': { opacity: 0 },
+          }}
+        >
+          <Box
+            sx={{
+              position: 'relative',
+              alignSelf: 'stretch',
+              height: 34,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            {executionCount}
+            {dragHandle}
+          </Box>
           {!collapsed && isCode && (
             <Tooltip title={codeHidden ? 'Show code' : 'Hide code'}>
               <IconButton
@@ -344,7 +401,7 @@ const PythonCellComponent: React.FC<PythonCellProps> = ({
                   setCodeHidden((value) => !value);
                 }}
                 data-testid={`python-cell-code-toggle-${index}`}
-                sx={{ p: 0.25, mt: 0.5 }}
+                sx={{ p: 0.25 }}
               >
                 {codeHidden ? (
                   <KeyboardArrowRight sx={{ fontSize: 18 }} />
@@ -380,35 +437,11 @@ const PythonCellComponent: React.FC<PythonCellProps> = ({
               borderColor: 'divider',
             }}
           >
-            {isCode && (
-              <Tooltip title="Execution count: the order this cell last ran in">
-                <Typography
-                  variant="caption"
-                  data-testid={`python-cell-count-${index}`}
-                  sx={{
-                    // Same 20px height as the run button and the type badge
-                    boxSizing: 'border-box',
-                    height: 20,
-                    minWidth: 28,
-                    px: 0.75,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    borderRadius: '10px',
-                    fontFamily: 'monospace',
-                    fontSize: 11,
-                    lineHeight: 1,
-                    color: 'text.secondary',
-                  }}
-                >
-                  {gutterLabel}
-                </Typography>
-              </Tooltip>
-            )}
             {runButton}
+            {runButton && (
+              // Full header height: cancel the header's vertical padding
+              <Divider orientation="vertical" flexItem sx={{ my: -0.5 }} />
+            )}
             <Tooltip title={`${badge.label} cell`}>
               <Chip
                 icon={badge.icon}
