@@ -369,9 +369,14 @@ export const KeystoreSettings: React.FC = () => {
       >
         <SettingsSection title="Add Entry" icon={<AddCircleOutline />}>
           <SettingsSectionBody>
-            <Box display="flex" gap={2} alignItems="flex-start">
+            <Box
+              display="flex"
+              gap={2}
+              alignItems="center"
+              sx={{ '& .MuiInputBase-root': { height: 36 } }}
+            >
               <TextField
-                label="Key"
+                placeholder="Key"
                 value={newKey}
                 onChange={(e) => setNewKey(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
@@ -402,7 +407,7 @@ export const KeystoreSettings: React.FC = () => {
                 }
               />
               <TextField
-                label="Value"
+                placeholder="Value"
                 value={newValue}
                 onChange={(e) => setNewValue(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
@@ -435,7 +440,7 @@ export const KeystoreSettings: React.FC = () => {
                     : ''
                 }
               >
-                <Box component="span" sx={{ flexShrink: 0, mt: 0.25 }}>
+                <Box component="span" sx={{ flexShrink: 0 }}>
                   <Button
                     variant="contained"
                     size="small"
@@ -448,7 +453,7 @@ export const KeystoreSettings: React.FC = () => {
                     }
                     onClick={handleAdd}
                     disabled={!newKey.trim() || !newValue.trim() || isSaving}
-                    sx={{ whiteSpace: 'nowrap' }}
+                    sx={{ whiteSpace: 'nowrap', height: 36 }}
                   >
                     Add
                   </Button>
