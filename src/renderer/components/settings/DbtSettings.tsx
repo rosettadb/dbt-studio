@@ -726,24 +726,23 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
             </Box>
           }
         >
-          {isInstalled ? (
-            <SettingsStatus tone="success">Installed</SettingsStatus>
-          ) : (
-            <Button
-              size="small"
-              onClick={() => {
-                prepareDbtVersionChange(item.version).catch(() => undefined);
-              }}
-              disabled={isLoadingDialog || isLoadingInstall}
-              startIcon={
-                installingPackageKey === `dbt-core@${item.version}` ? (
-                  <CircularProgress size={14} />
-                ) : undefined
-              }
-            >
-              {actionLabel}
-            </Button>
-          )}
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => {
+              prepareDbtVersionChange(item.version).catch(() => undefined);
+            }}
+            disabled={isInstalled || isLoadingDialog || isLoadingInstall}
+            startIcon={
+              installingPackageKey === `dbt-core@${item.version}` ? (
+                <CircularProgress size={14} />
+              ) : (
+                <Download />
+              )
+            }
+          >
+            {actionLabel}
+          </Button>
         </SettingsRow>
       );
     });
@@ -984,7 +983,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                   }
                   description={packageDescriptions[pkg]}
                 >
-                  {installSource ? (
+                  {installSource && (
                     <Button
                       size="small"
                       variant="outlined"
@@ -995,22 +994,6 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                       startIcon={<Download />}
                     >
                       {installed ? 'Update from source' : 'Install'}
-                    </Button>
-                  ) : (
-                    <Button
-                      size="small"
-                      onClick={() => {
-                        fetchPackageVersions(pkg).catch(() => undefined);
-                        if (!isExpanded) {
-                          setExpandedPackage(pkg);
-                        }
-                      }}
-                      disabled={isLoading}
-                      startIcon={
-                        isLoading ? <CircularProgress size={14} /> : undefined
-                      }
-                    >
-                      {isLoading ? 'Loading...' : 'Versions'}
                     </Button>
                   )}
                   {installed && (
@@ -1102,30 +1085,31 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                                 </Box>
                               }
                             >
-                              {isInstalled ? (
-                                <SettingsStatus tone="success">
-                                  Installed
-                                </SettingsStatus>
-                              ) : (
-                                <Button
-                                  size="small"
-                                  onClick={() => {
-                                    installSinglePackageVersion(
-                                      pkg,
-                                      v.version,
-                                    ).catch(() => undefined);
-                                  }}
-                                  disabled={isLoadingDialog || isLoadingInstall}
-                                  startIcon={
-                                    installingPackageKey ===
-                                    `${pkg}@${v.version}` ? (
-                                      <CircularProgress size={14} />
-                                    ) : undefined
-                                  }
-                                >
-                                  {actionLabel}
-                                </Button>
-                              )}
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={() => {
+                                  installSinglePackageVersion(
+                                    pkg,
+                                    v.version,
+                                  ).catch(() => undefined);
+                                }}
+                                disabled={
+                                  isInstalled ||
+                                  isLoadingDialog ||
+                                  isLoadingInstall
+                                }
+                                startIcon={
+                                  installingPackageKey ===
+                                  `${pkg}@${v.version}` ? (
+                                    <CircularProgress size={14} />
+                                  ) : (
+                                    <Download />
+                                  )
+                                }
+                              >
+                                {actionLabel}
+                              </Button>
                             </SettingsRow>
                           );
                         })}
@@ -1136,7 +1120,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                       <Typography variant="body2" color="text.secondary">
                         {isLoading
                           ? 'Loading versions...'
-                          : 'Click "Versions" to view versions.'}
+                          : 'No versions found.'}
                       </Typography>
                     )}
                   </SettingsSectionBody>

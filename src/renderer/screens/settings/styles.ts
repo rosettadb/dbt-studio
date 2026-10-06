@@ -18,6 +18,21 @@ export const StyledForm = styled('form')(({ theme }) => ({
   padding: '22px 28px 40px',
   backgroundColor: theme.palette.background.paper,
   width: '100%',
+  // Compact buttons for every settings page (icon, text and border).
+  '& .MuiButton-sizeSmall': {
+    fontSize: 12,
+    lineHeight: 1.6,
+    padding: '2px 8px',
+    minWidth: 0,
+    '& .MuiButton-startIcon': {
+      marginRight: 4,
+      marginLeft: -2,
+      '& > *:nth-of-type(1)': { fontSize: 15 },
+    },
+  },
+  '& .MuiButton-outlinedSizeSmall': {
+    padding: '1px 7px',
+  },
 }));
 
 export const Title = styled('h1')(() => ({

@@ -17,6 +17,7 @@ import {
   TerminalOutlined,
   ListAltOutlined,
   WarningAmberOutlined,
+  Download,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { SettingsType, RosettaVersionInfo } from '../../../types/backend';
@@ -335,25 +336,25 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
                 version.releaseDate,
               ).toLocaleDateString()}`}
             >
-              {version.version === versionInfo.currentVersion ? (
-                <SettingsStatus tone="success">Installed</SettingsStatus>
-              ) : (
-                <Button
-                  size="small"
-                  onClick={() => handleInstallVersion(version.version)}
-                  disabled={
-                    installingVersion === version.version ||
-                    installVersion.isLoading
-                  }
-                  startIcon={
-                    installingVersion === version.version ? (
-                      <CircularProgress size={14} />
-                    ) : undefined
-                  }
-                >
-                  {getButtonText(version)}
-                </Button>
-              )}
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => handleInstallVersion(version.version)}
+                disabled={
+                  version.version === versionInfo.currentVersion ||
+                  installingVersion === version.version ||
+                  installVersion.isLoading
+                }
+                startIcon={
+                  installingVersion === version.version ? (
+                    <CircularProgress size={14} />
+                  ) : (
+                    <Download />
+                  )
+                }
+              >
+                {getButtonText(version)}
+              </Button>
             </SettingsRow>
           ))}
         {versionInfo && (

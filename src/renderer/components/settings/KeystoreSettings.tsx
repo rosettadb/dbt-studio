@@ -280,83 +280,6 @@ export const KeystoreSettings: React.FC = () => {
         </Button>
       </Box>
 
-      <SettingsSection
-        title={activeEnv === 'default' ? 'Default' : activeEnv}
-        icon={<VpnKeyOutlined />}
-        description={
-          <>
-            Encrypted at rest by the OS. Keys are prefixed with the environment
-            name (e.g.{' '}
-            <code style={{ fontFamily: 'monospace' }}>dev.MY_KEY</code>
-            ).
-          </>
-        }
-      >
-        {isLoading && (
-          <SettingsSectionBody>
-            <Box display="flex" justifyContent="center">
-              <CircularProgress size={24} />
-            </Box>
-          </SettingsSectionBody>
-        )}
-        {!isLoading && envEntries.length === 0 && (
-          <SettingsRow label="No entries in this environment yet." />
-        )}
-        {!isLoading &&
-          envEntries.length > 0 &&
-          envEntries.map((entry) => (
-            <SettingsRow
-              key={entry.key}
-              label={
-                <Box
-                  component="span"
-                  sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}
-                >
-                  {displayKey(entry.key)}
-                </Box>
-              }
-              description={
-                <Box
-                  component="span"
-                  sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}
-                >
-                  {entry.visibleValue !== null
-                    ? entry.visibleValue
-                    : '••••••••'}
-                </Box>
-              }
-            >
-              {entry.loading ? (
-                <CircularProgress size={16} />
-              ) : (
-                <Tooltip
-                  title={entry.visibleValue !== null ? 'Hide' : 'Reveal'}
-                >
-                  <IconButton
-                    size="small"
-                    onClick={() => handleToggleReveal(entry.key)}
-                  >
-                    {entry.visibleValue !== null ? (
-                      <VisibilityOff fontSize="small" />
-                    ) : (
-                      <Visibility fontSize="small" />
-                    )}
-                  </IconButton>
-                </Tooltip>
-              )}
-              <Tooltip title="Delete">
-                <IconButton
-                  size="small"
-                  color="error"
-                  onClick={() => setDeleteKeyTarget(entry.key)}
-                >
-                  <Delete fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            </SettingsRow>
-          ))}
-      </SettingsSection>
-
       <SettingsSection title="Add Entry" icon={<AddCircleOutline />}>
         <SettingsSectionBody>
           <Box display="flex" gap={2} alignItems="flex-start">
@@ -436,6 +359,83 @@ export const KeystoreSettings: React.FC = () => {
             </Button>
           </Box>
         </SettingsSectionBody>
+      </SettingsSection>
+
+      <SettingsSection
+        title={activeEnv === 'default' ? 'Default' : activeEnv}
+        icon={<VpnKeyOutlined />}
+        description={
+          <>
+            Encrypted at rest by the OS. Keys are prefixed with the environment
+            name (e.g.{' '}
+            <code style={{ fontFamily: 'monospace' }}>dev.MY_KEY</code>
+            ).
+          </>
+        }
+      >
+        {isLoading && (
+          <SettingsSectionBody>
+            <Box display="flex" justifyContent="center">
+              <CircularProgress size={24} />
+            </Box>
+          </SettingsSectionBody>
+        )}
+        {!isLoading && envEntries.length === 0 && (
+          <SettingsRow label="No entries in this environment yet." />
+        )}
+        {!isLoading &&
+          envEntries.length > 0 &&
+          envEntries.map((entry) => (
+            <SettingsRow
+              key={entry.key}
+              label={
+                <Box
+                  component="span"
+                  sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}
+                >
+                  {displayKey(entry.key)}
+                </Box>
+              }
+              description={
+                <Box
+                  component="span"
+                  sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}
+                >
+                  {entry.visibleValue !== null
+                    ? entry.visibleValue
+                    : '••••••••'}
+                </Box>
+              }
+            >
+              {entry.loading ? (
+                <CircularProgress size={16} />
+              ) : (
+                <Tooltip
+                  title={entry.visibleValue !== null ? 'Hide' : 'Reveal'}
+                >
+                  <IconButton
+                    size="small"
+                    onClick={() => handleToggleReveal(entry.key)}
+                  >
+                    {entry.visibleValue !== null ? (
+                      <VisibilityOff fontSize="small" />
+                    ) : (
+                      <Visibility fontSize="small" />
+                    )}
+                  </IconButton>
+                </Tooltip>
+              )}
+              <Tooltip title="Delete">
+                <IconButton
+                  size="small"
+                  color="error"
+                  onClick={() => setDeleteKeyTarget(entry.key)}
+                >
+                  <Delete fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </SettingsRow>
+          ))}
       </SettingsSection>
 
       <Dialog

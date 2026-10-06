@@ -5,6 +5,7 @@ import {
   CodeOutlined,
   ListAltOutlined,
   WarningAmberOutlined,
+  Download,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { SettingsType, PythonVersionInfo } from '../../../types/backend';
@@ -197,25 +198,25 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
               </Box>
             }
           >
-            {entry.version === settings.pythonVersion ? (
-              <SettingsStatus tone="success">Installed</SettingsStatus>
-            ) : (
-              <Button
-                size="small"
-                onClick={() => requestInstallVersion(entry.version)}
-                disabled={
-                  installingVersion === entry.version ||
-                  installVersion.isLoading
-                }
-                startIcon={
-                  installingVersion === entry.version ? (
-                    <CircularProgress size={14} />
-                  ) : undefined
-                }
-              >
-                {getButtonLabel(entry.version)}
-              </Button>
-            )}
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => requestInstallVersion(entry.version)}
+              disabled={
+                entry.version === settings.pythonVersion ||
+                installingVersion === entry.version ||
+                installVersion.isLoading
+              }
+              startIcon={
+                installingVersion === entry.version ? (
+                  <CircularProgress size={14} />
+                ) : (
+                  <Download />
+                )
+              }
+            >
+              {getButtonLabel(entry.version)}
+            </Button>
           </SettingsRow>
         ))}
       </SettingsSection>
