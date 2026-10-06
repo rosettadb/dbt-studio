@@ -5,7 +5,9 @@ describe('cloudExplorer.ipcHandlers', () => {
   });
 
   const getHandleHandler = (ipcMain: any, channel: string) => {
-    const call = (ipcMain.handle as jest.Mock).mock.calls.find(([c]) => c === channel);
+    const call = (ipcMain.handle as jest.Mock).mock.calls.find(
+      ([c]) => c === channel,
+    );
     if (!call) {
       throw new Error(`No handler registered for channel: ${channel}`);
     }
@@ -28,14 +30,18 @@ describe('cloudExplorer.ipcHandlers', () => {
       },
     }));
 
-    const registerCloudExplorerHandlers = (await import(
-      '../../../../src/main/ipcHandlers/cloudExplorer.ipcHandlers'
-    )).default;
+    const registerCloudExplorerHandlers = (
+      await import('../../../../src/main/ipcHandlers/cloudExplorer.ipcHandlers')
+    ).default;
 
     registerCloudExplorerHandlers();
 
-    expect(ipcMain.removeHandler).toHaveBeenCalledWith('cloudExplorer:listBuckets');
-    expect(ipcMain.removeHandler).toHaveBeenCalledWith('cloudExplorer:previewData');
+    expect(ipcMain.removeHandler).toHaveBeenCalledWith(
+      'cloudExplorer:listBuckets',
+    );
+    expect(ipcMain.removeHandler).toHaveBeenCalledWith(
+      'cloudExplorer:previewData',
+    );
 
     expect(ipcMain.handle).toHaveBeenCalledWith(
       'cloudExplorer:listBuckets',
@@ -69,9 +75,9 @@ describe('cloudExplorer.ipcHandlers', () => {
       },
     }));
 
-    const registerCloudExplorerHandlers = (await import(
-      '../../../../src/main/ipcHandlers/cloudExplorer.ipcHandlers'
-    )).default;
+    const registerCloudExplorerHandlers = (
+      await import('../../../../src/main/ipcHandlers/cloudExplorer.ipcHandlers')
+    ).default;
 
     registerCloudExplorerHandlers();
 
@@ -80,5 +86,67 @@ describe('cloudExplorer.ipcHandlers', () => {
     const payload = { provider: 'aws', config: { region: 'us-east-1' } as any };
     await expect(handler(null, payload)).resolves.toEqual(['bucket-1']);
     expect(listBuckets).toHaveBeenCalledWith('aws', payload.config);
+  });
+
+  const registerTestConnectionHandler = async () => {
+    const { ipcMain } = await import('electron');
+    const testConnection = jest.fn().mockResolvedValue(true);
+    jest.doMock('../../../../src/main/services', () => ({
+      CloudExplorerService: { testConnection },
+      CloudPreviewService: {},
+    }));
+    const registerCloudExplorerHandlers = (
+      await import('../../../../src/main/ipcHandlers/cloudExplorer.ipcHandlers')
+    ).default;
+    registerCloudExplorerHandlers();
+    return {
+      handler: getHandleHandler(ipcMain, 'cloudExplorer:testConnection'),
+      testConnection,
+    };
+  };
+
+  it('passes a public S3 connection without credentials through IPC', async () => {
+    const { handler, testConnection } = await registerTestConnectionHandler();
+    const config = {
+      authMode: 'public',
+      bucket: 'samples.dremio.com',
+      region: 'us-west-2',
+    };
+    await expect(handler(null, { provider: 'aws', config })).resolves.toBe(
+      true,
+    );
+    expect(testConnection).toHaveBeenCalledWith('aws', config);
+  });
+
+  it.each([
+    { authMode: 'public', bucket: '', region: 'us-west-2' },
+    { authMode: 'public', bucket: '   ', region: 'us-west-2' },
+    { authMode: 'public', bucket: 'samples.dremio.com' },
+    { region: 'us-west-2' },
+    { region: 'us-west-2', accessKeyId: 'test-key' },
+    {
+      authMode: 'credentials',
+      region: 'us-west-2',
+      secretAccessKey: 'test-secret',
+    },
+  ])('rejects incomplete AWS configuration %j', async (config) => {
+    const { handler, testConnection } = await registerTestConnectionHandler();
+    await expect(handler(null, { provider: 'aws', config })).rejects.toThrow(
+      'Invalid AWS config: missing required fields.',
+    );
+    expect(testConnection).not.toHaveBeenCalled();
+  });
+
+  it('keeps credential-based S3 connection testing working', async () => {
+    const { handler, testConnection } = await registerTestConnectionHandler();
+    const config = {
+      region: 'us-west-2',
+      accessKeyId: 'test-key',
+      secretAccessKey: 'test-secret',
+    };
+    await expect(handler(null, { provider: 'aws', config })).resolves.toBe(
+      true,
+    );
+    expect(testConnection).toHaveBeenCalledWith('aws', config);
   });
 });

@@ -119,7 +119,33 @@ class CloudExplorerService {
   }
 
   // AWS S3 Methods
+  private static validatePublicS3Config(config: S3Config): string {
+    const bucket = config.bucket?.trim();
+    if (!bucket || !/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket)) {
+      throw new Error('A valid public S3 bucket name is required.');
+    }
+    if (!/^[a-z]{2}(?:-[a-z]+)+-\d+$/.test(config.region)) {
+      throw new Error('A valid AWS region is required.');
+    }
+    return bucket;
+  }
+
   private static createS3Client(config: S3Config): S3Client {
+    if (config.authMode === 'public') {
+      CloudExplorerService.validatePublicS3Config(config);
+      // Explicit anonymous auth avoids signing and the default credential chain.
+      return new S3Client({
+        region: config.region,
+        httpAuthSchemeProvider: () => [{ schemeId: 'smithy.api#noAuth' }],
+        httpAuthSchemes: [
+          {
+            schemeId: 'smithy.api#noAuth',
+            identityProvider: () => async () => ({}),
+            signer: { sign: async (request) => request },
+          },
+        ],
+      });
+    }
     // Validate credentials are provided
     if (!config.accessKeyId || !config.secretAccessKey) {
       throw new Error(
@@ -147,6 +173,14 @@ class CloudExplorerService {
   }
 
   static async listS3Buckets(config: S3Config): Promise<Bucket[]> {
+    if (config.authMode === 'public') {
+      return [
+        {
+          name: CloudExplorerService.validatePublicS3Config(config),
+          location: config.region,
+        },
+      ];
+    }
     const client = CloudExplorerService.createS3Client(config);
     try {
       const data = await client.send(new ListBucketsCommand({}));
@@ -214,6 +248,14 @@ class CloudExplorerService {
     bucketName: string,
     objectKey: string,
   ): Promise<string> {
+    if (config.authMode === 'public') {
+      CloudExplorerService.validatePublicS3Config(config);
+      const key = objectKey.split('/').map(encodeURIComponent).join('/');
+      const domain = config.region.startsWith('cn-')
+        ? 'amazonaws.com.cn'
+        : 'amazonaws.com';
+      return `https://s3.${config.region}.${domain}/${encodeURIComponent(bucketName)}/${key}`;
+    }
     const client = CloudExplorerService.createS3Client(config);
     try {
       const command = new GetObjectCommand({
@@ -229,7 +271,16 @@ class CloudExplorerService {
   static async testS3Connection(config: S3Config): Promise<boolean> {
     const client = CloudExplorerService.createS3Client(config);
     try {
-      await client.send(new ListBucketsCommand({}));
+      if (config.authMode === 'public') {
+        await client.send(
+          new ListObjectsV2Command({
+            Bucket: config.bucket?.trim(),
+            MaxKeys: 1,
+          }),
+        );
+      } else {
+        await client.send(new ListBucketsCommand({}));
+      }
       return true;
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -237,6 +288,12 @@ class CloudExplorerService {
       // Re-throw with user-friendly message
       const errorMessage = (error as Error).message;
       const errorName = (error as any).name;
+
+      if (config.authMode === 'public') {
+        throw new Error(
+          `Cannot browse public S3 bucket "${config.bucket}": ${errorMessage}. Check the bucket name, region, and anonymous listing permission.`,
+        );
+      }
 
       if (
         errorName === 'InvalidAccessKeyId' ||

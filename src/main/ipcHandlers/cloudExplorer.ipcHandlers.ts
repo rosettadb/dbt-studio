@@ -1,5 +1,9 @@
 import { ipcMain } from 'electron';
-import type { CloudStorageConfig, CloudProvider } from '../../types/frontend';
+import type {
+  CloudStorageConfig,
+  CloudProvider,
+  S3Config,
+} from '../../types/frontend';
 import type {
   UploadFileRequest,
   UploadFolderRequest,
@@ -123,15 +127,14 @@ const registerCloudExplorerHandlers = () => {
 
       // Validate required fields based on provider
       if (provider === 'aws') {
-        const s3Config = config as any;
+        const s3Config = config as S3Config;
         if (
           !s3Config.region ||
-          !s3Config.accessKeyId ||
-          !s3Config.secretAccessKey
+          (s3Config.authMode === 'public'
+            ? !s3Config.bucket?.trim()
+            : !s3Config.accessKeyId || !s3Config.secretAccessKey)
         ) {
-          throw new Error(
-            `Invalid AWS config: missing required fields. Received: ${JSON.stringify(s3Config)}`,
-          );
+          throw new Error('Invalid AWS config: missing required fields.');
         }
       } else if (provider === 'minio') {
         const minioConfig = config as any;

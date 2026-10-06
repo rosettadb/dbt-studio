@@ -17,6 +17,8 @@ import {
   CardActionArea,
   IconButton,
   InputAdornment,
+  FormControlLabel,
+  Checkbox,
 } from '@mui/material';
 import {
   CheckCircle,
@@ -70,6 +72,8 @@ interface FormData {
   projectId: string;
   credentials: string;
   region: string;
+  s3Public: boolean;
+  bucket: string;
   accessKeyId: string;
   secretAccessKey: string;
   sessionToken: string;
@@ -107,6 +111,7 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
     getCloudGcsCredential,
     setCloudAwsSecret,
     getCloudAwsSecret,
+    deleteCloudAwsSecret,
     setCloudAwsSessionToken,
     getCloudAwsSessionToken,
     deleteCloudAwsSessionToken,
@@ -139,6 +144,8 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
     projectId: '',
     credentials: '',
     region: '',
+    s3Public: false,
+    bucket: '',
     accessKeyId: '',
     secretAccessKey: '',
     sessionToken: '',
@@ -182,6 +189,8 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         provider: sourceConnection.provider,
         projectId: (config as GCSConfig).projectId || '',
         credentials: (config as GCSConfig).credentials || '',
+        s3Public: (config as S3Config).authMode === 'public',
+        bucket: (config as S3Config).bucket || '',
         sessionToken: (config as S3Config).sessionToken || '',
         region:
           (config as S3Config).region ||
@@ -242,7 +251,10 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
             if (isMounted) {
               setFormData((prev) => ({ ...prev, credentials: stored || '' }));
             }
-          } else if (provider === 'aws') {
+          } else if (
+            provider === 'aws' &&
+            (sourceConnection.config as S3Config).authMode !== 'public'
+          ) {
             const stored = await getCloudAwsSecret(id);
             const storedSessionToken = await getCloudAwsSessionToken(id);
             if (isMounted) {
@@ -333,8 +345,10 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
       case 'aws':
         return (
           !!formData.region.trim() &&
-          !!formData.accessKeyId.trim() &&
-          !!formData.secretAccessKey.trim()
+          (formData.s3Public
+            ? !!formData.bucket.trim()
+            : !!formData.accessKeyId.trim() &&
+              !!formData.secretAccessKey.trim())
         );
       case 'azure':
         return !!formData.accountName.trim() && !!formData.accountKey.trim();
@@ -379,6 +393,13 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
           credentials: formData.credentials.trim() || undefined,
         } as GCSConfig;
       case 'aws':
+        if (formData.s3Public) {
+          return {
+            authMode: 'public',
+            bucket: formData.bucket.trim(),
+            region: formData.region.trim(),
+          } as S3Config;
+        }
         return {
           region: formData.region.trim(),
           accessKeyId: formData.accessKeyId.trim(),
@@ -487,11 +508,22 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         }
         finalConfig = config;
       } else if (formData.provider === 'aws') {
-        await setCloudAwsSecret(formData.secretAccessKey, connId);
-        if (formData.sessionToken.trim()) {
-          await setCloudAwsSessionToken(formData.sessionToken, connId);
+        if (formData.s3Public) {
+          if (
+            connectionId &&
+            initialValues?.provider === 'aws' &&
+            (initialValues.config as S3Config).authMode !== 'public'
+          ) {
+            await deleteCloudAwsSecret(connId);
+            await deleteCloudAwsSessionToken(connId);
+          }
         } else {
-          await deleteCloudAwsSessionToken(connId);
+          await setCloudAwsSecret(formData.secretAccessKey, connId);
+          if (formData.sessionToken.trim()) {
+            await setCloudAwsSessionToken(formData.sessionToken, connId);
+          } else {
+            await deleteCloudAwsSessionToken(connId);
+          }
         }
         const config = { ...rawConfig };
         if ('secretAccessKey' in config) {
@@ -617,6 +649,33 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
       case 'aws':
         return (
           <>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={formData.s3Public}
+                  onChange={(e) => {
+                    setFormData((prev) => ({
+                      ...prev,
+                      s3Public: e.target.checked,
+                    }));
+                    setTestStatus('idle');
+                  }}
+                />
+              }
+              label="Public bucket (no credentials)"
+            />
+            {formData.s3Public && (
+              <TextField
+                label="Bucket name"
+                placeholder="my-public-bucket"
+                fullWidth
+                margin="normal"
+                value={formData.bucket}
+                onChange={(e) => handleChange('bucket', e.target.value)}
+                required
+                helperText="Enter a bucket that allows anonymous listing and reads."
+              />
+            )}
             <TextField
               label="Region"
               placeholder="us-east-1"
@@ -627,50 +686,56 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
               required
               helperText="Your AWS region (e.g., us-east-1)"
             />
-            <TextField
-              label="Access Key ID"
-              placeholder="AKIAIOSFODNN7EXAMPLE"
-              fullWidth
-              margin="normal"
-              value={formData.accessKeyId}
-              onChange={(e) => handleChange('accessKeyId', e.target.value)}
-              required
-              helperText="Your AWS Access Key ID"
-            />
-            <TextField
-              label="Secret Access Key"
-              placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-              type={showPassword ? 'text' : 'password'}
-              fullWidth
-              margin="normal"
-              value={formData.secretAccessKey}
-              onChange={(e) => handleChange('secretAccessKey', e.target.value)}
-              required
-              helperText="Your AWS Secret Access Key"
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton
-                      aria-label="toggle password visibility"
-                      onClick={() => setShowPassword(!showPassword)}
-                      edge="end"
-                    >
-                      {showPassword ? <VisibilityOff /> : <Visibility />}
-                    </IconButton>
-                  </InputAdornment>
-                ),
-              }}
-            />
-            <TextField
-              label="Session Token (Optional)"
-              placeholder="Temporary session token for temporary credentials"
-              type="password"
-              fullWidth
-              margin="normal"
-              value={formData.sessionToken}
-              onChange={(e) => handleChange('sessionToken', e.target.value)}
-              helperText="Optional: Required when using temporary AWS credentials (e.g., from STS AssumeRole)"
-            />
+            {!formData.s3Public && (
+              <>
+                <TextField
+                  label="Access Key ID"
+                  placeholder="AKIAIOSFODNN7EXAMPLE"
+                  fullWidth
+                  margin="normal"
+                  value={formData.accessKeyId}
+                  onChange={(e) => handleChange('accessKeyId', e.target.value)}
+                  required
+                  helperText="Your AWS Access Key ID"
+                />
+                <TextField
+                  label="Secret Access Key"
+                  placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+                  type={showPassword ? 'text' : 'password'}
+                  fullWidth
+                  margin="normal"
+                  value={formData.secretAccessKey}
+                  onChange={(e) =>
+                    handleChange('secretAccessKey', e.target.value)
+                  }
+                  required
+                  helperText="Your AWS Secret Access Key"
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          aria-label="toggle password visibility"
+                          onClick={() => setShowPassword(!showPassword)}
+                          edge="end"
+                        >
+                          {showPassword ? <VisibilityOff /> : <Visibility />}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+                <TextField
+                  label="Session Token (Optional)"
+                  placeholder="Temporary session token for temporary credentials"
+                  type="password"
+                  fullWidth
+                  margin="normal"
+                  value={formData.sessionToken}
+                  onChange={(e) => handleChange('sessionToken', e.target.value)}
+                  helperText="Optional: Required when using temporary AWS credentials (e.g., from STS AssumeRole)"
+                />
+              </>
+            )}
           </>
         );
       case 'minio':

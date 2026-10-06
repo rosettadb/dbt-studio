@@ -115,7 +115,9 @@ export interface CloudListResult {
 
 export interface S3Config {
   region: string;
-  accessKeyId: string;
+  authMode?: 'credentials' | 'public';
+  bucket?: string;
+  accessKeyId?: string;
   secretAccessKey?: string;
   sessionToken?: string;
 }

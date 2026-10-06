@@ -187,7 +187,10 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
       }
       const config = { ...connection.config };
       try {
-        if (connection.provider === 'aws') {
+        if (
+          connection.provider === 'aws' &&
+          (config as { authMode?: string }).authMode !== 'public'
+        ) {
           const secret = await getCloudAwsSecret(connection.id);
           const sessionToken = await getCloudAwsSessionToken(connection.id);
           (
