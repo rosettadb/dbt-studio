@@ -280,87 +280,6 @@ export const KeystoreSettings: React.FC = () => {
         </Button>
       </Box>
 
-      <SettingsSection title="Add Entry" icon={<AddCircleOutline />}>
-        <SettingsSectionBody>
-          <Box display="flex" gap={2} alignItems="flex-start">
-            <TextField
-              label="Key"
-              value={newKey}
-              onChange={(e) => setNewKey(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-              size="small"
-              fullWidth
-              inputProps={{ style: { fontFamily: 'monospace' } }}
-              slotProps={
-                activeEnv !== 'default'
-                  ? {
-                      input: {
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            <Typography
-                              variant="body2"
-                              sx={{
-                                fontFamily: 'monospace',
-                                color: 'text.disabled',
-                                userSelect: 'none',
-                              }}
-                            >
-                              {activeEnv}.
-                            </Typography>
-                          </InputAdornment>
-                        ),
-                      },
-                    }
-                  : undefined
-              }
-            />
-            <TextField
-              label="Value"
-              value={newValue}
-              onChange={(e) => setNewValue(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-              size="small"
-              fullWidth
-              type={showNewValue ? 'text' : 'password'}
-              slotProps={{
-                input: {
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton
-                        size="small"
-                        onClick={() => setShowNewValue((v) => !v)}
-                      >
-                        {showNewValue ? (
-                          <VisibilityOff fontSize="small" />
-                        ) : (
-                          <Visibility fontSize="small" />
-                        )}
-                      </IconButton>
-                    </InputAdornment>
-                  ),
-                },
-              }}
-            />
-            <Button
-              variant="contained"
-              size="small"
-              startIcon={
-                isSaving ? (
-                  <CircularProgress size={14} color="inherit" />
-                ) : (
-                  <Add />
-                )
-              }
-              onClick={handleAdd}
-              disabled={!newKey.trim() || !newValue.trim() || isSaving}
-              sx={{ whiteSpace: 'nowrap', mt: 0.25 }}
-            >
-              Add
-            </Button>
-          </Box>
-        </SettingsSectionBody>
-      </SettingsSection>
-
       <SettingsSection
         title={activeEnv === 'default' ? 'Default' : activeEnv}
         icon={<VpnKeyOutlined />}
@@ -437,6 +356,98 @@ export const KeystoreSettings: React.FC = () => {
             </SettingsRow>
           ))}
       </SettingsSection>
+
+      {/* Stays visible at the bottom of the window while the key list scrolls. */}
+      <Box
+        sx={{
+          position: 'sticky',
+          bottom: 12,
+          zIndex: 1,
+          borderRadius: 2,
+          boxShadow: '0 -4px 16px rgba(0, 0, 0, 0.25)',
+        }}
+      >
+        <SettingsSection title="Add Entry" icon={<AddCircleOutline />}>
+          <SettingsSectionBody>
+            <Box display="flex" gap={2} alignItems="flex-start">
+              <TextField
+                label="Key"
+                value={newKey}
+                onChange={(e) => setNewKey(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+                size="small"
+                fullWidth
+                inputProps={{ style: { fontFamily: 'monospace' } }}
+                slotProps={
+                  activeEnv !== 'default'
+                    ? {
+                        input: {
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <Typography
+                                variant="body2"
+                                sx={{
+                                  fontFamily: 'monospace',
+                                  color: 'text.disabled',
+                                  userSelect: 'none',
+                                }}
+                              >
+                                {activeEnv}.
+                              </Typography>
+                            </InputAdornment>
+                          ),
+                        },
+                      }
+                    : undefined
+                }
+              />
+              <TextField
+                label="Value"
+                value={newValue}
+                onChange={(e) => setNewValue(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+                size="small"
+                fullWidth
+                type={showNewValue ? 'text' : 'password'}
+                slotProps={{
+                  input: {
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          size="small"
+                          onClick={() => setShowNewValue((v) => !v)}
+                        >
+                          {showNewValue ? (
+                            <VisibilityOff fontSize="small" />
+                          ) : (
+                            <Visibility fontSize="small" />
+                          )}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  },
+                }}
+              />
+              <Button
+                variant="contained"
+                size="small"
+                startIcon={
+                  isSaving ? (
+                    <CircularProgress size={14} color="inherit" />
+                  ) : (
+                    <Add />
+                  )
+                }
+                onClick={handleAdd}
+                disabled={!newKey.trim() || !newValue.trim() || isSaving}
+                sx={{ whiteSpace: 'nowrap', mt: 0.25 }}
+              >
+                Add
+              </Button>
+            </Box>
+          </SettingsSectionBody>
+        </SettingsSection>
+      </Box>
 
       <Dialog
         open={!!deleteKeyTarget}
