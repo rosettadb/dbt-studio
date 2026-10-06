@@ -294,6 +294,7 @@ export type TaskManagerChannels =
 export type CloudExplorerChannels =
   | 'cloudExplorer:listBuckets'
   | 'cloudExplorer:listObjects'
+  | 'cloudExplorer:getFolderMetadata'
   | 'cloudExplorer:getDownloadUrl'
   | 'cloudExplorer:testConnection'
   | 'cloudExplorer:previewData'

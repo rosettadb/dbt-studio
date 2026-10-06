@@ -1,6 +1,7 @@
 import type {
   Bucket,
   CloudListResult,
+  CloudFolderMetadata,
   CloudStorageConfig,
   PreviewResult,
   CloudProvider,
@@ -61,6 +62,29 @@ class CloudExplorerService {
       config,
       bucketName,
       continuationToken,
+      prefix,
+    });
+    return data;
+  }
+
+  static async getFolderMetadata(
+    provider: CloudProvider,
+    config: CloudStorageConfig,
+    bucketName: string,
+    prefix: string,
+  ): Promise<CloudFolderMetadata> {
+    const { data } = await client.post<
+      {
+        provider: CloudProvider;
+        config: CloudStorageConfig;
+        bucketName: string;
+        prefix: string;
+      },
+      CloudFolderMetadata
+    >('cloudExplorer:getFolderMetadata', {
+      provider,
+      config,
+      bucketName,
       prefix,
     });
     return data;

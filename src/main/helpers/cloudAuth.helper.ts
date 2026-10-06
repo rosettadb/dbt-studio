@@ -131,6 +131,24 @@ export async function buildCloudSecretQuery(
   switch (provider) {
     case 'aws': {
       const awsConfig = config as S3Config;
+      if (awsConfig.authMode === 'public') {
+        const domain = awsConfig.region.startsWith('cn-')
+          ? 'amazonaws.com.cn'
+          : 'amazonaws.com';
+        return `
+          ${dropSecretsQuery}
+          CREATE OR REPLACE SECRET s3_secret (
+            TYPE s3,
+            PROVIDER config,
+            KEY_ID '',
+            SECRET '',
+            SESSION_TOKEN '',
+            REGION '${escapeSqlString(awsConfig.region)}',
+            ENDPOINT 's3.${escapeSqlString(awsConfig.region)}.${domain}',
+            URL_STYLE 'path'
+          );
+        `;
+      }
       let sessionTokenClause = '';
       if (awsConfig.sessionToken) {
         // Escape single quotes in session token to prevent SQL injection

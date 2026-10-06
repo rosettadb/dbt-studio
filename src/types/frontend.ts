@@ -106,6 +106,12 @@ export interface StorageObject {
   updated?: Date;
   contentType?: string;
   isDirectory: boolean;
+  folderMetadataStatus?: 'pending' | 'ready' | 'error';
+}
+
+export interface CloudFolderMetadata {
+  size: number;
+  updated?: Date;
 }
 
 export interface CloudListResult {
@@ -115,7 +121,9 @@ export interface CloudListResult {
 
 export interface S3Config {
   region: string;
-  accessKeyId: string;
+  authMode?: 'credentials' | 'public';
+  bucket?: string;
+  accessKeyId?: string;
   secretAccessKey?: string;
   sessionToken?: string;
 }
