@@ -149,6 +149,7 @@ export const PythonTextCell: React.FC<PythonTextCellProps> = ({
             px: 1.5,
             py: 1,
             '& .MuiInputBase-root': {
+              height: 'auto',
               fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
               fontSize: 13,
               lineHeight: 1.6,
