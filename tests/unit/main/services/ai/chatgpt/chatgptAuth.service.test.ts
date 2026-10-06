@@ -430,6 +430,38 @@ describe('ChatGptAuthService credentials', () => {
     ).resolves.toMatchObject({ refreshToken: 'refresh-new' });
   });
 
+  it('signs out after an in-flight refresh, so the refresh cannot restore the credential', async () => {
+    saveCredential(Date.now() + 1000);
+    let respond!: (response: Response) => void;
+    fetchMock.mockImplementation(
+      () =>
+        new Promise<Response>((resolve) => {
+          respond = resolve;
+        }),
+    );
+
+    const refresh = ChatGptAuthService.getValidCredential(7);
+    await waitFor(() => fetchMock.mock.calls.length > 0);
+    const signOut = ChatGptAuthService.signOut(7);
+    respond(jsonResponse(tokenResponse({ refresh_token: 'refresh-new' })));
+
+    await refresh;
+    await signOut;
+    expect(store.has('openai-codex-7-oauth')).toBe(false);
+    expect(updateProvider).toHaveBeenCalledWith(7, {
+      config: JSON.stringify({ model: 'gpt-5.5', signedOut: true }),
+    });
+  });
+
+  it('fails a refresh queued after sign-out instead of restoring tokens', async () => {
+    saveCredential(Date.now() + 1000);
+    await ChatGptAuthService.signOut(7);
+    await expect(
+      ChatGptAuthService.getValidCredential(7, { forceRefresh: true }),
+    ).rejects.toMatchObject({ code: 'signed_out' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('rejects an invalid provider ID on sign-out', async () => {
     await Promise.all(
       [0, -1, 1.5, NaN, '7' as unknown as number].map((id) =>

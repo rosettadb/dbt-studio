@@ -90,6 +90,38 @@ export default class ChatGptAuthService {
   private static refreshing = new Map<number, Promise<ChatGptCredential>>();
 
   /**
+   * Per-provider queue for operations that write the stored credential
+   * (refresh, sign-out). Without it, a sign-out during a refresh's network
+   * wait deletes the credential and the refresh then writes it back,
+   * leaving a provider marked signed out that still has working tokens.
+   */
+  private static providerQueues = new Map<number, Promise<unknown>>();
+
+  /**
+   * Runs `operation` after every earlier queued operation for the same
+   * provider has settled. A failed operation doesn't block the next one.
+   * Must not be called from inside a queued operation (it would wait on
+   * itself).
+   */
+  private static runExclusive<T>(
+    providerId: number,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const previous = this.providerQueues.get(providerId) ?? Promise.resolve();
+    const run = previous.then(operation, operation);
+    // Settles either way; drops itself from the map if nothing queued after.
+    let tail: Promise<void> | undefined;
+    const clear = () => {
+      if (this.providerQueues.get(providerId) === tail) {
+        this.providerQueues.delete(providerId);
+      }
+    };
+    tail = run.then(clear, clear);
+    this.providerQueues.set(providerId, tail);
+    return run;
+  }
+
+  /**
    * Pending logins (signed in, provider not saved yet), keyed by loginId.
    * Memory only: they belong to an open dialog, so none survive a restart
    * and startup needs no keytar scan. On macOS, keytar.findCredentials()
@@ -374,7 +406,7 @@ export default class ChatGptAuthService {
     const inFlight = this.refreshing.get(providerId);
     if (inFlight) return inFlight;
 
-    const promise = (async () => {
+    const promise = this.runExclusive(providerId, async () => {
       const current = await this.readStoredCredential(providerId);
       if (!current) {
         throw new ChatGptAuthError('signed_out', SIGNED_OUT_MESSAGE);
@@ -405,7 +437,7 @@ export default class ChatGptAuthService {
         }
         throw error;
       }
-    })().finally(() => {
+    }).finally(() => {
       this.refreshing.delete(providerId);
     });
 
@@ -450,7 +482,9 @@ export default class ChatGptAuthService {
     if (!Number.isInteger(providerId) || providerId <= 0) {
       throw new Error(MESSAGES.invalidProviderId);
     }
-    await this.markSignedOut(providerId);
+    // Queued behind any in-flight refresh, so the refresh can't write the
+    // credential back after it is deleted.
+    await this.runExclusive(providerId, () => this.markSignedOut(providerId));
   }
 
   private static async markSignedOut(providerId: number): Promise<void> {
