@@ -468,7 +468,6 @@ export const BackupSettings: React.FC = () => {
                     icon={<LockOutlined sx={{ fontSize: 12 }} />}
                     label="Encrypted"
                     size="small"
-                    color="warning"
                     variant="outlined"
                     sx={{ height: 18, fontSize: '0.65rem' }}
                   />

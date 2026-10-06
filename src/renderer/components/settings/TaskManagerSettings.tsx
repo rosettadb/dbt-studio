@@ -4,14 +4,18 @@ import {
   Typography,
   LinearProgress,
   IconButton,
-  Chip,
   Tooltip,
 } from '@mui/material';
 import { Cancel, Delete, PendingActions, History } from '@mui/icons-material';
 import { formatDistanceToNow } from 'date-fns';
 import type { TaskRecord, TaskStatus } from '../../../types/ipc';
 import { useTaskManager } from '../../context';
-import { SettingsRow, SettingsSection, SettingsStack } from './SettingsLayout';
+import {
+  SettingsRow,
+  SettingsSection,
+  SettingsStack,
+  SettingsStatus,
+} from './SettingsLayout';
 
 const STATUS_LABEL: Record<TaskStatus, string> = {
   pending: 'Pending',
@@ -21,12 +25,12 @@ const STATUS_LABEL: Record<TaskStatus, string> = {
   cancelled: 'Cancelled',
 };
 
-const STATUS_COLOR: Record<
+const STATUS_TONE: Record<
   TaskStatus,
-  'default' | 'primary' | 'success' | 'error' | 'warning'
+  'neutral' | 'info' | 'success' | 'error' | 'warning'
 > = {
-  pending: 'default',
-  running: 'primary',
+  pending: 'neutral',
+  running: 'info',
   completed: 'success',
   error: 'error',
   cancelled: 'warning',
@@ -70,11 +74,9 @@ export const TaskManagerSettings: React.FC = () => {
         </Box>
       )}
 
-      <Chip
-        size="small"
-        label={STATUS_LABEL[task.status]}
-        color={STATUS_COLOR[task.status]}
-      />
+      <SettingsStatus tone={STATUS_TONE[task.status]}>
+        {STATUS_LABEL[task.status]}
+      </SettingsStatus>
 
       {task.status === 'running' && task.cancellable && (
         <Tooltip title="Cancel">

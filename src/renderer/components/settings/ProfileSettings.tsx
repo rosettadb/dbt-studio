@@ -1,6 +1,6 @@
 import React from 'react';
-import { Box, Button, CircularProgress, Alert } from '@mui/material';
-import { Refresh, CloudOff, PersonOutline } from '@mui/icons-material';
+import { Box, CircularProgress, Alert } from '@mui/material';
+import { CloudOff, PersonOutline } from '@mui/icons-material';
 import {
   useApiKey,
   useProfile,
@@ -10,6 +10,7 @@ import {
 import { ProfileCard } from '../profile';
 import { CloudSettings } from './CloudSettings';
 import {
+  SettingsRefreshButton,
   SettingsRow,
   SettingsSection,
   SettingsSectionBody,
@@ -54,17 +55,11 @@ export const ProfileSettings: React.FC = () => {
         }
         action={
           apiKey && (
-            <Button
-              variant="outlined"
-              size="small"
+            <SettingsRefreshButton
+              title="Refresh profile"
               onClick={() => refreshProfile()}
-              disabled={refreshing}
-              startIcon={
-                refreshing ? <CircularProgress size={14} /> : <Refresh />
-              }
-            >
-              {refreshing ? 'Refreshing...' : 'Refresh'}
-            </Button>
+              loading={refreshing}
+            />
           )
         }
       >

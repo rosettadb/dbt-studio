@@ -2,7 +2,6 @@ import React from 'react';
 import {
   TextField,
   Button,
-  Chip,
   Typography,
   CircularProgress,
   IconButton,
@@ -22,7 +21,7 @@ import { toast } from 'react-toastify';
 import { useAuthLogin, useValidateApiKey, useApiKey } from '../../controllers';
 import useSecureStorage from '../../hooks/useSecureStorage';
 import { useApiKeySync } from '../../hooks/useApiKeySync';
-import { SettingsRow, SettingsSection } from './SettingsLayout';
+import { SettingsRow, SettingsSection, SettingsStatus } from './SettingsLayout';
 
 export const CloudSettings: React.FC = () => {
   const { setCloudApiKey, deleteCloudApiKey } = useSecureStorage();
@@ -179,7 +178,7 @@ export const CloudSettings: React.FC = () => {
         >
           {hasApiKey ? (
             <>
-              <Chip size="small" color="success" label="Connected" />
+              <SettingsStatus tone="success">Connected</SettingsStatus>
               <Button
                 size="small"
                 color="error"

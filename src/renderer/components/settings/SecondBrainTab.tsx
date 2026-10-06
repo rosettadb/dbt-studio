@@ -59,6 +59,7 @@ import {
   SettingsSection,
   SettingsSectionBody,
   SettingsStack,
+  SettingsStatus,
   settingsTabsSx,
 } from './SettingsLayout';
 import { FileIcon } from '../fileIcon';
@@ -862,15 +863,11 @@ export const SecondBrainTab: React.FC = () => {
             label="Enabled"
             description="Let agents discover durable Markdown memory across sessions."
           >
-            <Chip
-              size="small"
-              color={status?.initialized ? 'success' : 'default'}
-              label={
-                status?.initialized
-                  ? `${status.pageCount} pages`
-                  : 'Not initialized'
-              }
-            />
+            <SettingsStatus tone={status?.initialized ? 'success' : 'neutral'}>
+              {status?.initialized
+                ? `${status.pageCount} pages`
+                : 'Not initialized'}
+            </SettingsStatus>
             {status?.okfVersion && (
               <Chip
                 size="small"
@@ -1226,7 +1223,6 @@ export const SecondBrainTab: React.FC = () => {
                     ) : (
                       <Button
                         size="small"
-                        color="warning"
                         startIcon={<Archive />}
                         disabled={
                           readOnly || canonicalPages.has(pageQuery.data.pageId)

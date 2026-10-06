@@ -4,6 +4,7 @@ import {
   Button,
   Box,
   Chip,
+  Link,
   Typography,
   Alert,
   CircularProgress,
@@ -13,12 +14,8 @@ import {
   Popover,
 } from '@mui/material';
 import {
-  Refresh,
   Delete,
   Download,
-  CheckCircle,
-  Info,
-  Warning,
   Launch,
   HelpOutline,
   TerminalOutlined,
@@ -34,10 +31,12 @@ import {
 } from '../../../types/backend';
 import { ConfirmationModal } from '../modals';
 import {
+  SettingsRefreshButton,
   SettingsRow,
   SettingsSection,
   SettingsSectionBody,
   SettingsStack,
+  SettingsStatus,
 } from './SettingsLayout';
 import {
   useCheckRunnerVersions,
@@ -262,19 +261,11 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
           }
         >
           {settings.runnerPath ? (
-            <Chip
-              size="small"
-              color="success"
-              icon={<CheckCircle />}
-              label={`Installed · ${settings.runnerVersion || 'Unknown'}`}
-            />
+            <SettingsStatus tone="success">
+              Installed · {settings.runnerVersion || 'Unknown'}
+            </SettingsStatus>
           ) : (
-            <Chip
-              size="small"
-              color="warning"
-              icon={<Warning />}
-              label="Not installed"
-            />
+            <SettingsStatus tone="warning">Not installed</SettingsStatus>
           )}
         </SettingsRow>
       </SettingsSection>
@@ -283,21 +274,11 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
         title="Available Versions"
         icon={<ListAltOutlined />}
         action={
-          <Button
-            size="small"
-            variant="outlined"
+          <SettingsRefreshButton
+            title="Refresh versions"
             onClick={() => checkVersions.mutate()}
-            disabled={checkVersions.isLoading}
-            startIcon={
-              checkVersions.isLoading ? (
-                <CircularProgress size={14} />
-              ) : (
-                <Refresh />
-              )
-            }
-          >
-            {checkVersions.isLoading ? 'Loading...' : 'Refresh Versions'}
-          </Button>
+            loading={checkVersions.isLoading}
+          />
         }
       >
         {(!versionInfo || versionInfo.availableVersions.length === 0) && (
@@ -314,12 +295,30 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
             key={version.version}
             label={
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                {version.version}
-                {version.version === versionInfo.currentVersion && (
-                  <Chip label="Installed" size="small" color="success" />
+                {version.releaseNotes ? (
+                  <Tooltip title="View release notes">
+                    {/* eslint-disable-next-line jsx-a11y/anchor-is-valid */}
+                    <Link
+                      component="button"
+                      variant="body2"
+                      underline="hover"
+                      color="inherit"
+                      fontWeight={500}
+                      onClick={() =>
+                        window.open(
+                          `https://github.com/rosettadb/dbt-studio/releases/tag/${version.version}`,
+                          '_blank',
+                        )
+                      }
+                    >
+                      {version.version}
+                    </Link>
+                  </Tooltip>
+                ) : (
+                  version.version
                 )}
                 {version.version === versionInfo.latestStable && (
-                  <Chip label="Latest" size="small" color="primary" />
+                  <Chip label="Latest" size="small" variant="outlined" />
                 )}
               </Box>
             }
@@ -327,40 +326,25 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
               version.releaseDate,
             ).toLocaleDateString()}`}
           >
-            {version.releaseNotes && (
-              <Tooltip title="View release notes">
-                <IconButton
-                  size="small"
-                  onClick={() =>
-                    window.open(
-                      `https://github.com/rosettadb/dbt-studio/releases/tag/${version.version}`,
-                      '_blank',
-                    )
-                  }
-                >
-                  <Info fontSize="small" />
-                </IconButton>
-              </Tooltip>
+            {version.version === versionInfo.currentVersion ? (
+              <SettingsStatus tone="success">Installed</SettingsStatus>
+            ) : (
+              <Button
+                size="small"
+                onClick={() => handleInstallVersion(version.version)}
+                disabled={
+                  installingVersion === version.version ||
+                  installVersion.isLoading
+                }
+                startIcon={
+                  installingVersion === version.version ? (
+                    <CircularProgress size={14} />
+                  ) : undefined
+                }
+              >
+                {getButtonText(version)}
+              </Button>
             )}
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={() => handleInstallVersion(version.version)}
-              disabled={
-                version.version === versionInfo.currentVersion ||
-                installingVersion === version.version ||
-                installVersion.isLoading
-              }
-              startIcon={
-                installingVersion === version.version ? (
-                  <CircularProgress size={14} />
-                ) : (
-                  <Download />
-                )
-              }
-            >
-              {getButtonText(version)}
-            </Button>
           </SettingsRow>
         ))}
       </SettingsSection>
@@ -391,22 +375,14 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
               >
                 {dep.label}
                 {dep.available ? (
-                  <Chip
-                    icon={<CheckCircle />}
-                    label={dep.version ? `v${dep.version}` : 'Available'}
-                    size="small"
-                    color="success"
-                  />
+                  <SettingsStatus tone="success">
+                    {dep.version ? `v${dep.version}` : 'Available'}
+                  </SettingsStatus>
                 ) : (
-                  <Chip
-                    icon={<Warning />}
-                    label="Not found"
-                    size="small"
-                    color="warning"
-                  />
+                  <SettingsStatus tone="warning">Not found</SettingsStatus>
                 )}
                 {dep.id === 'kinetica_cli' && kisqlUpdateAvailable && (
-                  <Chip label="Update available" size="small" color="info" />
+                  <SettingsStatus tone="info">Update available</SettingsStatus>
                 )}
               </Box>
             }
@@ -428,7 +404,6 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
             {(dep.id === 'dbt' || dep.id === 'rosetta') && (
               <Button
                 size="small"
-                variant="outlined"
                 onClick={() => navigate(`/app/settings/${dep.id}`)}
               >
                 Manage

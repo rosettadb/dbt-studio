@@ -20,12 +20,10 @@ import {
 import {
   Info,
   Delete,
-  Refresh,
   GetApp,
   Description,
   CloudDownload,
   Download,
-  CheckCircle,
   ExpandMore,
   DataObjectOutlined,
   CodeOutlined,
@@ -64,10 +62,12 @@ import {
   getPackageInstallSource,
 } from '../../../shared/dbtAdapterPackages';
 import {
+  SettingsRefreshButton,
   SettingsRow,
   SettingsSection,
   SettingsSectionBody,
   SettingsStack,
+  SettingsStatus,
 } from './SettingsLayout';
 
 interface DbtSettingsProps {
@@ -712,40 +712,38 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
               }}
             >
               {item.version}
-              {isInstalled && (
-                <Chip
-                  label="Installed"
-                  size="small"
-                  color="success"
-                  icon={<CheckCircle />}
-                />
-              )}
               {isLatest && !item.isPrerelease && (
-                <Chip label="Latest stable" size="small" />
+                <Chip label="Latest stable" size="small" variant="outlined" />
               )}
               {item.isPrerelease && (
-                <Chip label="Preview" size="small" color="warning" />
+                <Chip
+                  label="Preview"
+                  size="small"
+                  color="warning"
+                  variant="outlined"
+                />
               )}
             </Box>
           }
         >
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={() => {
-              prepareDbtVersionChange(item.version).catch(() => undefined);
-            }}
-            disabled={isInstalled || isLoadingDialog || isLoadingInstall}
-            startIcon={
-              installingPackageKey === `dbt-core@${item.version}` ? (
-                <CircularProgress size={14} />
-              ) : (
-                <Download />
-              )
-            }
-          >
-            {actionLabel}
-          </Button>
+          {isInstalled ? (
+            <SettingsStatus tone="success">Installed</SettingsStatus>
+          ) : (
+            <Button
+              size="small"
+              onClick={() => {
+                prepareDbtVersionChange(item.version).catch(() => undefined);
+              }}
+              disabled={isLoadingDialog || isLoadingInstall}
+              startIcon={
+                installingPackageKey === `dbt-core@${item.version}` ? (
+                  <CircularProgress size={14} />
+                ) : undefined
+              }
+            >
+              {actionLabel}
+            </Button>
+          )}
         </SettingsRow>
       );
     });
@@ -766,14 +764,10 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
           description={settings.dbtPath || 'Not installed'}
         >
           {hasDbt && (
-            <Chip
-              size="small"
-              color="success"
-              icon={<CheckCircle />}
-              label={`${isV2Active ? 'v2 (Rust)' : 'v1 (Python)'}${
-                settings.dbtVersion ? ` · ${settings.dbtVersion}` : ''
-              }`}
-            />
+            <SettingsStatus tone="success">
+              {isV2Active ? 'v2 (Rust)' : 'v1 (Python)'}
+              {settings.dbtVersion ? ` · ${settings.dbtVersion}` : ''}
+            </SettingsStatus>
           )}
         </SettingsRow>
         {settings.pythonPath && settings.pythonVersion && (
@@ -853,21 +847,17 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
         description="Stable runtime. Recommended for production projects and broad adapter compatibility."
         action={
           <>
-            {isCheckingDbtCoreVersions && <CircularProgress size={16} />}
-            <Button
-              size="small"
-              onClick={handleRefreshDbtCoreVersionsClick}
-              disabled={isCheckingDbtCoreVersions}
-              startIcon={<Refresh />}
-            >
-              Refresh
-            </Button>
             <Button
               size="small"
               onClick={() => setShowOlderVersions((value) => !value)}
             >
               {showOlderVersions ? 'Show fewer' : 'Show older'}
             </Button>
+            <SettingsRefreshButton
+              title="Refresh versions"
+              onClick={handleRefreshDbtCoreVersionsClick}
+              loading={isCheckingDbtCoreVersions}
+            />
           </>
         }
       >
@@ -889,7 +879,14 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
         title="dbt Core v2 · Rust"
         icon={<BoltOutlined />}
         description="Preview runtime, still in alpha. Cloud pipeline runs are unavailable while v2 is active."
-        action={<Chip label="Preview" size="small" color="warning" />}
+        action={
+          <Chip
+            label="Preview"
+            size="small"
+            color="warning"
+            variant="outlined"
+          />
+        }
       >
         {renderVersionList(
           rustDbtVersions,
@@ -942,11 +939,11 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                   }}
                 >
                   {adapter.displayName}
-                  <Chip
-                    size="small"
-                    label={adapter.status}
-                    color={adapter.canExecute ? 'warning' : 'error'}
-                  />
+                  <SettingsStatus
+                    tone={adapter.canExecute ? 'warning' : 'error'}
+                  >
+                    {adapter.status}
+                  </SettingsStatus>
                   <Chip
                     size="small"
                     variant="outlined"
@@ -980,7 +977,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                         <Chip
                           label={`v${installed}`}
                           size="small"
-                          color="primary"
+                          variant="outlined"
                         />
                       )}
                     </Box>
@@ -1002,7 +999,6 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                   ) : (
                     <Button
                       size="small"
-                      variant="outlined"
                       onClick={() => {
                         fetchPackageVersions(pkg).catch(() => undefined);
                         if (!isExpanded) {
@@ -1011,7 +1007,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                       }}
                       disabled={isLoading}
                       startIcon={
-                        isLoading ? <CircularProgress size={14} /> : <Refresh />
+                        isLoading ? <CircularProgress size={14} /> : undefined
                       }
                     >
                       {isLoading ? 'Loading...' : 'Versions'}
@@ -1096,49 +1092,40 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                                   }}
                                 >
                                   {v.version}
-                                  {isInstalled && (
-                                    <Chip
-                                      label="Installed"
-                                      size="small"
-                                      color="success"
-                                      icon={<CheckCircle />}
-                                    />
-                                  )}
                                   {isLatest && !v.isPrerelease && (
                                     <Chip
                                       label="Latest"
                                       size="small"
-                                      color="primary"
+                                      variant="outlined"
                                     />
                                   )}
                                 </Box>
                               }
                             >
-                              <Button
-                                size="small"
-                                variant="outlined"
-                                onClick={() => {
-                                  installSinglePackageVersion(
-                                    pkg,
-                                    v.version,
-                                  ).catch(() => undefined);
-                                }}
-                                disabled={
-                                  isInstalled ||
-                                  isLoadingDialog ||
-                                  isLoadingInstall
-                                }
-                                startIcon={
-                                  installingPackageKey ===
-                                  `${pkg}@${v.version}` ? (
-                                    <CircularProgress size={14} />
-                                  ) : (
-                                    <Download />
-                                  )
-                                }
-                              >
-                                {actionLabel}
-                              </Button>
+                              {isInstalled ? (
+                                <SettingsStatus tone="success">
+                                  Installed
+                                </SettingsStatus>
+                              ) : (
+                                <Button
+                                  size="small"
+                                  onClick={() => {
+                                    installSinglePackageVersion(
+                                      pkg,
+                                      v.version,
+                                    ).catch(() => undefined);
+                                  }}
+                                  disabled={isLoadingDialog || isLoadingInstall}
+                                  startIcon={
+                                    installingPackageKey ===
+                                    `${pkg}@${v.version}` ? (
+                                      <CircularProgress size={14} />
+                                    ) : undefined
+                                  }
+                                >
+                                  {actionLabel}
+                                </Button>
+                              )}
                             </SettingsRow>
                           );
                         })}
@@ -1164,17 +1151,11 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
           title="Installed Packages"
           icon={<Inventory2Outlined />}
           action={
-            <>
-              {isCheckingPackages && <CircularProgress size={16} />}
-              <Button
-                size="small"
-                onClick={handleRefreshInstalledPackagesClick}
-                disabled={isCheckingPackages}
-                startIcon={<Refresh />}
-              >
-                Refresh
-              </Button>
-            </>
+            <SettingsRefreshButton
+              title="Refresh packages"
+              onClick={handleRefreshInstalledPackagesClick}
+              loading={isCheckingPackages}
+            />
           }
         >
           {Object.keys(installedPackages).length > 0

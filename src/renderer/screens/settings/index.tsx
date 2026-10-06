@@ -11,6 +11,7 @@ import {
 } from '@mui/material';
 import { OpenInNew } from '@mui/icons-material';
 import { useLocation } from 'react-router-dom';
+import { useColorScheme } from '@mui/material/styles';
 import { SettingsType } from '../../../types/backend';
 import {
   useFilePicker,
@@ -42,8 +43,39 @@ import {
 import { AppLayout } from '../../layouts';
 import { settingsSidebarCategories } from './settingsElements';
 
+// The theme's warning yellow is very bright. Inside settings we use a
+// softer orange so warning states don't jump out.
+const softWarningColors = {
+  dark: {
+    '--mui-palette-warning-main': '#d8a05a',
+    '--mui-palette-warning-mainChannel': '216 160 90',
+    '--mui-palette-warning-light': '#e3b47a',
+    '--mui-palette-warning-dark': '#b8742a',
+    '--mui-palette-warning-contrastText': 'rgba(0, 0, 0, 0.87)',
+    '--mui-palette-Alert-warningColor': '#f0d6b3',
+    '--mui-palette-Alert-warningStandardBg': '#2e2416',
+    '--mui-palette-Alert-warningIconColor': '#d8a05a',
+    '--mui-palette-Alert-warningFilledBg': '#b8742a',
+    '--mui-palette-Alert-warningFilledColor': '#fff',
+  },
+  light: {
+    '--mui-palette-warning-main': '#b8742a',
+    '--mui-palette-warning-mainChannel': '184 116 42',
+    '--mui-palette-warning-light': '#d8a05a',
+    '--mui-palette-warning-dark': '#9a5f1f',
+    '--mui-palette-warning-contrastText': '#fff',
+    '--mui-palette-Alert-warningColor': '#5c3a10',
+    '--mui-palette-Alert-warningStandardBg': '#fbf1e4',
+    '--mui-palette-Alert-warningIconColor': '#b8742a',
+    '--mui-palette-Alert-warningFilledBg': '#b8742a',
+    '--mui-palette-Alert-warningFilledColor': '#fff',
+  },
+} as const;
+
 const Settings: React.FC = () => {
   const theme = useTheme();
+  const { mode, systemMode } = useColorScheme();
+  const isDarkMode = (mode === 'system' ? systemMode : mode) === 'dark';
   const { data: settings } = useGetSettings();
   const { mutate: updateSettings, mutateAsync: updateSettingsAsync } =
     useUpdateSettings({
@@ -326,7 +358,13 @@ const Settings: React.FC = () => {
         </Box>
       }
     >
-      <Container>
+      <Container
+        style={
+          (isDarkMode
+            ? softWarningColors.dark
+            : softWarningColors.light) as React.CSSProperties
+        }
+      >
         <StyledForm
           onSubmit={(event) => {
             event.preventDefault();

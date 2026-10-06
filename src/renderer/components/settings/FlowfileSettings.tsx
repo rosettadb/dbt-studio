@@ -5,15 +5,12 @@ import {
   Button,
   Alert,
   CircularProgress,
-  Chip,
   Backdrop,
   Switch,
 } from '@mui/material';
 import {
-  CheckCircle,
   CloudDownload,
   Delete,
-  Refresh,
   AccountTreeOutlined,
   WarningAmberOutlined,
 } from '@mui/icons-material';
@@ -28,10 +25,12 @@ import {
 import { ConfirmationModal } from '../modals';
 import { useInstallPython } from '../../controllers';
 import {
+  SettingsRefreshButton,
   SettingsRow,
   SettingsSection,
   SettingsSectionBody,
   SettingsStack,
+  SettingsStatus,
 } from './SettingsLayout';
 
 interface FlowfileSettingsProps {
@@ -169,38 +168,20 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
         title="Flowfile"
         icon={<AccountTreeOutlined />}
         action={
-          <Button
-            size="small"
-            startIcon={
-              isCheckingStatus ? (
-                <CircularProgress size={12} />
-              ) : (
-                <Refresh fontSize="small" />
-              )
-            }
+          <SettingsRefreshButton
+            title="Refresh status"
             onClick={checkStatus}
-            disabled={isCheckingStatus}
-          >
-            Refresh
-          </Button>
+            loading={isCheckingStatus}
+          />
         }
       >
         <SettingsRow label="Installation Status">
           {installedVersion ? (
-            <Chip
-              icon={<CheckCircle fontSize="small" />}
-              label={`Flowfile ${installedVersion}`}
-              color="success"
-              variant="outlined"
-              size="small"
-            />
+            <SettingsStatus tone="success">
+              Installed · {installedVersion}
+            </SettingsStatus>
           ) : (
-            <Chip
-              label="Not installed"
-              color="default"
-              variant="outlined"
-              size="small"
-            />
+            <SettingsStatus tone="neutral">Not installed</SettingsStatus>
           )}
         </SettingsRow>
         <SettingsRow label="Auto-start Flowfile on app launch">

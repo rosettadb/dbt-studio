@@ -5,17 +5,10 @@ import {
   Button,
   Alert,
   CircularProgress,
-  Chip,
   Tabs,
   Tab,
 } from '@mui/material';
-import {
-  Add,
-  Refresh,
-  DeleteSweep,
-  StorageOutlined,
-  SmartToyOutlined,
-} from '@mui/icons-material';
+import { Add, StorageOutlined, SmartToyOutlined } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
@@ -31,9 +24,11 @@ import { MCPServersTab } from './MCPServersTab';
 import { SkillsTab } from './SkillsTab';
 import { SecondBrainTab } from './SecondBrainTab';
 import {
+  SettingsRefreshButton,
   SettingsRow,
   SettingsSection,
   SettingsStack,
+  SettingsStatus,
   settingsTabsSx,
 } from './SettingsLayout';
 
@@ -136,7 +131,7 @@ export const AIProvidersSettings: React.FC = () => {
       case 'error':
         return 'error';
       default:
-        return 'default';
+        return 'neutral';
     }
   };
 
@@ -199,22 +194,17 @@ export const AIProvidersSettings: React.FC = () => {
               label="AI database"
               description={`SQLite ${settingsWithDbInfo?.sqliteVersion || 'Unknown'} · ${settingsWithDbInfo?.mainDatabaseSize || 'Unknown'}`}
             >
-              <Chip
-                size="small"
-                label={settingsWithDbInfo?.mainDatabaseStatus || 'Unknown'}
-                color={getStatusColor(settingsWithDbInfo?.mainDatabaseStatus)}
-                variant="outlined"
-              />
+              <SettingsStatus
+                tone={getStatusColor(settingsWithDbInfo?.mainDatabaseStatus)}
+              >
+                {settingsWithDbInfo?.mainDatabaseStatus || 'Unknown'}
+              </SettingsStatus>
               <Button
-                variant="outlined"
-                color="warning"
                 size="small"
                 startIcon={
                   isCleaningUp ? (
                     <CircularProgress size={14} color="inherit" />
-                  ) : (
-                    <DeleteSweep />
-                  )
+                  ) : undefined
                 }
                 onClick={() => cleanupOrphanedChats()}
                 disabled={isCleaningUp}
@@ -255,14 +245,10 @@ export const AIProvidersSettings: React.FC = () => {
             description="Use the switch to choose which provider is active."
             action={
               <>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  startIcon={<Refresh />}
+                <SettingsRefreshButton
+                  title="Refresh providers"
                   onClick={handleRefreshAll}
-                >
-                  Refresh
-                </Button>
+                />
                 <Button
                   size="small"
                   variant="contained"

@@ -3,22 +3,17 @@ import {
   Button,
   Box,
   Chip,
+  Link,
   Typography,
   CircularProgress,
   ToggleButton,
   ToggleButtonGroup,
-  IconButton,
   Tooltip,
   Backdrop,
 } from '@mui/material';
 import {
   OpenInNew,
-  Refresh,
   Delete,
-  Download,
-  CheckCircle,
-  Info,
-  Warning,
   TerminalOutlined,
   ListAltOutlined,
   WarningAmberOutlined,
@@ -33,10 +28,12 @@ import {
   useUninstallRosetta,
 } from '../../controllers';
 import {
+  SettingsRefreshButton,
   SettingsRow,
   SettingsSection,
   SettingsSectionBody,
   SettingsStack,
+  SettingsStatus,
 } from './SettingsLayout';
 
 interface RosettaSettingsProps {
@@ -227,19 +224,13 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
           }
         >
           {settings.rosettaPath ? (
-            <Chip
-              size="small"
-              color={isCurrentVersionUnsupported ? 'warning' : 'success'}
-              icon={isCurrentVersionUnsupported ? <Warning /> : <CheckCircle />}
-              label={`Installed · ${settings.rosettaVersion || 'Unknown'}`}
-            />
+            <SettingsStatus
+              tone={isCurrentVersionUnsupported ? 'warning' : 'success'}
+            >
+              Installed · {settings.rosettaVersion || 'Unknown'}
+            </SettingsStatus>
           ) : (
-            <Chip
-              size="small"
-              color="warning"
-              icon={<Warning />}
-              label="Not installed"
-            />
+            <SettingsStatus tone="warning">Not installed</SettingsStatus>
           )}
         </SettingsRow>
       </SettingsSection>
@@ -271,22 +262,11 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
                 <ToggleButton value="all">All</ToggleButton>
               </ToggleButtonGroup>
             )}
-            <Tooltip title="Refresh versions">
-              <span>
-                <IconButton
-                  size="small"
-                  onClick={handleCheckVersions}
-                  disabled={checkVersions.isLoading}
-                  aria-label="Refresh versions"
-                >
-                  {checkVersions.isLoading ? (
-                    <CircularProgress size={16} />
-                  ) : (
-                    <Refresh fontSize="small" />
-                  )}
-                </IconButton>
-              </span>
-            </Tooltip>
+            <SettingsRefreshButton
+              title="Refresh versions"
+              onClick={handleCheckVersions}
+              loading={checkVersions.isLoading}
+            />
           </>
         }
       >
@@ -315,21 +295,39 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
               key={version.version}
               label={
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  {version.version}
-                  {version.isPrerelease && (
-                    <Chip label="Pre-release" size="small" color="warning" />
+                  {version.releaseNotes ? (
+                    <Tooltip title="View release notes">
+                      {/* eslint-disable-next-line jsx-a11y/anchor-is-valid */}
+                      <Link
+                        component="button"
+                        variant="body2"
+                        underline="hover"
+                        color="inherit"
+                        fontWeight={500}
+                        onClick={() =>
+                          window.open(
+                            `https://github.com/rosettadb/rosetta/releases/tag/v${version.version}`,
+                            '_blank',
+                          )
+                        }
+                      >
+                        {version.version}
+                      </Link>
+                    </Tooltip>
+                  ) : (
+                    version.version
                   )}
-                  {version.version === versionInfo.currentVersion && (
+                  {version.isPrerelease && (
                     <Chip
-                      label="Installed"
+                      label="Pre-release"
                       size="small"
-                      color="success"
-                      icon={<CheckCircle />}
+                      color="warning"
+                      variant="outlined"
                     />
                   )}
                   {version.version === versionInfo.latestStable &&
                     !version.isPrerelease && (
-                      <Chip label="Latest" size="small" color="primary" />
+                      <Chip label="Latest" size="small" variant="outlined" />
                     )}
                 </Box>
               }
@@ -337,40 +335,25 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
                 version.releaseDate,
               ).toLocaleDateString()}`}
             >
-              {version.releaseNotes && (
-                <Tooltip title="View release notes">
-                  <IconButton
-                    size="small"
-                    onClick={() =>
-                      window.open(
-                        `https://github.com/rosettadb/rosetta/releases/tag/v${version.version}`,
-                        '_blank',
-                      )
-                    }
-                  >
-                    <Info fontSize="small" />
-                  </IconButton>
-                </Tooltip>
+              {version.version === versionInfo.currentVersion ? (
+                <SettingsStatus tone="success">Installed</SettingsStatus>
+              ) : (
+                <Button
+                  size="small"
+                  onClick={() => handleInstallVersion(version.version)}
+                  disabled={
+                    installingVersion === version.version ||
+                    installVersion.isLoading
+                  }
+                  startIcon={
+                    installingVersion === version.version ? (
+                      <CircularProgress size={14} />
+                    ) : undefined
+                  }
+                >
+                  {getButtonText(version)}
+                </Button>
               )}
-              <Button
-                size="small"
-                variant="outlined"
-                onClick={() => handleInstallVersion(version.version)}
-                disabled={
-                  version.version === versionInfo.currentVersion ||
-                  installingVersion === version.version ||
-                  installVersion.isLoading
-                }
-                startIcon={
-                  installingVersion === version.version ? (
-                    <CircularProgress size={14} />
-                  ) : (
-                    <Download />
-                  )
-                }
-              >
-                {getButtonText(version)}
-              </Button>
             </SettingsRow>
           ))}
         {versionInfo && (

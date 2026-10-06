@@ -1,11 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Button, Box, Chip, CircularProgress, Backdrop } from '@mui/material';
 import {
-  CheckCircle,
   Delete,
-  Download,
-  Refresh,
-  Warning,
   CodeOutlined,
   ListAltOutlined,
   WarningAmberOutlined,
@@ -18,7 +14,13 @@ import {
   useInstallPythonVersion,
   useUninstallPython,
 } from '../../controllers';
-import { SettingsRow, SettingsSection, SettingsStack } from './SettingsLayout';
+import {
+  SettingsRefreshButton,
+  SettingsRow,
+  SettingsSection,
+  SettingsStack,
+  SettingsStatus,
+} from './SettingsLayout';
 
 interface PythonSettingsProps {
   settings: SettingsType;
@@ -154,19 +156,11 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
           }
         >
           {isInstalled ? (
-            <Chip
-              size="small"
-              color="success"
-              icon={<CheckCircle />}
-              label={`Installed · ${settings.pythonVersion || 'Unknown'}`}
-            />
+            <SettingsStatus tone="success">
+              Installed · {settings.pythonVersion || 'Unknown'}
+            </SettingsStatus>
           ) : (
-            <Chip
-              size="small"
-              color="warning"
-              icon={<Warning />}
-              label="Not installed"
-            />
+            <SettingsStatus tone="warning">Not installed</SettingsStatus>
           )}
         </SettingsRow>
       </SettingsSection>
@@ -175,21 +169,11 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
         title="Available Versions"
         icon={<ListAltOutlined />}
         action={
-          <Button
-            size="small"
-            variant="outlined"
+          <SettingsRefreshButton
+            title="Refresh versions"
             onClick={() => checkVersions.mutate()}
-            disabled={checkVersions.isLoading}
-            startIcon={
-              checkVersions.isLoading ? (
-                <CircularProgress size={14} />
-              ) : (
-                <Refresh />
-              )
-            }
-          >
-            {checkVersions.isLoading ? 'Refreshing...' : 'Refresh Versions'}
-          </Button>
+            loading={checkVersions.isLoading}
+          />
         }
       >
         {!versionInfo && (
@@ -208,38 +192,30 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 {entry.version}
                 {entry.isRecommended && (
-                  <Chip label="Recommended" size="small" color="primary" />
-                )}
-                {entry.version === settings.pythonVersion && (
-                  <Chip
-                    label="Installed"
-                    size="small"
-                    color="success"
-                    icon={<CheckCircle />}
-                  />
+                  <Chip label="Recommended" size="small" variant="outlined" />
                 )}
               </Box>
             }
           >
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={() => requestInstallVersion(entry.version)}
-              disabled={
-                entry.version === settings.pythonVersion ||
-                installingVersion === entry.version ||
-                installVersion.isLoading
-              }
-              startIcon={
-                installingVersion === entry.version ? (
-                  <CircularProgress size={14} />
-                ) : (
-                  <Download />
-                )
-              }
-            >
-              {getButtonLabel(entry.version)}
-            </Button>
+            {entry.version === settings.pythonVersion ? (
+              <SettingsStatus tone="success">Installed</SettingsStatus>
+            ) : (
+              <Button
+                size="small"
+                onClick={() => requestInstallVersion(entry.version)}
+                disabled={
+                  installingVersion === entry.version ||
+                  installVersion.isLoading
+                }
+                startIcon={
+                  installingVersion === entry.version ? (
+                    <CircularProgress size={14} />
+                  ) : undefined
+                }
+              >
+                {getButtonLabel(entry.version)}
+              </Button>
+            )}
           </SettingsRow>
         ))}
       </SettingsSection>

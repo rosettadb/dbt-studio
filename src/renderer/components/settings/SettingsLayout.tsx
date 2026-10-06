@@ -1,5 +1,12 @@
 import React from 'react';
-import { Box, Typography } from '@mui/material';
+import {
+  Box,
+  CircularProgress,
+  IconButton,
+  Tooltip,
+  Typography,
+} from '@mui/material';
+import { Refresh } from '@mui/icons-material';
 
 // Shared building blocks so every settings page has the same look:
 // compact cards with a header strip (icon, title, description) and the
@@ -153,3 +160,61 @@ export const settingsTabsSx = {
     textTransform: 'none',
   },
 } as const;
+
+type SettingsStatusTone = 'success' | 'warning' | 'error' | 'info' | 'neutral';
+
+// A small coloured dot with text. Used for states (installed, connected,
+// not found) instead of coloured chips, so colour stays quiet.
+export const SettingsStatus: React.FC<{
+  tone: SettingsStatusTone;
+  children: React.ReactNode;
+}> = ({ tone, children }) => (
+  <Box
+    component="span"
+    sx={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 0.75,
+      fontSize: 12,
+      color: 'text.secondary',
+      whiteSpace: 'nowrap',
+    }}
+  >
+    <Box
+      component="span"
+      sx={{
+        width: 7,
+        height: 7,
+        borderRadius: '50%',
+        flexShrink: 0,
+        bgcolor: tone === 'neutral' ? 'text.disabled' : `${tone}.main`,
+      }}
+    />
+    {children}
+  </Box>
+);
+
+// Icon-only refresh button; the tooltip says what it refreshes.
+export const SettingsRefreshButton: React.FC<{
+  title: string;
+  onClick: () => void;
+  loading?: boolean;
+  disabled?: boolean;
+}> = ({ title, onClick, loading = false, disabled = false }) => (
+  <Tooltip title={title}>
+    <span>
+      <IconButton
+        size="small"
+        onClick={onClick}
+        disabled={disabled || loading}
+        aria-label={title}
+      >
+        {loading ? (
+          <CircularProgress size={16} />
+        ) : (
+          <Refresh fontSize="small" />
+        )}
+      </IconButton>
+    </span>
+  </Tooltip>
+);

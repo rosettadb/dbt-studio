@@ -3,7 +3,6 @@ import {
   Typography,
   Box,
   Button,
-  Chip,
   LinearProgress,
   IconButton,
   Tooltip,
@@ -17,7 +16,6 @@ import {
   Storage,
   Refresh,
   RestartAlt,
-  HealthAndSafety,
   Warning,
   Close,
   StorageOutlined,
@@ -33,6 +31,7 @@ import {
   SettingsRow,
   SettingsSection,
   SettingsSectionBody,
+  SettingsStatus,
 } from './SettingsLayout';
 
 const DiagnosticsDialog: React.FC<{ open: boolean; onClose: () => void }> = ({
@@ -178,7 +177,7 @@ export const DuckDBWorkspaceCard: React.FC = () => {
       case 'error':
         return 'error';
       default:
-        return 'default';
+        return 'neutral';
     }
   };
 
@@ -211,11 +210,9 @@ export const DuckDBWorkspaceCard: React.FC = () => {
         ) : (
           <>
             <SettingsRow label="Status">
-              <Chip
-                label={metadata?.status || 'Unknown'}
-                color={getStatusColor(metadata?.status) as any}
-                size="small"
-              />
+              <SettingsStatus tone={getStatusColor(metadata?.status)}>
+                {metadata?.status || 'Unknown'}
+              </SettingsStatus>
             </SettingsRow>
             <SettingsRow label="File Size">
               <Typography variant="body2" color="text.secondary">
@@ -243,14 +240,8 @@ export const DuckDBWorkspaceCard: React.FC = () => {
           label="Diagnostics"
           description="Connection pool, leaks and a sample of open connections."
         >
-          <Button
-            size="small"
-            variant="outlined"
-            color="primary"
-            startIcon={<HealthAndSafety />}
-            onClick={() => setShowDiagnostics(true)}
-          >
-            Diagnostics
+          <Button size="small" onClick={() => setShowDiagnostics(true)}>
+            Open
           </Button>
         </SettingsRow>
         <SettingsRow
@@ -264,7 +255,7 @@ export const DuckDBWorkspaceCard: React.FC = () => {
             startIcon={<RestartAlt />}
             onClick={() => setConfirmReinit(true)}
           >
-            Reinitialize Database
+            Reinitialize
           </Button>
         </SettingsRow>
       </SettingsSection>
