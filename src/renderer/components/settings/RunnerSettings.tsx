@@ -404,6 +404,7 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
             {(dep.id === 'dbt' || dep.id === 'rosetta') && (
               <Button
                 size="small"
+                variant="outlined"
                 onClick={() => navigate(`/app/settings/${dep.id}`)}
               >
                 Manage

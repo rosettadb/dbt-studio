@@ -8,7 +8,12 @@ import {
   Tabs,
   Tab,
 } from '@mui/material';
-import { Add, StorageOutlined, SmartToyOutlined } from '@mui/icons-material';
+import {
+  Add,
+  StorageOutlined,
+  SmartToyOutlined,
+  DeleteSweep,
+} from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
@@ -201,10 +206,13 @@ export const AIProvidersSettings: React.FC = () => {
               </SettingsStatus>
               <Button
                 size="small"
+                variant="outlined"
                 startIcon={
                   isCleaningUp ? (
                     <CircularProgress size={14} color="inherit" />
-                  ) : undefined
+                  ) : (
+                    <DeleteSweep />
+                  )
                 }
                 onClick={() => cleanupOrphanedChats()}
                 disabled={isCleaningUp}

@@ -19,6 +19,7 @@ import {
   Warning,
   Close,
   StorageOutlined,
+  HealthAndSafety,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import {
@@ -240,7 +241,12 @@ export const DuckDBWorkspaceCard: React.FC = () => {
           label="Diagnostics"
           description="Connection pool, leaks and a sample of open connections."
         >
-          <Button size="small" onClick={() => setShowDiagnostics(true)}>
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<HealthAndSafety />}
+            onClick={() => setShowDiagnostics(true)}
+          >
             Open
           </Button>
         </SettingsRow>

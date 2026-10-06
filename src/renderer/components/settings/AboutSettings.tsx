@@ -49,6 +49,7 @@ export const AboutSettings: React.FC = () => {
   const renderExternalLinkButton = (label: string, url: string) => (
     <Button
       size="small"
+      variant="outlined"
       endIcon={<OpenInNew fontSize="small" />}
       component="a"
       href={url}

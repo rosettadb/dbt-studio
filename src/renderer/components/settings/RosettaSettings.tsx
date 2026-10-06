@@ -377,6 +377,7 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
               ).length > 10 && (
                 <Button
                   size="small"
+                  variant="outlined"
                   onClick={() => setShowAllVersions(!showAllVersions)}
                 >
                   {showAllVersions
