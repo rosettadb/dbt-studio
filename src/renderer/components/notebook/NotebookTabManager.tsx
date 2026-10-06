@@ -1,7 +1,8 @@
 import React from 'react';
 import { Box, IconButton, Tooltip, useTheme } from '@mui/material';
-import { Close, Description } from '@mui/icons-material';
+import { Close } from '@mui/icons-material';
 import { NotebookTabState } from '../../hooks/useNotebookTabManager';
+import { NotebookKindIcon } from './NotebookKindIcon';
 
 interface NotebookTabProps {
   tab: NotebookTabState;
@@ -108,7 +109,10 @@ const NotebookTab: React.FC<NotebookTabProps> = ({
             }}
           />
         )}
-        <Description sx={{ fontSize: 16, color: 'inherit' }} />
+        <NotebookKindIcon
+          kind={tab.kind}
+          sx={{ fontSize: 16, color: 'inherit' }}
+        />
         <Box
           sx={{
             fontSize: 13,

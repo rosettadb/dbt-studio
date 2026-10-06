@@ -36,12 +36,21 @@ export type PostgresConnection = ConnectionBase & {
   sslRejectUnauthorized?: boolean;
 };
 
+export type SnowflakeAuthMethod = 'password' | 'oauth_browser';
+
+// Shown verbatim by every screen when a Snowflake OAuth session is missing.
+// Single source of truth shared by main and renderer so all three screens
+// display identical guidance.
+export const SNOWFLAKE_REAUTH_MESSAGE =
+  'Snowflake session not found or expired. Open the Connections screen, select this Snowflake connection, and click Test Connection to sign in again in the browser.';
+
 export type SnowflakeConnection = ConnectionBase & {
   type: 'snowflake';
   account: string;
   warehouse: string;
   role?: string;
   client_session_keep_alive?: boolean;
+  authMethod?: SnowflakeAuthMethod;
 };
 
 export type BigQueryConnection = ConnectionBase & {
@@ -104,6 +113,13 @@ export type KineticaConnection = ConnectionBase & {
   bypassSslCertCheck?: boolean;
 };
 
+export type MySqlConnection = ConnectionBase & {
+  type: 'mysql';
+  host: string;
+  port: number;
+  ssl?: boolean;
+};
+
 /** Db2 for LUW. Query-only: never a dbt connection. */
 export type Db2Connection = ConnectionBase & {
   type: 'db2';
@@ -135,12 +151,13 @@ export type ConnectionInput =
   | DuckDBConnection
   | SQLiteConnection
   | KineticaConnection
+  | MySqlConnection
   | Db2Connection
   | DuckLakeConnectionConfig;
 
 export const canUseAsDbtConnection = (
   type: SupportedConnectionTypes,
-): boolean => type !== 'sqlite' && type !== 'db2';
+): boolean => type !== 'sqlite' && type !== 'mysql' && type !== 'db2';
 
 export type ConnectionModel = {
   id: string;
@@ -163,13 +180,16 @@ export type PostgresDBTConnection = DBTConnectionBase & {
   ssl?: boolean;
 };
 
-export type SnowflakeDBTConnection = DBTConnectionBase & {
+export type SnowflakeDBTConnection = Omit<DBTConnectionBase, 'password'> & {
   type: 'snowflake';
+  password?: string;
   account: string;
   warehouse: string;
   role?: string;
   client_session_keep_alive?: boolean;
   query_tag?: string;
+  authMethod?: SnowflakeAuthMethod;
+  authenticator?: 'oauth_authorization_code' | 'externalbrowser';
 };
 
 export type BigQueryDBTConnection = DBTConnectionBase & {
@@ -222,6 +242,14 @@ export type KineticaDBTConnection = DBTConnectionBase & {
   bypassSslCertCheck?: boolean;
 };
 
+export type MySqlDBTConnection = DBTConnectionBase & {
+  type: 'mysql';
+  host: string;
+  port: number;
+  ssl?: boolean;
+  sslRejectUnauthorized?: boolean;
+};
+
 export type DBTConnection =
   | PostgresDBTConnection
   | SnowflakeDBTConnection
@@ -229,7 +257,8 @@ export type DBTConnection =
   | RedshiftDBTConnection
   | DatabricksDBTConnection
   | DuckDBDBTConnection
-  | KineticaDBTConnection;
+  | KineticaDBTConnection
+  | MySqlDBTConnection;
 
 export type RosettaConnection = {
   name: string;
@@ -776,6 +805,19 @@ export type BigQueryTestResponse = {
   success: boolean;
 };
 
+export type ConnectionTestResult = {
+  ok: boolean;
+  code?: string;
+  message?: string;
+  details?: string;
+  authFlow?: 'none' | 'browser';
+};
+
+export type ConnectorTestResponse =
+  | boolean
+  | BigQueryTestResponse
+  | ConnectionTestResult;
+
 export type UpdateInfo = {
   currentVersion: string;
   newVersion: string;
@@ -839,7 +881,8 @@ export type AIProviderType =
   | 'gemini'
   | 'anthropic'
   | 'openai-compatible'
-  | 'lmstudio';
+  | 'lmstudio'
+  | 'openai-codex';
 
 // Chat-related types
 export interface ChatConversation {

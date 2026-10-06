@@ -9,6 +9,8 @@ interface TestProviderConnectionProps {
   providerType: string;
   apiKey?: string;
   baseUrl?: string;
+  /** ChatGPT sign-in (Plan 71): the pending login to test with. */
+  pendingLoginId?: string;
   onTestComplete?: (success: boolean, models?: any[]) => void;
   disabled?: boolean;
   size?: 'small' | 'medium' | 'large';
@@ -18,6 +20,7 @@ export const TestProviderConnection: React.FC<TestProviderConnectionProps> = ({
   providerType,
   apiKey,
   baseUrl,
+  pendingLoginId,
   onTestComplete,
   disabled = false,
   size = 'medium',
@@ -74,6 +77,9 @@ export const TestProviderConnection: React.FC<TestProviderConnectionProps> = ({
     if (apiKey) {
       credentials.apiKey = apiKey;
     }
+    if (providerType === 'openai-codex' && pendingLoginId) {
+      credentials.pendingLoginId = pendingLoginId;
+    }
 
     testTemporaryProvider({ config, credentials });
   };
@@ -88,6 +94,8 @@ export const TestProviderConnection: React.FC<TestProviderConnectionProps> = ({
       case 'lmstudio':
       case 'openai-compatible':
         return true;
+      case 'openai-codex':
+        return !!pendingLoginId;
       default:
         return false;
     }
@@ -130,6 +138,8 @@ export const TestProviderConnection: React.FC<TestProviderConnectionProps> = ({
         return 'Blank URL uses local LM Studio (port 1234)';
       case 'openai-compatible':
         return 'Enter Base URL to test';
+      case 'openai-codex':
+        return 'Sign in with ChatGPT to test';
       default:
         return 'Select provider type first';
     }

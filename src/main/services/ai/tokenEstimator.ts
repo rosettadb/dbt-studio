@@ -1,4 +1,6 @@
 /* eslint-disable no-console */
+import { CHAT_IMAGE_TOKEN_ESTIMATE } from '../../../types/chatAttachments';
+
 /**
  * Token Estimator Service
  * Provides fast approximate token counts and context window sizes per model.
@@ -6,10 +8,17 @@
  * We use 3 chars/token to slightly over-estimate, which is safer for context management.
  *
  * Context window resolution order:
+ *   0. ChatGPT sign-in models (provider 'chatgpt'): their own caps only
  *   1. Live cache populated by fetchAndCacheContextWindows() (called by providerManager on save)
  *   2. Static fallback table below (covers known models at build time)
  *   3. 'default' entry (32K) if nothing matches
  */
+
+import {
+  CHATGPT_CONTEXT_WINDOWS,
+  CHATGPT_INPUT_TOKEN_LIMIT,
+  CHATGPT_PROVIDER_ID,
+} from './chatgpt/chatgptModels';
 
 // ─── Static Fallback Table ────────────────────────────────────────────────────
 // Last updated: April 2026. Used when the provider API is unreachable.
@@ -190,15 +199,25 @@ export function estimateMessagesTokens(
     content: any;
     contextItems?: any[];
     toolCalls?: any[];
+    imageAttachments?: any[];
   }>,
 ): number {
   return messages.reduce((sum, msg) => {
-    const contentStr =
-      typeof msg.content === 'string'
-        ? msg.content
-        : JSON.stringify(msg.content);
-
-    let tokens = estimateTokens(contentStr);
+    let tokens: number;
+    if (typeof msg.content === 'string') {
+      tokens = estimateTokens(msg.content);
+    } else if (Array.isArray(msg.content)) {
+      // Multimodal content array: estimate text parts, count image/binary parts flat.
+      tokens = (msg.content as Array<{ type?: string; text?: string }>).reduce(
+        (cSum, part) =>
+          part.type === 'text'
+            ? cSum + estimateTokens(part.text ?? '')
+            : cSum + CHAT_IMAGE_TOKEN_ESTIMATE,
+        0,
+      );
+    } else {
+      tokens = estimateTokens(msg.content);
+    }
 
     if (msg.contextItems?.length) {
       tokens += msg.contextItems.reduce(
@@ -221,6 +240,8 @@ export function estimateMessagesTokens(
       }, 0);
     }
 
+    tokens += (msg.imageAttachments?.length ?? 0) * CHAT_IMAGE_TOKEN_ESTIMATE;
+
     // ~4 tokens overhead per message (role, separators)
     return sum + tokens + 4;
   }, 0);
@@ -228,11 +249,19 @@ export function estimateMessagesTokens(
 
 /**
  * Returns the context window size for a given model ID.
- * Checks the live cache (populated from provider APIs) first,
- * then falls back to substring matching against the static table.
+ * `provider` is the AI SDK model's `provider` string; pass it so a ChatGPT
+ * sign-in model gets its own caps. Otherwise checks the live cache
+ * (populated from provider APIs) first, then falls back to substring
+ * matching against the static table.
  */
-export function getContextWindow(modelId: string): number {
+export function getContextWindow(modelId: string, provider?: string): number {
   const normalized = (modelId || '').toLowerCase();
+
+  // 0. ChatGPT sign-in (Plan 71): its caps apply to its own model only.
+  //    Kept out of the live cache so they never leak to an API-key provider.
+  if (provider === CHATGPT_PROVIDER_ID) {
+    return CHATGPT_CONTEXT_WINDOWS[normalized] ?? CHATGPT_INPUT_TOKEN_LIMIT;
+  }
 
   // 1. Exact match in live cache
   if (liveCache[normalized]) return liveCache[normalized];

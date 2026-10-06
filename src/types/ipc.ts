@@ -128,7 +128,13 @@ export type ConnectorChannels =
   | 'connector:updateQuery'
   | 'connector:getQuery'
   | 'connector:executeQuery'
-  | 'connector:save';
+  | 'connector:save'
+  | 'connector:snowflake:auth:start'
+  | 'connector:snowflake:auth:cancel'
+  | 'connector:snowflake:auth:revoke'
+  | 'connector:snowflake:auth:materialize'
+  | 'connector:snowflake:auth:hasToken'
+  | 'connector:snowflake:auth:event';
 
 export type SourcesChannels =
   | 'sources:create'
@@ -161,6 +167,13 @@ export type AIChannels =
   | 'ai:provider:get-all-models'
   | 'ai:provider:get-credential'
   | 'ai:provider:cleanup-api-keys'
+
+  // ChatGPT subscription sign-in (Plan 71)
+  | 'ai:chatgpt-auth:start'
+  | 'ai:chatgpt-auth:cancel'
+  | 'ai:chatgpt-auth:discard-pending'
+  | 'ai:chatgpt-auth:sign-out'
+  | 'ai:chatgpt-auth:event'
 
   // AI completion
   | 'ai:completion:generate'
@@ -288,6 +301,7 @@ export type TaskManagerChannels =
 export type CloudExplorerChannels =
   | 'cloudExplorer:listBuckets'
   | 'cloudExplorer:listObjects'
+  | 'cloudExplorer:getFolderMetadata'
   | 'cloudExplorer:getDownloadUrl'
   | 'cloudExplorer:testConnection'
   | 'cloudExplorer:previewData'
@@ -437,8 +451,44 @@ export type NotebookChannels =
   | 'notebooks:archived:delete'
   | 'notebooks:archived:deleteAll';
 
+export type PythonNotebookChannels =
+  // Managed interpreters (python-build-standalone) usable by notebooks
+  | 'pythonRuntimes:list'
+  | 'pythonRuntimes:install'
+  | 'pythonRuntimes:event' // main → renderer (install progress)
+  // Python notebooks (.ipynb files, connection scoped)
+  | 'pythonNotebooks:list'
+  | 'pythonNotebooks:get'
+  | 'pythonNotebooks:create'
+  | 'pythonNotebooks:update'
+  | 'pythonNotebooks:rename'
+  | 'pythonNotebooks:duplicate'
+  | 'pythonNotebooks:delete'
+  | 'pythonNotebooks:export'
+  | 'pythonNotebooks:selectImportFile'
+  | 'pythonNotebooks:import'
+  | 'pythonNotebooks:convertFromSql' // legacy SQL notebook (.json) → .ipynb
+  // Per-notebook virtualenv
+  | 'pythonNotebooks:env:status'
+  | 'pythonNotebooks:env:recreate'
+  | 'pythonNotebooks:env:packages:list'
+  | 'pythonNotebooks:env:packages:install'
+  | 'pythonNotebooks:env:packages:uninstall'
+  | 'pythonNotebooks:env:event' // main → renderer
+  // Kernel (ipykernel via bridge script)
+  | 'pythonNotebooks:kernel:start'
+  | 'pythonNotebooks:kernel:execute'
+  | 'pythonNotebooks:kernel:interrupt'
+  | 'pythonNotebooks:kernel:restart'
+  | 'pythonNotebooks:kernel:shutdown'
+  | 'pythonNotebooks:kernel:status'
+  | 'pythonNotebooks:kernel:event'; // main → renderer
+
 export type AgentChannels =
   | 'agent:run'
+  | 'agent:images:select'
+  | 'agent:images:preview'
+  | 'agent:images:release'
   | 'agent:cancel'
   | 'agent:context-overhead:get'
   | 'agent:tool-call'
@@ -579,6 +629,7 @@ export type Channels =
   | DuckLakeChannels
   | LineageChannels
   | NotebookChannels
+  | PythonNotebookChannels
   | AgentChannels
   | MCPChannels
   | SkillsChannels
@@ -748,3 +799,54 @@ export interface DeleteBucketRequest {
 export interface DeleteBucketResponse {
   success: boolean;
 }
+
+// ChatGPT subscription sign-in (Plan 71). Tokens never cross IPC; the
+// renderer only sees lifecycle events and the signed-in account summary.
+export type ChatGptAuthStatus =
+  | 'started'
+  | 'waiting_for_browser'
+  | 'completed'
+  | 'cancelled'
+  | 'failed';
+
+export type ChatGptAuthEventPayload = {
+  correlationId: string;
+  status: ChatGptAuthStatus;
+  error?: string;
+};
+
+export type StartChatGptAuthRequest = {
+  correlationId: string;
+};
+
+export type StartChatGptAuthResult =
+  | {
+      ok: true;
+      loginId: string;
+      email: string | null;
+      planType: string | null;
+    }
+  | { ok: false; message: string };
+
+export type SnowflakeAuthLifecycleEvent =
+  | 'started'
+  | 'waiting_for_browser'
+  | 'completed'
+  | 'cancelled'
+  | 'failed';
+
+export type SnowflakeAuthEventPayload = {
+  correlationId: string;
+  status: SnowflakeAuthLifecycleEvent;
+  error?: string;
+};
+
+export type StartSnowflakeAuthRequest = {
+  correlationId: string;
+  account: string;
+  username: string;
+  warehouse: string;
+  database: string;
+  schema: string;
+  role: string;
+};

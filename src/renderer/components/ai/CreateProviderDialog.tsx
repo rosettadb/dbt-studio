@@ -35,12 +35,16 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'react-toastify';
 import {
+  useChatGptSignIn,
   useCreateAIProvider,
   useUpdateAIProvider,
 } from '../../controllers/aiProviders.controller';
 import { aiProvidersService } from '../../services/aiProviders.service';
 import { SmartModelSelector } from './SmartModelSelector';
 import { TestProviderConnection } from './TestProviderConnection';
+import { ChatGptSignInGate } from './ChatGptSignInGate';
+import { ChatGptSignInSection } from './ChatGptSignInSection';
+import { CHATGPT_MODELS } from '../../../main/services/ai/chatgpt/chatgptModels';
 import type {
   AIProvider,
   NewAIProvider,
@@ -56,6 +60,7 @@ export const providerSchema = z.object({
       'anthropic',
       'openai-compatible',
       'lmstudio',
+      'openai-codex',
     ],
     {
       errorMap: () => ({ message: 'Please select a provider type' }),
@@ -82,12 +87,31 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
   const [showApiKey, setShowApiKey] = React.useState(false);
   const [discoveredModels, setDiscoveredModels] = React.useState<any[]>([]);
   const isEdit = Boolean(provider);
+  const chatGpt = useChatGptSignIn();
+  const { reset: resetChatGpt } = chatGpt;
+  const savedConfig = React.useMemo(() => {
+    if (!provider) return {};
+    try {
+      return typeof provider.config === 'string'
+        ? JSON.parse(provider.config)
+        : provider.config || {};
+    } catch {
+      return {};
+    }
+  }, [provider]);
+
+  // Closing the dialog also cancels a running ChatGPT sign-in and deletes a
+  // sign-in that was never saved as a provider (Plan 71, L2).
+  const handleClose = React.useCallback(() => {
+    resetChatGpt();
+    onClose();
+  }, [resetChatGpt, onClose]);
 
   const { mutate: createProvider, isLoading: isCreating } = useCreateAIProvider(
     {
       onSuccess: () => {
         toast.success('AI Provider created successfully!');
-        onClose();
+        handleClose();
       },
       onError: (error) => {
         toast.error(`Failed to create AI provider: ${error.message}`);
@@ -99,7 +123,7 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
     {
       onSuccess: () => {
         toast.success('AI Provider updated successfully!');
-        onClose();
+        handleClose();
       },
       onError: (error) => {
         toast.error(`Failed to update AI provider: ${error.message}`);
@@ -112,6 +136,8 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
     handleSubmit,
     watch,
     reset,
+    getValues,
+    setValue,
     formState: { errors, isValid },
   } = useForm<ProviderFormData>({
     resolver: zodResolver(providerSchema),
@@ -216,12 +242,38 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
     setDiscoveredModels([]);
   }, [watchedType]);
 
+  // ChatGPT has no models API: offer the fixed list once signed in.
+  const chatGptLogin = chatGpt.login;
+  React.useEffect(() => {
+    if (watchedType === 'openai-codex' && chatGptLogin) {
+      setDiscoveredModels(CHATGPT_MODELS);
+    }
+  }, [watchedType, chatGptLogin]);
+
+  const isChatGpt = watchedType === 'openai-codex';
+  const chatGptNeedsSignIn =
+    isChatGpt && !chatGpt.login && (!isEdit || savedConfig.signedOut === true);
+
   const onSubmit = (data: ProviderFormData) => {
     const config: any = {};
 
-    if (data.apiKey) config.apiKey = data.apiKey;
-    if (data.baseUrl) config.baseUrl = data.baseUrl;
-    if (data.model) config.model = data.model;
+    if (data.type === 'openai-codex') {
+      // No key: the main process moves the pending sign-in to the provider.
+      if (data.model) config.model = data.model;
+      if (chatGpt.login) {
+        config.pendingLoginId = chatGpt.login.loginId;
+        config.accountEmail = chatGpt.login.email;
+        config.planType = chatGpt.login.planType;
+      } else if (isEdit) {
+        config.accountEmail = savedConfig.accountEmail ?? null;
+        config.planType = savedConfig.planType ?? null;
+        if (savedConfig.signedOut) config.signedOut = true;
+      }
+    } else {
+      if (data.apiKey) config.apiKey = data.apiKey;
+      if (data.baseUrl) config.baseUrl = data.baseUrl;
+      if (data.model) config.model = data.model;
+    }
 
     const providerData: NewAIProvider = {
       name: data.name,
@@ -287,6 +339,15 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
             'Local LM Studio server URL. Change only if using a non-default port or a cloud-hosted deployment.',
           modelPlaceholder: 'llama-3.2-1b (auto-discovered if left blank)',
         };
+      case 'openai-codex':
+        return {
+          requiresApiKey: false,
+          supportsOptionalApiKey: false,
+          apiKeyLabel: '',
+          apiKeyPlaceholder: '',
+          requiresBaseUrl: false,
+          modelPlaceholder: 'gpt-5.5',
+        };
       case 'openai-compatible':
         return {
           requiresApiKey: false,
@@ -317,13 +378,13 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
   const isLoading = isCreating || isUpdating;
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle>
         <Box display="flex" justifyContent="space-between" alignItems="center">
           <Typography variant="h6">
             {isEdit ? 'Edit AI Provider' : 'Add AI Provider'}
           </Typography>
-          <IconButton onClick={onClose} size="small">
+          <IconButton onClick={handleClose} size="small">
             <Close />
           </IconButton>
         </Box>
@@ -367,11 +428,23 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
                   <Select
                     name={field.name}
                     value={field.value}
-                    onChange={field.onChange}
+                    onChange={(event) => {
+                      field.onChange(event);
+                      if (
+                        event.target.value === 'openai-codex' &&
+                        !getValues('name')
+                      ) {
+                        setValue('name', 'ChatGPT', { shouldValidate: true });
+                      }
+                    }}
                     onBlur={field.onBlur}
                     label="Provider Type"
+                    disabled={isEdit && provider?.type === 'openai-codex'}
                   >
                     <MenuItem value="openai">OpenAI</MenuItem>
+                    <MenuItem value="openai-codex">
+                      ChatGPT (subscription) · Experimental
+                    </MenuItem>
                     <MenuItem value="anthropic">Anthropic Claude</MenuItem>
                     <MenuItem value="gemini">Google Gemini</MenuItem>
                     <MenuItem value="ollama">Ollama</MenuItem>
@@ -429,6 +502,19 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
               />
             )}
 
+            {/* ChatGPT sign-in replaces the API key (Plan 71) */}
+            {isChatGpt && (
+              <ChatGptSignInSection
+                status={chatGpt.status}
+                error={chatGpt.error}
+                login={chatGpt.login}
+                signedOut={isEdit && savedConfig.signedOut === true}
+                savedEmail={isEdit ? savedConfig.accountEmail : null}
+                disabled={isLoading}
+                onSignIn={chatGpt.start}
+              />
+            )}
+
             {/* Base URL */}
             {(watchedType === 'ollama' ||
               watchedType === 'lmstudio' ||
@@ -477,7 +563,7 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
                     value={field.value}
                     onChange={field.onChange}
                     label="Default Model"
-                    disabled={isLoading}
+                    disabled={isLoading || chatGptNeedsSignIn}
                     fullWidth
                   />
                 );
@@ -489,6 +575,7 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
               providerType={watchedType}
               apiKey={watchedApiKey}
               baseUrl={watchedBaseUrl}
+              pendingLoginId={chatGpt.login?.loginId}
               onTestComplete={handleTestComplete}
             />
 
@@ -613,13 +700,13 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
         </DialogContent>
 
         <DialogActions>
-          <Button onClick={onClose} disabled={isLoading}>
+          <Button onClick={handleClose} disabled={isLoading}>
             Cancel
           </Button>
           <Button
             type="submit"
             variant="contained"
-            disabled={!isValid || isLoading}
+            disabled={!isValid || isLoading || chatGptNeedsSignIn}
           >
             {(() => {
               if (isLoading) {
@@ -630,6 +717,7 @@ export const CreateProviderDialog: React.FC<CreateProviderDialogProps> = ({
           </Button>
         </DialogActions>
       </Box>
+      <ChatGptSignInGate status={chatGpt.status} onCancel={chatGpt.cancel} />
     </Dialog>
   );
 };

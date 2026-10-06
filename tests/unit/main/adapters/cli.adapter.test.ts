@@ -46,6 +46,33 @@ describe('CliAdapter environment', () => {
     await expect(command).resolves.toBeUndefined();
   });
 
+  it('runs string commands through bash so hyphenated env vars survive on Linux', async () => {
+    const child = new EventEmitter() as any;
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    mockedSpawn.mockReturnValue(child);
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+
+    try {
+      const adapter = new CliAdapter();
+      const command = adapter.runCommand(
+        { webContents: { send: jest.fn() } } as any,
+        'cd "/p" && "/managed/dbt" debug',
+      );
+
+      expect(mockedSpawn).toHaveBeenCalledWith(
+        'cd "/p" && "/managed/dbt" debug',
+        expect.objectContaining({ shell: 'bash' }),
+      );
+
+      child.emit('close', 0);
+      await expect(command).resolves.toBeUndefined();
+    } finally {
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    }
+  });
+
   it('publishes a nonzero exit code before completing the command', async () => {
     const child = new EventEmitter() as any;
     child.stdout = new EventEmitter();

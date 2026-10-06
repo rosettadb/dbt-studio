@@ -54,6 +54,10 @@ const getConnectionTypeName = (connectionType?: string) => {
       return 'Databricks';
     case 'duckdb':
       return 'DuckDB';
+    case 'kinetica':
+      return 'Kinetica';
+    case 'mysql':
+      return 'MySQL';
     default:
       return String(connectionType).toUpperCase();
   }
@@ -74,6 +78,8 @@ const getConnectionTypeColor = (connectionType: string) => {
       return '#ff3621';
     case 'duckdb':
       return '#fff000';
+    case 'mysql':
+      return '#00758f';
     default:
       return '#666';
   }
@@ -266,6 +272,7 @@ interface ExplorerTabProps {
   onRenameFile?: (oldPath: string, newPath: string) => void;
   onRunPipeline?: (filePath: string) => void;
   onRunPipelineLocal?: (filePath: string) => void;
+  openCreatePipeline?: boolean;
 }
 
 const ExplorerTab: React.FC<ExplorerTabProps> = ({
@@ -282,9 +289,17 @@ const ExplorerTab: React.FC<ExplorerTabProps> = ({
   onRenameFile,
   onRunPipeline,
   onRunPipelineLocal,
+  openCreatePipeline,
 }) => {
   const theme = useTheme();
   const [createPipelineOpen, setCreatePipelineOpen] = React.useState(false);
+
+  // Open the modal when triggered externally (e.g. from the home screen pipeline card)
+  React.useEffect(() => {
+    if (openCreatePipeline) {
+      setCreatePipelineOpen(true);
+    }
+  }, [openCreatePipeline]);
 
   const { refetch: refetchPipelines } = useListPipelines(project?.id);
 
@@ -460,6 +475,7 @@ interface ProjectSidebarProps {
 
   // Pipeline
   onRunPipeline?: (filePath: string) => void;
+  openCreatePipeline?: boolean;
 
   // Search (find in files)
   onSearchResultSelect: (selection: SearchResultSelection) => void;
@@ -491,6 +507,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   onRunPipeline,
   onSearchResultSelect,
   onRunPipelineLocal,
+  openCreatePipeline,
 }) => {
   return (
     <Box
@@ -519,6 +536,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
             onRenameFile={onRenameFile}
             onRunPipeline={onRunPipeline}
             onRunPipelineLocal={onRunPipelineLocal}
+            openCreatePipeline={openCreatePipeline}
           />
         )}
 

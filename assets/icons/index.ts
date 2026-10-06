@@ -18,6 +18,10 @@ import apacheIcebergLake from './apache-iceberg-lake.png';
 import deltaLake from './delta-lake.png';
 import apacheHudiLake from './apache-hudi-lake.png';
 import flow from './flow.svg';
+import analytics from './analytics.png';
+import datalakeCard from './datalake_card.png';
+import cloudSearch from './cloud-search.png';
+import dataMigration from './data-migration.png';
 
 export const icons = {
   settings,
@@ -40,4 +44,8 @@ export const icons = {
   deltaLake,
   apacheHudiLake,
   flow,
+  analytics,
+  datalakeCard,
+  cloudSearch,
+  dataMigration,
 };

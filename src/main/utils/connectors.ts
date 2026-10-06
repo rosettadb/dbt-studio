@@ -5,6 +5,7 @@ import { BigQuery } from '@google-cloud/bigquery';
 import { DuckDBInstance } from '@duckdb/node-api';
 import SqliteDatabase from 'better-sqlite3';
 import { DBSQLClient } from '@databricks/sql';
+import mysql from 'mysql2/promise';
 import fs from 'fs';
 import {
   BigQueryConnection,
@@ -12,6 +13,7 @@ import {
   DatabricksConnection,
   DuckDBConnection,
   KineticaConnection,
+  MySqlConnection,
   PostgresConnection,
   QueryResponseType,
   RedshiftConnection,
@@ -22,6 +24,10 @@ import {
 import { SNOWFLAKE_TYPE_MAP } from './constants';
 import SecureStorageService from '../services/secureStorage.service';
 import { buildKineticaUrl } from '../../shared/kineticaUrl';
+import {
+  SNOWFLAKE_REAUTH_MESSAGE,
+  SnowflakeAuthManager,
+} from './snowflakeAuth';
 
 export async function testPostgresConnection(
   config: PostgresConnection,
@@ -168,15 +174,38 @@ export const executeRedshiftQuery = async (
   }
 };
 
-const createSnowflakeConnection = (config: SnowflakeConnection) => {
-  return snowflake.createConnection({
-    account: config.account.split('.')[0],
+const getSnowflakeAuthMethod = (config: SnowflakeConnection) => {
+  return config.authMethod || 'password';
+};
+
+export const createSnowflakeConnection = (config: SnowflakeConnection) => {
+  const authMethod = getSnowflakeAuthMethod(config);
+
+  const baseConfig = {
     username: config.username,
-    password: config.password,
     warehouse: config.warehouse,
     database: config.database,
     schema: config.schema,
     role: config.role,
+  };
+
+  if (authMethod === 'oauth_browser') {
+    return snowflake.createConnection({
+      ...baseConfig,
+      account: config.account,
+      authenticator: 'OAUTH_AUTHORIZATION_CODE',
+      browserActionTimeout: 120000,
+      clientStoreTemporaryCredential: true,
+      openExternalBrowserCallback: () => {
+        throw new Error(SNOWFLAKE_REAUTH_MESSAGE);
+      },
+    });
+  }
+
+  return snowflake.createConnection({
+    ...baseConfig,
+    account: config.account.split('.')[0],
+    password: config.password,
   });
 };
 
@@ -225,40 +254,63 @@ export const executeSnowflakeQuery = async (
   registerCancel?: (fn: () => void) => void,
 ): Promise<QueryResponseType> => {
   const connection = createSnowflakeConnection(config);
+  const authMethod = getSnowflakeAuthMethod(config);
 
   if (registerCancel) {
     registerCancel(() => {
-      connection.destroy(() => {});
+      try {
+        connection.destroy(() => {});
+      } catch (e) {
+        // ignore
+      }
     });
   }
 
-  return new Promise((resolve) => {
-    connection.connect((err) => {
-      if (err) {
-        return resolve({ success: false, error: err.message });
-      }
-
-      connection.execute({
-        sqlText: query,
-        complete: (error, stmt, rows) => {
-          connection.destroy(() => {});
-          if (error) {
-            return resolve({ success: false, error: error.message });
-          }
-
-          const fields =
-            stmt?.getColumns().map((col) => ({
-              name: col.getName(),
-              type: SNOWFLAKE_TYPE_MAP[col.getType().toUpperCase()] || 0,
-            })) || [];
-
-          resolve({
-            success: true,
-            data: rows,
-            fields,
-          });
-        },
+  try {
+    if (authMethod === 'oauth_browser') {
+      // No browser flows outside the Connections screen: a cold session
+      // fails fast with guidance instead of opening an ungated popup.
+      // A warm SDK cache connects silently without user interaction.
+      SnowflakeAuthManager.assertCachedSession();
+      await new Promise<void>((resolve, reject) => {
+        connection.connectAsync((err) => {
+          if (err) return reject(err);
+          resolve();
+        });
       });
+    } else {
+      await new Promise<void>((resolve, reject) => {
+        connection.connect((err) => {
+          if (err) return reject(err);
+          resolve();
+        });
+      });
+    }
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+
+  return new Promise((resolve) => {
+    connection.execute({
+      sqlText: query,
+      complete: (error, stmt, rows) => {
+        connection.destroy(() => {});
+        if (error) {
+          return resolve({ success: false, error: error.message });
+        }
+
+        const fields =
+          stmt?.getColumns()?.map((col) => ({
+            name: col.getName(),
+            type: SNOWFLAKE_TYPE_MAP[col.getType().toUpperCase()] || 0,
+          })) || [];
+
+        resolve({
+          success: true,
+          data: rows,
+          fields,
+        });
+      },
     });
   });
 };
@@ -1068,5 +1120,107 @@ export const executeKineticaQuery = async (
       success: false,
       error: `Kinetica query failed: ${errorMessage}`,
     };
+  }
+};
+
+// MySQL connection functions using the official mysql2 driver
+function createMySqlConfig(config: MySqlConnection) {
+  return {
+    host: config.host,
+    port: config.port,
+    user: config.username,
+    password: config.password,
+    database: config.database,
+    connectTimeout: 5000,
+    ...(config.ssl ? { ssl: { rejectUnauthorized: false } } : {}),
+  };
+}
+
+export async function testMySqlConnection(
+  config: MySqlConnection,
+): Promise<boolean> {
+  let connection: any = null;
+  try {
+    connection = await mysql.createConnection(createMySqlConfig(config));
+    await connection.query('SELECT 1 AS connection_test');
+    return true;
+  } catch (error: any) {
+    // eslint-disable-next-line no-console
+    console.error('MySQL connection test failed:', error.message);
+    return false;
+  } finally {
+    if (connection) {
+      try {
+        await connection.end();
+      } catch {
+        /* empty */
+      }
+    }
+  }
+}
+
+export const executeMySqlQuery = async (
+  config: MySqlConnection,
+  query: string,
+  registerCancel?: (fn: () => void) => void,
+): Promise<QueryResponseType> => {
+  let connection: any = null;
+  try {
+    connection = await mysql.createConnection(createMySqlConfig(config));
+
+    if (registerCancel) {
+      registerCancel(() => {
+        try {
+          connection.destroy();
+        } catch {
+          /* empty */
+        }
+      });
+    }
+
+    const [rows] = await connection.query(query);
+
+    if (Array.isArray(rows)) {
+      const data = rows as any[];
+      const fields =
+        data.length > 0
+          ? Object.keys(data[0]).map((name) => ({ name, type: 0 }))
+          : [];
+      return {
+        success: true,
+        data,
+        fields,
+        rowCount: data.length,
+      };
+    }
+
+    // Non-SELECT statement (ResultSetHeader)
+    const statementType = query.trimStart().split(/\s+/, 1)[0]?.toUpperCase();
+    const commandType = ['INSERT', 'UPDATE', 'DELETE', 'REPLACE'].includes(
+      statementType,
+    )
+      ? 'DML'
+      : 'DDL';
+    return {
+      success: true,
+      data: [],
+      fields: [],
+      rowCount: (rows as any)?.affectedRows ?? 0,
+      isCommand: true,
+      commandType,
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      error: error?.message || 'Unknown error occurred during query execution',
+    };
+  } finally {
+    if (connection) {
+      try {
+        await connection.end();
+      } catch {
+        /* empty */
+      }
+    }
   }
 };

@@ -8,6 +8,7 @@ import type {
   GarageConfig,
   MinIOConfig,
   RustfsConfig,
+  S3Config,
 } from '../../../../../types/frontend';
 import CloudExplorerService from '../../../cloudExplorer.service';
 import CloudPreviewService from '../../../cloudPreview.service';
@@ -57,6 +58,9 @@ async function hydrateCloudConfig(
   const { id, provider } = connection;
 
   if (provider === 'aws') {
+    if ((connection.config as S3Config).authMode === 'public') {
+      return { ...(connection.config as S3Config) };
+    }
     const persisted = connection.config as {
       region: string;
       accessKeyId: string;

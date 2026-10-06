@@ -1,7 +1,7 @@
 import React from 'react';
 import SplitPane, { Pane } from 'split-pane-react';
 import 'split-pane-react/esm/themes/default.css';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import {
   AccountTree,
   AutoAwesome,
@@ -168,6 +168,20 @@ const getPipelineRelativeName = (
 
 const ProjectDetails: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const openCreatePipeline = React.useMemo(() => {
+    const state = location.state as { openCreatePipeline?: boolean } | null;
+    return state?.openCreatePipeline === true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Clear the nav state so a back-navigation doesn't re-trigger the modal
+  React.useEffect(() => {
+    if (openCreatePipeline) {
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [verticalSizes, setVerticalSizes] = React.useState<(number | string)[]>(
     ['auto', 500],
   );
@@ -1516,6 +1530,7 @@ const ProjectDetails: React.FC = () => {
               }}
               onRunPipeline={handleRunPipelineFile}
               onRunPipelineLocal={handleRunPipelineFileLocally}
+              openCreatePipeline={openCreatePipeline}
             />
           </Box>
         </Box>

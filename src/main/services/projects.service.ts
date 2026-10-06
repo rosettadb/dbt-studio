@@ -12,6 +12,7 @@ import {
   DataBase,
   DuckDBConnection,
   KineticaConnection,
+  MySqlConnection,
   PostgresConnection,
   Project,
   RedshiftConnection,
@@ -39,6 +40,7 @@ import {
   DatabricksExtractor,
   DuckDBExtractor,
   KineticaExtractor,
+  MySqlExtractor,
   PGSchemaExtractor,
   RedshiftExtractor,
   SnowflakeExtractor,
@@ -1079,14 +1081,20 @@ export default class ProjectsService {
   }
 
   static async extractSnowflakeSchema(connection: SnowflakeConnection) {
+    const sfAuthMethod =
+      connection.authMethod === 'oauth_browser' ? 'oauth_browser' : 'password';
     const extractor = new SnowflakeExtractor({
-      account: connection.account.split('.')[0],
+      account:
+        sfAuthMethod === 'oauth_browser'
+          ? connection.account
+          : connection.account.split('.')[0],
       username: connection.username,
       password: connection.password,
       warehouse: connection.warehouse,
       database: connection.database,
       schema: connection.schema,
       role: connection.role,
+      authMethod: sfAuthMethod,
     });
 
     await extractor.connect();
@@ -1191,6 +1199,25 @@ export default class ProjectsService {
     return schema.tables;
   }
 
+  static async extractMySqlSchema(connection: MySqlConnection) {
+    const extractor = new MySqlExtractor({
+      user: connection.username,
+      host: connection.host,
+      database: connection.database,
+      password: connection.password,
+      port: connection.port,
+      ssl: connection.ssl,
+    });
+
+    await extractor.connect();
+    try {
+      const schema = await extractor.extractSchema();
+      return schema.tables;
+    } finally {
+      await extractor.disconnect();
+    }
+  }
+
   static async extractSchema(project: Project): Promise<Table[]> {
     if (!project.connectionId) {
       throw new Error('No database connection configured for this project');
@@ -1260,6 +1287,8 @@ export default class ProjectsService {
         );
       case 'kinetica':
         return this.extractKineticaSchema(connection as KineticaConnection);
+      case 'mysql':
+        return this.extractMySqlSchema(connection as MySqlConnection);
       default:
         throw new Error(
           `Unsupported connection type: "${(connection as any).type}"`,
