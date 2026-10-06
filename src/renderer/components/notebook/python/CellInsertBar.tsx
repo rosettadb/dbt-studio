@@ -29,7 +29,7 @@ export const CellInsertBar: React.FC<CellInsertBarProps> = ({
       justifyContent: 'center',
       alignItems: 'center',
       gap: 1,
-      height: persistent ? 36 : 18,
+      height: persistent ? 40 : 24,
       my: persistent ? 1 : 0,
       opacity: persistent ? 1 : 0,
       transition: 'opacity 120ms ease',
@@ -52,13 +52,14 @@ export const CellInsertBar: React.FC<CellInsertBarProps> = ({
     <Button
       size="small"
       variant="outlined"
-      startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+      startIcon={<AddIcon sx={{ fontSize: 18 }} />}
       onClick={onAddCode}
       sx={{
         zIndex: 1,
         bgcolor: 'background.paper',
-        height: 24,
-        fontSize: 11,
+        height: 30,
+        px: 1.5,
+        fontSize: 13,
         textTransform: 'none',
         py: 0,
       }}
@@ -68,13 +69,14 @@ export const CellInsertBar: React.FC<CellInsertBarProps> = ({
     <Button
       size="small"
       variant="outlined"
-      startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+      startIcon={<AddIcon sx={{ fontSize: 18 }} />}
       onClick={onAddSql}
       sx={{
         zIndex: 1,
         bgcolor: 'background.paper',
-        height: 24,
-        fontSize: 11,
+        height: 30,
+        px: 1.5,
+        fontSize: 13,
         textTransform: 'none',
         py: 0,
       }}
@@ -84,13 +86,14 @@ export const CellInsertBar: React.FC<CellInsertBarProps> = ({
     <Button
       size="small"
       variant="outlined"
-      startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+      startIcon={<AddIcon sx={{ fontSize: 18 }} />}
       onClick={onAddText}
       sx={{
         zIndex: 1,
         bgcolor: 'background.paper',
-        height: 24,
-        fontSize: 11,
+        height: 30,
+        px: 1.5,
+        fontSize: 13,
         textTransform: 'none',
         py: 0,
       }}
