@@ -28,7 +28,8 @@ export type AIProviderType =
   | 'gemini'
   | 'anthropic'
   | 'openai-compatible'
-  | 'lmstudio';
+  | 'lmstudio'
+  | 'openai-codex';
 
 class SecureStorageService {
   private serviceName: string;
@@ -298,6 +299,38 @@ class SecureStorageService {
   ): Promise<void> {
     const credentialKey = `${providerType}-${providerId}-api-key`;
     await this.deleteCredential(credentialKey);
+    // Subscription sign-ins (ChatGPT) keep OAuth tokens under a separate key.
+    await this.deleteAIProviderOAuthCredential(providerId, providerType);
+  }
+
+  /**
+   * OAuth credentials for subscription sign-ins (ChatGPT). Stored under a
+   * separate `-oauth` key so `getAIProviderCredential` (which the renderer
+   * can reach through `ai:provider:get-credential`) never returns them.
+   */
+  async setAIProviderOAuthCredential(
+    providerId: number,
+    providerType: AIProviderType,
+    credentialJson: string,
+  ): Promise<void> {
+    await this.setCredential(
+      `${providerType}-${providerId}-oauth`,
+      credentialJson,
+    );
+  }
+
+  async getAIProviderOAuthCredential(
+    providerId: number,
+    providerType: AIProviderType,
+  ): Promise<string | null> {
+    return this.getCredential(`${providerType}-${providerId}-oauth`);
+  }
+
+  async deleteAIProviderOAuthCredential(
+    providerId: number,
+    providerType: AIProviderType,
+  ): Promise<void> {
+    await this.deleteCredential(`${providerType}-${providerId}-oauth`);
   }
 
   async listAIProviderCredentials(): Promise<string[]> {

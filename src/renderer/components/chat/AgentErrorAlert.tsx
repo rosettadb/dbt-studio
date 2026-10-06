@@ -2,6 +2,7 @@ import React from 'react';
 import { Alert, AlertTitle, Button, Box, Typography } from '@mui/material';
 import type { ParsedAgentError } from '../../utils/agentErrorParser';
 import { ToggleSection } from './ToggleSection';
+import { ChatGptFallbackAction } from './ChatGptFallbackAction';
 
 interface AgentErrorAlertProps {
   error: ParsedAgentError;
@@ -38,6 +39,13 @@ export const AgentErrorAlert: React.FC<AgentErrorAlertProps> = ({
         Change Provider
       </Button>
     ) : undefined;
+  } else if (
+    error.type === 'chatgptUsageLimit' ||
+    error.type === 'chatgptSignedOut'
+  ) {
+    // Plan 71, D7: offer another provider; never retry automatically.
+    severity = 'warning';
+    actionButton = <ChatGptFallbackAction onSwitched={onDismiss} />;
   } else if (error.type === 'toolUnsupported') {
     severity = 'info';
     actionButton = onNavigate ? (
