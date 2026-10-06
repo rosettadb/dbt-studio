@@ -1,8 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Card,
-  CardContent,
-  CardActions,
   Typography,
   Box,
   Button,
@@ -23,6 +20,7 @@ import {
   HealthAndSafety,
   Warning,
   Close,
+  StorageOutlined,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import {
@@ -31,7 +29,11 @@ import {
   useReinitializeDuckDb,
   useDiagnoseDuckDb,
 } from '../../controllers/settings.controller';
-import connectionIcons from '../../../../assets/connectionIcons';
+import {
+  SettingsRow,
+  SettingsSection,
+  SettingsSectionBody,
+} from './SettingsLayout';
 
 const DiagnosticsDialog: React.FC<{ open: boolean; onClose: () => void }> = ({
   open,
@@ -189,117 +191,83 @@ export const DuckDBWorkspaceCard: React.FC = () => {
   };
 
   return (
-    <Card
-      variant="outlined"
-      sx={{ maxWidth: 800, borderColor: 'divider', mb: 4 }}
-    >
-      <CardContent>
-        <Box
-          display="flex"
-          alignItems="center"
-          justifyContent="space-between"
-          mb={2}
-        >
-          <Box display="flex" alignItems="center" gap={1}>
-            <img
-              src={connectionIcons.images.duckdb}
-              alt="DuckDB"
-              style={{
-                width: 24,
-                height: 24,
-                objectFit: 'contain',
-              }}
-            />
-            <Typography variant="h6" sx={{ m: 0 }}>
-              Persistent Database (DuckDB)
-            </Typography>
-          </Box>
-          <Box display="flex" gap={1}>
-            <Tooltip title="Refresh Status">
-              <IconButton onClick={handleRefresh} size="small">
-                <Refresh />
-              </IconButton>
-            </Tooltip>
-          </Box>
-        </Box>
-
-        <Typography variant="body2" color="text.secondary" mb={3}>
-          Manages the local DuckDB instance used for caching, data preview, and
-          persistent storage.
-        </Typography>
-
+    <>
+      <SettingsSection
+        title="Persistent Database (DuckDB)"
+        icon={<StorageOutlined />}
+        description="Local DuckDB instance used for caching, data preview, and persistent storage."
+        action={
+          <Tooltip title="Refresh Status">
+            <IconButton onClick={handleRefresh} size="small">
+              <Refresh fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        }
+      >
         {isLoading ? (
-          <LinearProgress />
+          <SettingsSectionBody>
+            <LinearProgress />
+          </SettingsSectionBody>
         ) : (
-          <Box display="flex" flexDirection="column" gap={2}>
-            <Box display="flex" gap={4} flexWrap="wrap">
-              <Box>
-                <Typography variant="caption" color="text.secondary">
-                  Status
-                </Typography>
-                <Box display="flex" alignItems="center" gap={1}>
-                  <Chip
-                    label={metadata?.status || 'Unknown'}
-                    color={getStatusColor(metadata?.status) as any}
-                    size="small"
-                  />
-                </Box>
-              </Box>
-
-              <Box>
-                <Typography variant="caption" color="text.secondary">
-                  File Size
-                </Typography>
-                <Typography variant="body1">
-                  {metadata?.sizeHumanReadable || '0 Bytes'}
-                </Typography>
-              </Box>
-
-              <Box>
-                <Typography variant="caption" color="text.secondary">
-                  Active Connections
-                </Typography>
-                <Box display="flex" alignItems="center" gap={1}>
-                  <Typography variant="body1">
-                    {metadata?.activeConnections || 0} /{' '}
-                    {metadata?.maxConnections || 10}
-                  </Typography>
-                  {getLockStatusIcon(metadata?.lockStatus)}
-                </Box>
-              </Box>
-
-              <Box>
-                <Typography variant="caption" color="text.secondary">
-                  Path
-                </Typography>
-                <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
+          <>
+            <SettingsRow label="Status">
+              <Chip
+                label={metadata?.status || 'Unknown'}
+                color={getStatusColor(metadata?.status) as any}
+                size="small"
+              />
+            </SettingsRow>
+            <SettingsRow label="File Size">
+              <Typography variant="body2" color="text.secondary">
+                {metadata?.sizeHumanReadable || '0 Bytes'}
+              </Typography>
+            </SettingsRow>
+            <SettingsRow label="Active Connections">
+              <Typography variant="body2" color="text.secondary">
+                {metadata?.activeConnections || 0} /{' '}
+                {metadata?.maxConnections || 10}
+              </Typography>
+              {getLockStatusIcon(metadata?.lockStatus)}
+            </SettingsRow>
+            <SettingsRow
+              label="Path"
+              description={
+                <Box component="span" sx={{ wordBreak: 'break-all' }}>
                   {metadata?.path || 'Not initialized'}
-                </Typography>
-              </Box>
-            </Box>
-          </Box>
+                </Box>
+              }
+            />
+          </>
         )}
-      </CardContent>
-
-      <CardActions sx={{ justifyContent: 'space-between', px: 3, pb: 3 }}>
-        <Button
-          color="error"
-          variant="outlined"
-          startIcon={<RestartAlt />}
-          onClick={() => setConfirmReinit(true)}
+        <SettingsRow
+          label="Diagnostics"
+          description="Connection pool, leaks and a sample of open connections."
         >
-          Reinitialize Database
-        </Button>
-
-        <Button
-          variant="outlined"
-          color="primary"
-          startIcon={<HealthAndSafety />}
-          onClick={() => setShowDiagnostics(true)}
+          <Button
+            size="small"
+            variant="outlined"
+            color="primary"
+            startIcon={<HealthAndSafety />}
+            onClick={() => setShowDiagnostics(true)}
+          >
+            Diagnostics
+          </Button>
+        </SettingsRow>
+        <SettingsRow
+          label="Reinitialize Database"
+          description="Deletes main.duckdb and creates a new one. Cached data is lost."
         >
-          Diagnostics
-        </Button>
-      </CardActions>
+          <Button
+            size="small"
+            color="error"
+            variant="outlined"
+            startIcon={<RestartAlt />}
+            onClick={() => setConfirmReinit(true)}
+          >
+            Reinitialize Database
+          </Button>
+        </SettingsRow>
+      </SettingsSection>
 
       {/* Diagnostics Dialog */}
       <DiagnosticsDialog
@@ -336,6 +304,6 @@ export const DuckDBWorkspaceCard: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </Card>
+    </>
   );
 };

@@ -1,14 +1,6 @@
 import React from 'react';
-import {
-  Box,
-  Button,
-  Typography,
-  Card,
-  CardContent,
-  CircularProgress,
-  Alert,
-} from '@mui/material';
-import { Refresh, CloudOff } from '@mui/icons-material';
+import { Box, Button, CircularProgress, Alert } from '@mui/material';
+import { Refresh, CloudOff, PersonOutline } from '@mui/icons-material';
 import {
   useApiKey,
   useProfile,
@@ -17,6 +9,12 @@ import {
 } from '../../controllers';
 import { ProfileCard } from '../profile';
 import { CloudSettings } from './CloudSettings';
+import {
+  SettingsRow,
+  SettingsSection,
+  SettingsSectionBody,
+  SettingsStack,
+} from './SettingsLayout';
 
 export const ProfileSettings: React.FC = () => {
   const { data: apiKey, isLoading: apiKeyLoading } = useApiKey();
@@ -43,65 +41,54 @@ export const ProfileSettings: React.FC = () => {
 
   // Always show cloud settings, regardless of connection status
   return (
-    <Box maxWidth={800} width="100%">
+    <SettingsStack>
       <CloudSettings />
 
-      {!apiKey && (
-        <Box mt={4}>
-          <Typography variant="h6" gutterBottom>
-            Profile Information
-          </Typography>
-          <Card sx={{ maxWidth: '100%' }}>
-            <CardContent sx={{ textAlign: 'center', py: 3 }}>
-              <CloudOff sx={{ fontSize: 40, color: 'text.secondary', mb: 2 }} />
-              <Typography variant="h6" gutterBottom>
-                Not Connected
-              </Typography>
-              <Typography variant="body2" color="textSecondary" paragraph>
-                Connect to your Cloud Dashboard account above to view your
-                profile information.
-              </Typography>
-            </CardContent>
-          </Card>
-        </Box>
-      )}
-
-      {apiKey && (
-        <Box mt={4}>
-          <Box
-            display="flex"
-            justifyContent="space-between"
-            alignItems="center"
-            mb={2}
-          >
-            <Typography variant="h6">Profile Information</Typography>
-            <Box display="flex" gap={1}>
-              <Button
-                variant="outlined"
-                size="small"
-                onClick={() => refreshProfile()}
-                disabled={refreshing}
-                startIcon={
-                  refreshing ? <CircularProgress size={16} /> : <Refresh />
-                }
-              >
-                {refreshing ? 'Refreshing...' : 'Refresh'}
-              </Button>
-            </Box>
-          </Box>
-          <Typography variant="body2" color="textSecondary" paragraph>
-            Your profile information from the Cloud Dashboard.
-          </Typography>
-
+      <SettingsSection
+        title="Profile Information"
+        icon={<PersonOutline />}
+        description={
+          apiKey
+            ? 'Your profile information from the Cloud Dashboard.'
+            : undefined
+        }
+        action={
+          apiKey && (
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => refreshProfile()}
+              disabled={refreshing}
+              startIcon={
+                refreshing ? <CircularProgress size={14} /> : <Refresh />
+              }
+            >
+              {refreshing ? 'Refreshing...' : 'Refresh'}
+            </Button>
+          )
+        }
+      >
+        {apiKey ? (
           <ProfileCard />
-
-          {profileError && (
-            <Alert severity="warning" sx={{ mt: 2 }}>
+        ) : (
+          <SettingsRow
+            label={
+              <Box display="flex" alignItems="center" gap={1}>
+                <CloudOff fontSize="small" color="disabled" />
+                Not Connected
+              </Box>
+            }
+            description="Connect to your Cloud Dashboard account above to view your profile information."
+          />
+        )}
+        {apiKey && profileError && (
+          <SettingsSectionBody>
+            <Alert severity="warning">
               Profile data may be outdated. Last refresh failed.
             </Alert>
-          )}
-        </Box>
-      )}
-    </Box>
+          </SettingsSectionBody>
+        )}
+      </SettingsSection>
+    </SettingsStack>
   );
 };

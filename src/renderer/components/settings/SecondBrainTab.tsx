@@ -46,11 +46,21 @@ import {
   Stop,
   Terminal,
   WarningAmber,
+  PsychologyAltOutlined,
+  FolderSpecialOutlined,
+  ArticleOutlined,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import type * as monaco from 'monaco-editor';
 import { useNavigate } from 'react-router-dom';
 import { MonacoCodeEditor } from '../monaco/MonacoCodeEditor';
+import {
+  SettingsRow,
+  SettingsSection,
+  SettingsSectionBody,
+  SettingsStack,
+  settingsTabsSx,
+} from './SettingsLayout';
 import { FileIcon } from '../fileIcon';
 import { MarkdownPreview } from '../editor/markdownPreview';
 import {
@@ -795,70 +805,29 @@ export const SecondBrainTab: React.FC = () => {
       ? 'Agent Memory'
       : item.title;
   return (
-    <Stack spacing={1.5}>
-      <Paper variant="outlined">
-        <Tabs
-          value={memorySettingsTab}
-          onChange={(_, value: 'global' | 'project') =>
-            setMemorySettingsTab(value)
-          }
-          sx={{
-            px: 1.5,
-            minHeight: 40,
-            borderBottom: 1,
-            borderColor: 'divider',
-            '& .MuiTab-root': { minHeight: 40, py: 0.5 },
-          }}
-        >
-          <Tab value="global" label="Global" />
-          <Tab value="project" label="Project" />
-        </Tabs>
-      </Paper>
+    <SettingsStack>
+      <Tabs
+        value={memorySettingsTab}
+        onChange={(_, value: 'global' | 'project') =>
+          setMemorySettingsTab(value)
+        }
+        sx={settingsTabsSx}
+      >
+        <Tab value="global" label="Global" />
+        <Tab value="project" label="Project" />
+      </Tabs>
 
       {memorySettingsTab === 'global' && (
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Stack
-            direction={{ xs: 'column', md: 'row' }}
-            justifyContent="space-between"
-            gap={2}
-          >
-            <Box>
-              <Typography variant="h6">Agent Memory</Typography>
-              <Typography variant="body2" color="text.secondary">
-                User-owned Markdown memory maintained through progressive
-                discovery.
-              </Typography>
-            </Box>
-            <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={Boolean(settings?.secondBrain.enabled)}
-                    onChange={(_, checked) => handleEnable(checked)}
-                    sx={memorySwitchSx}
-                  />
-                }
-                label="Enabled"
-              />
-              <Chip
-                size="small"
-                color={status?.initialized ? 'success' : 'default'}
-                label={
-                  status?.initialized
-                    ? `${status.pageCount} pages`
-                    : 'Not initialized'
-                }
-              />
-              {status?.okfVersion && (
-                <Chip
-                  size="small"
-                  variant="outlined"
-                  label={`OKF ${status.okfVersion}`}
-                />
-              )}
+        <SettingsSection
+          title="Agent Memory"
+          icon={<PsychologyAltOutlined />}
+          description="User-owned Markdown memory maintained through progressive discovery."
+          action={
+            <>
               <Tooltip title="Open the user-owned Agent Memory wiki folder">
                 <span>
                   <IconButton
+                    size="small"
                     onClick={() =>
                       openSecondBrainWikiFolder().catch((error) =>
                         toast.error(error.message),
@@ -866,13 +835,14 @@ export const SecondBrainTab: React.FC = () => {
                     }
                     disabled={!status?.initialized}
                   >
-                    <FolderOpen />
+                    <FolderOpen fontSize="small" />
                   </IconButton>
                 </span>
               </Tooltip>
               <Tooltip title="Open terminal in the Agent Memory folder">
                 <span>
                   <IconButton
+                    size="small"
                     onClick={() =>
                       openSecondBrainWikiTerminal().catch((error) =>
                         toast.error(error.message),
@@ -881,256 +851,191 @@ export const SecondBrainTab: React.FC = () => {
                     disabled={!status?.initialized}
                     aria-label="Open terminal in Agent Memory folder"
                   >
-                    <Terminal />
+                    <Terminal fontSize="small" />
                   </IconButton>
                 </span>
               </Tooltip>
-            </Stack>
-          </Stack>
-        </Paper>
+            </>
+          }
+        >
+          <SettingsRow
+            label="Enabled"
+            description="Let agents discover durable Markdown memory across sessions."
+          >
+            <Chip
+              size="small"
+              color={status?.initialized ? 'success' : 'default'}
+              label={
+                status?.initialized
+                  ? `${status.pageCount} pages`
+                  : 'Not initialized'
+              }
+            />
+            {status?.okfVersion && (
+              <Chip
+                size="small"
+                variant="outlined"
+                label={`OKF ${status.okfVersion}`}
+              />
+            )}
+            <Switch
+              checked={Boolean(settings?.secondBrain.enabled)}
+              onChange={(_, checked) => handleEnable(checked)}
+              sx={memorySwitchSx}
+            />
+          </SettingsRow>
+          {settings?.secondBrain.enabled && !status?.initialized && (
+            <SettingsRow
+              label="Initialize Agent Memory"
+              description="Create the local Markdown memory wiki and run the first refresh so agents can use durable context across sessions."
+            >
+              {providerSelector}
+              <Tooltip
+                title={
+                  !hasActiveProvider
+                    ? getSecondBrainProviderTooltip('init')
+                    : ''
+                }
+              >
+                <span>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    onClick={() => handleRefresh('init')}
+                    disabled={
+                      busy ||
+                      providerLoading ||
+                      setActiveProvider.isLoading ||
+                      !hasActiveProvider
+                    }
+                    startIcon={
+                      busy ? (
+                        <CircularProgress color="inherit" size={16} />
+                      ) : null
+                    }
+                  >
+                    Initialize memory
+                  </Button>
+                </span>
+              </Tooltip>
+            </SettingsRow>
+          )}
+          {settings?.secondBrain.enabled && status?.initialized && (
+            <SettingsRow
+              label="Refresh memory"
+              description={lastRefreshMessage || undefined}
+            >
+              {providerSelector}
+              <Tooltip
+                title={
+                  !hasActiveProvider
+                    ? getSecondBrainProviderTooltip('preview')
+                    : ''
+                }
+              >
+                <span>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<Search />}
+                    onClick={() => handleRefresh('preview')}
+                    disabled={
+                      busy ||
+                      providerLoading ||
+                      setActiveProvider.isLoading ||
+                      !hasActiveProvider
+                    }
+                  >
+                    Preview refresh
+                  </Button>
+                </span>
+              </Tooltip>
+              <Tooltip
+                title={
+                  !hasActiveProvider
+                    ? getSecondBrainProviderTooltip('apply')
+                    : ''
+                }
+              >
+                <span>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    startIcon={
+                      busy ? <CircularProgress size={16} /> : <Refresh />
+                    }
+                    onClick={() => handleRefresh('apply')}
+                    disabled={
+                      busy ||
+                      providerLoading ||
+                      setActiveProvider.isLoading ||
+                      !hasActiveProvider
+                    }
+                  >
+                    Refresh memory
+                  </Button>
+                </span>
+              </Tooltip>
+            </SettingsRow>
+          )}
+          {settings?.secondBrain.enabled && providerError && (
+            <SettingsSectionBody>
+              <Alert severity="error">{providerError}</Alert>
+            </SettingsSectionBody>
+          )}
+        </SettingsSection>
       )}
 
       {memorySettingsTab === 'project' && (
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Stack spacing={2}>
-            <Box>
-              <Typography variant="subtitle1">Project Memory</Typography>
-              <Typography variant="body2" color="text.secondary">
-                Project Memory is stored as{' '}
-                <code>{PROJECT_AGENT_CONTEXT_FILE}</code> in this dbt project.
-                It travels with the repository and is separate from global Agent
-                Memory.
-              </Typography>
-            </Box>
-            {!selectedProject ? (
-              <Alert severity="info">
-                Select a dbt project to configure project-scoped AI context.
-              </Alert>
-            ) : (
-              <Stack
-                direction={{ xs: 'column', md: 'row' }}
-                justifyContent="space-between"
-                gap={2}
-              >
-                <Box>
-                  <Typography variant="subtitle2">
-                    Include {PROJECT_AGENT_CONTEXT_FILE} in Project Agent
-                    context
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    The Project Agent reads the current project&apos;s root
-                    {PROJECT_AGENT_CONTEXT_FILE} file when starting a request.
-                  </Typography>
-                </Box>
-                <Switch
-                  checked={projectMemoryEnabled}
-                  onChange={(_, checked) =>
-                    handleSetProjectMemoryEnabled(checked)
-                  }
-                  sx={memorySwitchSx}
-                />
-              </Stack>
-            )}
-          </Stack>
-        </Paper>
-      )}
-
-      {memorySettingsTab === 'global' && !settings?.secondBrain.enabled && (
-        <Alert severity="info">
-          Enable Agent Memory to let agents discover durable Markdown memory
-          across sessions.
-        </Alert>
-      )}
-
-      {memorySettingsTab === 'global' &&
-        settings?.secondBrain.enabled &&
-        !status?.initialized && (
-          <Paper
-            variant="outlined"
-            sx={{
-              p: 2,
-              borderColor: 'primary.main',
-              bgcolor: 'action.hover',
-            }}
-          >
-            <Stack
-              direction={{ xs: 'column', md: 'row' }}
-              justifyContent="space-between"
-              alignItems={{ xs: 'stretch', md: 'center' }}
-              gap={2}
+        <SettingsSection
+          title="Project Memory"
+          icon={<FolderSpecialOutlined />}
+          description={
+            <>
+              Stored as <code>{PROJECT_AGENT_CONTEXT_FILE}</code> in this dbt
+              project and travels with the repository.
+            </>
+          }
+        >
+          {!selectedProject ? (
+            <SettingsRow
+              label="No project selected"
+              description="Select a dbt project to configure project-scoped AI context."
+            />
+          ) : (
+            <SettingsRow
+              label={`Include ${PROJECT_AGENT_CONTEXT_FILE} in Project Agent context`}
+              description={`The Project Agent reads the current project's root ${PROJECT_AGENT_CONTEXT_FILE} file when starting a request.`}
             >
-              <Stack direction="row" gap={1.5} alignItems="flex-start">
-                <Box
-                  sx={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: '50%',
-                    display: 'grid',
-                    placeItems: 'center',
-                    color: 'primary.contrastText',
-                    bgcolor: 'primary.main',
-                    flexShrink: 0,
-                  }}
-                >
-                  <Refresh fontSize="small" />
-                </Box>
-                <Box>
-                  <Typography variant="subtitle1" fontWeight={700}>
-                    Initialize Agent Memory
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Create the local Markdown memory wiki and run the first
-                    refresh so agents can use durable context across sessions.
-                  </Typography>
-                </Box>
-              </Stack>
-              <Stack
-                direction={{ xs: 'column', lg: 'row' }}
-                alignItems={{ xs: 'stretch', lg: 'center' }}
-                gap={1}
-              >
-                <Tooltip
-                  title={
-                    !hasActiveProvider
-                      ? getSecondBrainProviderTooltip('init')
-                      : ''
-                  }
-                >
-                  <span>
-                    <Button
-                      size="small"
-                      variant="contained"
-                      onClick={() => handleRefresh('init')}
-                      disabled={
-                        busy ||
-                        providerLoading ||
-                        setActiveProvider.isLoading ||
-                        !hasActiveProvider
-                      }
-                      startIcon={
-                        busy ? (
-                          <CircularProgress color="inherit" size={16} />
-                        ) : null
-                      }
-                      sx={{
-                        width: { xs: '100%', lg: 'auto' },
-                        minWidth: 170,
-                        fontWeight: 700,
-                      }}
-                    >
-                      Initialize memory
-                    </Button>
-                  </span>
-                </Tooltip>
-                {providerSelector}
-              </Stack>
-            </Stack>
-            {providerError && (
-              <Alert severity="error" sx={{ mt: 1.5 }}>
-                {providerError}
-              </Alert>
-            )}
-          </Paper>
-        )}
+              <Switch
+                checked={projectMemoryEnabled}
+                onChange={(_, checked) =>
+                  handleSetProjectMemoryEnabled(checked)
+                }
+                sx={memorySwitchSx}
+              />
+            </SettingsRow>
+          )}
+        </SettingsSection>
+      )}
+
       {memorySettingsTab === 'global' &&
         settings?.secondBrain.enabled &&
         status?.initialized && (
-          <>
-            <Paper variant="outlined" sx={{ p: 1 }}>
-              <Stack spacing={1}>
-                <Stack
-                  direction={{ xs: 'column', md: 'row' }}
-                  gap={1}
-                  alignItems={{ xs: 'stretch', md: 'center' }}
-                  justifyContent="space-between"
-                >
-                  <Stack
-                    direction={{ xs: 'column', sm: 'row' }}
-                    gap={1}
-                    alignItems={{ xs: 'stretch', sm: 'center' }}
-                  >
-                    <Tooltip
-                      title={
-                        !hasActiveProvider
-                          ? getSecondBrainProviderTooltip('preview')
-                          : ''
-                      }
-                    >
-                      <span>
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          startIcon={<Search />}
-                          onClick={() => handleRefresh('preview')}
-                          disabled={
-                            busy ||
-                            providerLoading ||
-                            setActiveProvider.isLoading ||
-                            !hasActiveProvider
-                          }
-                          sx={{ width: { xs: '100%', sm: 'auto' } }}
-                        >
-                          Preview refresh
-                        </Button>
-                      </span>
-                    </Tooltip>
-                    <Tooltip
-                      title={
-                        !hasActiveProvider
-                          ? getSecondBrainProviderTooltip('apply')
-                          : ''
-                      }
-                    >
-                      <span>
-                        <Button
-                          size="small"
-                          variant="contained"
-                          startIcon={
-                            busy ? <CircularProgress size={16} /> : <Refresh />
-                          }
-                          onClick={() => handleRefresh('apply')}
-                          disabled={
-                            busy ||
-                            providerLoading ||
-                            setActiveProvider.isLoading ||
-                            !hasActiveProvider
-                          }
-                          sx={{ width: { xs: '100%', sm: 'auto' } }}
-                        >
-                          Refresh memory
-                        </Button>
-                      </span>
-                    </Tooltip>
-                  </Stack>
-                  {providerSelector}
-                </Stack>
-                {lastRefreshMessage && (
-                  <Typography variant="body2" color="text.secondary">
-                    {lastRefreshMessage}
-                  </Typography>
-                )}
-                {providerError && (
-                  <Alert severity="error">{providerError}</Alert>
-                )}
-              </Stack>
-            </Paper>
-
+          <SettingsSection title="Memory pages" icon={<ArticleOutlined />}>
             <Box
               sx={{
                 display: 'grid',
                 gridTemplateColumns: {
                   xs: '1fr',
-                  lg: '260px minmax(0, 1fr) 240px',
+                  md: '220px minmax(0, 1fr)',
                 },
                 minHeight: 620,
-                border: 1,
-                borderColor: 'divider',
-                borderRadius: 1,
                 overflow: 'hidden',
               }}
             >
               <Box
-                sx={{ borderRight: { lg: 1 }, borderColor: 'divider', p: 1 }}
+                sx={{ borderRight: { md: 1 }, borderColor: 'divider', p: 1 }}
               >
                 <Stack direction="row" gap={1} mb={1}>
                   <TextField
@@ -1283,7 +1188,12 @@ export const SecondBrainTab: React.FC = () => {
               </Box>
 
               <Box
-                sx={{ borderLeft: { lg: 1 }, borderColor: 'divider', p: 1.5 }}
+                sx={{
+                  gridColumn: '1 / -1',
+                  borderTop: 1,
+                  borderColor: 'divider',
+                  p: 1.5,
+                }}
               >
                 <Typography variant="subtitle2">Page details</Typography>
                 <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
@@ -1398,7 +1308,7 @@ export const SecondBrainTab: React.FC = () => {
                 )}
               </Box>
             </Box>
-          </>
+          </SettingsSection>
         )}
 
       <Dialog
@@ -1650,6 +1560,6 @@ export const SecondBrainTab: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </Stack>
+    </SettingsStack>
   );
 };

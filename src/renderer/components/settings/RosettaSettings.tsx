@@ -4,17 +4,11 @@ import {
   Box,
   Chip,
   Typography,
-  Alert,
   CircularProgress,
-  FormControlLabel,
-  Switch,
-  Divider,
+  ToggleButton,
+  ToggleButtonGroup,
   IconButton,
   Tooltip,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction,
   Backdrop,
 } from '@mui/material';
 import {
@@ -25,6 +19,9 @@ import {
   CheckCircle,
   Info,
   Warning,
+  TerminalOutlined,
+  ListAltOutlined,
+  WarningAmberOutlined,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { SettingsType, RosettaVersionInfo } from '../../../types/backend';
@@ -35,6 +32,12 @@ import {
   useInstallRosettaVersion,
   useUninstallRosetta,
 } from '../../controllers';
+import {
+  SettingsRow,
+  SettingsSection,
+  SettingsSectionBody,
+  SettingsStack,
+} from './SettingsLayout';
 
 interface RosettaSettingsProps {
   settings: SettingsType;
@@ -180,7 +183,7 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
     settings.rosettaVersion && !isVersionSupported(settings.rosettaVersion);
 
   return (
-    <Box sx={{ maxWidth: 800 }}>
+    <SettingsStack>
       <Backdrop
         open={isBlocking}
         sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, color: '#fff' }}
@@ -188,276 +191,246 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
         <CircularProgress color="inherit" />
       </Backdrop>
 
-      {/* Current Installation Status */}
-      <Typography variant="h6" gutterBottom>
-        Rosetta CLI Installation
-      </Typography>
-
-      {settings.rosettaPath ? (
-        <Alert
-          severity={isCurrentVersionUnsupported ? 'warning' : 'success'}
-          sx={{ mb: 3 }}
-          icon={isCurrentVersionUnsupported ? <Warning /> : <CheckCircle />}
-        >
-          <Typography variant="body1" sx={{ fontWeight: 500 }}>
-            Rosetta is installed at: {settings.rosettaPath}
-          </Typography>
-          <Typography variant="body2" sx={{ mt: 1 }}>
-            Version: {settings.rosettaVersion || 'Unknown'}
-          </Typography>
-          {isCurrentVersionUnsupported && (
-            <Typography variant="body2" sx={{ mt: 1, fontWeight: 500 }}>
-              ⚠️ This version is not supported. Please upgrade to version{' '}
-              {MINIMUM_SUPPORTED_VERSION} or higher.
-            </Typography>
-          )}
-        </Alert>
-      ) : (
-        <Alert severity="warning" sx={{ mb: 3 }}>
-          <Typography variant="body1">
-            Rosetta is not installed. Please install a version below (minimum:{' '}
-            {MINIMUM_SUPPORTED_VERSION}).
-          </Typography>
-        </Alert>
-      )}
-
-      {/* Version Management Section */}
-      <Box sx={{ mb: 3 }}>
-        <Button
-          variant="outlined"
-          onClick={handleCheckVersions}
-          disabled={checkVersions.isLoading}
-          startIcon={
-            checkVersions.isLoading ? (
-              <CircularProgress size={16} />
-            ) : (
-              <Refresh />
-            )
-          }
-          sx={{ mb: 2 }}
-        >
-          {checkVersions.isLoading ? 'Loading Versions...' : 'Refresh Versions'}
-        </Button>
-
-        {versionInfo && (
-          <FormControlLabel
-            control={
-              <Switch
-                checked={showPrerelease}
-                onChange={(e) => setShowPrerelease(e.target.checked)}
-              />
-            }
-            label="Show pre-release versions"
-            sx={{ ml: 2 }}
-          />
-        )}
-      </Box>
-
-      {/* Loading state for initial version check */}
-      {checkVersions.isLoading && !versionInfo && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-          <CircularProgress />
-          <Typography variant="body2" sx={{ ml: 2, alignSelf: 'center' }}>
-            Loading available versions...
-          </Typography>
-        </Box>
-      )}
-
-      {/* Available Versions List */}
-      {versionInfo && filteredVersions.length > 0 && (
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            Available Versions (minimum: {MINIMUM_SUPPORTED_VERSION})
-          </Typography>
-          <List
-            sx={{
-              border: 1,
-              borderColor: 'divider',
-              borderRadius: 1,
-            }}
-          >
-            {filteredVersions.map((version) => (
-              <React.Fragment key={version.version}>
-                <ListItem>
-                  <ListItemText
-                    primary={
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 1,
-                        }}
-                      >
-                        <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                          {version.version}
-                        </Typography>
-                        {version.isPrerelease && (
-                          <Chip
-                            label="Pre-release"
-                            size="small"
-                            color="warning"
-                          />
-                        )}
-                        {version.version === versionInfo.currentVersion && (
-                          <Box
-                            sx={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 0.5,
-                            }}
-                          >
-                            <CheckCircle color="success" fontSize="small" />
-                            <Chip
-                              label="Installed"
-                              size="small"
-                              color="success"
-                            />
-                          </Box>
-                        )}
-                        {version.version === versionInfo.latestStable &&
-                          !version.isPrerelease && (
-                            <Chip label="Latest" size="small" color="primary" />
-                          )}
-                      </Box>
-                    }
-                    secondary={
-                      <Typography variant="body2" color="text.secondary">
-                        Released:{' '}
-                        {new Date(version.releaseDate).toLocaleDateString()}
-                      </Typography>
-                    }
-                  />
-                  <ListItemSecondaryAction>
-                    <Box sx={{ display: 'flex', gap: 1 }}>
-                      {version.releaseNotes && (
-                        <Tooltip title="View release notes">
-                          <IconButton
-                            size="small"
-                            onClick={() =>
-                              window.open(
-                                `https://github.com/rosettadb/rosetta/releases/tag/v${version.version}`,
-                                '_blank',
-                              )
-                            }
-                          >
-                            <Info />
-                          </IconButton>
-                        </Tooltip>
-                      )}
-                      <Button
-                        size="small"
-                        variant="contained"
-                        onClick={() => handleInstallVersion(version.version)}
-                        disabled={
-                          version.version === versionInfo.currentVersion ||
-                          installingVersion === version.version ||
-                          installVersion.isLoading
-                        }
-                        startIcon={
-                          installingVersion === version.version ? (
-                            <CircularProgress size={16} />
-                          ) : (
-                            <Download />
-                          )
-                        }
-                      >
-                        {getButtonText(version)}
-                      </Button>
-                    </Box>
-                  </ListItemSecondaryAction>
-                </ListItem>
-                <Divider />
-              </React.Fragment>
-            ))}
-          </List>
-
-          {/* Show All/Show Less Button */}
-          {versionInfo &&
-            versionInfo.availableVersions.filter(
-              (v) =>
-                (showPrerelease || !v.isPrerelease) &&
-                isVersionSupported(v.version),
-            ).length > 10 && (
-              <Box sx={{ mt: 2, textAlign: 'center' }}>
-                <Button
-                  variant="outlined"
-                  onClick={() => setShowAllVersions(!showAllVersions)}
-                  size="small"
-                >
-                  {showAllVersions ? 'Show Less' : 'Show All Versions'}
-                </Button>
-              </Box>
-            )}
-        </Box>
-      )}
-
-      {/* No supported versions message */}
-      {versionInfo && filteredVersions.length === 0 && (
-        <Alert severity="info" sx={{ mb: 3 }}>
-          <Typography variant="body2">
-            No supported versions found. Only versions{' '}
-            {MINIMUM_SUPPORTED_VERSION} and above are supported.
-            {!showPrerelease &&
-              ' Try enabling pre-release versions if available.'}
-          </Typography>
-        </Alert>
-      )}
-
-      {/* Documentation and Help */}
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h6" gutterBottom>
-          Documentation
-        </Typography>
-        <Button
-          startIcon={<OpenInNew />}
-          color="primary"
-          size="small"
-          component="a"
-          href="https://github.com/rosettadb/rosetta?tab=readme-ov-file#getting-started"
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) =>
-            utils.handleExternalLink(
-              e,
-              'https://github.com/rosettadb/rosetta?tab=readme-ov-file#getting-started',
-            )
-          }
-          sx={{ textTransform: 'none' }}
-        >
-          View RosettaDB CLI documentation
-        </Button>
-      </Box>
-
-      {/* Uninstall Option */}
-      {settings.rosettaPath && (
-        <Box sx={{ pt: 2, borderTop: 1, borderColor: 'divider' }}>
-          <Typography variant="h6" gutterBottom color="error">
-            Danger Zone
-          </Typography>
-          <Alert severity="warning" sx={{ mb: 2 }}>
-            <Typography variant="body2">
-              Uninstalling Rosetta will remove all Rosetta files and reset the
-              configuration. This action cannot be undone.
-            </Typography>
-          </Alert>
+      <SettingsSection
+        title="Rosetta CLI Installation"
+        icon={<TerminalOutlined />}
+        action={
           <Button
-            variant="outlined"
-            color="error"
-            onClick={handleUninstall}
-            disabled={uninstallRosetta.isLoading}
-            startIcon={
-              uninstallRosetta.isLoading ? (
-                <CircularProgress size={16} />
-              ) : (
-                <Delete />
+            size="small"
+            startIcon={<OpenInNew />}
+            color="primary"
+            component="a"
+            href="https://github.com/rosettadb/rosetta?tab=readme-ov-file#getting-started"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) =>
+              utils.handleExternalLink(
+                e,
+                'https://github.com/rosettadb/rosetta?tab=readme-ov-file#getting-started',
               )
             }
           >
-            {uninstallRosetta.isLoading
-              ? 'Uninstalling...'
-              : 'Uninstall Rosetta CLI'}
+            Documentation
           </Button>
-        </Box>
+        }
+      >
+        <SettingsRow
+          label="Status"
+          description={
+            settings.rosettaPath
+              ? `${settings.rosettaPath}${
+                  isCurrentVersionUnsupported
+                    ? ` · This version is not supported. Please upgrade to version ${MINIMUM_SUPPORTED_VERSION} or higher.`
+                    : ''
+                }`
+              : `Rosetta is not installed. Please install a version below (minimum: ${MINIMUM_SUPPORTED_VERSION}).`
+          }
+        >
+          {settings.rosettaPath ? (
+            <Chip
+              size="small"
+              color={isCurrentVersionUnsupported ? 'warning' : 'success'}
+              icon={isCurrentVersionUnsupported ? <Warning /> : <CheckCircle />}
+              label={`Installed · ${settings.rosettaVersion || 'Unknown'}`}
+            />
+          ) : (
+            <Chip
+              size="small"
+              color="warning"
+              icon={<Warning />}
+              label="Not installed"
+            />
+          )}
+        </SettingsRow>
+      </SettingsSection>
+
+      <SettingsSection
+        title="Available Versions"
+        icon={<ListAltOutlined />}
+        action={
+          <>
+            {versionInfo && (
+              <ToggleButtonGroup
+                size="small"
+                exclusive
+                value={showPrerelease ? 'all' : 'stable'}
+                onChange={(_, value) =>
+                  value && setShowPrerelease(value === 'all')
+                }
+                aria-label="Which versions to show"
+                sx={{
+                  '& .MuiToggleButton-root': {
+                    px: 1.25,
+                    py: 0.25,
+                    fontSize: 12,
+                    textTransform: 'none',
+                  },
+                }}
+              >
+                <ToggleButton value="stable">Stable</ToggleButton>
+                <ToggleButton value="all">All</ToggleButton>
+              </ToggleButtonGroup>
+            )}
+            <Tooltip title="Refresh versions">
+              <span>
+                <IconButton
+                  size="small"
+                  onClick={handleCheckVersions}
+                  disabled={checkVersions.isLoading}
+                  aria-label="Refresh versions"
+                >
+                  {checkVersions.isLoading ? (
+                    <CircularProgress size={16} />
+                  ) : (
+                    <Refresh fontSize="small" />
+                  )}
+                </IconButton>
+              </span>
+            </Tooltip>
+          </>
+        }
+      >
+        {!versionInfo && (
+          <SettingsRow
+            label={
+              checkVersions.isLoading
+                ? 'Loading available versions...'
+                : 'No version information yet.'
+            }
+          />
+        )}
+        {versionInfo && filteredVersions.length === 0 && (
+          <SettingsRow
+            label="No supported versions found."
+            description={
+              !showPrerelease
+                ? 'Try switching to All to include pre-release versions.'
+                : undefined
+            }
+          />
+        )}
+        {versionInfo &&
+          filteredVersions.map((version) => (
+            <SettingsRow
+              key={version.version}
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  {version.version}
+                  {version.isPrerelease && (
+                    <Chip label="Pre-release" size="small" color="warning" />
+                  )}
+                  {version.version === versionInfo.currentVersion && (
+                    <Chip
+                      label="Installed"
+                      size="small"
+                      color="success"
+                      icon={<CheckCircle />}
+                    />
+                  )}
+                  {version.version === versionInfo.latestStable &&
+                    !version.isPrerelease && (
+                      <Chip label="Latest" size="small" color="primary" />
+                    )}
+                </Box>
+              }
+              description={`Released: ${new Date(
+                version.releaseDate,
+              ).toLocaleDateString()}`}
+            >
+              {version.releaseNotes && (
+                <Tooltip title="View release notes">
+                  <IconButton
+                    size="small"
+                    onClick={() =>
+                      window.open(
+                        `https://github.com/rosettadb/rosetta/releases/tag/v${version.version}`,
+                        '_blank',
+                      )
+                    }
+                  >
+                    <Info fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              )}
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => handleInstallVersion(version.version)}
+                disabled={
+                  version.version === versionInfo.currentVersion ||
+                  installingVersion === version.version ||
+                  installVersion.isLoading
+                }
+                startIcon={
+                  installingVersion === version.version ? (
+                    <CircularProgress size={14} />
+                  ) : (
+                    <Download />
+                  )
+                }
+              >
+                {getButtonText(version)}
+              </Button>
+            </SettingsRow>
+          ))}
+        {versionInfo && (
+          <SettingsSectionBody>
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 2,
+              }}
+            >
+              <Typography variant="caption" color="text.secondary">
+                Minimum supported: {MINIMUM_SUPPORTED_VERSION}
+              </Typography>
+              {versionInfo.availableVersions.filter(
+                (v) =>
+                  (showPrerelease || !v.isPrerelease) &&
+                  isVersionSupported(v.version),
+              ).length > 10 && (
+                <Button
+                  size="small"
+                  onClick={() => setShowAllVersions(!showAllVersions)}
+                >
+                  {showAllVersions
+                    ? 'Show fewer versions'
+                    : 'Show all versions'}
+                </Button>
+              )}
+            </Box>
+          </SettingsSectionBody>
+        )}
+      </SettingsSection>
+
+      {settings.rosettaPath && (
+        <SettingsSection title="Danger Zone" icon={<WarningAmberOutlined />}>
+          <SettingsRow
+            label="Uninstall Rosetta CLI"
+            description="Removes all Rosetta files and resets the configuration. This cannot be undone."
+          >
+            <Button
+              size="small"
+              variant="outlined"
+              color="error"
+              onClick={handleUninstall}
+              disabled={uninstallRosetta.isLoading}
+              startIcon={
+                uninstallRosetta.isLoading ? (
+                  <CircularProgress size={14} />
+                ) : (
+                  <Delete />
+                )
+              }
+            >
+              {uninstallRosetta.isLoading
+                ? 'Uninstalling...'
+                : 'Uninstall Rosetta CLI'}
+            </Button>
+          </SettingsRow>
+        </SettingsSection>
       )}
 
       <ConfirmationModal
@@ -467,6 +440,6 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
         title="Uninstall Rosetta CLI"
         question="Are you sure you want to uninstall Rosetta CLI? This will remove all Rosetta CLI files and you will need to reinstall it to use Rosetta CLI features."
       />
-    </Box>
+    </SettingsStack>
   );
 };

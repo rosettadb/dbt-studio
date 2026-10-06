@@ -3,14 +3,9 @@ import {
   Box,
   Typography,
   Button,
-  Card,
-  CardContent,
   Checkbox,
-  FormControlLabel,
-  FormGroup,
   TextField,
   Alert,
-  Divider,
   CircularProgress,
   InputAdornment,
   IconButton,
@@ -32,6 +27,12 @@ import { toast } from 'react-toastify';
 import { useQueryClient } from 'react-query';
 import { QUERY_KEYS } from '../../config/constants';
 import { cloudExplorerKeys } from '../../controllers/cloudExplorer.controller';
+import {
+  SettingsRow,
+  SettingsSection,
+  SettingsSectionBody,
+  SettingsStack,
+} from './SettingsLayout';
 
 type BackupCategory =
   | 'projects'
@@ -418,365 +419,297 @@ export const BackupSettings: React.FC = () => {
       )
     : 0;
 
+  const renderPasswordToggle = (visible: boolean, onToggle: () => void) => (
+    <InputAdornment position="end">
+      <IconButton size="small" onClick={onToggle} edge="end">
+        {visible ? (
+          <VisibilityOff fontSize="small" />
+        ) : (
+          <Visibility fontSize="small" />
+        )}
+      </IconButton>
+    </InputAdornment>
+  );
+
+  const renderProgress = (label: string, value: number) => (
+    <SettingsSectionBody>
+      <Box display="flex" justifyContent="space-between" mb={0.5}>
+        <Typography variant="caption" color="text.secondary">
+          {label}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          {value}%
+        </Typography>
+      </Box>
+      <LinearProgress
+        variant="determinate"
+        value={value}
+        sx={{ borderRadius: 1, height: 6 }}
+      />
+    </SettingsSectionBody>
+  );
+
   return (
-    <Box maxWidth={700} width="100%">
-      <Typography variant="body2" color="text.secondary" mb={3}>
-        Export your app data as an encrypted or plain ZIP archive, and restore
-        from a previous backup. Only the categories you select will be included.
-      </Typography>
-
+    <SettingsStack>
       {/* ── Export Section ─────────────────────────────────────────────────── */}
-      <Card
-        variant="outlined"
-        sx={{ mb: 3, borderRadius: 2, borderColor: 'divider' }}
+      <SettingsSection
+        title="Export Backup"
+        icon={<BackupOutlined />}
+        description="Only the categories you select are included in the ZIP."
       >
-        <CardContent>
-          <Box display="flex" alignItems="center" gap={1} mb={0.5}>
-            <BackupOutlined color="primary" />
-            <Typography variant="h6" sx={{ m: 0 }}>
-              Export Backup
-            </Typography>
-          </Box>
-          <Typography variant="body2" color="text.secondary" mb={2}>
-            Select what to include in the backup ZIP.
-          </Typography>
-
-          <FormGroup>
-            {CATEGORIES.map(({ key, label, description }) => (
-              <FormControlLabel
-                key={key}
-                sx={{
-                  alignItems: 'flex-start',
-                  mb: 0.5,
-                  '& .MuiCheckbox-root': { pt: 0.5 },
-                }}
-                control={
-                  <Checkbox
-                    id={`backup-category-${key}`}
+        {CATEGORIES.map(({ key, label, description }) => (
+          <SettingsRow
+            key={key}
+            label={
+              <Box display="flex" alignItems="center" gap={0.75}>
+                {label}
+                {key === 'secretStore' && (
+                  <Chip
+                    icon={<LockOutlined sx={{ fontSize: 12 }} />}
+                    label="Encrypted"
                     size="small"
-                    checked={exportCategories.has(key)}
-                    onChange={() => handleCategoryToggle(key)}
+                    color="warning"
+                    variant="outlined"
+                    sx={{ height: 18, fontSize: '0.65rem' }}
                   />
-                }
-                label={
-                  <Box>
-                    <Box display="flex" alignItems="center" gap={0.75}>
-                      <Typography variant="body2" fontWeight={500}>
-                        {label}
-                      </Typography>
-                      {key === 'secretStore' && (
-                        <Chip
-                          icon={<LockOutlined sx={{ fontSize: 12 }} />}
-                          label="Encrypted"
-                          size="small"
-                          color="warning"
-                          variant="outlined"
-                          sx={{ height: 18, fontSize: '0.65rem' }}
-                        />
-                      )}
-                    </Box>
-                    <Typography variant="caption" color="text.secondary">
-                      {description}
-                    </Typography>
-                  </Box>
-                }
-              />
-            ))}
-          </FormGroup>
-
-          {/* Password field — always visible; required when Secret Store selected, optional otherwise */}
-          <Box mt={2}>
-            {secretStoreSelected && (
-              <Alert severity="warning" sx={{ mb: 1.5, borderRadius: 1 }}>
-                The Secret Store contains sensitive credentials. A password is
-                required to encrypt this data in the ZIP.
-              </Alert>
-            )}
-            <TextField
-              id="backup-export-password"
-              label={
-                secretStoreSelected
-                  ? 'Encryption Password (required)'
-                  : 'Encryption Password (optional — encrypts the whole ZIP)'
-              }
-              value={exportPassword}
-              onChange={(e) => setExportPassword(e.target.value)}
-              type={showExportPassword ? 'text' : 'password'}
-              size="small"
-              fullWidth
-              required={secretStoreSelected}
-              placeholder={
-                secretStoreSelected
-                  ? 'Enter a strong password…'
-                  : 'Leave blank for no encryption'
-              }
-              slotProps={{
-                input: {
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton
-                        size="small"
-                        onClick={() => setShowExportPassword((v) => !v)}
-                        edge="end"
-                      >
-                        {showExportPassword ? (
-                          <VisibilityOff fontSize="small" />
-                        ) : (
-                          <Visibility fontSize="small" />
-                        )}
-                      </IconButton>
-                    </InputAdornment>
-                  ),
-                },
-              }}
-            />
-          </Box>
-
-          <Box mt={2} display="flex" alignItems="center" gap={1.5}>
-            <Button
-              id="backup-export-btn"
-              variant="contained"
-              startIcon={
-                isExporting ? (
-                  <CircularProgress size={16} color="inherit" />
-                ) : (
-                  <FolderZip />
-                )
-              }
-              onClick={handleExport}
-              disabled={
-                isExporting ||
-                exportCategories.size === 0 ||
-                (secretStoreSelected && !exportPassword.trim())
-              }
-            >
-              {isExporting ? `Exporting (${exportProgress}%)` : 'Export ZIP'}
-            </Button>
-
-            {isExporting && (
-              <Button
-                variant="outlined"
-                color="error"
-                size="small"
-                startIcon={<CancelOutlined fontSize="small" />}
-                onClick={handleStopExport}
-              >
-                Stop
-              </Button>
-            )}
-
-            {lastExportPath && !isExporting && (
-              <Typography
-                variant="caption"
-                color="success.main"
-                sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
-              >
-                <CheckCircleOutline sx={{ fontSize: 14 }} />
-                Saved
-              </Typography>
-            )}
-          </Box>
-
-          {isExporting && (
-            <Box mt={2}>
-              <Box display="flex" justifyContent="space-between" mb={0.5}>
-                <Typography variant="caption" color="text.secondary">
-                  Exporting data…
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {exportProgress}%
-                </Typography>
+                )}
               </Box>
-              <LinearProgress
-                variant="determinate"
-                value={exportProgress}
-                sx={{ borderRadius: 1, height: 6 }}
-              />
-            </Box>
-          )}
-        </CardContent>
-      </Card>
+            }
+            description={description}
+          >
+            <Checkbox
+              id={`backup-category-${key}`}
+              size="small"
+              checked={exportCategories.has(key)}
+              onChange={() => handleCategoryToggle(key)}
+            />
+          </SettingsRow>
+        ))}
 
-      {/* ── Import Section ─────────────────────────────────────────────────── */}
-      <Card variant="outlined" sx={{ borderRadius: 2, borderColor: 'divider' }}>
-        <CardContent>
-          <Box display="flex" alignItems="center" gap={1} mb={0.5}>
-            <RestoreOutlined color="primary" />
-            <Typography variant="h6" sx={{ m: 0 }}>
-              Import Backup
-            </Typography>
-          </Box>
-          <Typography variant="body2" color="text.secondary" mb={2}>
-            Restore data from a previously exported backup ZIP. Existing items
-            with matching IDs will not be overwritten.
-          </Typography>
-
+        <SettingsRow
+          label={
+            secretStoreSelected
+              ? 'Encryption Password (required)'
+              : 'Encryption Password (optional)'
+          }
+          description={
+            secretStoreSelected
+              ? 'The Secret Store contains sensitive credentials. A password is required to encrypt this data in the ZIP.'
+              : 'Encrypts the whole ZIP. Leave blank for no encryption.'
+          }
+        >
           <TextField
-            id="backup-import-password"
-            label="Decryption Password (if backup has Secret Store)"
-            value={importPassword}
-            onChange={(e) => setImportPassword(e.target.value)}
-            type={showImportPassword ? 'text' : 'password'}
+            id="backup-export-password"
+            value={exportPassword}
+            onChange={(e) => setExportPassword(e.target.value)}
+            type={showExportPassword ? 'text' : 'password'}
             size="small"
-            fullWidth
-            placeholder="Leave blank if backup has no Secret Store"
-            sx={{ mb: 2 }}
+            sx={{ width: 260 }}
+            required={secretStoreSelected}
+            placeholder={
+              secretStoreSelected
+                ? 'Enter a strong password…'
+                : 'Leave blank for no encryption'
+            }
             slotProps={{
               input: {
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton
-                      size="small"
-                      onClick={() => setShowImportPassword((v) => !v)}
-                      edge="end"
-                    >
-                      {showImportPassword ? (
-                        <VisibilityOff fontSize="small" />
-                      ) : (
-                        <Visibility fontSize="small" />
-                      )}
-                    </IconButton>
-                  </InputAdornment>
+                endAdornment: renderPasswordToggle(showExportPassword, () =>
+                  setShowExportPassword((v) => !v),
                 ),
               },
             }}
           />
+        </SettingsRow>
 
-          <Box display="flex" alignItems="center" gap={1.5} mb={2}>
-            <Button
-              id="backup-import-select-btn"
-              variant="outlined"
-              startIcon={<FolderZip />}
-              onClick={handleSelectImportFile}
-              disabled={isImporting}
-            >
-              Select Backup File
-            </Button>
-
-            {selectedImportPath && (
-              <Typography
-                variant="body2"
-                color="text.secondary"
+        <SettingsRow
+          label="Export"
+          description={
+            lastExportPath && !isExporting ? (
+              <Box
+                component="span"
                 sx={{
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  maxWidth: '300px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 0.5,
+                  color: 'success.main',
                 }}
               >
-                {selectedImportPath.split('/').pop() ?? selectedImportPath}
-              </Typography>
-            )}
-          </Box>
-
-          <Box display="flex" alignItems="center" gap={1.5}>
+                <CheckCircleOutline sx={{ fontSize: 14 }} />
+                Saved
+              </Box>
+            ) : undefined
+          }
+        >
+          {isExporting && (
             <Button
-              id="backup-import-btn"
-              variant="contained"
-              startIcon={
-                isImporting ? (
-                  <CircularProgress size={16} color="inherit" />
-                ) : (
-                  <RestoreOutlined />
-                )
-              }
-              onClick={handleImport}
-              disabled={isImporting || !selectedImportPath}
+              variant="outlined"
+              color="error"
+              size="small"
+              startIcon={<CancelOutlined fontSize="small" />}
+              onClick={handleStopExport}
             >
-              {isImporting ? `Importing (${importProgress}%)` : 'Import'}
+              Stop
             </Button>
-
-            {isImporting && (
-              <Button
-                variant="outlined"
-                color="error"
-                size="small"
-                startIcon={<CancelOutlined fontSize="small" />}
-                onClick={handleStopImport}
-              >
-                Stop
-              </Button>
-            )}
-          </Box>
-
-          {isImporting && (
-            <Box mt={2}>
-              <Box display="flex" justifyContent="space-between" mb={0.5}>
-                <Typography variant="caption" color="text.secondary">
-                  Restoring backup files…
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {importProgress}%
-                </Typography>
-              </Box>
-              <LinearProgress
-                variant="determinate"
-                value={importProgress}
-                sx={{ borderRadius: 1, height: 6 }}
-              />
-            </Box>
           )}
+          <Button
+            id="backup-export-btn"
+            size="small"
+            variant="contained"
+            startIcon={
+              isExporting ? (
+                <CircularProgress size={14} color="inherit" />
+              ) : (
+                <FolderZip />
+              )
+            }
+            onClick={handleExport}
+            disabled={
+              isExporting ||
+              exportCategories.size === 0 ||
+              (secretStoreSelected && !exportPassword.trim())
+            }
+          >
+            {isExporting ? `Exporting (${exportProgress}%)` : 'Export ZIP'}
+          </Button>
+        </SettingsRow>
+        {isExporting && renderProgress('Exporting data…', exportProgress)}
+      </SettingsSection>
 
-          {/* Import result summary */}
-          {importResult && (
-            <Box mt={2}>
-              <Divider sx={{ mb: 1.5 }} />
-              <Typography variant="subtitle2" gutterBottom>
-                Import Results
-                {importFilePath && (
-                  <Typography
-                    component="span"
-                    variant="caption"
-                    color="text.secondary"
-                    ml={1}
-                  >
-                    from {importFilePath.split('/').pop()}
-                  </Typography>
-                )}
-              </Typography>
+      {/* ── Import Section ─────────────────────────────────────────────────── */}
+      <SettingsSection
+        title="Import Backup"
+        icon={<RestoreOutlined />}
+        description="Existing items with matching IDs will not be overwritten."
+      >
+        <SettingsRow
+          label="Decryption Password"
+          description="Only needed if the backup has a Secret Store."
+        >
+          <TextField
+            id="backup-import-password"
+            value={importPassword}
+            onChange={(e) => setImportPassword(e.target.value)}
+            type={showImportPassword ? 'text' : 'password'}
+            size="small"
+            sx={{ width: 260 }}
+            placeholder="Leave blank if no Secret Store"
+            slotProps={{
+              input: {
+                endAdornment: renderPasswordToggle(showImportPassword, () =>
+                  setShowImportPassword((v) => !v),
+                ),
+              },
+            }}
+          />
+        </SettingsRow>
 
-              <Box display="flex" flexWrap="wrap" gap={1} mb={1.5}>
-                {(
-                  Object.entries(importResult.imported) as [
-                    BackupCategory,
-                    number,
-                  ][]
-                ).map(([category, count]) => (
-                  <Chip
-                    key={category}
-                    icon={<CheckCircleOutline />}
-                    label={`${CATEGORIES.find((c) => c.key === category)?.label ?? category}: ${count} imported`}
-                    size="small"
-                    color="success"
-                    variant="outlined"
-                  />
-                ))}
-                {importedTotal === 0 && importResult.warnings.length === 0 && (
-                  <Typography variant="body2" color="text.secondary">
-                    No new items found (all items already exist).
-                  </Typography>
-                )}
-              </Box>
+        <SettingsRow
+          label="Backup File"
+          description={
+            selectedImportPath
+              ? (selectedImportPath.split('/').pop() ?? selectedImportPath)
+              : 'No file selected'
+          }
+        >
+          <Button
+            id="backup-import-select-btn"
+            size="small"
+            variant="outlined"
+            startIcon={<FolderZip />}
+            onClick={handleSelectImportFile}
+            disabled={isImporting}
+          >
+            Select Backup File
+          </Button>
+          {isImporting && (
+            <Button
+              variant="outlined"
+              color="error"
+              size="small"
+              startIcon={<CancelOutlined fontSize="small" />}
+              onClick={handleStopImport}
+            >
+              Stop
+            </Button>
+          )}
+          <Button
+            id="backup-import-btn"
+            size="small"
+            variant="contained"
+            startIcon={
+              isImporting ? (
+                <CircularProgress size={14} color="inherit" />
+              ) : (
+                <RestoreOutlined />
+              )
+            }
+            onClick={handleImport}
+            disabled={isImporting || !selectedImportPath}
+          >
+            {isImporting ? `Importing (${importProgress}%)` : 'Import'}
+          </Button>
+        </SettingsRow>
+        {isImporting &&
+          renderProgress('Restoring backup files…', importProgress)}
 
-              {importResult.warnings.length > 0 && (
-                <Box display="flex" flexDirection="column" gap={0.75}>
-                  {importResult.warnings.map((w, i) => (
-                    // eslint-disable-next-line react/no-array-index-key
-                    <Alert
-                      key={i}
-                      severity="warning"
-                      icon={<WarningAmberOutlined fontSize="small" />}
-                      sx={{ borderRadius: 1, py: 0.25 }}
-                    >
-                      <Typography variant="caption">{w}</Typography>
-                    </Alert>
-                  ))}
-                </Box>
+        {/* Import result summary */}
+        {importResult && (
+          <SettingsSectionBody>
+            <Typography variant="subtitle2" gutterBottom>
+              Import Results
+              {importFilePath && (
+                <Typography
+                  component="span"
+                  variant="caption"
+                  color="text.secondary"
+                  ml={1}
+                >
+                  from {importFilePath.split('/').pop()}
+                </Typography>
+              )}
+            </Typography>
+
+            <Box display="flex" flexWrap="wrap" gap={1} mb={1.5}>
+              {(
+                Object.entries(importResult.imported) as [
+                  BackupCategory,
+                  number,
+                ][]
+              ).map(([category, count]) => (
+                <Chip
+                  key={category}
+                  icon={<CheckCircleOutline />}
+                  label={`${CATEGORIES.find((c) => c.key === category)?.label ?? category}: ${count} imported`}
+                  size="small"
+                  color="success"
+                  variant="outlined"
+                />
+              ))}
+              {importedTotal === 0 && importResult.warnings.length === 0 && (
+                <Typography variant="body2" color="text.secondary">
+                  No new items found (all items already exist).
+                </Typography>
               )}
             </Box>
-          )}
-        </CardContent>
-      </Card>
-    </Box>
+
+            {importResult.warnings.length > 0 && (
+              <Box display="flex" flexDirection="column" gap={0.75}>
+                {importResult.warnings.map((w, i) => (
+                  // eslint-disable-next-line react/no-array-index-key
+                  <Alert
+                    key={i}
+                    severity="warning"
+                    icon={<WarningAmberOutlined fontSize="small" />}
+                    sx={{ borderRadius: 1, py: 0.25 }}
+                  >
+                    <Typography variant="caption">{w}</Typography>
+                  </Alert>
+                ))}
+              </Box>
+            )}
+          </SettingsSectionBody>
+        )}
+      </SettingsSection>
+    </SettingsStack>
   );
 };

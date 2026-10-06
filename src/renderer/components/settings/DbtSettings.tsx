@@ -1,7 +1,6 @@
 /* eslint-disable no-restricted-syntax, no-await-in-loop, no-plusplus */
 import React, { useEffect } from 'react';
 import {
-  TextField,
   Typography,
   Button,
   Box,
@@ -9,18 +8,10 @@ import {
   Alert,
   LinearProgress,
   Backdrop,
-  FormGroup,
   FormControlLabel,
   Checkbox,
   Chip,
-  Divider,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
+  IconButton,
   Dialog,
   DialogActions,
   DialogContent,
@@ -36,6 +27,11 @@ import {
   Download,
   CheckCircle,
   ExpandMore,
+  DataObjectOutlined,
+  CodeOutlined,
+  BoltOutlined,
+  ExtensionOutlined,
+  Inventory2Outlined,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import {
@@ -67,38 +63,17 @@ import {
   DBT_ADAPTER_PACKAGE_DESCRIPTIONS,
   getPackageInstallSource,
 } from '../../../shared/dbtAdapterPackages';
+import {
+  SettingsRow,
+  SettingsSection,
+  SettingsSectionBody,
+  SettingsStack,
+} from './SettingsLayout';
 
 interface DbtSettingsProps {
   settings: SettingsType;
   onInstallDbtSave: (key: string, value: string) => Promise<void>;
 }
-
-const RuntimeLanguageIcon = ({ language }: { language: 'python' | 'rust' }) => (
-  <Box
-    aria-hidden="true"
-    sx={{
-      width: 32,
-      height: 32,
-      flex: '0 0 auto',
-      display: 'grid',
-      placeItems: 'center',
-      borderRadius: language === 'python' ? 1 : '50%',
-      bgcolor: language === 'rust' ? '#ce422b' : undefined,
-      background:
-        language === 'python'
-          ? 'linear-gradient(135deg, #3776ab 0%, #3776ab 52%, #ffd343 52%, #ffd343 100%)'
-          : undefined,
-      color: language === 'python' ? '#fff' : '#fff7f2',
-      fontSize: '0.72rem',
-      fontWeight: 800,
-      letterSpacing: '-0.02em',
-      boxShadow: 1,
-      textShadow: '0 1px 2px rgba(0, 0, 0, 0.55)',
-    }}
-  >
-    {language === 'python' ? 'Py' : 'Rs'}
-  </Box>
-);
 
 export const DbtSettings: React.FC<DbtSettingsProps> = ({
   settings,
@@ -704,174 +679,180 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     emptyMessage: string,
   ) => {
     if (versions.length === 0) {
-      return <Alert severity="info">{emptyMessage}</Alert>;
+      return <SettingsRow label={emptyMessage} />;
     }
 
-    return (
-      <List
-        disablePadding
-        sx={{
-          border: 1,
-          borderColor: 'divider',
-          borderRadius: 1,
-          overflow: 'hidden',
-        }}
-      >
-        {versions.map((item, index) => {
-          const installed = settings.dbtVersion;
-          const isInstalled = item.isInstalled || installed === item.version;
-          const isLatest = item.isLatestStable;
+    return versions.map((item) => {
+      const installed = settings.dbtVersion;
+      const isInstalled = item.isInstalled || installed === item.version;
+      const isLatest = item.isLatestStable;
 
-          let actionLabel = installed ? 'Downgrade' : 'Install';
-          if (isInstalled) {
-            actionLabel = 'Installed';
-          } else if (item.isPrerelease) {
-            actionLabel = 'Install Preview';
-          } else if (
-            installed &&
-            compareSimpleVersions(item.version, installed) > 0
-          ) {
-            actionLabel = 'Upgrade';
-          }
+      let actionLabel = installed ? 'Downgrade' : 'Install';
+      if (isInstalled) {
+        actionLabel = 'Installed';
+      } else if (item.isPrerelease) {
+        actionLabel = 'Install Preview';
+      } else if (
+        installed &&
+        compareSimpleVersions(item.version, installed) > 0
+      ) {
+        actionLabel = 'Upgrade';
+      }
 
-          return (
-            <React.Fragment key={item.version}>
-              <ListItem sx={{ pr: 17, minHeight: 56 }}>
-                <ListItemText
-                  primary={
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 0.75,
-                        flexWrap: 'wrap',
-                      }}
-                    >
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        {item.version}
-                      </Typography>
-                      {isInstalled && (
-                        <>
-                          <CheckCircle color="success" fontSize="small" />
-                          <Chip
-                            label="Installed"
-                            size="small"
-                            color="success"
-                          />
-                        </>
-                      )}
-                      {isLatest && !item.isPrerelease && (
-                        <Chip label="Latest stable" size="small" />
-                      )}
-                      {item.isPrerelease && (
-                        <Chip label="Preview" size="small" color="warning" />
-                      )}
-                    </Box>
-                  }
+      return (
+        <SettingsRow
+          key={item.version}
+          label={
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.75,
+                flexWrap: 'wrap',
+              }}
+            >
+              {item.version}
+              {isInstalled && (
+                <Chip
+                  label="Installed"
+                  size="small"
+                  color="success"
+                  icon={<CheckCircle />}
                 />
-                <ListItemSecondaryAction>
-                  <Button
-                    size="small"
-                    variant="contained"
-                    onClick={() => {
-                      prepareDbtVersionChange(item.version).catch(
-                        () => undefined,
-                      );
-                    }}
-                    disabled={
-                      isInstalled || isLoadingDialog || isLoadingInstall
-                    }
-                    startIcon={
-                      installingPackageKey === `dbt-core@${item.version}` ? (
-                        <CircularProgress size={16} />
-                      ) : (
-                        <Download />
-                      )
-                    }
-                  >
-                    {actionLabel}
-                  </Button>
-                </ListItemSecondaryAction>
-              </ListItem>
-              {index < versions.length - 1 && <Divider />}
-            </React.Fragment>
-          );
-        })}
-      </List>
-    );
+              )}
+              {isLatest && !item.isPrerelease && (
+                <Chip label="Latest stable" size="small" />
+              )}
+              {item.isPrerelease && (
+                <Chip label="Preview" size="small" color="warning" />
+              )}
+            </Box>
+          }
+        >
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => {
+              prepareDbtVersionChange(item.version).catch(() => undefined);
+            }}
+            disabled={isInstalled || isLoadingDialog || isLoadingInstall}
+            startIcon={
+              installingPackageKey === `dbt-core@${item.version}` ? (
+                <CircularProgress size={14} />
+              ) : (
+                <Download />
+              )
+            }
+          >
+            {actionLabel}
+          </Button>
+        </SettingsRow>
+      );
+    });
   };
 
+  const hasDbt = Boolean(settings.dbtPath && settings.dbtPath !== 'dbt');
+  const isV2Active = Boolean(settings.dbtVersion?.startsWith('2.'));
+
   return (
-    <Box sx={{ p: 2, maxWidth: 1200 }}>
-      <Box display="flex" alignItems="center" gap={1} sx={{ mb: 2 }}>
-        <TextField
-          fullWidth
+    <SettingsStack>
+      <SettingsSection
+        title="dbt Core"
+        icon={<DataObjectOutlined />}
+        description="Changing the active dbt runtime affects all local projects."
+      >
+        <SettingsRow
           label="dbt Path"
-          variant="outlined"
-          id="dbtPath"
-          name="dbtPath"
-          value={settings.dbtPath}
-          disabled
-        />
-      </Box>
-
-      {settings.pythonPath && settings.pythonVersion && (
-        <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
-          Python environment (version {settings.pythonVersion}) is already
-          installed at: {settings.pythonPath}
-        </Alert>
-      )}
-
-      {settings.dbtPath && settings.dbtPath !== 'dbt' ? (
-        <Box sx={{ mt: 2 }}>
-          <Alert severity="success" sx={{ mb: 2 }}>
-            {settings.dbtVersion?.startsWith('2.')
-              ? 'dbt Core v2 (Rust)'
-              : 'dbt Core v1 (Python)'}{' '}
-            is active at: {settings.dbtPath}
-            {settings?.dbtVersion && (
-              <Typography variant="body2" sx={{ mt: 1 }}>
-                Version: {settings?.dbtVersion}
-              </Typography>
-            )}
-          </Alert>
-          {settings.dbtVersion?.startsWith('2.') && (
-            <Alert severity="warning" sx={{ mb: 2 }}>
+          description={settings.dbtPath || 'Not installed'}
+        >
+          {hasDbt && (
+            <Chip
+              size="small"
+              color="success"
+              icon={<CheckCircle />}
+              label={`${isV2Active ? 'v2 (Rust)' : 'v1 (Python)'}${
+                settings.dbtVersion ? ` · ${settings.dbtVersion}` : ''
+              }`}
+            />
+          )}
+        </SettingsRow>
+        {settings.pythonPath && settings.pythonVersion && (
+          <SettingsRow
+            label="Python environment"
+            description={settings.pythonPath}
+          >
+            <Chip size="small" label={settings.pythonVersion} />
+          </SettingsRow>
+        )}
+        {hasDbt && isV2Active && (
+          <SettingsSectionBody>
+            <Alert severity="warning">
               dbt Core v2 is still in alpha — cloud pipeline runs and other
               cloud features are unavailable until the first official v2
               release.
             </Alert>
-          )}
-        </Box>
-      ) : null}
+          </SettingsSectionBody>
+        )}
+      </SettingsSection>
 
-      <Box sx={{ mb: 3 }}>
-        <Box
-          sx={{
-            mb: 1,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 2,
-            flexWrap: 'wrap',
-          }}
-        >
-          <Box>
-            <Typography variant="h6">Available dbt runtimes</Typography>
-            <Typography variant="body2" color="text.secondary">
-              Rosetta DBT Studio supports both dbt Core v1 (Python) and dbt Core
-              v2 (Rust).
+      {versionChangeResult && (
+        <Alert severity={versionChangeResult.ok ? 'success' : 'error'}>
+          {versionChangeResult.ok
+            ? `Verified dbt-core ${versionChangeResult.installedVersion} is now active.`
+            : versionChangeResult.error ||
+              'The dbt-core version change failed.'}
+          {versionChangeResult.ok && versionChangeResult.previousVersion && (
+            <Button size="small" sx={{ ml: 2 }} onClick={handleRollback}>
+              Roll back to {versionChangeResult.previousVersion}
+            </Button>
+          )}
+        </Alert>
+      )}
+
+      {compatibilityResult && (
+        <Alert severity={compatibilityResult.ok ? 'success' : 'warning'}>
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+            {compatibilityResult.ok
+              ? `Project ${compatibilityResult.projectName} passed dbt parse and compile.`
+              : `Project ${compatibilityResult.projectName || ''} has migration diagnostics.`}
+          </Typography>
+          {compatibilityResult.error && (
+            <Typography variant="body2">{compatibilityResult.error}</Typography>
+          )}
+          {compatibilityResult.diagnostics
+            .filter((diagnostic) => !diagnostic.ok)
+            .map((diagnostic) => (
+              <Box key={diagnostic.command} sx={{ mt: 1 }}>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  dbt {diagnostic.command} failed
+                </Typography>
+                <Typography
+                  component="pre"
+                  variant="caption"
+                  sx={{
+                    whiteSpace: 'pre-wrap',
+                    maxHeight: 180,
+                    overflow: 'auto',
+                  }}
+                >
+                  {diagnostic.summary}
+                </Typography>
+              </Box>
+            ))}
+          {compatibilityResult.recommendations.map((recommendation) => (
+            <Typography key={recommendation} variant="body2" sx={{ mt: 1 }}>
+              {recommendation}
             </Typography>
-          </Box>
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1,
-              flexWrap: 'wrap',
-              justifyContent: 'flex-end',
-            }}
-          >
+          ))}
+        </Alert>
+      )}
+
+      <SettingsSection
+        title="dbt Core v1 · Python"
+        icon={<CodeOutlined />}
+        description="Stable runtime. Recommended for production projects and broad adapter compatibility."
+        action={
+          <>
             {isCheckingDbtCoreVersions && <CircularProgress size={16} />}
             <Button
               size="small"
@@ -885,670 +866,399 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
               size="small"
               onClick={() => setShowOlderVersions((value) => !value)}
             >
-              {showOlderVersions
-                ? 'Show fewer versions'
-                : 'Show older versions'}
+              {showOlderVersions ? 'Show fewer' : 'Show older'}
             </Button>
-          </Box>
-        </Box>
-
-        <Alert severity="info" sx={{ mb: 2 }}>
-          Changing the active dbt runtime affects all local projects. Preview
-          versions are hidden by default and should be tested before production
-          use.
-        </Alert>
-
-        {versionChangeResult && (
-          <Alert
-            severity={versionChangeResult.ok ? 'success' : 'error'}
-            sx={{ mb: 2 }}
-          >
-            {versionChangeResult.ok
-              ? `Verified dbt-core ${versionChangeResult.installedVersion} is now active.`
-              : versionChangeResult.error ||
-                'The dbt-core version change failed.'}
-            {versionChangeResult.ok && versionChangeResult.previousVersion && (
-              <Button size="small" sx={{ ml: 2 }} onClick={handleRollback}>
-                Roll back to {versionChangeResult.previousVersion}
-              </Button>
-            )}
-          </Alert>
-        )}
-
-        {compatibilityResult && (
-          <Alert
-            severity={compatibilityResult.ok ? 'success' : 'warning'}
-            sx={{ mb: 2 }}
-          >
-            <Typography variant="body2" sx={{ fontWeight: 600 }}>
-              {compatibilityResult.ok
-                ? `Project ${compatibilityResult.projectName} passed dbt parse and compile.`
-                : `Project ${compatibilityResult.projectName || ''} has migration diagnostics.`}
-            </Typography>
-            {compatibilityResult.error && (
-              <Typography variant="body2">
-                {compatibilityResult.error}
-              </Typography>
-            )}
-            {compatibilityResult.diagnostics
-              .filter((diagnostic) => !diagnostic.ok)
-              .map((diagnostic) => (
-                <Box key={diagnostic.command} sx={{ mt: 1 }}>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                    dbt {diagnostic.command} failed
-                  </Typography>
-                  <Typography
-                    component="pre"
-                    variant="caption"
-                    sx={{
-                      whiteSpace: 'pre-wrap',
-                      maxHeight: 180,
-                      overflow: 'auto',
-                    }}
-                  >
-                    {diagnostic.summary}
-                  </Typography>
-                </Box>
-              ))}
-            {compatibilityResult.recommendations.map((recommendation) => (
-              <Typography key={recommendation} variant="body2" sx={{ mt: 1 }}>
-                {recommendation}
-              </Typography>
-            ))}
-          </Alert>
-        )}
-
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: {
-              xs: 'minmax(0, 1fr)',
-              lg: 'repeat(2, minmax(0, 1fr))',
-            },
-            gap: 2,
-          }}
-        >
-          <Box
-            component="section"
-            aria-labelledby="python-dbt-runtime-title"
-            sx={{
-              p: 2,
-              border: 1,
-              borderColor: settings.dbtVersion?.startsWith('1.')
-                ? 'success.main'
-                : 'divider',
-              borderRadius: 2,
-              bgcolor: 'background.paper',
-            }}
-          >
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                justifyContent: 'space-between',
-                gap: 1,
-                mb: 1.5,
-              }}
-            >
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <RuntimeLanguageIcon language="python" />
-                <Box>
-                  <Typography
-                    id="python-dbt-runtime-title"
-                    variant="subtitle1"
-                    sx={{ fontWeight: 700 }}
-                  >
-                    dbt Core v1
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Python engine · Stable runtime
-                  </Typography>
-                </Box>
-              </Box>
-              <Box
-                sx={{
-                  display: 'flex',
-                  gap: 0.75,
-                  flexWrap: 'wrap',
-                  justifyContent: 'flex-end',
-                }}
-              >
-                <Chip label="Python" size="small" variant="outlined" />
-                <Chip label="Supported" size="small" color="success" />
-              </Box>
-            </Box>
-            <Typography variant="caption" color="text.secondary">
-              Recommended for production projects and broad adapter
-              compatibility.
-            </Typography>
-            {!settings.pythonPath && (
-              <Alert severity="info" sx={{ mt: 1.5 }}>
-                Python is not installed yet. Installing a dbt Core v1 version
-                below will install it automatically.
-              </Alert>
-            )}
-            <Box sx={{ mt: 1.5 }}>
-              {renderVersionList(
-                pythonDbtVersions,
-                'No dbt Core v1 releases are available.',
-              )}
-            </Box>
-          </Box>
-
-          <Box
-            component="section"
-            aria-labelledby="rust-dbt-runtime-title"
-            sx={{
-              p: 2,
-              border: 1,
-              borderColor: settings.dbtVersion?.startsWith('2.')
-                ? 'success.main'
-                : 'divider',
-              borderRadius: 2,
-              bgcolor: 'background.paper',
-            }}
-          >
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                justifyContent: 'space-between',
-                gap: 1,
-                mb: 1.5,
-              }}
-            >
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <RuntimeLanguageIcon language="rust" />
-                <Box>
-                  <Typography
-                    id="rust-dbt-runtime-title"
-                    variant="subtitle1"
-                    sx={{ fontWeight: 700 }}
-                  >
-                    dbt Core v2
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Rust engine · Preview runtime
-                  </Typography>
-                </Box>
-              </Box>
-              <Box
-                sx={{
-                  display: 'flex',
-                  gap: 0.75,
-                  flexWrap: 'wrap',
-                  justifyContent: 'flex-end',
-                }}
-              >
-                <Chip label="Rust" size="small" variant="outlined" />
-                <Chip label="Supported" size="small" color="success" />
-                <Chip label="Preview" size="small" color="warning" />
-              </Box>
-            </Box>
-            <Typography variant="caption" color="text.secondary">
-              Preview releases are available in Rosetta DBT Studio. Validate
-              project and adapter compatibility before production use.
-            </Typography>
-            <Alert severity="warning" sx={{ mt: 1.5, mb: 1.5 }}>
-              dbt Core v2 is still in alpha. Cloud pipeline runs are not
-              supported on v2 until the first official release — cloud features
-              will be unavailable while v2 is active.
+          </>
+        }
+      >
+        {!settings.pythonPath && (
+          <SettingsSectionBody>
+            <Alert severity="info">
+              Python is not installed yet. Installing a dbt Core v1 version
+              below will install it automatically.
             </Alert>
-            <Box sx={{ mt: 1.5 }}>
-              {renderVersionList(
-                rustDbtVersions,
-                'No dbt Core v2 preview releases are available.',
-              )}
-            </Box>
-          </Box>
-        </Box>
-      </Box>
+          </SettingsSectionBody>
+        )}
+        {renderVersionList(
+          pythonDbtVersions,
+          'No dbt Core v1 releases are available.',
+        )}
+      </SettingsSection>
 
-      <Box sx={{ mb: 3 }}>
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            mb: 1,
-            flexWrap: 'wrap',
-            gap: 1,
-          }}
-        >
-          <Typography variant="h6">
-            {settings.dbtVersion?.startsWith('2.')
-              ? 'Project adapter compatibility'
-              : 'Adapter packages'}
-          </Typography>
+      <SettingsSection
+        title="dbt Core v2 · Rust"
+        icon={<BoltOutlined />}
+        description="Preview runtime, still in alpha. Cloud pipeline runs are unavailable while v2 is active."
+        action={<Chip label="Preview" size="small" color="warning" />}
+      >
+        {renderVersionList(
+          rustDbtVersions,
+          'No dbt Core v2 preview releases are available.',
+        )}
+      </SettingsSection>
 
-          {!settings.dbtVersion?.startsWith('2.') &&
-            settings.dbtPath &&
-            settings.dbtPath !== 'dbt' && (
-              <Button
-                size="small"
-                variant="contained"
-                onClick={() => setShowInstallAllConfirmation(true)}
-                disabled={isLoadingInstall || isLoadingDialog}
-                startIcon={
-                  isLoadingInstall ? (
-                    <CircularProgress size={16} color="inherit" />
-                  ) : (
-                    <CloudDownload />
-                  )
-                }
-              >
-                {isLoadingInstall ? 'Installing...' : 'Install All Adapters'}
-              </Button>
-            )}
-        </Box>
-
-        {settings.dbtVersion?.startsWith('2.') && adapterCapabilities && (
-          <Box
-            sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 2 }}
-          >
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-              dbt Core v2 includes its own adapter runtime. Python adapter
-              packages are used only by dbt Core v1 and do not enable dbt Core
-              v2 adapters.
-            </Typography>
-            {adapterCapabilities.adapters.map((adapter) => (
-              <Box
-                key={adapter.adapter || 'unknown'}
-                sx={{
-                  display: 'flex',
-                  gap: 1,
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                }}
-              >
-                <Typography variant="body1" sx={{ fontWeight: 600 }}>
+      <SettingsSection
+        title={
+          isV2Active ? 'Project adapter compatibility' : 'Adapter packages'
+        }
+        icon={<ExtensionOutlined />}
+        description={
+          isV2Active
+            ? 'dbt Core v2 includes its own adapter runtime. Python adapter packages are used only by dbt Core v1.'
+            : undefined
+        }
+        action={
+          !isV2Active &&
+          hasDbt && (
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => setShowInstallAllConfirmation(true)}
+              disabled={isLoadingInstall || isLoadingDialog}
+              startIcon={
+                isLoadingInstall ? (
+                  <CircularProgress size={14} color="inherit" />
+                ) : (
+                  <CloudDownload />
+                )
+              }
+            >
+              {isLoadingInstall ? 'Installing...' : 'Install All Adapters'}
+            </Button>
+          )
+        }
+      >
+        {isV2Active &&
+          adapterCapabilities?.adapters.map((adapter) => (
+            <SettingsRow
+              key={adapter.adapter || 'unknown'}
+              label={
+                <Box
+                  sx={{
+                    display: 'flex',
+                    gap: 1,
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                  }}
+                >
                   {adapter.displayName}
-                </Typography>
-                <Chip
-                  size="small"
-                  label={adapter.status}
-                  color={adapter.canExecute ? 'warning' : 'error'}
-                />
-                <Chip size="small" variant="outlined" label={adapter.driver} />
-                <Typography variant="body2" color="text.secondary">
-                  {adapter.notes}
-                </Typography>
-              </Box>
-            ))}
-          </Box>
+                  <Chip
+                    size="small"
+                    label={adapter.status}
+                    color={adapter.canExecute ? 'warning' : 'error'}
+                  />
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    label={adapter.driver}
+                  />
+                </Box>
+              }
+              description={adapter.notes}
+            />
+          ))}
+        {isV2Active && !adapterCapabilities && (
+          <SettingsRow label="Adapter compatibility is not available yet." />
         )}
 
-        {!settings.dbtVersion?.startsWith('2.') &&
+        {!isV2Active &&
           ADAPTER_PACKAGES.map((pkg) => {
             const installed = installedPackages[pkg];
             const versions = packageVersions[pkg]?.versions ?? [];
             const latestStable = packageVersions[pkg]?.latestStable ?? null;
             const isLoading = isCheckingPackageVersions[pkg] ?? false;
             const installSource = getPackageInstallSource(pkg);
+            const isExpanded = expandedPackage === pkg;
 
             return (
-              <Accordion
-                key={pkg}
-                expanded={expandedPackage === pkg}
-                onChange={handlePackageAccordionChange(pkg)}
-                TransitionProps={{ timeout: 500 }}
-                sx={{ mb: 1 }}
-              >
-                <AccordionSummary expandIcon={<ExpandMore />}>
-                  <Box>
+              <Box key={pkg}>
+                <SettingsRow
+                  label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                        {pkg}
-                      </Typography>
+                      {pkg}
                       {installed && (
                         <Chip
                           label={`v${installed}`}
                           size="small"
                           color="primary"
-                          sx={{
-                            height: 18,
-                            '& .MuiChip-label': {
-                              px: 0.75,
-                              fontSize: '0.7rem',
-                              lineHeight: 1,
-                            },
-                          }}
                         />
                       )}
                     </Box>
-                    <Typography variant="body2" color="text.secondary">
-                      {packageDescriptions[pkg]}
-                    </Typography>
-                  </Box>
-                </AccordionSummary>
-                <AccordionDetails>
-                  <Box
-                    sx={{
-                      mb: 2,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 1,
-                    }}
-                  >
-                    {installSource ? (
-                      <Button
-                        size="small"
-                        variant="contained"
-                        onClick={() => {
-                          handleInstallSinglePackage(pkg).catch(
-                            () => undefined,
-                          );
-                        }}
-                        disabled={isLoadingInstall || isLoadingDialog}
-                        startIcon={<Download />}
-                      >
-                        {installed ? 'Update from source' : 'Install'}
-                      </Button>
-                    ) : (
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => {
-                          fetchPackageVersions(pkg).catch(() => undefined);
-                        }}
-                        disabled={isLoading}
-                        startIcon={
-                          isLoading ? (
-                            <CircularProgress size={16} />
-                          ) : (
-                            <Refresh />
-                          )
-                        }
-                      >
-                        {isLoading ? 'Loading...' : 'Load Versions'}
-                      </Button>
-                    )}
-
-                    {installed && (
-                      <Button
-                        color="error"
-                        variant="outlined"
-                        size="small"
-                        onClick={() => {
-                          handleUninstallPackage(pkg).catch(() => undefined);
-                        }}
-                        disabled={isLoadingInstall || isLoadingDialog}
-                        startIcon={<Delete />}
-                      >
-                        Uninstall
-                      </Button>
-                    )}
-                  </Box>
-
-                  {installSource && (
-                    <Alert severity="info">
-                      {pkg} is not published on PyPI. It is installed directly
-                      from {installSource.homepage} and requires dbt Core 1.8 or
-                      newer (1.x).
-                    </Alert>
-                  )}
-
-                  {!installSource && versions.length > 0 && (
-                    <List
-                      sx={{
-                        border: 1,
-                        borderColor: 'divider',
-                        borderRadius: 1,
+                  }
+                  description={packageDescriptions[pkg]}
+                >
+                  {installSource ? (
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() => {
+                        handleInstallSinglePackage(pkg).catch(() => undefined);
                       }}
+                      disabled={isLoadingInstall || isLoadingDialog}
+                      startIcon={<Download />}
                     >
-                      {versions.map((v) => {
-                        const isInstalled = installed === v.version;
-                        const isLatest = v.version === latestStable;
-
-                        let actionLabel = 'Install';
-                        if (isInstalled) {
-                          actionLabel = 'Installed';
-                        } else if (
-                          installed &&
-                          compareSimpleVersions(v.version, installed) > 0
-                        ) {
-                          actionLabel = 'Upgrade';
-                        } else if (installed) {
-                          actionLabel = 'Downgrade';
+                      {installed ? 'Update from source' : 'Install'}
+                    </Button>
+                  ) : (
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() => {
+                        fetchPackageVersions(pkg).catch(() => undefined);
+                        if (!isExpanded) {
+                          setExpandedPackage(pkg);
                         }
+                      }}
+                      disabled={isLoading}
+                      startIcon={
+                        isLoading ? <CircularProgress size={14} /> : <Refresh />
+                      }
+                    >
+                      {isLoading ? 'Loading...' : 'Versions'}
+                    </Button>
+                  )}
+                  {installed && (
+                    <Button
+                      color="error"
+                      variant="outlined"
+                      size="small"
+                      onClick={() => {
+                        handleUninstallPackage(pkg).catch(() => undefined);
+                      }}
+                      disabled={isLoadingInstall || isLoadingDialog}
+                      startIcon={<Delete />}
+                    >
+                      Uninstall
+                    </Button>
+                  )}
+                  <IconButton
+                    size="small"
+                    onClick={(event) =>
+                      handlePackageAccordionChange(pkg)(event, !isExpanded)
+                    }
+                    aria-label={isExpanded ? 'Hide details' : 'Show details'}
+                  >
+                    <ExpandMore
+                      fontSize="small"
+                      sx={{
+                        transform: isExpanded ? 'rotate(180deg)' : 'none',
+                        transition: 'transform 0.15s',
+                      }}
+                    />
+                  </IconButton>
+                </SettingsRow>
 
-                        return (
-                          <React.Fragment key={v.version}>
-                            <ListItem>
-                              <ListItemText
-                                primary={
-                                  <Box
-                                    sx={{
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: 1,
-                                    }}
-                                  >
-                                    <Typography
-                                      variant="body1"
-                                      sx={{ fontWeight: 500 }}
-                                    >
-                                      {v.version}
-                                    </Typography>
+                {isExpanded && (
+                  <SettingsSectionBody>
+                    {installSource && (
+                      <Alert severity="info">
+                        {pkg} is not published on PyPI. It is installed directly
+                        from {installSource.homepage} and requires dbt Core 1.8
+                        or newer (1.x).
+                      </Alert>
+                    )}
 
-                                    {isInstalled && (
-                                      <Box
-                                        sx={{
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: 0.5,
-                                        }}
-                                      >
-                                        <CheckCircle
-                                          color="success"
-                                          fontSize="small"
-                                        />
-                                        <Chip
-                                          label="Installed"
-                                          size="small"
-                                          color="success"
-                                        />
-                                      </Box>
-                                    )}
+                    {!installSource && versions.length > 0 && (
+                      <Box
+                        sx={(theme) => ({
+                          border: `1px solid ${theme.palette.divider}`,
+                          borderRadius: 1,
+                          '& > * + *': {
+                            borderTop: `1px solid ${theme.palette.divider}`,
+                          },
+                        })}
+                      >
+                        {versions.map((v) => {
+                          const isInstalled = installed === v.version;
+                          const isLatest = v.version === latestStable;
 
-                                    {isLatest && !v.isPrerelease && (
-                                      <Chip
-                                        label="Latest"
-                                        size="small"
-                                        color="primary"
-                                      />
-                                    )}
-                                  </Box>
-                                }
-                              />
-                              <ListItemSecondaryAction>
-                                <Button
-                                  size="small"
-                                  variant="contained"
-                                  onClick={() => {
-                                    installSinglePackageVersion(
-                                      pkg,
-                                      v.version,
-                                    ).catch(() => undefined);
+                          let actionLabel = 'Install';
+                          if (isInstalled) {
+                            actionLabel = 'Installed';
+                          } else if (
+                            installed &&
+                            compareSimpleVersions(v.version, installed) > 0
+                          ) {
+                            actionLabel = 'Upgrade';
+                          } else if (installed) {
+                            actionLabel = 'Downgrade';
+                          }
+
+                          return (
+                            <SettingsRow
+                              key={v.version}
+                              label={
+                                <Box
+                                  sx={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 1,
                                   }}
-                                  disabled={
-                                    isInstalled ||
-                                    isLoadingDialog ||
-                                    isLoadingInstall
-                                  }
-                                  startIcon={
-                                    installingPackageKey ===
-                                    `${pkg}@${v.version}` ? (
-                                      <CircularProgress size={16} />
-                                    ) : (
-                                      <Download />
-                                    )
-                                  }
                                 >
-                                  {actionLabel}
-                                </Button>
-                              </ListItemSecondaryAction>
-                            </ListItem>
-                            <Divider />
-                          </React.Fragment>
-                        );
-                      })}
-                    </List>
-                  )}
+                                  {v.version}
+                                  {isInstalled && (
+                                    <Chip
+                                      label="Installed"
+                                      size="small"
+                                      color="success"
+                                      icon={<CheckCircle />}
+                                    />
+                                  )}
+                                  {isLatest && !v.isPrerelease && (
+                                    <Chip
+                                      label="Latest"
+                                      size="small"
+                                      color="primary"
+                                    />
+                                  )}
+                                </Box>
+                              }
+                            >
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={() => {
+                                  installSinglePackageVersion(
+                                    pkg,
+                                    v.version,
+                                  ).catch(() => undefined);
+                                }}
+                                disabled={
+                                  isInstalled ||
+                                  isLoadingDialog ||
+                                  isLoadingInstall
+                                }
+                                startIcon={
+                                  installingPackageKey ===
+                                  `${pkg}@${v.version}` ? (
+                                    <CircularProgress size={14} />
+                                  ) : (
+                                    <Download />
+                                  )
+                                }
+                              >
+                                {actionLabel}
+                              </Button>
+                            </SettingsRow>
+                          );
+                        })}
+                      </Box>
+                    )}
 
-                  {!installSource && versions.length === 0 && (
-                    <Alert severity="info">
-                      Click &quot;Load Versions&quot; to view versions.
-                    </Alert>
-                  )}
-                </AccordionDetails>
-              </Accordion>
+                    {!installSource && versions.length === 0 && (
+                      <Typography variant="body2" color="text.secondary">
+                        {isLoading
+                          ? 'Loading versions...'
+                          : 'Click "Versions" to view versions.'}
+                      </Typography>
+                    )}
+                  </SettingsSectionBody>
+                )}
+              </Box>
             );
           })}
-      </Box>
+      </SettingsSection>
 
-      {settings.dbtPath && settings.dbtPath !== 'dbt' ? (
-        <Box sx={{ mt: 2 }}>
-          <Typography
-            variant="h6"
-            sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}
-          >
-            Installed Packages
-            {isCheckingPackages && <CircularProgress size={16} />}
-            <Button
-              size="small"
-              onClick={handleRefreshInstalledPackagesClick}
-              disabled={isCheckingPackages}
-              startIcon={<Refresh />}
-            >
-              Refresh
-            </Button>
-          </Typography>
-
-          {Object.keys(installedPackages).length > 0 ? (
-            <Box sx={{ mb: 2 }}>
-              {/* Show all packages from packageDescriptions, not just installed ones */}
-              {Object.entries(packageDescriptions)
+      {hasDbt ? (
+        <SettingsSection
+          title="Installed Packages"
+          icon={<Inventory2Outlined />}
+          action={
+            <>
+              {isCheckingPackages && <CircularProgress size={16} />}
+              <Button
+                size="small"
+                onClick={handleRefreshInstalledPackagesClick}
+                disabled={isCheckingPackages}
+                startIcon={<Refresh />}
+              >
+                Refresh
+              </Button>
+            </>
+          }
+        >
+          {Object.keys(installedPackages).length > 0
+            ? Object.entries(packageDescriptions)
                 .filter(([pkg]) => pkg === 'sqlglot')
                 .map(([pkg, description]) => {
                   const version = installedPackages[pkg];
                   const isInstalled = !!version;
 
                   return (
-                    <Alert
+                    <SettingsRow
                       key={pkg}
-                      severity={isInstalled ? 'info' : 'warning'}
-                      sx={{ mb: 1 }}
-                      action={
-                        isInstalled ? (
-                          <Button
-                            color="error"
-                            variant="outlined"
-                            size="small"
-                            onClick={() => handleUninstallPackage(pkg)}
-                            disabled={isLoadingInstall}
-                            startIcon={<Delete />}
-                          >
-                            Uninstall
-                          </Button>
-                        ) : (
-                          <Button
-                            color="primary"
-                            variant="contained"
-                            size="small"
-                            onClick={() => handleInstallSinglePackage(pkg)}
-                            disabled={isLoadingInstall}
-                            startIcon={<GetApp />}
-                          >
-                            Install
-                          </Button>
-                        )
-                      }
+                      label={`${pkg} ${
+                        isInstalled ? `v${version}` : '(not installed)'
+                      }`}
+                      description={description}
                     >
-                      <Box>
-                        <Typography
-                          variant="body2"
-                          sx={{ fontWeight: 'medium' }}
+                      {isInstalled ? (
+                        <Button
+                          color="error"
+                          variant="outlined"
+                          size="small"
+                          onClick={() => handleUninstallPackage(pkg)}
+                          disabled={isLoadingInstall}
+                          startIcon={<Delete />}
                         >
-                          {pkg}{' '}
-                          {isInstalled ? `v${version}` : '(not installed)'}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {description}
-                        </Typography>
-                      </Box>
-                    </Alert>
+                          Uninstall
+                        </Button>
+                      ) : (
+                        <Button
+                          color="primary"
+                          variant="outlined"
+                          size="small"
+                          onClick={() => handleInstallSinglePackage(pkg)}
+                          disabled={isLoadingInstall}
+                          startIcon={<GetApp />}
+                        >
+                          Install
+                        </Button>
+                      )}
+                    </SettingsRow>
                   );
-                })}
-            </Box>
-          ) : (
-            !isCheckingPackages && (
-              <Alert severity="warning" sx={{ mb: 2 }}>
-                No dbt packages found. You may need to reinstall dbt.
-              </Alert>
-            )
-          )}
-        </Box>
+                })
+            : !isCheckingPackages && (
+                <SettingsRow
+                  label="No dbt packages found."
+                  description="You may need to reinstall dbt."
+                />
+              )}
+        </SettingsSection>
       ) : (
-        <Box sx={{ mt: 2 }}>
-          <Typography
-            variant="h6"
-            gutterBottom
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1,
-              mb: 2,
-            }}
-          >
-            <Info color="primary" />
-            dbt™ Core Setup Required
-          </Typography>
-
-          <Typography variant="body1" sx={{ mb: 2 }}>
-            Before continuing, you need to set up dbt™ Core and the necessary
-            adapters on your system.
-          </Typography>
-
-          <Typography variant="body2" sx={{ mb: 2, fontWeight: 'bold' }}>
-            Select packages to install:
-          </Typography>
-
-          <FormGroup sx={{ mb: 2, ml: 2 }}>
-            {Object.entries(packageDescriptions).map(([pkg, description]) => (
-              <FormControlLabel
-                key={pkg}
-                control={
-                  <Checkbox
-                    checked={selectedPackages[pkg] ?? false}
-                    onChange={() => handlePackageToggle(pkg)}
-                    disabled={pkg === 'dbt-core'} // dbt-core is always required
-                  />
-                }
-                label={
-                  <Box>
-                    <Typography
-                      variant="body2"
-                      component="span"
-                      sx={{ fontWeight: 'medium' }}
-                    >
-                      {pkg}
-                    </Typography>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      component="div"
-                    >
-                      {description}
-                    </Typography>
-                  </Box>
-                }
+        <SettingsSection
+          title="dbt™ Core Setup Required"
+          icon={<Info />}
+          description="Set up dbt™ Core and the necessary adapters on your system."
+          action={
+            <Button
+              size="small"
+              onClick={() => {
+                window.open(
+                  'https://docs.getdbt.com/docs/core/installation',
+                  '_blank',
+                );
+              }}
+              color="primary"
+              startIcon={<Description />}
+            >
+              Documentation
+            </Button>
+          }
+        >
+          {Object.entries(packageDescriptions).map(([pkg, description]) => (
+            <SettingsRow key={pkg} label={pkg} description={description}>
+              <Checkbox
+                size="small"
+                checked={selectedPackages[pkg] ?? false}
+                onChange={() => handlePackageToggle(pkg)}
+                disabled={pkg === 'dbt-core'} // dbt-core is always required
               />
-            ))}
-          </FormGroup>
+            </SettingsRow>
+          ))}
 
           {isLoadingInstall && (
-            <Box sx={{ width: '100%', mb: 2 }}>
+            <SettingsSectionBody>
               <Box
                 sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}
               >
@@ -1560,11 +1270,12 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                 </Typography>
               </Box>
               <LinearProgress variant="determinate" value={installProgress} />
-            </Box>
+            </SettingsSectionBody>
           )}
 
-          <Box sx={{ display: 'flex', gap: 2 }}>
+          <SettingsRow label="Install">
             <Button
+              size="small"
               variant="contained"
               color="primary"
               onClick={() => handleInstallDbt()}
@@ -1584,20 +1295,8 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                 ? 'Installing...'
                 : `Install Selected Packages (${Object.values(selectedPackages).filter(Boolean).length})`}
             </Button>
-            <Button
-              onClick={() => {
-                window.open(
-                  'https://docs.getdbt.com/docs/core/installation',
-                  '_blank',
-                );
-              }}
-              color="primary"
-              startIcon={<Description />}
-            >
-              View Documentation
-            </Button>
-          </Box>
-        </Box>
+          </SettingsRow>
+        </SettingsSection>
       )}
 
       <ConfirmationModal
@@ -1731,6 +1430,6 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
           </Typography>
         </Box>
       </Backdrop>
-    </Box>
+    </SettingsStack>
   );
 };

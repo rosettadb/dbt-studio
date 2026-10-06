@@ -5,13 +5,9 @@ import {
   IconButton,
   TextField,
   Button,
-  Card,
-  CardContent,
   InputAdornment,
   CircularProgress,
-  Alert,
   Tooltip,
-  Divider,
   Tabs,
   Tab,
   Dialog,
@@ -25,12 +21,20 @@ import {
   Visibility,
   VisibilityOff,
   Add,
-  VpnKey,
+  VpnKeyOutlined,
+  AddCircleOutline,
   Close,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { secureStorageService } from '../../services/secureStorage.service';
 import { SecureStorageAccount } from '../../../types/frontend';
+import {
+  SettingsRow,
+  SettingsSection,
+  SettingsSectionBody,
+  SettingsStack,
+  settingsTabsSx,
+} from './SettingsLayout';
 
 type Entry = {
   key: string;
@@ -229,24 +233,16 @@ export const KeystoreSettings: React.FC = () => {
     : 0;
 
   return (
-    <Box maxWidth={800} width="100%" mt={3}>
-      <Typography variant="body2" color="text.secondary" mb={3}>
-        Credentials stored in the system keystore, encrypted at rest by the OS.
-        Use environments to group related keys — keys are prefixed with the
-        environment name (e.g.{' '}
-        <code style={{ fontFamily: 'monospace' }}>dev.MY_KEY</code>).
-      </Typography>
-
+    <SettingsStack>
       <Box
         display="flex"
         alignItems="center"
-        mb={2}
         sx={{ borderBottom: 1, borderColor: 'divider' }}
       >
         <Tabs
           value={activeEnv}
           onChange={(_e, v) => setActiveEnv(v as string)}
-          sx={{ flex: 1, minHeight: 0 }}
+          sx={{ ...settingsTabsSx, borderBottom: 0, flex: 1 }}
         >
           <Tab label="Default" value="default" />
           {environments.map((env) => (
@@ -274,7 +270,7 @@ export const KeystoreSettings: React.FC = () => {
           ))}
         </Tabs>
         <Button
-          variant="contained"
+          variant="outlined"
           size="small"
           startIcon={<Add />}
           onClick={() => setAddEnvOpen(true)}
@@ -284,112 +280,85 @@ export const KeystoreSettings: React.FC = () => {
         </Button>
       </Box>
 
-      <Card
-        variant="outlined"
-        sx={{ borderRadius: 1, borderColor: 'divider', mb: 3 }}
+      <SettingsSection
+        title={activeEnv === 'default' ? 'Default' : activeEnv}
+        icon={<VpnKeyOutlined />}
+        description={
+          <>
+            Encrypted at rest by the OS. Keys are prefixed with the environment
+            name (e.g.{' '}
+            <code style={{ fontFamily: 'monospace' }}>dev.MY_KEY</code>
+            ).
+          </>
+        }
       >
-        <CardContent>
-          <Box display="flex" alignItems="center" gap={1} mb={2}>
-            <VpnKey color="primary" />
-            <Typography variant="h6" sx={{ m: 0 }}>
-              {activeEnv === 'default' ? 'Default' : activeEnv}
-            </Typography>
-          </Box>
-
-          {isLoading && (
-            <Box display="flex" justifyContent="center" py={2}>
+        {isLoading && (
+          <SettingsSectionBody>
+            <Box display="flex" justifyContent="center">
               <CircularProgress size={24} />
             </Box>
-          )}
-          {!isLoading && envEntries.length === 0 && (
-            <Alert severity="info">No entries in this environment yet.</Alert>
-          )}
-          {!isLoading &&
-            envEntries.length > 0 &&
-            envEntries.map((entry, i) => (
-              <React.Fragment key={entry.key}>
-                {i > 0 && <Divider />}
-                <Box display="flex" alignItems="center" gap={1} py={1}>
-                  <Box flex={1} minWidth={0}>
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      display="block"
-                    >
-                      Key
-                    </Typography>
-                    <Typography
-                      variant="body2"
-                      sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}
-                    >
-                      {displayKey(entry.key)}
-                    </Typography>
-                  </Box>
-                  <Box flex={1} minWidth={0}>
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      display="block"
-                    >
-                      Value
-                    </Typography>
-                    <Typography
-                      variant="body2"
-                      sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}
-                    >
-                      {entry.visibleValue !== null
-                        ? entry.visibleValue
-                        : '••••••••'}
-                    </Typography>
-                  </Box>
-                  <Box
-                    display="flex"
-                    alignItems="center"
-                    gap={0.5}
-                    flexShrink={0}
-                  >
-                    {entry.loading ? (
-                      <CircularProgress size={16} />
-                    ) : (
-                      <Tooltip
-                        title={entry.visibleValue !== null ? 'Hide' : 'Reveal'}
-                      >
-                        <IconButton
-                          size="small"
-                          onClick={() => handleToggleReveal(entry.key)}
-                        >
-                          {entry.visibleValue !== null ? (
-                            <VisibilityOff fontSize="small" />
-                          ) : (
-                            <Visibility fontSize="small" />
-                          )}
-                        </IconButton>
-                      </Tooltip>
-                    )}
-                    <Tooltip title="Delete">
-                      <IconButton
-                        size="small"
-                        color="error"
-                        onClick={() => setDeleteKeyTarget(entry.key)}
-                      >
-                        <Delete fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </Box>
+          </SettingsSectionBody>
+        )}
+        {!isLoading && envEntries.length === 0 && (
+          <SettingsRow label="No entries in this environment yet." />
+        )}
+        {!isLoading &&
+          envEntries.length > 0 &&
+          envEntries.map((entry) => (
+            <SettingsRow
+              key={entry.key}
+              label={
+                <Box
+                  component="span"
+                  sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}
+                >
+                  {displayKey(entry.key)}
                 </Box>
-              </React.Fragment>
-            ))}
-        </CardContent>
-      </Card>
+              }
+              description={
+                <Box
+                  component="span"
+                  sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}
+                >
+                  {entry.visibleValue !== null
+                    ? entry.visibleValue
+                    : '••••••••'}
+                </Box>
+              }
+            >
+              {entry.loading ? (
+                <CircularProgress size={16} />
+              ) : (
+                <Tooltip
+                  title={entry.visibleValue !== null ? 'Hide' : 'Reveal'}
+                >
+                  <IconButton
+                    size="small"
+                    onClick={() => handleToggleReveal(entry.key)}
+                  >
+                    {entry.visibleValue !== null ? (
+                      <VisibilityOff fontSize="small" />
+                    ) : (
+                      <Visibility fontSize="small" />
+                    )}
+                  </IconButton>
+                </Tooltip>
+              )}
+              <Tooltip title="Delete">
+                <IconButton
+                  size="small"
+                  color="error"
+                  onClick={() => setDeleteKeyTarget(entry.key)}
+                >
+                  <Delete fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </SettingsRow>
+          ))}
+      </SettingsSection>
 
-      <Card variant="outlined" sx={{ borderRadius: 1, borderColor: 'divider' }}>
-        <CardContent>
-          <Box display="flex" alignItems="center" gap={1} mb={2}>
-            <Add color="primary" />
-            <Typography variant="h6" sx={{ m: 0 }}>
-              Add Entry
-            </Typography>
-          </Box>
+      <SettingsSection title="Add Entry" icon={<AddCircleOutline />}>
+        <SettingsSectionBody>
           <Box display="flex" gap={2} alignItems="flex-start">
             <TextField
               label="Key"
@@ -466,8 +435,8 @@ export const KeystoreSettings: React.FC = () => {
               Add
             </Button>
           </Box>
-        </CardContent>
-      </Card>
+        </SettingsSectionBody>
+      </SettingsSection>
 
       <Dialog
         open={!!deleteKeyTarget}
@@ -572,6 +541,6 @@ export const KeystoreSettings: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </SettingsStack>
   );
 };

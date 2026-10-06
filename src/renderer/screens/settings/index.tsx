@@ -1,7 +1,6 @@
 import React from 'react';
 import { toast } from 'react-toastify';
 import {
-  Button,
   Typography,
   Box,
   List,
@@ -10,17 +9,21 @@ import {
   ListItemIcon,
   ListItemText,
 } from '@mui/material';
-import { DarkMode, LightMode, OpenInNew } from '@mui/icons-material';
+import { OpenInNew } from '@mui/icons-material';
 import { useLocation } from 'react-router-dom';
-import { useColorScheme } from '@mui/material/styles';
-import AppsIcon from '@mui/icons-material/Apps';
 import { SettingsType } from '../../../types/backend';
 import {
   useFilePicker,
   useGetSettings,
   useUpdateSettings,
 } from '../../controllers';
-import { Container, StyledForm, StyledSettingsNavLink, Title } from './styles';
+import {
+  Container,
+  StyledForm,
+  StyledSettingsNavLink,
+  Title,
+  Description,
+} from './styles';
 import {
   GeneralSettings,
   ProfileSettings,
@@ -40,7 +43,6 @@ import { AppLayout } from '../../layouts';
 import { settingsSidebarCategories } from './settingsElements';
 
 const Settings: React.FC = () => {
-  const { mode, setMode } = useColorScheme();
   const theme = useTheme();
   const { data: settings } = useGetSettings();
   const { mutate: updateSettings, mutateAsync: updateSettingsAsync } =
@@ -134,6 +136,25 @@ const Settings: React.FC = () => {
     return section.charAt(0).toUpperCase() + section.slice(1).replace('-', ' ');
   };
 
+  const sectionDescriptions: Record<string, string> = {
+    general:
+      'Where projects live, how the app looks, and which version you run.',
+    'ai-providers': 'Providers, tools and how the AI assistant behaves.',
+    profile: 'Connect to Rosetta Cloud and view your profile.',
+    keystore:
+      'Credentials stored in the system keystore, grouped by environment.',
+    'task-manager': 'Track and cancel long-running background tasks.',
+    backup: 'Export your app data to a ZIP and restore it later.',
+    dbt: 'dbt runtimes, adapters and packages used to build your projects.',
+    python:
+      'Embedded interpreter used by dbt Core, Flowfile and column lineage.',
+    rosetta: 'Rosetta CLI versions and installation.',
+    duckdb: 'Local DuckDB instance used for caching, data preview and storage.',
+    flowfile: 'Install and manage Flowfile.',
+    runner: 'Run pipelines on this machine and manage their tool dependencies.',
+    about: 'Version, help links and advanced options.',
+  };
+
   React.useEffect(() => {
     if (settings) {
       setLocalSettings(settings);
@@ -196,7 +217,7 @@ const Settings: React.FC = () => {
       sidebarContent={
         <Box
           sx={{
-            p: 2,
+            p: 1,
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
@@ -211,32 +232,17 @@ const Settings: React.FC = () => {
               overflowY: 'auto',
             }}
           >
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                mb: 2,
-                gap: 1,
-                justifyContent: 'space-between',
-              }}
-            >
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <AppsIcon color="primary" fontSize="small" />
-                <Typography variant="h6" sx={{ m: 0 }}>
-                  Settings
-                </Typography>
-              </Box>
-            </Box>
             <List
               sx={{
                 py: 0,
                 width: '100%',
                 '& .MuiListItem-root': {
-                  py: 0.25,
+                  py: 0,
                   px: 1,
-                  minHeight: '32px',
+                  minHeight: '28px',
                   width: '100%',
                 },
+                '& .MuiListItemText-primary': { fontSize: 13 },
               }}
             >
               {settingsSidebarCategories.map((category, categoryIndex) => (
@@ -293,7 +299,7 @@ const Settings: React.FC = () => {
                               : 'transparent',
                         }}
                       >
-                        <ListItemIcon sx={{ minWidth: 32 }}>
+                        <ListItemIcon sx={{ minWidth: 28 }}>
                           <element.icon
                             fontSize="small"
                             color={
@@ -317,45 +323,6 @@ const Settings: React.FC = () => {
               ))}
             </List>
           </Box>
-          {/* Theme Section */}
-          <Box
-            sx={{
-              textAlign: 'left',
-              borderTop: `1px solid ${theme.palette.divider}`,
-              pt: 2,
-            }}
-          >
-            <Typography variant="subtitle2" sx={{ mb: 1 }}>
-              Theme
-            </Typography>
-            <Button
-              variant={mode === 'light' ? 'contained' : 'outlined'}
-              size="small"
-              onClick={() => setMode('light')}
-              sx={{ mx: 0.5 }}
-              startIcon={<LightMode fontSize="small" />}
-            >
-              Light
-            </Button>
-            <Button
-              variant={mode === 'dark' ? 'contained' : 'outlined'}
-              size="small"
-              onClick={() => setMode('dark')}
-              sx={{ mx: 0.5 }}
-              startIcon={<DarkMode fontSize="small" />}
-            >
-              Dark
-            </Button>
-            <Button
-              variant={mode === 'system' ? 'contained' : 'outlined'}
-              size="small"
-              onClick={() => setMode('system')}
-              sx={{ mx: 0.5 }}
-              startIcon={<AppsIcon fontSize="small" />}
-            >
-              System
-            </Button>
-          </Box>
         </Box>
       }
     >
@@ -366,10 +333,13 @@ const Settings: React.FC = () => {
             updateSettings(localSettings);
           }}
         >
-          <Title style={{ margin: 0, marginBottom: '16px' }}>
-            {getSectionTitle(currentSection)}
-          </Title>
-          <div style={{ maxWidth: '100%' }}>{renderContent()}</div>
+          <div>
+            <Title>{getSectionTitle(currentSection)}</Title>
+            {sectionDescriptions[currentSection] && (
+              <Description>{sectionDescriptions[currentSection]}</Description>
+            )}
+          </div>
+          <div style={{ maxWidth: 820 }}>{renderContent()}</div>
         </StyledForm>
       </Container>
     </AppLayout>

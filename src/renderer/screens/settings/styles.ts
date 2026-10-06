@@ -12,15 +12,26 @@ export const Container = styled('div')(() => ({
 export const StyledForm = styled('form')(({ theme }) => ({
   display: 'flex',
   minWidth: 600,
-  minHeight: 400,
+  minHeight: '100%',
   flexDirection: 'column',
   gap: theme.spacing(2),
-  padding: theme.spacing(4),
+  padding: '22px 28px 40px',
   backgroundColor: theme.palette.background.paper,
   width: '100%',
 }));
 
-export const Title = styled('h1')(() => ({}));
+export const Title = styled('h1')(() => ({
+  margin: 0,
+  fontSize: 18,
+  fontWeight: 600,
+  lineHeight: 1.4,
+}));
+
+export const Description = styled('p')(({ theme }) => ({
+  margin: 0,
+  fontSize: 12.5,
+  color: theme.palette.text.secondary,
+}));
 
 export const StyledSettingsNavLink = styled(NavLink)(({ theme }) => ({
   textDecoration: 'none',

@@ -1,16 +1,14 @@
 import React from 'react';
 import {
   Box,
-  Typography,
   Switch,
-  Divider,
   Select,
   MenuItem,
   FormControl,
   TextField,
-  Checkbox,
   CircularProgress,
   Tooltip,
+  IconButton,
 } from '@mui/material';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
@@ -23,13 +21,18 @@ import PsychologyIcon from '@mui/icons-material/Psychology';
 import PatchIcon from '@mui/icons-material/MergeType';
 import CreateIcon from '@mui/icons-material/NoteAdd';
 import StorageIcon from '@mui/icons-material/Storage';
-import TuneIcon from '@mui/icons-material/Tune';
+import ChatBubbleOutline from '@mui/icons-material/ChatBubbleOutline';
+import Tune from '@mui/icons-material/Tune';
+import ScheduleOutlined from '@mui/icons-material/ScheduleOutlined';
+import SettingsOutlined from '@mui/icons-material/SettingsOutlined';
+import BuildOutlined from '@mui/icons-material/BuildOutlined';
 import {
   useGetAISettings,
   useSaveAISettings,
   useGetAISettingsFilePath,
 } from '../../controllers/aiSettings.controller';
 import type { AISettingsConfig } from '../../../types/backend';
+import { SettingsRow, SettingsSection, SettingsStack } from './SettingsLayout';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -201,47 +204,6 @@ const TOOLS: ToolItem[] = [
   },
 ];
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-interface SettingRowProps {
-  label: string;
-  description: string;
-  control: React.ReactNode;
-}
-
-const SettingRow: React.FC<SettingRowProps> = ({
-  label,
-  description,
-  control,
-}) => (
-  <Box
-    sx={{
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      py: 1.5,
-    }}
-  >
-    <Box sx={{ flex: 1, pr: 4 }}>
-      <Typography variant="body2" fontWeight={500}>
-        {label}
-      </Typography>
-      <Typography variant="caption" color="text.secondary">
-        {description}
-      </Typography>
-    </Box>
-    <Box sx={{ flexShrink: 0 }}>{control}</Box>
-  </Box>
-);
-
-const SectionTitle: React.FC<{ children: React.ReactNode }> = ({
-  children,
-}) => (
-  <Typography variant="subtitle1" fontWeight={600} sx={{ mt: 3, mb: 1 }}>
-    {children}
-  </Typography>
-);
-
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export const AISettingsTab: React.FC = () => {
@@ -294,186 +256,98 @@ export const AISettingsTab: React.FC = () => {
     );
   }
 
+  const toolRow = (tool: ToolItem) => (
+    <SettingsRow
+      key={tool.id}
+      label={
+        <Box
+          component="span"
+          sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}
+        >
+          <Box
+            component="span"
+            sx={{ color: 'text.secondary', display: 'flex' }}
+          >
+            {tool.icon}
+          </Box>
+          {tool.label}
+        </Box>
+      }
+      description={tool.description}
+    >
+      <Switch
+        size="small"
+        disabled={tool.planned}
+        checked={!tool.planned && cfg.tools[tool.id] !== false}
+        onChange={() => toggleTool(tool.id)}
+      />
+    </SettingsRow>
+  );
+
   return (
-    <Box sx={{ maxWidth: 720 }}>
-      <SectionTitle>Chat</SectionTitle>
-      <Divider />
-      <SettingRow
-        label="Stream Responses"
-        description="Display AI responses as they are generated in real time."
-        control={
+    <SettingsStack>
+      <SettingsSection title="Chat" icon={<ChatBubbleOutline />}>
+        <SettingsRow
+          label="Stream Responses"
+          description="Display AI responses as they are generated in real time."
+        >
           <Switch
             checked={cfg.chat.streamResponses}
             onChange={(e) => updateChat('streamResponses', e.target.checked)}
             size="small"
-            sx={{
-              '& .MuiSwitch-switchBase.Mui-checked': {
-                color: '#4caf50',
-              },
-              '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                backgroundColor: '#4caf50',
-              },
-            }}
           />
-        }
-      />
-      <Divider />
-      <SettingRow
-        label="Auto-Include File Context"
-        description="Automatically include the active file as context when sending messages."
-        control={
+        </SettingsRow>
+        <SettingsRow
+          label="Auto-Include File Context"
+          description="Automatically include the active file as context when sending messages."
+        >
           <Switch
             checked={cfg.chat.autoIncludeFileContext}
             onChange={(e) =>
               updateChat('autoIncludeFileContext', e.target.checked)
             }
             size="small"
-            sx={{
-              '& .MuiSwitch-switchBase.Mui-checked': {
-                color: '#4caf50',
-              },
-              '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                backgroundColor: '#4caf50',
-              },
-            }}
           />
-        }
-      />
-      <Divider />
-      <SettingRow
-        label="Show Token Count"
-        description="Display estimated token usage for each conversation."
-        control={
+        </SettingsRow>
+        <SettingsRow
+          label="Show Token Count"
+          description="Display estimated token usage for each conversation."
+        >
           <Switch
             checked={cfg.chat.showTokenCount}
             onChange={(e) => updateChat('showTokenCount', e.target.checked)}
             size="small"
-            sx={{
-              '& .MuiSwitch-switchBase.Mui-checked': {
-                color: '#4caf50',
-              },
-              '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                backgroundColor: '#4caf50',
-              },
-            }}
           />
-        }
-      />
-      <Divider />
-      <SettingRow
-        label="Auto-Scroll to Latest"
-        description="Automatically scroll to the latest message as responses stream in."
-        control={
+        </SettingsRow>
+        <SettingsRow
+          label="Auto-Scroll to Latest"
+          description="Automatically scroll to the latest message as responses stream in."
+        >
           <Switch
             checked={cfg.chat.autoScrollToLatest}
             onChange={(e) => updateChat('autoScrollToLatest', e.target.checked)}
             size="small"
-            sx={{
-              '& .MuiSwitch-switchBase.Mui-checked': {
-                color: '#4caf50',
-              },
-              '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                backgroundColor: '#4caf50',
-              },
-            }}
           />
-        }
-      />
+        </SettingsRow>
+      </SettingsSection>
 
-      <SectionTitle>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <TuneIcon sx={{ fontSize: 18 }} />
-          Tools
-        </Box>
-      </SectionTitle>
-      <Typography
-        variant="caption"
-        color="text.secondary"
-        sx={{ mb: 1, display: 'block' }}
+      <SettingsSection
+        title="Tools"
+        icon={<Tune />}
+        description="Tools available to the AI agent. Implemented tools are active now; planned tools are on the roadmap."
       >
-        Tools available to the AI agent. Implemented tools are active now;
-        planned tools are on the roadmap.
-      </Typography>
-      <Divider sx={{ mb: 0.5 }} />
-      {TOOLS.filter((t) => !t.planned).map((tool) => (
-        <Box
-          key={tool.id}
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            py: 0.5,
-            px: 0.5,
-            borderRadius: 1,
-            '&:hover': { bgcolor: 'action.hover' },
-          }}
-        >
-          <Checkbox
-            size="small"
-            checked={cfg.tools[tool.id] !== false}
-            onChange={() => toggleTool(tool.id)}
-            sx={{ p: 0.25, mr: 0.5 }}
-          />
-          <Box sx={{ color: 'text.secondary', display: 'flex', mr: 0.75 }}>
-            {tool.icon}
-          </Box>
-          <Typography
-            variant="body2"
-            fontWeight={600}
-            component="span"
-            sx={{ mr: 1, minWidth: 100 }}
-          >
-            {tool.label}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            {tool.description}
-          </Typography>
-        </Box>
-      ))}
+        {TOOLS.filter((t) => !t.planned).map(toolRow)}
+      </SettingsSection>
 
-      <Typography
-        variant="caption"
-        color="text.disabled"
-        sx={{ mt: 1.5, mb: 0.5, display: 'block', fontStyle: 'italic' }}
-      >
-        Planned tools
-      </Typography>
-      <Divider sx={{ mb: 0.5 }} />
-      {TOOLS.filter((t) => t.planned).map((tool) => (
-        <Box
-          key={tool.id}
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            py: 0.5,
-            px: 0.5,
-            borderRadius: 1,
-            opacity: 0.45,
-          }}
-        >
-          <Checkbox size="small" disabled sx={{ p: 0.25, mr: 0.5 }} />
-          <Box sx={{ color: 'text.disabled', display: 'flex', mr: 0.75 }}>
-            {tool.icon}
-          </Box>
-          <Typography
-            variant="body2"
-            fontWeight={600}
-            component="span"
-            sx={{ mr: 1, minWidth: 100, color: 'text.disabled' }}
-          >
-            {tool.label}
-          </Typography>
-          <Typography variant="caption" color="text.disabled">
-            {tool.description}
-          </Typography>
-        </Box>
-      ))}
+      <SettingsSection title="Planned tools" icon={<ScheduleOutlined />}>
+        {TOOLS.filter((t) => t.planned).map(toolRow)}
+      </SettingsSection>
 
-      <SectionTitle>Configuration</SectionTitle>
-      <Divider />
-      <SettingRow
-        label="Allow AI in Background"
-        description="Allow the AI agent to continue running when you switch conversations."
-        control={
+      <SettingsSection title="Configuration" icon={<SettingsOutlined />}>
+        <SettingsRow
+          label="Allow AI in Background"
+          description="Allow the AI agent to continue running when you switch conversations."
+        >
           <Switch
             checked={cfg.configuration.allowAIInBackground}
             onChange={(e) =>
@@ -481,17 +355,16 @@ export const AISettingsTab: React.FC = () => {
             }
             size="small"
           />
-        }
-      />
-      <Divider />
-      <SettingRow
-        label="Auto Execution"
-        description="Control whether the AI can auto-execute terminal commands."
-        control={
+        </SettingsRow>
+        <SettingsRow
+          label="Auto Execution"
+          description="Control whether the AI can auto-execute terminal commands."
+        >
           <FormControl size="small" sx={{ minWidth: 140 }}>
             <Select
               value={cfg.configuration.autoExecution}
               onChange={(e) => updateConfig('autoExecution', e.target.value)}
+              sx={{ fontSize: 13 }}
             >
               <MenuItem value="disabled">Disabled</MenuItem>
               <MenuItem value="allowlist">Allowlist</MenuItem>
@@ -499,25 +372,21 @@ export const AISettingsTab: React.FC = () => {
               <MenuItem value="turbo">Turbo</MenuItem>
             </Select>
           </FormControl>
-        }
-      />
-      <Divider />
-      <SettingRow
-        label="Auto-Continue"
-        description="Automatically continue the AI response when it reaches its per-response limit."
-        control={
+        </SettingsRow>
+        <SettingsRow
+          label="Auto-Continue"
+          description="Automatically continue the AI response when it reaches its per-response limit."
+        >
           <Switch
             checked={cfg.configuration.autoContinue}
             onChange={(e) => updateConfig('autoContinue', e.target.checked)}
             size="small"
           />
-        }
-      />
-      <Divider />
-      <SettingRow
-        label="Auto-Generate Memories"
-        description="Autonomously generate memories to remember important context across sessions."
-        control={
+        </SettingsRow>
+        <SettingsRow
+          label="Auto-Generate Memories"
+          description="Autonomously generate memories to remember important context across sessions."
+        >
           <Switch
             checked={cfg.configuration.autoGenerateMemories}
             onChange={(e) =>
@@ -525,15 +394,14 @@ export const AISettingsTab: React.FC = () => {
             }
             size="small"
           />
-        }
-      />
+        </SettingsRow>
+      </SettingsSection>
 
-      <SectionTitle>Advanced</SectionTitle>
-      <Divider />
-      <SettingRow
-        label="Max Workspace File Count"
-        description="Maximum number of files the AI will index for workspace context. Set 0 for unlimited."
-        control={
+      <SettingsSection title="Advanced" icon={<BuildOutlined />}>
+        <SettingsRow
+          label="Max Workspace File Count"
+          description="Maximum number of files the AI will index for workspace context. Set 0 for unlimited."
+        >
           <TextField
             size="small"
             value={cfg.advanced.maxWorkspaceFileCount}
@@ -543,49 +411,25 @@ export const AISettingsTab: React.FC = () => {
             sx={{ width: 100 }}
             inputProps={{ inputMode: 'numeric' }}
           />
-        }
-      />
-
-      {/* Config file path */}
-      {filePath && (
-        <Box
-          sx={{
-            mt: 3,
-            pt: 1.5,
-            borderTop: '1px solid',
-            borderColor: 'divider',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1,
-          }}
-        >
-          <Typography
-            variant="caption"
-            color="text.disabled"
-            sx={{
-              flex: 1,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {filePath}
-          </Typography>
-          <Tooltip title="Open config file in editor">
-            <OpenInNewIcon
-              sx={{
-                fontSize: 14,
-                color: 'text.disabled',
-                cursor: 'pointer',
-                flexShrink: 0,
-              }}
-              onClick={() =>
-                window.electron.ipcRenderer.invoke('utils:open-path', filePath)
-              }
-            />
-          </Tooltip>
-        </Box>
-      )}
-    </Box>
+        </SettingsRow>
+        {filePath && (
+          <SettingsRow label="Config file" description={filePath}>
+            <Tooltip title="Open config file in editor">
+              <IconButton
+                size="small"
+                onClick={() =>
+                  window.electron.ipcRenderer.invoke(
+                    'utils:open-path',
+                    filePath,
+                  )
+                }
+              >
+                <OpenInNewIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+          </SettingsRow>
+        )}
+      </SettingsSection>
+    </SettingsStack>
   );
 };
