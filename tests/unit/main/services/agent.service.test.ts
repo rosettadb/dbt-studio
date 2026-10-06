@@ -66,6 +66,13 @@ jest.mock('../../../../src/main/services/connectors.service', () => ({
   },
 }));
 
+jest.mock('../../../../src/main/services/icebergDatalake.service', () => ({
+  IcebergDatalakeService: {
+    getInstance: jest.fn(),
+    getSqlCapability: jest.fn(),
+  },
+}));
+
 jest.mock('../../../../src/main/services/ai/skills/skillsDiscovery', () => ({
   discoverSkills: jest.fn(),
 }));
@@ -148,6 +155,56 @@ jest.mock(
 );
 
 describe('AgentService (Phase 1)', () => {
+  describe('Iceberg connection metadata', () => {
+    it('resolves an Iceberg renderer ID without using the database resolver', async () => {
+      const ConnectorsService = jest.requireMock(
+        '../../../../src/main/services/connectors.service',
+      ).default;
+      const { IcebergDatalakeService } = jest.requireMock(
+        '../../../../src/main/services/icebergDatalake.service',
+      );
+      ConnectorsService.getConnectionById.mockClear();
+      IcebergDatalakeService.getInstance.mockResolvedValue({
+        name: 'Acceptance catalog',
+        catalogType: 'polaris',
+      });
+      IcebergDatalakeService.getSqlCapability.mockResolvedValue({
+        available: true,
+        reason: undefined,
+      });
+
+      await expect(
+        AgentService.resolveEnrichedConnectionMeta('iceberg-catalog-id'),
+      ).resolves.toMatchObject({
+        name: 'Acceptance catalog',
+        type: 'iceberg',
+        catalogType: 'polaris',
+        sqlAvailable: true,
+      });
+      expect(ConnectorsService.getConnectionById).not.toHaveBeenCalled();
+    });
+
+    it('reports a missing Iceberg renderer ID as unavailable', async () => {
+      const { IcebergDatalakeService } = jest.requireMock(
+        '../../../../src/main/services/icebergDatalake.service',
+      );
+      IcebergDatalakeService.getInstance.mockRejectedValue(
+        new Error('Iceberg instance not found'),
+      );
+      IcebergDatalakeService.getSqlCapability.mockRejectedValue(
+        new Error('Iceberg instance not found'),
+      );
+
+      await expect(
+        AgentService.resolveEnrichedConnectionMeta('iceberg-missing-id'),
+      ).resolves.toMatchObject({
+        type: 'iceberg',
+        sqlAvailable: false,
+        unavailableReason: 'ICEBERG_INSTANCE_NOT_FOUND',
+      });
+    });
+  });
+
   describe('AI settings migration', () => {
     it('adds disabled Second Brain defaults to legacy settings', () => {
       const normalized = normalizeAISettings({

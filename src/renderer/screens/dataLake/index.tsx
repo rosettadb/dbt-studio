@@ -263,6 +263,12 @@ const DataLake: React.FC = () => {
       storageConnectionId: wizardData.storage.connectionId,
       storageBucket: wizardData.storage.bucket,
       storagePrefix: wizardData.storage.prefix,
+      sqlEnabled: wizardData.sql.enabled,
+      sqlStorageConnectionId: wizardData.sql.connectionId,
+      sqlStorageProvider: wizardData.sql.provider,
+      sqlStorageBucket: wizardData.sql.bucket,
+      sqlStoragePrefix: wizardData.sql.prefix,
+      sqlWarehouseMatchAcknowledged: wizardData.sql.warehouseMatchAcknowledged,
     };
     try {
       const created = await createIcebergMutation.mutateAsync(dto);
@@ -310,6 +316,12 @@ const DataLake: React.FC = () => {
       storageConnectionId: wizardData.storage.connectionId,
       storageBucket: wizardData.storage.bucket,
       storagePrefix: wizardData.storage.prefix,
+      sqlEnabled: wizardData.sql.enabled,
+      sqlStorageConnectionId: wizardData.sql.connectionId,
+      sqlStorageProvider: wizardData.sql.provider,
+      sqlStorageBucket: wizardData.sql.bucket,
+      sqlStoragePrefix: wizardData.sql.prefix,
+      sqlWarehouseMatchAcknowledged: wizardData.sql.warehouseMatchAcknowledged,
     };
     try {
       await updateIcebergMutation.mutateAsync({ id: icebergEditId, data: dto });

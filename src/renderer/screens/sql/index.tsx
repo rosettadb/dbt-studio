@@ -38,8 +38,13 @@ import {
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { connectorsServices, DuckLakeService } from '../../services';
+import {
+  connectorsServices,
+  DuckLakeService,
+  icebergService,
+} from '../../services';
 import { QueryResultStore } from './queryResultStore';
+import { icebergQualifiedName } from '../../services/iceberg.service';
 import { registerQueryResultBridge } from '../../services/agentEditorBridge.service';
 import type { QueryResultSnapshot } from '../../../types/backend';
 import { useLocalStorage } from '../../hooks';
@@ -72,22 +77,30 @@ import {
   useRenameDuckLakeTable,
   useRenameDuckLakeColumn,
 } from '../../controllers';
+import { useListIcebergInstances } from '../../controllers/icebergDatalake.controller';
 import { SchemaTreeViewerWithSchema } from './SchemaTreeViewerWithSchema';
 import { SavedQueriesList } from '../../components/sqlEditor/SavedQueriesList';
 import { SqlEditorActions } from '../../components/sqlEditor/SqlEditorActions';
 import connectionIcons, {
   defaultIcon,
+  icebergCatalogImages,
 } from '../../../../assets/connectionIcons';
+import icebergIcon from '../../../../assets/icons/apache-iceberg-lake.png';
 import { AppContext } from '../../context';
 import {
   generateDuckLakeCompletions,
   mergeCompletions,
 } from '../../utils/duckLakeCompletions';
+import { MonacoCompletionItemKind } from '../../config/constants';
 
 const QUERY_HISTORY_KEY = 'query_history_key';
 const EMPTY_ARRAY: Table[] = [];
 const CHAT_MIN_WIDTH = 280;
 const CHAT_DEFAULT_WIDTH = 360;
+
+const getIcebergCatalogIcon = (catalogType: string) =>
+  icebergCatalogImages[catalogType as keyof typeof icebergCatalogImages] ||
+  icebergIcon;
 
 const VerticalSash = (_: number, active: boolean) => (
   <div
@@ -130,6 +143,7 @@ const Sql = () => {
     isLoading: isLoadingDuckLakeInstances,
     refetch: refetchDuckLakeInstances,
   } = useDuckLakeInstances();
+  const { data: icebergInstances = [] } = useListIcebergInstances();
   const [sidebarTab, setSidebarTab] = useState(0);
 
   // Open the Analytics tab when navigated here with state { tab: 2 }
@@ -175,6 +189,12 @@ const Sql = () => {
       const instance = duckLakeInstances.find((inst) => inst.id === instanceId);
       return instance?.name ?? activeConnectionName;
     }
+    if (activeConnectionId.startsWith('iceberg-')) {
+      const instance = icebergInstances.find(
+        (item) => item.id === activeConnectionId.replace('iceberg-', ''),
+      );
+      return instance?.name ?? activeConnectionName;
+    }
 
     const connection = connections.find(
       (conn) => conn.id === activeConnectionId,
@@ -185,6 +205,7 @@ const Sql = () => {
     activeConnectionName,
     connections,
     duckLakeInstances,
+    icebergInstances,
   ]);
 
   // Reset analytics page when switching connections to prevent showing
@@ -196,10 +217,17 @@ const Sql = () => {
   // Check if active connection is DuckLake
   const isDuckLakeConnection =
     activeConnectionId?.startsWith('ducklake-') || false;
+  const isIcebergConnection =
+    activeConnectionId?.startsWith('iceberg-') || false;
+  const activeIcebergInstance = isIcebergConnection
+    ? icebergInstances.find(
+        (item) => item.id === activeConnectionId?.replace('iceberg-', ''),
+      )
+    : undefined;
 
   // Get active connection
   const { data: activeConnection, isLoading: isLoadingConnection } =
-    useGetConnectionById(activeConnectionId);
+    useGetConnectionById(isIcebergConnection ? undefined : activeConnectionId);
 
   // Schema state for active tab
   const [tabSchemas, setTabSchemas] = useState<Record<string, Table[]>>({});
@@ -267,6 +295,18 @@ const Sql = () => {
         status: 'loading',
       } as any;
     }
+    if (activeConnectionId?.startsWith('iceberg-')) {
+      const instanceId = activeConnectionId.replace('iceberg-', '');
+      const instance = icebergInstances.find((item) => item.id === instanceId);
+      if (instance) {
+        return {
+          type: 'duckdb',
+          name: instance.name,
+          instanceId,
+          status: 'active',
+        } as any;
+      }
+    }
 
     // Handle regular database connections
     if (!activeConnection || activeConnection.id !== activeConnectionId) {
@@ -278,6 +318,7 @@ const Sql = () => {
     activeConnectionId,
     activeConnectionName,
     duckLakeInstances,
+    icebergInstances,
     isLoadingDuckLakeInstances,
   ]);
 
@@ -402,13 +443,43 @@ const Sql = () => {
       ? utils.generateMonacoCompletions(activeSchema)
       : [];
 
+    if (isIcebergConnection) {
+      const icebergItems = activeSchema.flatMap((table) => {
+        const qualifiedTable = icebergQualifiedName(table.schema, table.name);
+        return [
+          {
+            label: `iceberg.${table.schema}.${table.name}`,
+            kind: MonacoCompletionItemKind.Struct,
+            insertText: qualifiedTable,
+            detail: 'Iceberg table',
+          },
+          ...table.columns.map((column) => ({
+            label: `iceberg.${table.schema}.${table.name}.${column.name}`,
+            kind: MonacoCompletionItemKind.Field,
+            insertText: icebergQualifiedName(
+              table.schema,
+              table.name,
+              column.name,
+            ),
+            detail: 'Iceberg column',
+          })),
+        ];
+      });
+      return [
+        ...baseCompletions.filter(
+          (item) => item.kind === MonacoCompletionItemKind.Keyword,
+        ),
+        ...icebergItems,
+      ];
+    }
+
     // Merge with DuckLake completions if available
     if (duckLakeCompletions.length > 0) {
       return mergeCompletions(baseCompletions, duckLakeCompletions);
     }
 
     return baseCompletions;
-  }, [activeSchema, duckLakeCompletions]);
+  }, [activeSchema, duckLakeCompletions, isIcebergConnection]);
 
   const loadDuckLakeCompletions = useCallback(async () => {
     const requestSeq = duckLakeCompletionsRequestSeq.current + 1;
@@ -484,6 +555,42 @@ const Sql = () => {
         // Mark as loaded (empty schema) to prevent loading state
         setTabSchemas((prev) => ({ ...prev, [connectionId]: [] }));
         setLoadingSchemas((prev) => ({ ...prev, [connectionId]: false }));
+        return;
+      }
+
+      if (connectionId.startsWith('iceberg-')) {
+        setLoadingSchemas((prev) => ({ ...prev, [connectionId]: true }));
+        try {
+          const schema = await icebergService.getIcebergSqlSchema(
+            connectionId.replace('iceberg-', ''),
+          );
+          const tables: Table[] = schema.namespaces.flatMap((namespace) =>
+            namespace.tables.map((table) => ({
+              name: table.name,
+              type: table.type,
+              schema: namespace.name,
+              columns: table.columns.map((column) => ({
+                name: column.name,
+                typeName: column.type,
+                ordinalPosition: column.position,
+                primaryKeySequenceId: 0,
+                columnDisplaySize: 0,
+                scale: 0,
+                precision: 0,
+                columnProperties: [],
+                autoincrement: false,
+                primaryKey: false,
+                nullable: true,
+                foreignKeys: [],
+              })),
+            })),
+          );
+          setTabSchemas((prev) => ({ ...prev, [connectionId]: tables }));
+        } catch {
+          setTabSchemas((prev) => ({ ...prev, [connectionId]: [] }));
+        } finally {
+          setLoadingSchemas((prev) => ({ ...prev, [connectionId]: false }));
+        }
         return;
       }
 
@@ -657,7 +764,11 @@ const Sql = () => {
     const execution = activeTabId ? tabExecutions[activeTabId] : null;
     if (execution) {
       try {
-        await connectorsServices.cancelQuery(execution.id);
+        if (isIcebergConnection) {
+          await icebergService.cancelIcebergSql(execution.id);
+        } else {
+          await connectorsServices.cancelQuery(execution.id);
+        }
         toast.info('Query execution cancelled');
       } catch (e) {
         toast.error('Failed to cancel query');
@@ -842,7 +953,21 @@ const Sql = () => {
                 data-testid="sql-connection-select"
                 value={activeTab?.connectionId || ''}
                 onChange={(e) => {
-                  const conn = connections.find((c) => c.id === e.target.value);
+                  const selected = String(e.target.value);
+                  if (selected.startsWith('iceberg-')) {
+                    const instance = icebergInstances.find(
+                      (item) => item.id === selected.replace('iceberg-', ''),
+                    );
+                    if (instance?.sqlAvailable) {
+                      handleConnectionSelect({
+                        id: selected,
+                        name: instance.name,
+                        type: `iceberg-${instance.catalogType}`,
+                      });
+                    }
+                    return;
+                  }
+                  const conn = connections.find((c) => c.id === selected);
                   if (conn) {
                     handleConnectionSelect({
                       id: conn.id,
@@ -892,6 +1017,44 @@ const Sql = () => {
                           }}
                         >
                           {instance.name}
+                        </span>
+                      </Box>
+                    );
+                  }
+
+                  if (selected.startsWith('iceberg-')) {
+                    const instance = icebergInstances.find(
+                      (item) => item.id === selected.replace('iceberg-', ''),
+                    );
+                    return (
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1,
+                          width: '100%',
+                        }}
+                      >
+                        <img
+                          src={getIcebergCatalogIcon(
+                            instance?.catalogType ?? 'rest',
+                          )}
+                          alt=""
+                          style={{
+                            width: 14,
+                            height: 14,
+                            objectFit: 'contain',
+                          }}
+                        />
+                        <span
+                          style={{
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            flex: 1,
+                          }}
+                        >
+                          {instance?.name ?? activeTab?.connectionName}
                         </span>
                       </Box>
                     );
@@ -1062,6 +1225,38 @@ const Sql = () => {
                     </Box>
                   </MenuItem>
                 ))}
+                {icebergInstances.some((instance) => instance.sqlAvailable) && (
+                  <MenuItem
+                    disabled
+                    sx={{ fontSize: '0.75rem', opacity: 0.6, mt: 1 }}
+                  >
+                    <strong>Iceberg Catalogs</strong>
+                  </MenuItem>
+                )}
+                {icebergInstances
+                  .filter((instance) => instance.sqlAvailable)
+                  .map((instance) => (
+                    <MenuItem
+                      key={`iceberg-${instance.id}`}
+                      value={`iceberg-${instance.id}`}
+                      sx={{ fontSize: '0.8rem' }}
+                    >
+                      <Box
+                        sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
+                      >
+                        <img
+                          src={getIcebergCatalogIcon(instance.catalogType)}
+                          alt=""
+                          style={{
+                            width: 14,
+                            height: 14,
+                            objectFit: 'contain',
+                          }}
+                        />
+                        {instance.name}
+                      </Box>
+                    </MenuItem>
+                  ))}
               </Select>
             </FormControl>
 
@@ -1265,6 +1460,13 @@ const Sql = () => {
                         connectionId={activeConnectionId}
                         draggable
                         onContextMenu={handleSchemaContextMenu}
+                        databaseIcon={
+                          activeIcebergInstance
+                            ? getIcebergCatalogIcon(
+                                activeIcebergInstance.catalogType,
+                              )
+                            : undefined
+                        }
                       />
                     )}
                     {!activeTab && (

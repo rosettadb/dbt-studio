@@ -4,6 +4,9 @@ module.exports = {
   testMatch: ['**/tests/unit/**/*.test.ts', '**/tests/unit/**/*.test.tsx'],
   setupFilesAfterEnv: ['<rootDir>/tests/unit/__setup__/jest.setup.ts'],
   moduleDirectories: ['node_modules', 'release/app/node_modules', 'src'],
+  // AWS SDK v3 ships browser-only ESM builds that the jsdom environment would
+  // otherwise select; main-process code must load its Node (CommonJS) builds.
+  resolver: '<rootDir>/tests/unit/__setup__/nodeConditionsResolver.js',
   moduleNameMapper: {
     'file-icons-js': '<rootDir>/.erb/mocks/file-icons-js.js',
     '^split-pane-react$': '<rootDir>/.erb/mocks/split-pane-react.js',
