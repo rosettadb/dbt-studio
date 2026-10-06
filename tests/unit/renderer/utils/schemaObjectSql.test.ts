@@ -171,6 +171,16 @@ describe('other generators', () => {
     );
   });
 
+  it('keeps placeholder comments on one line for names with line breaks', () => {
+    expect(
+      buildInsertTemplate({ schema: 's', name: 't' }, 'postgres', [
+        'a\nDROP TABLE t; --',
+      ]),
+    ).toBe(
+      'INSERT INTO s.t ("a\nDROP TABLE t; --")\nVALUES (\n  ?  -- a DROP TABLE t; --\n);',
+    );
+  });
+
   it('builds SELECT DISTINCT statements', () => {
     expect(buildSelectDistinctStatement(orders, 'total', 'postgres')).toBe(
       'SELECT DISTINCT total\nFROM sales.orders\nLIMIT 100;',
@@ -194,7 +204,24 @@ describe('other generators', () => {
       'RENAME TABLE sales.orders TO sales.orders_v2;',
     );
     expect(buildRenameTableStatement(orders, "o'2", 'mssql')).toBe(
-      "EXEC sp_rename 'sales.orders', 'o''2';",
+      "EXEC sp_rename '[sales].[orders]', 'o''2';",
+    );
+  });
+
+  it('renames views with ALTER VIEW where the dialect requires it', () => {
+    const view = { schema: 'sales', name: 'orders_v', type: 'VIEW' };
+    expect(buildRenameTableStatement(view, 'orders_v2', 'snowflake')).toBe(
+      'ALTER VIEW "sales"."orders_v" RENAME TO "orders_v2";',
+    );
+    expect(buildRenameTableStatement(view, 'orders_v2', 'postgres')).toBe(
+      'ALTER VIEW sales.orders_v RENAME TO orders_v2;',
+    );
+    // Dialects without ALTER VIEW … RENAME keep the table syntax.
+    expect(buildRenameTableStatement(view, 'orders_v2', 'sqlite')).toBe(
+      'ALTER TABLE sales.orders_v RENAME TO orders_v2;',
+    );
+    expect(buildRenameTableStatement(view, 'orders_v2', 'mysql')).toBe(
+      'RENAME TABLE sales.orders_v TO sales.orders_v2;',
     );
   });
 
@@ -203,7 +230,15 @@ describe('other generators', () => {
       buildRenameColumnStatement(orders, 'total', 'amount', 'postgres'),
     ).toBe('ALTER TABLE sales.orders RENAME COLUMN total TO amount;');
     expect(buildRenameColumnStatement(orders, 'total', 'amount', 'mssql')).toBe(
-      "EXEC sp_rename 'sales.orders.total', 'amount', 'COLUMN';",
+      "EXEC sp_rename '[sales].[orders].[total]', 'amount', 'COLUMN';",
     );
+    expect(
+      buildRenameColumnStatement(
+        { schema: 'dbo', name: 'my table' },
+        'a]b',
+        'c',
+        'mssql',
+      ),
+    ).toBe("EXEC sp_rename '[dbo].[my table].[a]]b]', 'c', 'COLUMN';");
   });
 });

@@ -38,7 +38,8 @@ export const RenameSchemaObjectDialog: React.FC<Props> = ({
   }, [open, currentName]);
 
   const trimmed = value.trim();
-  const canConfirm = trimmed.length > 0 && trimmed !== currentName;
+  const canConfirm =
+    trimmed.length > 0 && value !== currentName && trimmed !== currentName;
 
   const confirm = () => {
     if (canConfirm) onConfirm(trimmed);

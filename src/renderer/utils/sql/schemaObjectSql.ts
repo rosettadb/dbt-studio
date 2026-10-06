@@ -293,7 +293,10 @@ export const buildInsertTemplate = (
   const values = columns
     .map((c, i) => {
       const isLast = i === columns.length - 1;
-      return `  ?${isLast ? ' ' : ','} -- ${c}`;
+      // A line break in the name would end the comment and turn the rest of
+      // the name into SQL; keep the comment on one line.
+      const comment = c.replace(/[\r\n\u2028\u2029]+/g, ' ');
+      return `  ?${isLast ? ' ' : ','} -- ${comment}`;
     })
     .join('\n');
   return `INSERT INTO ${target} (${formatColumnList(columns, dialect)})\nVALUES (\n${values}\n);`;
@@ -321,7 +324,31 @@ export const buildCountByColumnStatement = (
   return `SELECT\n  ${col},\n  COUNT(*) AS total_rows\nFROM ${qualifiedName(ref, dialect)}\nGROUP BY ${col}\nORDER BY total_rows DESC;`;
 };
 
-/** Dialect-specific table rename. Never executed by this module. */
+/**
+ * Dialects where a view is renamed with `ALTER VIEW … RENAME TO` rather than
+ * `ALTER TABLE`. Everything else keeps the table syntax.
+ */
+const ALTER_VIEW_RENAME_DIALECTS = new Set<string>([
+  'postgres',
+  'snowflake',
+  'duckdb',
+  'ducklake',
+  'databricks',
+  'kinetica',
+]);
+
+/**
+ * `sp_rename` takes the object as a string; delimit every part so names with
+ * dots, spaces or reserved words resolve to the right object.
+ */
+const spRenameSource = (parts: (string | undefined)[]): string =>
+  parts
+    .filter((part): part is string => !!part)
+    .map((part) => quoteIdentifier(part, 'mssql', { force: true }))
+    .join('.')
+    .replace(/'/g, "''");
+
+/** Dialect-specific table/view rename. Never executed by this module. */
 export const buildRenameTableStatement = (
   ref: SchemaObjectRef,
   newName: string,
@@ -331,12 +358,15 @@ export const buildRenameTableStatement = (
   switch (dialect) {
     case 'mysql':
       return `RENAME TABLE ${from} TO ${qualifiedName({ schema: ref.schema, name: newName }, dialect)};`;
-    case 'mssql': {
-      const source = ref.schema ? `${ref.schema}.${ref.name}` : ref.name;
-      return `EXEC sp_rename '${source.replace(/'/g, "''")}', '${newName.replace(/'/g, "''")}';`;
+    case 'mssql':
+      return `EXEC sp_rename '${spRenameSource([ref.schema, ref.name])}', '${newName.replace(/'/g, "''")}';`;
+    default: {
+      const isView =
+        ref.type?.toUpperCase() === 'VIEW' &&
+        !!dialect &&
+        ALTER_VIEW_RENAME_DIALECTS.has(dialect);
+      return `ALTER ${isView ? 'VIEW' : 'TABLE'} ${from} RENAME TO ${quoteIdentifier(newName, dialect)};`;
     }
-    default:
-      return `ALTER TABLE ${from} RENAME TO ${quoteIdentifier(newName, dialect)};`;
   }
 };
 
@@ -348,12 +378,8 @@ export const buildRenameColumnStatement = (
   dialect: SqlDialect,
 ): string => {
   switch (dialect) {
-    case 'mssql': {
-      const source = [ref.schema, ref.name, oldColumn]
-        .filter(Boolean)
-        .join('.');
-      return `EXEC sp_rename '${source.replace(/'/g, "''")}', '${newColumn.replace(/'/g, "''")}', 'COLUMN';`;
-    }
+    case 'mssql':
+      return `EXEC sp_rename '${spRenameSource([ref.schema, ref.name, oldColumn])}', '${newColumn.replace(/'/g, "''")}', 'COLUMN';`;
     default:
       return `ALTER TABLE ${qualifiedName(ref, dialect)} RENAME COLUMN ${quoteIdentifier(oldColumn, dialect)} TO ${quoteIdentifier(newColumn, dialect)};`;
   }

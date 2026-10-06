@@ -145,7 +145,7 @@ const findTable = (tables: Table[], ref: TableRef): Table | undefined => {
   const schema = ref.schema?.toLowerCase();
   const byName = tables.filter((t) => t.name.toLowerCase() === name);
   if (schema) {
-    return byName.find((t) => t.schema.toLowerCase() === schema) ?? byName[0];
+    return byName.find((t) => t.schema.toLowerCase() === schema);
   }
   return byName[0];
 };
@@ -194,21 +194,21 @@ export const provideSqlSchemaCompletions = (
     const qualifier = unquote(dotted[1]);
     let table: Table | undefined;
 
+    // An explicit `schema.table.` qualifier is matched exactly; no alias or
+    // bare-name fallback, so a same-named table in another schema never
+    // answers for it.
     const twoLevel = DOTTED_TWO.exec(lineBefore);
     if (twoLevel) {
       table = findTable(tables, {
         schema: unquote(twoLevel[1]),
         name: unquote(twoLevel[2]),
       });
-    }
-    if (!table) {
+    } else {
       const alias = collectTableAliases(model.getValue()).get(
         qualifier.toLowerCase(),
       );
       if (alias) table = findTable(tables, alias);
-    }
-    if (!table) {
-      table = findTable(tables, { name: qualifier });
+      if (!table) table = findTable(tables, { name: qualifier });
     }
 
     if (table) {

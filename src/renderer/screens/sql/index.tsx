@@ -723,6 +723,8 @@ const Sql = () => {
     (node: SchemaTreeNodeRef) =>
       isDuckLakeConnection &&
       !!(connectionInput as any)?.instanceId &&
+      // The DuckLake rename IPC only resolves tables, not views.
+      node.kind !== 'view' &&
       (!node.schema || node.schema === 'main'),
     [isDuckLakeConnection, connectionInput],
   );
@@ -741,6 +743,14 @@ const Sql = () => {
 
       if (canRenameNatively(node)) {
         const instanceId = (connectionInput as any).instanceId as string;
+        // Only refresh if this instance is still the active one; the hooks
+        // already invalidate the renamed instance's queries, and refreshing a
+        // stale closure would leave the active instance stuck loading.
+        const refreshIfActive = () => {
+          if (activeDuckLakeInstanceIdRef.current === instanceId) {
+            handleRefreshSchema();
+          }
+        };
         if (node.kind === 'column' && node.column) {
           renameDuckLakeColumn.mutate(
             {
@@ -749,27 +759,38 @@ const Sql = () => {
               oldColumnName: node.column,
               newColumnName: newName,
             },
-            { onSuccess: handleRefreshSchema },
+            { onSuccess: refreshIfActive },
           );
         } else {
           renameDuckLakeTable.mutate(
             { instanceId, oldName: node.table, newName },
-            { onSuccess: handleRefreshSchema },
+            { onSuccess: refreshIfActive },
           );
         }
         return;
       }
 
-      const ref = { schema: node.schema ?? '', name: node.table };
+      // The connection can disappear while the rename dialog is open; without
+      // a dialect the builders would produce SQL for the wrong database.
+      if (!connectionInput?.type) {
+        toast.error('The connection is no longer available');
+        return;
+      }
+
+      const ref = {
+        schema: node.schema ?? '',
+        name: node.table,
+        type: node.kind === 'view' ? 'VIEW' : node.tableType,
+      };
       const sql =
         node.kind === 'column' && node.column
           ? buildRenameColumnStatement(
               ref,
               node.column,
               newName,
-              connectionInput?.type,
+              connectionInput.type,
             )
-          : buildRenameTableStatement(ref, newName, connectionInput?.type);
+          : buildRenameTableStatement(ref, newName, connectionInput.type);
 
       if (sqlEditorRef.current?.insertText(sql)) {
         toast.info('Rename statement inserted. Review it, then run it.');

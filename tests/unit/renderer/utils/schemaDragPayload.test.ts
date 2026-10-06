@@ -109,6 +109,30 @@ describe('setSchemaDragData / readSchemaDragData', () => {
 
     dt.setData(SCHEMA_OBJECT_MIME, JSON.stringify({ version: 1 }));
     expect(readSchemaDragData(dt)).toBeNull();
+
+    dt.setData(
+      SCHEMA_OBJECT_MIME,
+      JSON.stringify({ ...tablePayload, kind: 'database' }),
+    );
+    expect(readSchemaDragData(dt)).toBeNull();
+
+    dt.setData(
+      SCHEMA_OBJECT_MIME,
+      JSON.stringify({ ...tablePayload, columns: 'id' }),
+    );
+    expect(readSchemaDragData(dt)).toBeNull();
+
+    dt.setData(
+      SCHEMA_OBJECT_MIME,
+      JSON.stringify({ ...tablePayload, columns: ['id', 1] }),
+    );
+    expect(readSchemaDragData(dt)).toBeNull();
+
+    dt.setData(
+      SCHEMA_OBJECT_MIME,
+      JSON.stringify({ ...tablePayload, table: { name: 'orders' } }),
+    );
+    expect(readSchemaDragData(dt)).toBeNull();
   });
 
   it('supports DOMStringList-style types', () => {

@@ -144,6 +144,15 @@ describe('provideSqlSchemaCompletions', () => {
     );
   });
 
+  it('does not answer a missing schema.table with a same-named table elsewhere', () => {
+    // sales.orders exists, crm.orders does not: fall back to the full list
+    // rather than showing sales.orders columns.
+    const { model, position } = modelAt('SELECT crm.orders.');
+    expect(labels(provideSqlSchemaCompletions(model, position, entry))).toEqual(
+      ['SELECT', 'sales', 'orders', 'total'],
+    );
+  });
+
   it('lists tables after a schema dot', () => {
     const { model, position } = modelAt('SELECT * FROM sales.');
     const result = provideSqlSchemaCompletions(model, position, entry);

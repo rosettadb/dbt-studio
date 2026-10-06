@@ -109,6 +109,30 @@ export const hasSchemaDragData = (
 ): boolean =>
   !!dataTransfer && typesInclude(dataTransfer.types, SCHEMA_OBJECT_MIME);
 
+const DRAG_KINDS = new Set<string>(['schema', 'table', 'view', 'column']);
+
+const isOptionalString = (value: unknown): value is string | undefined =>
+  value === undefined || typeof value === 'string';
+
+/** Validate a parsed JSON value; the generators assume this exact shape. */
+const isSchemaDragPayload = (value: unknown): value is SchemaDragPayload => {
+  if (!value || typeof value !== 'object') return false;
+  const p = value as Record<string, unknown>;
+  return (
+    p.version === 1 &&
+    typeof p.kind === 'string' &&
+    DRAG_KINDS.has(p.kind) &&
+    typeof p.schema === 'string' &&
+    isOptionalString(p.connectionId) &&
+    isOptionalString(p.connectionType) &&
+    isOptionalString(p.table) &&
+    isOptionalString(p.column) &&
+    (p.columns === undefined ||
+      (Array.isArray(p.columns) &&
+        p.columns.every((c) => typeof c === 'string')))
+  );
+};
+
 /** Parse the structured payload from a `drop` event, or `null`. */
 export const readSchemaDragData = (
   dataTransfer: DataTransferLike | null | undefined,
@@ -117,17 +141,8 @@ export const readSchemaDragData = (
   try {
     const raw = dataTransfer!.getData(SCHEMA_OBJECT_MIME);
     if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (
-      !parsed ||
-      typeof parsed !== 'object' ||
-      parsed.version !== 1 ||
-      typeof parsed.kind !== 'string' ||
-      typeof parsed.schema !== 'string'
-    ) {
-      return null;
-    }
-    return parsed as SchemaDragPayload;
+    const parsed: unknown = JSON.parse(raw);
+    return isSchemaDragPayload(parsed) ? parsed : null;
   } catch {
     return null;
   }

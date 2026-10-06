@@ -495,6 +495,8 @@ const Notebooks = () => {
   const canRenameNatively = useCallback(
     (node: SchemaTreeNodeRef) =>
       activeConnectionId.startsWith('ducklake-') &&
+      // The DuckLake rename IPC only resolves tables, not views.
+      node.kind !== 'view' &&
       (!node.schema || node.schema === 'main'),
     [activeConnectionId],
   );
@@ -532,7 +534,18 @@ const Notebooks = () => {
         return;
       }
 
-      const ref = { schema: node.schema ?? '', name: node.table };
+      // The connection can disappear while the rename dialog is open; without
+      // a dialect the builders would produce SQL for the wrong database.
+      if (!activeConnectionType) {
+        toast.error('The connection is no longer available');
+        return;
+      }
+
+      const ref = {
+        schema: node.schema ?? '',
+        name: node.table,
+        type: node.kind === 'view' ? 'VIEW' : node.tableType,
+      };
       const sql =
         node.kind === 'column' && node.column
           ? buildRenameColumnStatement(
