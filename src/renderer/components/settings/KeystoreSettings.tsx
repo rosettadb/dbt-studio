@@ -428,22 +428,32 @@ export const KeystoreSettings: React.FC = () => {
                   },
                 }}
               />
-              <Button
-                variant="contained"
-                size="small"
-                startIcon={
-                  isSaving ? (
-                    <CircularProgress size={14} color="inherit" />
-                  ) : (
-                    <Add />
-                  )
+              <Tooltip
+                title={
+                  !newKey.trim() || !newValue.trim()
+                    ? 'Enter a key and a value first'
+                    : ''
                 }
-                onClick={handleAdd}
-                disabled={!newKey.trim() || !newValue.trim() || isSaving}
-                sx={{ whiteSpace: 'nowrap', mt: 0.25 }}
               >
-                Add
-              </Button>
+                <Box component="span" sx={{ flexShrink: 0, mt: 0.25 }}>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    startIcon={
+                      isSaving ? (
+                        <CircularProgress size={14} color="inherit" />
+                      ) : (
+                        <Add />
+                      )
+                    }
+                    onClick={handleAdd}
+                    disabled={!newKey.trim() || !newValue.trim() || isSaving}
+                    sx={{ whiteSpace: 'nowrap' }}
+                  >
+                    Add
+                  </Button>
+                </Box>
+              </Tooltip>
             </Box>
           </SettingsSectionBody>
         </SettingsSection>
