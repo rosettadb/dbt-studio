@@ -18,6 +18,7 @@ import { CloudExplorerService, CloudPreviewService } from '../services';
 const handlerChannels = [
   'cloudExplorer:listBuckets',
   'cloudExplorer:listObjects',
+  'cloudExplorer:getFolderMetadata',
   'cloudExplorer:getDownloadUrl',
   'cloudExplorer:testConnection',
   'cloudExplorer:previewData',
@@ -81,6 +82,30 @@ const registerCloudExplorerHandlers = () => {
         prefix,
       );
     },
+  );
+
+  ipcMain.handle(
+    'cloudExplorer:getFolderMetadata',
+    async (
+      _event,
+      {
+        provider,
+        config,
+        bucketName,
+        prefix,
+      }: {
+        provider: CloudProvider;
+        config: CloudStorageConfig;
+        bucketName: string;
+        prefix: string;
+      },
+    ) =>
+      CloudExplorerService.getFolderMetadata(
+        provider,
+        config,
+        bucketName,
+        prefix,
+      ),
   );
 
   ipcMain.handle(

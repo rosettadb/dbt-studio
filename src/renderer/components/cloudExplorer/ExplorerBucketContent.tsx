@@ -53,6 +53,8 @@ import {
 import {
   useConnection,
   useListObjects,
+  useFolderMetadata,
+  useInvalidateFolderMetadata,
   useGetDownloadUrl,
   useDownloadObject,
   useAddRecentItem,
@@ -251,7 +253,14 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
   const addRecentItem = useAddRecentItem();
   const previewData = usePreviewData();
 
-  const objects = objectsQuery.data?.objects || [];
+  const invalidateFolderMetadata = useInvalidateFolderMetadata();
+  const objects = useFolderMetadata(
+    connection?.provider as CloudProvider,
+    secureConfig as CloudStorageConfig,
+    bucketName,
+    objectsQuery.data?.objects || [],
+    !!connection && !!secureConfig && !previewFile,
+  );
 
   // Get file extension
   const getFileExtension = (fileName: string) => {
@@ -597,6 +606,17 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
             const displayName =
               object.name.replace(/\/$/, '').split('/').pop() ||
               object.name.replace(/\/$/, '');
+            let metadataIndicator: React.ReactNode;
+            if (object.folderMetadataStatus === 'pending')
+              metadataIndicator = (
+                <CircularProgress
+                  size={16}
+                  aria-label={`Loading folder metadata for ${displayName}`}
+                  sx={{ color: 'text.secondary', verticalAlign: 'middle' }}
+                />
+              );
+            else if (object.folderMetadataStatus === 'error')
+              metadataIndicator = 'Unavailable';
             return (
               <TableRow
                 key={object.name}
@@ -638,18 +658,20 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
                   </Box>
                 </TableCell>
                 <TableCell align="right">
-                  {object.isDirectory && object.size === 0
-                    ? '-'
-                    : formatFileSize(object.size, {
-                        showZeroAsNA: false,
-                      })}
+                  {metadataIndicator ||
+                    (object.isDirectory &&
+                    object.size === 0 &&
+                    object.folderMetadataStatus !== 'ready'
+                      ? '-'
+                      : formatFileSize(object.size, { showZeroAsNA: false }))}
                 </TableCell>
                 <TableCell align="right">
-                  {object.updated
-                    ? formatDistanceToNow(new Date(object.updated), {
-                        addSuffix: true,
-                      })
-                    : '-'}
+                  {metadataIndicator ||
+                    (object.updated
+                      ? formatDistanceToNow(new Date(object.updated), {
+                          addSuffix: true,
+                        })
+                      : '-')}
                 </TableCell>
                 <TableCell align="right">
                   <Box
@@ -852,7 +874,16 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
             </Tooltip>
           )}
           <IconButton
-            onClick={() => objectsQuery.refetch()}
+            onClick={() => {
+              if (connection && secureConfig) {
+                invalidateFolderMetadata(
+                  connection.provider,
+                  secureConfig,
+                  bucketName,
+                );
+              }
+              objectsQuery.refetch();
+            }}
             disabled={objectsQuery.isFetching}
             sx={{ color: 'text.secondary' }}
           >

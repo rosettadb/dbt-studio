@@ -32,6 +32,7 @@ import {
   Bucket,
   StorageObject,
   CloudListResult,
+  CloudFolderMetadata,
   S3Config,
   AzureConfig,
   GCSConfig,
@@ -66,56 +67,106 @@ import { TaskManagerService } from './taskManager.service';
 
 // Cloud storage service class
 class CloudExplorerService {
-  private static async withS3FolderMetadata(
-    client: S3Client,
+  private static activeFolderScans = 0;
+
+  private static readonly folderScanQueue: Array<() => void> = [];
+
+  private static async withFolderScanSlot<T>(
+    scan: () => Promise<T>,
+  ): Promise<T> {
+    await new Promise<void>((resolve) => {
+      if (CloudExplorerService.activeFolderScans < 2) {
+        CloudExplorerService.activeFolderScans += 1;
+        resolve();
+      } else {
+        CloudExplorerService.folderScanQueue.push(resolve);
+      }
+    });
+    try {
+      return await scan();
+    } finally {
+      const next = CloudExplorerService.folderScanQueue.shift();
+      if (next) next();
+      else CloudExplorerService.activeFolderScans -= 1;
+    }
+  }
+
+  static async getFolderMetadata(
+    provider: CloudProvider,
+    config: CloudStorageConfig,
     bucketName: string,
-    folders: StorageObject[],
-  ): Promise<StorageObject[]> {
-    return Promise.all(
-      folders.map(async (folder) => {
-        try {
-          let continuationToken: string | undefined;
-          let latestModified: Date | undefined;
-          let totalSize = 0;
-
-          do {
-            // eslint-disable-next-line no-await-in-loop
-            const result = await client.send(
-              new ListObjectsV2Command({
-                Bucket: bucketName,
-                Prefix: folder.name,
-                ContinuationToken: continuationToken,
-                MaxKeys: 1000,
-              }),
-            );
-
-            // eslint-disable-next-line no-restricted-syntax
-            for (const object of result.Contents || []) {
-              totalSize += object.Size || 0;
-
-              if (
-                object.LastModified &&
-                (!latestModified || object.LastModified > latestModified)
-              ) {
-                latestModified = object.LastModified;
-              }
+    prefix: string,
+  ): Promise<CloudFolderMetadata> {
+    if (!prefix || !prefix.endsWith('/')) {
+      throw new Error('A folder prefix ending in / is required.');
+    }
+    return CloudExplorerService.withFolderScanSlot(async () => {
+      let client: S3Client;
+      switch (provider) {
+        case 'aws':
+          client = CloudExplorerService.createS3Client(config as S3Config);
+          break;
+        case 'minio':
+          client = CloudExplorerService.createMinIOClient(
+            config as MinIOConfig,
+          );
+          break;
+        case 'cloudflare-r2':
+          client = CloudExplorerService.createR2Client(
+            config as CloudflareR2Config,
+          );
+          break;
+        case 'backblaze-b2':
+          client = CloudExplorerService.createB2Client(
+            config as BackblazeB2Config,
+          );
+          break;
+        case 'rustfs':
+          client = CloudExplorerService.createRustfsClient(
+            config as RustfsConfig,
+          );
+          break;
+        case 'garage':
+          client = CloudExplorerService.createGarageClient(
+            config as GarageConfig,
+          );
+          break;
+        default:
+          throw new Error('Folder totals are not supported for this provider.');
+      }
+      try {
+        let continuationToken: string | undefined;
+        let latestModified: Date | undefined;
+        let totalSize = 0;
+        do {
+          // eslint-disable-next-line no-await-in-loop
+          const result = await client.send(
+            new ListObjectsV2Command({
+              Bucket: bucketName,
+              Prefix: prefix,
+              ContinuationToken: continuationToken,
+              MaxKeys: 1000,
+            }),
+          );
+          // eslint-disable-next-line no-restricted-syntax
+          for (const object of result.Contents || []) {
+            totalSize += object.Size || 0;
+            if (
+              object.LastModified &&
+              (!latestModified || object.LastModified > latestModified)
+            ) {
+              latestModified = object.LastModified;
             }
-
-            continuationToken = result.IsTruncated
-              ? result.NextContinuationToken
-              : undefined;
-          } while (continuationToken);
-
-          return {
-            ...folder,
-            size: totalSize,
-            updated: latestModified,
-          };
-        } catch {
-          return folder;
-        }
-      }),
-    );
+          }
+          continuationToken = result.IsTruncated
+            ? result.NextContinuationToken
+            : undefined;
+        } while (continuationToken);
+        return { size: totalSize, updated: latestModified };
+      } finally {
+        client.destroy();
+      }
+    });
   }
 
   // AWS S3 Methods
@@ -212,14 +263,13 @@ class CloudExplorerService {
         }),
       );
 
-      const folders = await CloudExplorerService.withS3FolderMetadata(
-        client,
-        bucketName,
-        (result.CommonPrefixes || []).map((folderPrefix) => ({
+      const folders: StorageObject[] = (result.CommonPrefixes || []).map(
+        (folderPrefix) => ({
           name: folderPrefix.Prefix!,
           size: 0,
           isDirectory: true,
-        })),
+          folderMetadataStatus: 'pending',
+        }),
       );
 
       const files = (result.Contents || [])
@@ -728,14 +778,13 @@ class CloudExplorerService {
         }),
       );
 
-      const folders = await CloudExplorerService.withS3FolderMetadata(
-        client,
-        bucketName,
-        (result.CommonPrefixes || []).map((folderPrefix) => ({
+      const folders: StorageObject[] = (result.CommonPrefixes || []).map(
+        (folderPrefix) => ({
           name: folderPrefix.Prefix!,
           size: 0,
           isDirectory: true,
-        })),
+          folderMetadataStatus: 'pending',
+        }),
       );
 
       const files = (result.Contents || [])
@@ -913,14 +962,13 @@ class CloudExplorerService {
         }),
       );
 
-      const folders = await CloudExplorerService.withS3FolderMetadata(
-        client,
-        bucketName,
-        (result.CommonPrefixes || []).map((folderPrefix) => ({
+      const folders: StorageObject[] = (result.CommonPrefixes || []).map(
+        (folderPrefix) => ({
           name: folderPrefix.Prefix!,
           size: 0,
           isDirectory: true,
-        })),
+          folderMetadataStatus: 'pending',
+        }),
       );
 
       const files = (result.Contents || [])
@@ -1112,6 +1160,7 @@ class CloudExplorerService {
               name: cp.Prefix,
               size: 0,
               isDirectory: true,
+              folderMetadataStatus: 'pending',
             });
           }
         });
@@ -1132,18 +1181,8 @@ class CloudExplorerService {
         });
       }
 
-      const folders = objects.filter((object) => object.isDirectory);
-      const files = objects.filter((object) => !object.isDirectory);
-
       return {
-        objects: [
-          ...(await CloudExplorerService.withS3FolderMetadata(
-            client,
-            bucketName,
-            folders,
-          )),
-          ...files,
-        ],
+        objects,
         nextPageToken: response.NextContinuationToken,
       };
     } catch (error) {
@@ -1307,14 +1346,13 @@ class CloudExplorerService {
         }),
       );
 
-      const folders = await CloudExplorerService.withS3FolderMetadata(
-        client,
-        bucketName,
-        (result.CommonPrefixes || []).map((folderPrefix) => ({
+      const folders: StorageObject[] = (result.CommonPrefixes || []).map(
+        (folderPrefix) => ({
           name: folderPrefix.Prefix!,
           size: 0,
           isDirectory: true,
-        })),
+          folderMetadataStatus: 'pending',
+        }),
       );
 
       const files = (result.Contents || [])
@@ -1496,14 +1534,13 @@ class CloudExplorerService {
         }),
       );
 
-      const folders = await CloudExplorerService.withS3FolderMetadata(
-        client,
-        bucketName,
-        (result.CommonPrefixes || []).map((folderPrefix) => ({
+      const folders: StorageObject[] = (result.CommonPrefixes || []).map(
+        (folderPrefix) => ({
           name: folderPrefix.Prefix!,
           size: 0,
           isDirectory: true,
-        })),
+          folderMetadataStatus: 'pending',
+        }),
       );
 
       const files = (result.Contents || [])

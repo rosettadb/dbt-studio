@@ -88,6 +88,46 @@ describe('cloudExplorer.ipcHandlers', () => {
     expect(listBuckets).toHaveBeenCalledWith('aws', payload.config);
   });
 
+  it('exposes background folder totals through a separate IPC request', async () => {
+    const { ipcMain } = await import('electron');
+    const metadata = { size: 1024, updated: new Date('2026-10-06') };
+    const getFolderMetadata = jest.fn().mockResolvedValue(metadata);
+    jest.doMock('../../../../src/main/services', () => ({
+      CloudExplorerService: { getFolderMetadata },
+      CloudPreviewService: {},
+    }));
+    const registerCloudExplorerHandlers = (
+      await import('../../../../src/main/ipcHandlers/cloudExplorer.ipcHandlers')
+    ).default;
+    registerCloudExplorerHandlers();
+    const handler = getHandleHandler(
+      ipcMain,
+      'cloudExplorer:getFolderMetadata',
+    );
+    const config = {
+      authMode: 'public',
+      bucket: 'public-data',
+      region: 'us-east-1',
+    };
+    await expect(
+      handler(null, {
+        provider: 'aws',
+        config,
+        bucketName: 'public-data',
+        prefix: 'outer/',
+      }),
+    ).resolves.toEqual(metadata);
+    expect(getFolderMetadata).toHaveBeenCalledWith(
+      'aws',
+      config,
+      'public-data',
+      'outer/',
+    );
+    expect(ipcMain.removeHandler).toHaveBeenCalledWith(
+      'cloudExplorer:getFolderMetadata',
+    );
+  });
+
   const registerTestConnectionHandler = async () => {
     const { ipcMain } = await import('electron');
     const testConnection = jest.fn().mockResolvedValue(true);

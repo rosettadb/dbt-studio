@@ -106,6 +106,12 @@ export interface StorageObject {
   updated?: Date;
   contentType?: string;
   isDirectory: boolean;
+  folderMetadataStatus?: 'pending' | 'ready' | 'error';
+}
+
+export interface CloudFolderMetadata {
+  size: number;
+  updated?: Date;
 }
 
 export interface CloudListResult {
