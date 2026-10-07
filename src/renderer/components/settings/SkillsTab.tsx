@@ -3,18 +3,13 @@ import {
   Box,
   Typography,
   Button,
-  List,
-  ListItem,
-  ListItemText,
   IconButton,
-  Paper,
   CircularProgress,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogContentText,
   DialogActions,
-  Divider,
   Alert,
   TextField,
   Stack,
@@ -25,6 +20,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import AddIcon from '@mui/icons-material/Add';
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
+import PsychologyOutlined from '@mui/icons-material/PsychologyOutlined';
 import {
   useGetSkills,
   useGetSkillsDir,
@@ -33,6 +29,12 @@ import {
   useImportSkill,
 } from '../../controllers/skills.controller';
 import { utilsService } from '../../services';
+import {
+  SettingsRow,
+  SettingsSection,
+  SettingsSectionBody,
+  SettingsStack,
+} from './SettingsLayout';
 
 export const SkillsTab: React.FC = () => {
   const { data: skills, isLoading, isError } = useGetSkills();
@@ -113,134 +115,100 @@ export const SkillsTab: React.FC = () => {
   const renderContent = () => {
     if (isLoading) {
       return (
-        <Box display="flex" justifyContent="center" my={4}>
-          <CircularProgress size={32} />
-        </Box>
+        <SettingsSectionBody>
+          <Box display="flex" justifyContent="center">
+            <CircularProgress size={24} />
+          </Box>
+        </SettingsSectionBody>
       );
     }
 
     if (isError) {
       return (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          Failed to load skills list.
-        </Alert>
+        <SettingsSectionBody>
+          <Alert severity="error">Failed to load skills list.</Alert>
+        </SettingsSectionBody>
       );
     }
 
     if (skills && skills.length > 0) {
-      return (
-        <Paper variant="outlined">
-          <List disablePadding>
-            {skills.map((skill, index) => (
-              <React.Fragment key={skill.name}>
-                {index > 0 && <Divider component="li" />}
-                <ListItem
-                  secondaryAction={
-                    <IconButton
-                      edge="end"
-                      aria-label="delete"
-                      onClick={() => setSkillToDelete(skill.path)}
-                      color="error"
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  }
-                >
-                  <ListItemText
-                    primary={skill.name}
-                    secondary={skill.description}
-                  />
-                </ListItem>
-              </React.Fragment>
-            ))}
-          </List>
-        </Paper>
-      );
+      return skills.map((skill) => (
+        <SettingsRow
+          key={skill.name}
+          label={skill.name}
+          description={skill.description}
+        >
+          <IconButton
+            size="small"
+            aria-label="delete"
+            onClick={() => setSkillToDelete(skill.path)}
+            color="error"
+          >
+            <DeleteIcon fontSize="small" />
+          </IconButton>
+        </SettingsRow>
+      ));
     }
 
     return (
-      <Paper
-        variant="outlined"
-        sx={{ p: 4, textAlign: 'center', bgcolor: 'background.default' }}
-      >
-        <Typography variant="body1" color="text.secondary" gutterBottom>
-          No skills found
-        </Typography>
-        <Typography variant="body2" color="text.disabled" sx={{ mb: 2 }}>
-          You can create a new skill or add them directly into your skills
-          directory.
-        </Typography>
-        <Stack
-          direction="row"
-          spacing={2}
-          justifyContent="center"
-          sx={{ mt: 2 }}
-        >
-          <Button variant="outlined" onClick={() => setImportDialogOpen(true)}>
-            Import from URL
-          </Button>
-          <Button variant="contained" onClick={() => setCreateDialogOpen(true)}>
-            Create Your First Skill
-          </Button>
-        </Stack>
-      </Paper>
+      <SettingsRow
+        label="No skills found"
+        description="You can create a new skill or add them directly into your skills directory."
+      />
     );
   };
 
   return (
-    <Box sx={{ p: 2 }}>
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          mb: 3,
-        }}
-      >
-        <Box>
-          <Typography variant="h6">Skills Library</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Manage local skills that give the AI specialized workflows. Discover
-            more skills at{' '}
+    <SettingsStack>
+      <SettingsSection
+        title="Skills Library"
+        icon={<PsychologyOutlined />}
+        description={
+          <>
+            Specialized AI workflows. Discover more at{' '}
             {/* eslint-disable-next-line jsx-a11y/anchor-is-valid */}
             <Link
               component="button"
-              variant="body2"
+              variant="caption"
               onClick={() => handleOpenExternal('https://skills.sh/')}
               sx={{ verticalAlign: 'baseline' }}
             >
               skills.sh
             </Link>
-            .
-          </Typography>
-        </Box>
-        <Stack direction="row" spacing={1}>
-          <Button
-            variant="outlined"
-            startIcon={<FolderOpenIcon />}
-            onClick={openSkillsDirectory}
-            disabled={!skillsDir}
-          >
-            Open Directory
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<CloudDownloadIcon />}
-            onClick={() => setImportDialogOpen(true)}
-          >
-            Import
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => setCreateDialogOpen(true)}
-          >
-            Create Skill
-          </Button>
-        </Stack>
-      </Box>
-
-      {renderContent()}
+          </>
+        }
+        action={
+          <>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<FolderOpenIcon />}
+              onClick={openSkillsDirectory}
+              disabled={!skillsDir}
+            >
+              Open Directory
+            </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<CloudDownloadIcon />}
+              onClick={() => setImportDialogOpen(true)}
+            >
+              Import
+            </Button>
+            <Button
+              size="small"
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => setCreateDialogOpen(true)}
+            >
+              Create Skill
+            </Button>
+          </>
+        }
+      >
+        {renderContent()}
+      </SettingsSection>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={!!skillToDelete} onClose={() => setSkillToDelete(null)}>
@@ -471,6 +439,6 @@ export const SkillsTab: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </SettingsStack>
   );
 };
