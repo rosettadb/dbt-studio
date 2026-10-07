@@ -16,6 +16,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  AlertTitle,
 } from '@mui/material';
 import {
   Info,
@@ -26,8 +27,6 @@ import {
   Download,
   ExpandMore,
   DataObjectOutlined,
-  CodeOutlined,
-  BoltOutlined,
   ExtensionOutlined,
   Inventory2Outlined,
 } from '@mui/icons-material';
@@ -68,6 +67,7 @@ import {
   SettingsSectionBody,
   SettingsStack,
   SettingsStatus,
+  useSettingsWarningStyle,
 } from './SettingsLayout';
 
 interface DbtSettingsProps {
@@ -122,6 +122,10 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
   const [isCheckingDbtCoreVersions, setIsCheckingDbtCoreVersions] =
     React.useState(false);
   const [showOlderVersions, setShowOlderVersions] = React.useState(false);
+  const [expandedRuntime, setExpandedRuntime] = React.useState<
+    'v1' | 'v2' | null
+  >(null);
+  const warningStyle = useSettingsWarningStyle();
   const [versionChangePlan, setVersionChangePlan] =
     React.useState<DbtVersionChangePlan | null>(null);
   const [isVersionChangeDialogOpen, setIsVersionChangeDialogOpen] =
@@ -751,24 +755,134 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
   const hasDbt = Boolean(settings.dbtPath && settings.dbtPath !== 'dbt');
   const isV2Active = Boolean(settings.dbtVersion?.startsWith('2.'));
 
+  const getRuntimeShort = (version: string) =>
+    version.startsWith('2.') ? 'v2' : 'v1';
+  const getRuntimeLabel = (version: string) =>
+    version.startsWith('2.') ? 'dbt Core v2 · Rust' : 'dbt Core v1 · Python';
+
+  // Text for the version change dialog, built only from the existing plan.
+  const planCurrentVersion = versionChangePlan?.currentVersion ?? null;
+  const planTargetVersion = versionChangePlan?.targetVersion ?? '';
+  const isRuntimeSwitch = Boolean(
+    planCurrentVersion &&
+      planTargetVersion &&
+      getRuntimeShort(planCurrentVersion) !==
+        getRuntimeShort(planTargetVersion),
+  );
+  let versionChangeTitle = 'Change dbt Core version?';
+  let versionChangeConfirmLabel = 'Confirm version change';
+  if (!planCurrentVersion) {
+    versionChangeTitle = `Install ${getRuntimeLabel(planTargetVersion)}?`;
+    versionChangeConfirmLabel = 'Install';
+  } else if (isRuntimeSwitch) {
+    versionChangeTitle = `Switch to dbt Core ${getRuntimeShort(
+      planTargetVersion,
+    )}?`;
+    versionChangeConfirmLabel = `Switch to ${getRuntimeShort(
+      planTargetVersion,
+    )}`;
+  }
+  const versionChangeSteps: string[] = [];
+  if (!planCurrentVersion) {
+    versionChangeSteps.push(
+      `${getRuntimeLabel(planTargetVersion)} ${planTargetVersion} will be installed.`,
+    );
+  } else if (isRuntimeSwitch) {
+    versionChangeSteps.push(
+      `${getRuntimeLabel(planCurrentVersion)} ${planCurrentVersion} will be uninstalled.`,
+      `${getRuntimeLabel(planTargetVersion)} ${planTargetVersion} will be installed.`,
+      'Your adapter packages stay installed.',
+    );
+  } else {
+    versionChangeSteps.push(
+      `${getRuntimeLabel(planTargetVersion)} ${planCurrentVersion} will be replaced by ${planTargetVersion} (${versionChangePlan?.direction}).`,
+    );
+  }
+  if (versionChangePlan?.rollbackVersion) {
+    versionChangeSteps.push(
+      `You can roll back to ${versionChangePlan.rollbackVersion} afterwards.`,
+    );
+  }
+
+  const renderRuntimeRow = (
+    runtime: 'v1' | 'v2',
+    label: React.ReactNode,
+    description: string,
+    isActive: boolean,
+  ) => (
+    <SettingsRow label={label} description={description}>
+      {isActive ? (
+        <SettingsStatus tone="success">
+          Active · {settings.dbtVersion}
+        </SettingsStatus>
+      ) : (
+        <SettingsStatus tone="neutral">Not installed</SettingsStatus>
+      )}
+      <IconButton
+        size="small"
+        onClick={() =>
+          setExpandedRuntime((current) =>
+            current === runtime ? null : runtime,
+          )
+        }
+        aria-label={
+          expandedRuntime === runtime ? 'Hide versions' : 'Show versions'
+        }
+      >
+        <ExpandMore
+          fontSize="small"
+          sx={{
+            transform: expandedRuntime === runtime ? 'rotate(180deg)' : 'none',
+            transition: 'transform 0.15s',
+          }}
+        />
+      </IconButton>
+    </SettingsRow>
+  );
+
+  const renderRuntimeVersions = (
+    versions: DbtVersionListResponse['versions'],
+    emptyMessage: string,
+  ) => (
+    <Box
+      sx={(theme) => ({
+        border: `1px solid ${theme.palette.divider}`,
+        borderRadius: 1,
+        '& > * + *': {
+          borderTop: `1px solid ${theme.palette.divider}`,
+        },
+      })}
+    >
+      {renderVersionList(versions, emptyMessage)}
+    </Box>
+  );
+
   return (
     <SettingsStack>
       <SettingsSection
         title="dbt Core"
         icon={<DataObjectOutlined />}
-        description="Changing the active dbt runtime affects all local projects."
+        description="Only one runtime can be installed at a time. Changing it affects all local projects."
+        action={
+          <>
+            <Button
+              size="small"
+              onClick={() => setShowOlderVersions((value) => !value)}
+            >
+              {showOlderVersions ? 'Show fewer' : 'Show older'}
+            </Button>
+            <SettingsRefreshButton
+              title="Refresh versions"
+              onClick={handleRefreshDbtCoreVersionsClick}
+              loading={isCheckingDbtCoreVersions}
+            />
+          </>
+        }
       >
         <SettingsRow
           label="dbt Path"
           description={settings.dbtPath || 'Not installed'}
-        >
-          {hasDbt && (
-            <SettingsStatus tone="success">
-              {isV2Active ? 'v2 (Rust)' : 'v1 (Python)'}
-              {settings.dbtVersion ? ` · ${settings.dbtVersion}` : ''}
-            </SettingsStatus>
-          )}
-        </SettingsRow>
+        />
         {settings.pythonPath && settings.pythonVersion && (
           <SettingsRow
             label="Python environment"
@@ -777,6 +891,54 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
             <Chip size="small" label={settings.pythonVersion} />
           </SettingsRow>
         )}
+
+        {renderRuntimeRow(
+          'v1',
+          'dbt Core v1 · Python',
+          'Stable runtime. Recommended for production projects and broad adapter compatibility.',
+          hasDbt && !isV2Active,
+        )}
+        {expandedRuntime === 'v1' && (
+          <SettingsSectionBody>
+            {!settings.pythonPath && (
+              <Alert severity="info" sx={{ mb: 1.25 }}>
+                Python is not installed yet. Installing a dbt Core v1 version
+                below will install it automatically.
+              </Alert>
+            )}
+            {renderRuntimeVersions(
+              pythonDbtVersions,
+              'No dbt Core v1 releases are available.',
+            )}
+          </SettingsSectionBody>
+        )}
+
+        {renderRuntimeRow(
+          'v2',
+          <Box
+            component="span"
+            sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
+          >
+            dbt Core v2 · Rust
+            <Chip
+              label="Preview"
+              size="small"
+              color="warning"
+              variant="outlined"
+            />
+          </Box>,
+          'Preview runtime, still in alpha. Cloud pipeline runs are unavailable while v2 is active.',
+          hasDbt && isV2Active,
+        )}
+        {expandedRuntime === 'v2' && (
+          <SettingsSectionBody>
+            {renderRuntimeVersions(
+              rustDbtVersions,
+              'No dbt Core v2 preview releases are available.',
+            )}
+          </SettingsSectionBody>
+        )}
+
         {hasDbt && isV2Active && (
           <SettingsSectionBody>
             <Alert severity="warning">
@@ -839,59 +1001,6 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
           ))}
         </Alert>
       )}
-
-      <SettingsSection
-        title="dbt Core v1 · Python"
-        icon={<CodeOutlined />}
-        description="Stable runtime. Recommended for production projects and broad adapter compatibility."
-        action={
-          <>
-            <Button
-              size="small"
-              onClick={() => setShowOlderVersions((value) => !value)}
-            >
-              {showOlderVersions ? 'Show fewer' : 'Show older'}
-            </Button>
-            <SettingsRefreshButton
-              title="Refresh versions"
-              onClick={handleRefreshDbtCoreVersionsClick}
-              loading={isCheckingDbtCoreVersions}
-            />
-          </>
-        }
-      >
-        {!settings.pythonPath && (
-          <SettingsSectionBody>
-            <Alert severity="info">
-              Python is not installed yet. Installing a dbt Core v1 version
-              below will install it automatically.
-            </Alert>
-          </SettingsSectionBody>
-        )}
-        {renderVersionList(
-          pythonDbtVersions,
-          'No dbt Core v1 releases are available.',
-        )}
-      </SettingsSection>
-
-      <SettingsSection
-        title="dbt Core v2 · Rust"
-        icon={<BoltOutlined />}
-        description="Preview runtime, still in alpha. Cloud pipeline runs are unavailable while v2 is active."
-        action={
-          <Chip
-            label="Preview"
-            size="small"
-            color="warning"
-            variant="outlined"
-          />
-        }
-      >
-        {renderVersionList(
-          rustDbtVersions,
-          'No dbt Core v2 preview releases are available.',
-        )}
-      </SettingsSection>
 
       <SettingsSection
         title={
@@ -1294,85 +1403,132 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
         onClose={() => setIsVersionChangeDialogOpen(false)}
         fullWidth
         maxWidth="sm"
+        PaperProps={{ style: warningStyle }}
       >
-        <DialogTitle>Confirm global dbt-core version change</DialogTitle>
+        <DialogTitle>{versionChangeTitle}</DialogTitle>
         <DialogContent>
           {versionChangePlan && (
-            <Box sx={{ pt: 1 }}>
-              <Typography variant="body2">
-                Current version:{' '}
-                {versionChangePlan.currentVersion || 'Not installed'}
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <Typography variant="body2" color="text.secondary">
+                {isRuntimeSwitch
+                  ? "Only one dbt Core runtime can be installed at a time. Here's what will happen:"
+                  : "Here's what will happen:"}
               </Typography>
-              <Typography variant="body2">
-                Target version: {versionChangePlan.targetVersion}
-              </Typography>
-              <Typography variant="body2" sx={{ mb: 2 }}>
-                Change: {versionChangePlan.direction} (
-                {versionChangePlan.channel})
-              </Typography>
+
+              <Box
+                component="ol"
+                sx={{
+                  m: 0,
+                  p: 0,
+                  listStyle: 'none',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 1,
+                }}
+              >
+                {versionChangeSteps.map((step, index) => (
+                  <Box
+                    component="li"
+                    key={step}
+                    sx={{
+                      display: 'flex',
+                      gap: 1.25,
+                      alignItems: 'flex-start',
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: '50%',
+                        border: 1,
+                        borderColor: 'divider',
+                        fontSize: 11,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {index + 1}
+                    </Box>
+                    <Typography variant="body2">{step}</Typography>
+                  </Box>
+                ))}
+              </Box>
 
               <Alert
                 severity={
                   versionChangePlan.isMajorVersionChange ? 'warning' : 'info'
                 }
-                sx={{ mb: 2 }}
               >
-                {versionChangePlan.globalImpactWarning}
+                <AlertTitle>Be careful</AlertTitle>
+                <Box component="ul" sx={{ m: 0, pl: 2 }}>
+                  <li>{versionChangePlan.globalImpactWarning}</li>
+                  {versionChangePlan.warnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                  {(versionChangePlan.channel === 'preview' ||
+                    versionChangePlan.targetVersion.startsWith('2.')) && (
+                    <li>
+                      Rosetta will install only the Apache-licensed dbt-core
+                      package and will block an ambiguous or proprietary dbt
+                      distribution.
+                    </li>
+                  )}
+                </Box>
               </Alert>
 
-              {versionChangePlan.warnings.map((warning) => (
-                <Alert key={warning} severity="warning" sx={{ mb: 1 }}>
-                  {warning}
-                </Alert>
-              ))}
-
               {versionChangePlan.adapters.length > 0 && (
-                <Box sx={{ mt: 2 }}>
-                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                <Box>
+                  <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
                     Installed adapter compatibility
                   </Typography>
                   {versionChangePlan.adapters.map((adapter) => (
-                    <Alert
+                    <Box
                       key={adapter.packageName}
-                      severity={getAdapterAlertSeverity(adapter.status)}
-                      sx={{ mb: 1 }}
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'baseline',
+                        gap: 1,
+                        py: 0.5,
+                      }}
                     >
-                      {adapter.packageName} {adapter.installedVersion}:{' '}
-                      {adapter.message}
-                    </Alert>
+                      <SettingsStatus
+                        tone={getAdapterAlertSeverity(adapter.status)}
+                      >
+                        {adapter.packageName} {adapter.installedVersion}
+                      </SettingsStatus>
+                      <Typography variant="caption" color="text.secondary">
+                        {adapter.message}
+                      </Typography>
+                    </Box>
                   ))}
                 </Box>
               )}
 
-              {(versionChangePlan.channel === 'preview' ||
-                versionChangePlan.targetVersion.startsWith('2.')) && (
-                <Alert severity="info" sx={{ mt: 2 }}>
-                  Rosetta will install only the Apache-licensed dbt-core package
-                  and will block an ambiguous or proprietary dbt distribution.
-                </Alert>
-              )}
-
-              <FormControlLabel
-                sx={{ mt: 2 }}
-                control={
-                  <Checkbox
-                    checked={runProjectCheck}
-                    onChange={(event) =>
-                      setRunProjectCheck(event.target.checked)
-                    }
-                  />
-                }
-                label="Check current project after install (dbt parse and compile)"
-              />
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                display="block"
-              >
-                Artifacts and logs are redirected to a temporary directory. dbt
-                deps is not run automatically because it can modify dependencies
-                and require network access.
-              </Typography>
+              <Box>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={runProjectCheck}
+                      onChange={(event) =>
+                        setRunProjectCheck(event.target.checked)
+                      }
+                    />
+                  }
+                  label="Check current project after install (dbt parse and compile)"
+                />
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  display="block"
+                >
+                  Artifacts and logs are redirected to a temporary directory.
+                  dbt deps is not run automatically because it can modify
+                  dependencies and require network access.
+                </Typography>
+              </Box>
             </Box>
           )}
         </DialogContent>
@@ -1381,7 +1537,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
             Cancel
           </Button>
           <Button variant="contained" onClick={confirmDbtVersionChange}>
-            Confirm version change
+            {versionChangeConfirmLabel}
           </Button>
         </DialogActions>
       </Dialog>
