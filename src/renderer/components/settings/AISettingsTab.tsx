@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   Box,
+  Button,
   Switch,
   Select,
   MenuItem,
@@ -31,6 +32,11 @@ import {
   useSaveAISettings,
   useGetAISettingsFilePath,
 } from '../../controllers/aiSettings.controller';
+import {
+  useRemoveSpeechModel,
+  useSpeechSetup,
+  useSpeechStatus,
+} from '../../controllers/speech.controller';
 import type { AISettingsConfig } from '../../../types/backend';
 import { SettingsRow, SettingsSection, SettingsStack } from './SettingsLayout';
 
@@ -204,6 +210,77 @@ const TOOLS: ToolItem[] = [
   },
 ];
 
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+/** Offline dictation (speech to text) status and setup / removal. */
+const DictationSettingRow: React.FC = () => {
+  const { data: status } = useSpeechStatus();
+  const { mutate: setup, progress } = useSpeechSetup();
+  const { mutate: removeModel, isLoading: removing } = useRemoveSpeechModel();
+
+  if (!status) return null;
+
+  let description: string;
+  let control: React.ReactNode;
+  switch (status.status) {
+    case 'unavailable':
+      description =
+        'Speak into the AI chat input. Requires the managed Python environment (Settings → Python).';
+      control = (
+        <Button size="small" variant="outlined" disabled>
+          Set up
+        </Button>
+      );
+      break;
+    case 'installing': {
+      let label = 'Setting up…';
+      if (progress?.phase === 'installing-package') label = 'Installing…';
+      else if (progress?.phase === 'downloading')
+        label = `Downloading… ${progress.percentage ?? 0}%`;
+      else if (progress?.phase === 'extracting') label = 'Unpacking…';
+      description = `Setting up offline dictation (${status.modelLabel} model, ~${status.modelSizeMb} MB).`;
+      control = (
+        <Button
+          size="small"
+          variant="outlined"
+          disabled
+          startIcon={<CircularProgress size={12} color="inherit" />}
+        >
+          {label}
+        </Button>
+      );
+      break;
+    }
+    case 'ready':
+      description = `Offline speech recognition is installed (${status.modelLabel} model). No audio leaves this computer.`;
+      control = (
+        <Button
+          size="small"
+          variant="outlined"
+          color="inherit"
+          disabled={removing}
+          onClick={() => removeModel()}
+        >
+          Remove model
+        </Button>
+      );
+      break;
+    default:
+      description = `Speak into the AI chat input. Installs the vosk recognizer and downloads the ${status.modelLabel} model (~${status.modelSizeMb} MB) from ${status.modelSource}.`;
+      control = (
+        <Button size="small" variant="outlined" onClick={() => setup()}>
+          Set up
+        </Button>
+      );
+  }
+
+  return (
+    <SettingsRow label="Dictation (Speech to Text)" description={description}>
+      {control}
+    </SettingsRow>
+  );
+};
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export const AISettingsTab: React.FC = () => {
@@ -329,6 +406,7 @@ export const AISettingsTab: React.FC = () => {
             size="small"
           />
         </SettingsRow>
+        <DictationSettingRow />
       </SettingsSection>
 
       <SettingsSection

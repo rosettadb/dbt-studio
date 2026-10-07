@@ -609,8 +609,19 @@ export type SecondBrainChannels =
   | 'second-brain:open-wiki-terminal'
   | 'second-brain:progress';
 
+export type SpeechChannels =
+  | 'speech:status'
+  | 'speech:setup'
+  | 'speech:remove-model'
+  | 'speech:setup-event' // main → renderer (setup progress)
+  | 'speech:start'
+  | 'speech:audio' // renderer → main (fire-and-forget PCM chunks)
+  | 'speech:stop'
+  | 'speech:event'; // main → renderer (recogniser events)
+
 export type Channels =
   | TestChannels
+  | SpeechChannels
   | CliChannels
   | ProjectChannels
   | SettingsChannels

@@ -2,6 +2,7 @@ import React from 'react';
 import { toast } from 'react-toastify';
 import {
   Box,
+  CircularProgress,
   IconButton,
   Tooltip,
   Menu,
@@ -17,10 +18,17 @@ import AddIcon from '@mui/icons-material/Add';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
 import CloseIcon from '@mui/icons-material/Close';
+import MicNoneOutlinedIcon from '@mui/icons-material/MicNoneOutlined';
+import MicIcon from '@mui/icons-material/Mic';
 
 import { FilePickerModal } from './FilePickerModal';
+import { DictationSetupDialog } from './DictationSetupDialog';
 
 import { useGetAISettings } from '../../controllers/aiSettings.controller';
+import {
+  useSpeechSetup,
+  useSpeechStatus,
+} from '../../controllers/speech.controller';
 
 import {
   useGetAIProviders,
@@ -39,6 +47,7 @@ import { htmlToPlainText } from '../../utils/chatHelpers';
 import { useAppContext } from '../../hooks';
 import { useContextManager } from '../../hooks/useContextManager';
 import { useToolMode } from '../../hooks/useToolMode';
+import { useDictation } from '../../hooks/useDictation';
 import { ContextUsageRing } from './ContextUsageRing';
 import type { ContextUsageBreakdown } from './ContextUsageRing';
 import { getUserMessageLimitError } from '../../../types/agentEvents';
@@ -333,6 +342,82 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
     if (!sessionId) return;
     if (onCancelStream) onCancelStream();
   };
+
+  // Speech to text: append each recognized phrase to the composer. The editor
+  // value is HTML, so the text is escaped and merged into the last paragraph.
+  const appendDictatedText = React.useCallback((text: string) => {
+    const escaped = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    setInput((current) => {
+      const trimmed = current.trim();
+      if (!trimmed || trimmed === '<p></p>') return `<p>${escaped}</p>`;
+      if (trimmed.endsWith('</p>')) {
+        const body = trimmed.slice(0, -'</p>'.length);
+        const separator = /(\s|>)$/.test(body) ? '' : ' ';
+        return `${body}${separator}${escaped}</p>`;
+      }
+      return `${trimmed}<p>${escaped}</p>`;
+    });
+  }, []);
+
+  const [dictationPartial, setDictationPartial] = React.useState('');
+  const [isDictationSetupOpen, setIsDictationSetupOpen] = React.useState(false);
+  const { data: speechStatus } = useSpeechStatus();
+  const { mutate: setupDictation, progress: dictationSetupProgress } =
+    useSpeechSetup();
+  // Hidden entirely when the studio's Python is not installed.
+  const showDictation =
+    speechStatus !== undefined && speechStatus.status !== 'unavailable';
+  const isDictationInstalling = speechStatus?.status === 'installing';
+
+  const {
+    isListening,
+    isBusy: isDictationBusy,
+    stop: stopDictation,
+    toggle: toggleDictation,
+  } = useDictation({
+    onTranscript: appendDictatedText,
+    onPartial: setDictationPartial,
+    onError: (message) => toast.error(message),
+  });
+
+  const handleDictationClick = () => {
+    if (!speechStatus || isDictationInstalling) return;
+    if (speechStatus.status === 'needs-setup') {
+      setIsDictationSetupOpen(true);
+      return;
+    }
+    toggleDictation();
+  };
+
+  const dictationSetupLabel = React.useMemo(() => {
+    switch (dictationSetupProgress?.phase) {
+      case 'installing-package':
+        return 'Installing speech recognizer…';
+      case 'downloading':
+        return `Downloading speech model… ${dictationSetupProgress.percentage ?? 0}%`;
+      case 'extracting':
+        return 'Unpacking speech model…';
+      default:
+        return 'Setting up dictation…';
+    }
+  }, [dictationSetupProgress]);
+
+  let dictationTooltip: string;
+  if (disabledReason) dictationTooltip = disabledReason;
+  else if (isDictationInstalling) dictationTooltip = dictationSetupLabel;
+  else if (speechStatus?.status === 'needs-setup')
+    dictationTooltip = 'Set up dictation (speech to text)';
+  else if (isListening) dictationTooltip = 'Stop dictation';
+  else if (isDictationBusy) dictationTooltip = 'Starting dictation…';
+  else dictationTooltip = 'Dictate (speech to text)';
+
+  // Stop dictating as soon as the composer becomes unusable.
+  React.useEffect(() => {
+    if (inputDisabled && isListening) stopDictation();
+  }, [inputDisabled, isListening, stopDictation]);
 
   const handleSelectImages = async () => {
     if (!sessionId || isSelectingImages) return;
@@ -816,7 +901,85 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
           </MenuItem>
         </Menu>
 
+        {showDictation && (
+          <DictationSetupDialog
+            open={isDictationSetupOpen}
+            status={speechStatus}
+            onClose={() => setIsDictationSetupOpen(false)}
+            onConfirm={() => {
+              setIsDictationSetupOpen(false);
+              setupDictation();
+            }}
+          />
+        )}
+
         <Box sx={{ flex: 1 }} />
+
+        {isListening && dictationPartial && (
+          <Typography
+            variant="caption"
+            color="text.disabled"
+            noWrap
+            sx={{ maxWidth: 240, fontStyle: 'italic' }}
+            title={dictationPartial}
+          >
+            {dictationPartial}
+          </Typography>
+        )}
+        {showDictation && (
+          <Tooltip
+            title={dictationTooltip}
+            placement="top"
+            arrow
+            disableInteractive
+          >
+            <span>
+              <IconButton
+                size="small"
+                onClick={handleDictationClick}
+                disabled={
+                  inputDisabled || isDictationBusy || isDictationInstalling
+                }
+                aria-label={isListening ? 'Stop dictation' : 'Start dictation'}
+                aria-pressed={isListening}
+                sx={{
+                  bgcolor: isListening ? 'error.main' : 'action.selected',
+                  color: isListening ? 'error.contrastText' : 'text.secondary',
+                  width: 22,
+                  height: 22,
+                  borderRadius: '50%',
+                  p: 0,
+                  '&:hover': {
+                    bgcolor: isListening ? 'error.dark' : 'action.focus',
+                    color: isListening ? 'error.contrastText' : 'text.primary',
+                  },
+                  '&:disabled': {
+                    bgcolor: 'action.disabledBackground',
+                    color: 'action.disabled',
+                  },
+                  ...(isListening && {
+                    '@keyframes dictationPulse': {
+                      '0%, 100%': { opacity: 1 },
+                      '50%': { opacity: 0.55 },
+                    },
+                    animation: 'dictationPulse 1.2s ease-in-out infinite',
+                  }),
+                }}
+              >
+                {(() => {
+                  if (isDictationBusy || isDictationInstalling) {
+                    return <CircularProgress size={12} color="inherit" />;
+                  }
+                  return isListening ? (
+                    <MicIcon fontSize="small" />
+                  ) : (
+                    <MicNoneOutlinedIcon fontSize="small" />
+                  );
+                })()}
+              </IconButton>
+            </span>
+          </Tooltip>
+        )}
 
         {isStreaming && (
           <span style={{ fontSize: 11, color: theme.palette.text.disabled }}>
