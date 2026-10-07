@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Breadcrumbs as MuiBreadcrumbs, Typography } from '@mui/material';
 import { NavigateNext } from '@mui/icons-material';
+import { path, isInside } from '../../../lib/path';
 
 interface BreadcrumbsProps {
   filePath: string;
@@ -13,9 +14,13 @@ export const Breadcrumbs: React.FC<BreadcrumbsProps> = ({
   projectPath,
   onNavigate,
 }) => {
-  // Parse file path into segments
-  const relativePath = filePath.replace(projectPath, '').replace(/^\//, '');
-  const segments = relativePath.split('/');
+  // Parse file path into segments relative to the project root. Virtual tab
+  // paths (previews, pipelines) are not absolute and are shown as-is.
+  const relativePath =
+    projectPath && path.isAbsolute(filePath) && isInside(projectPath, filePath)
+      ? path.relative(projectPath, filePath)
+      : filePath;
+  const segments = relativePath.split(path.sep);
 
   return (
     <Box
@@ -39,7 +44,7 @@ export const Breadcrumbs: React.FC<BreadcrumbsProps> = ({
       >
         {segments.map((segment, index) => {
           const isLast = index === segments.length - 1;
-          const segmentPath = segments.slice(0, index + 1).join('/');
+          const segmentPath = segments.slice(0, index + 1).join(path.sep);
 
           return isLast ? (
             <Typography

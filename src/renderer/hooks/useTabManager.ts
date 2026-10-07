@@ -7,6 +7,7 @@ import {
 } from '../components/editor/previewConstants';
 import { getLanguageFromExtension } from '../components/editor/helpers';
 import { getNonEditableFileMessage, isEditableFile } from '../helpers/utils';
+import { path as nodePath } from '../lib/path';
 import { disposeModelForPath, renameModel } from '../lib/monaco/modelStore';
 import { clearViewState } from '../lib/monaco/viewStateStore';
 import type {
@@ -116,13 +117,11 @@ const clearPersistedState = (projectId: string) => {
   window.localStorage.removeItem(key);
 };
 
-export const deriveTitleFromPath = (path: string): string => {
-  const parts = path.split(/[\\/]/).filter(Boolean);
-  if (parts.length === 0) {
-    return path || 'untitled';
+export const deriveTitleFromPath = (filePath: string): string => {
+  if (!filePath) {
+    return 'untitled';
   }
-  const fileName = parts[parts.length - 1];
-  return fileName || path;
+  return nodePath.basename(filePath) || filePath;
 };
 
 const ensureUniqueId = (

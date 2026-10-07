@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -7,7 +7,7 @@ import {
   Button,
   Typography,
 } from '@mui/material';
-import { settingsServices } from '../../services';
+import { path } from '../../lib/path';
 
 interface MoveConfirmDialogProps {
   open: boolean;
@@ -26,34 +26,11 @@ export const MoveConfirmDialog: React.FC<MoveConfirmDialogProps> = ({
   onCopy,
   onCancel,
 }) => {
-  const [fileName, setFileName] = useState<string>('');
-  const [targetFolder, setTargetFolder] = useState<string>('');
-
-  useEffect(() => {
-    const fetchNames = async () => {
-      if (sourcePath) {
-        try {
-          const name = await settingsServices.getBasename(sourcePath);
-          setFileName(name);
-        } catch (error) {
-          // Fallback to the path itself if service fails
-          setFileName(sourcePath);
-        }
-      }
-
-      if (targetPath) {
-        try {
-          const folder = await settingsServices.getBasename(targetPath);
-          setTargetFolder(folder);
-        } catch (error) {
-          // Fallback to the path itself if service fails
-          setTargetFolder(targetPath);
-        }
-      }
-    };
-
-    fetchNames();
-  }, [sourcePath, targetPath]);
+  // Fall back to the path itself when it has no basename (e.g. a drive root).
+  const fileName = sourcePath ? path.basename(sourcePath) || sourcePath : '';
+  const targetFolder = targetPath
+    ? path.basename(targetPath) || targetPath
+    : '';
 
   return (
     <Dialog open={open} onClose={onCancel} maxWidth="sm" fullWidth>

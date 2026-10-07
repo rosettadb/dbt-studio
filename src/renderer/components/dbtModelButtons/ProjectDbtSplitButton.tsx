@@ -24,7 +24,7 @@ import {
   PushToCloudModal,
   PipelineSelectorModal,
 } from '../modals';
-import { pathJoin } from '../../services/settings.services';
+import { path } from '../../lib/path';
 
 interface ProjectDbtSplitButtonProps {
   rosettaPath?: string;
@@ -100,27 +100,13 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
   const [localPipelineModal, setLocalPipelineModal] = React.useState(false);
 
   React.useEffect(() => {
-    const loadDefaults = async () => {
-      if (project.rawLayerDir) {
-        setRawPath(project.rawLayerDir);
-      } else {
-        const p = await pathJoin(project.path, 'models', 'raw');
-        setRawPath(p);
-      }
-      if (project.stagingDir) {
-        setStagingPath(project.stagingDir);
-      } else {
-        const p = await pathJoin(project.path, 'models', 'staging');
-        setStagingPath(p);
-      }
-      if (project.incrementalDir) {
-        setIncrementalPath(project.incrementalDir);
-      } else {
-        const p = await pathJoin(project.path, 'models', 'enhanced');
-        setIncrementalPath(p);
-      }
-    };
-    loadDefaults();
+    setRawPath(project.rawLayerDir || path.join(project.path, 'models', 'raw'));
+    setStagingPath(
+      project.stagingDir || path.join(project.path, 'models', 'staging'),
+    );
+    setIncrementalPath(
+      project.incrementalDir || path.join(project.path, 'models', 'enhanced'),
+    );
   }, [project.path]);
 
   // Define all menu items with environment restrictions

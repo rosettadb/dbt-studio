@@ -1,5 +1,6 @@
 import yaml from 'js-yaml';
 import { z } from 'zod';
+import { splitSegments } from '../../lib/path';
 import type { PipelineConfig } from './types';
 
 // Mirrors PipelineStep/PipelineJob/PipelineConfig in ./types. Every field
@@ -47,7 +48,7 @@ export const PIPELINE_CONFIG_DIR = 'pipelines';
 export const LEGACY_PIPELINE_CONFIG_DIR = '.rosetta';
 
 export function isPipelineFile(filePath: string): boolean {
-  const parts = filePath.replace(/\\/g, '/').split('/');
+  const parts = splitSegments(filePath);
   const fileName = parts[parts.length - 1];
   const dirParts = parts.slice(0, -1);
 

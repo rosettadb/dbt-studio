@@ -78,7 +78,7 @@ import {
   TaglineContainer,
   TaglineText,
 } from './styles';
-import { pathJoin } from '../../services/settings.services';
+import { path } from '../../lib/path';
 
 const SelectProject: React.FC = () => {
   const navigate = useNavigate();
@@ -279,7 +279,7 @@ const SelectProject: React.FC = () => {
     }
 
     try {
-      const path = await pathJoin(defaultProjectPath, newProject.name);
+      const projectPath = path.join(defaultProjectPath, newProject.name);
 
       let connectionId = selectedConnection || undefined;
 
@@ -311,7 +311,7 @@ const SelectProject: React.FC = () => {
         }
       }
       const project = await projectsServices.addProject({
-        name: path,
+        name: projectPath,
         connectionId,
         createTemplateFolders: newProject.createTemplateFolders,
       });

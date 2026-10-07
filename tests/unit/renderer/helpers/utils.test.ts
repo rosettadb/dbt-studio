@@ -15,16 +15,17 @@ import {
   generateFilename,
   getConnectionInput,
 } from '../../../../src/renderer/helpers/utils';
-
-jest.mock('../../../../src/renderer/services', () => {
-  return {
-    settingsServices: {
-      usePathJoin: jest.fn(),
-    },
-  };
-});
+import {
+  installIpcRendererMock,
+  setMockPlatform,
+} from '../../__setup__/ipcRenderer.mock';
 
 describe('renderer/helpers/utils', () => {
+  afterEach(() => {
+    // Individual tests may switch the mocked platform to win32.
+    installIpcRendererMock();
+  });
+
   describe('capitalizeFirstLetter', () => {
     it('should capitalize the first letter', () => {
       expect(capitalizeFirstLetter('hello')).toBe('Hello');
@@ -123,10 +124,22 @@ describe('renderer/helpers/utils', () => {
       expect(extractModelNameFromPath('/p/staging/my_model.sql')).toBe('');
     });
 
-    it('should handle Windows-style paths with backslashes', () => {
+    it('should handle Windows-style paths on Windows', () => {
+      setMockPlatform('win32');
       expect(
         extractModelNameFromPath('C:\\p\\models\\staging\\my_model.sql'),
       ).toBe('staging.my_model');
+    });
+
+    it('should accept forward slashes on Windows (paths built elsewhere)', () => {
+      setMockPlatform('win32');
+      expect(extractModelNameFromPath('C:/p/models/staging/my_model.sql')).toBe(
+        'staging.my_model',
+      );
+    });
+
+    it('should return empty string when nothing follows models', () => {
+      expect(extractModelNameFromPath('/p/models')).toBe('');
     });
   });
 
@@ -148,10 +161,7 @@ describe('renderer/helpers/utils', () => {
   });
 
   describe('compileCommand', () => {
-    it('should build a command using settingsServices.usePathJoin', async () => {
-      const { settingsServices } = require('../../../../src/renderer/services');
-      settingsServices.usePathJoin.mockResolvedValue('/tmp/project/rosetta');
-
+    it('should cd into <project>/rosetta using the native path join', async () => {
       const project = {
         path: '/tmp/project',
         rosettaConnection: { name: 'conn' },
@@ -165,14 +175,31 @@ describe('renderer/helpers/utils', () => {
 
       const result = await compileCommand(project, settings, command);
 
-      expect(settingsServices.usePathJoin).toHaveBeenCalledWith(
-        '/tmp/project',
-        'rosetta',
-      );
       expect(result).toContain('cd "/tmp/project/rosetta"');
       expect(result).toContain('"/bin/rosetta"');
       expect(result).toContain('run');
       expect(result).toContain('-s conn');
+    });
+
+    it('should produce a Windows path on Windows', async () => {
+      setMockPlatform('win32');
+      const project = {
+        path: 'C:\\tmp\\project',
+        rosettaConnection: { name: 'conn' },
+      } as any;
+      const command = {
+        commandType: 'rosetta',
+        command: 'run',
+        arguments: new Map(),
+      } as any;
+
+      const result = await compileCommand(
+        project,
+        { rosettaPath: 'C:\\bin\\rosetta.exe' },
+        command,
+      );
+
+      expect(result).toContain('cd "C:\\tmp\\project\\rosetta"');
     });
   });
 

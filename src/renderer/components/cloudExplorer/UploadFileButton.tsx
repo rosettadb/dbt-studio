@@ -4,6 +4,7 @@ import UploadFileIcon from '@mui/icons-material/UploadFile';
 import { toast } from 'react-toastify';
 import { useUploadFile } from '../../controllers/cloudExplorer.controller';
 import { cloudExplorerService } from '../../services';
+import { path } from '../../lib/path';
 import type {
   CloudProvider,
   CloudStorageConfig,
@@ -60,7 +61,7 @@ const UploadFileButton: React.FC<UploadFileButtonProps> = ({
     if (result.canceled || !result.filePaths?.length) return;
 
     const localFilePath: string = result.filePaths[0];
-    const fileName = localFilePath.split(/[\\/]/).pop() || 'file';
+    const fileName = path.basename(localFilePath) || 'file';
 
     uploadMutation.mutate({
       provider,

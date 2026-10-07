@@ -32,6 +32,7 @@ import { SourceControlView } from '../sourceControl';
 import connectionIcons from '../../../../assets/connectionIcons';
 import { useListPipelines } from '../../controllers';
 import { CreatePipelineModal } from '../modals';
+import { path } from '../../lib/path';
 
 export type SidebarTab = 'explorer' | 'search' | 'scm' | 'connections';
 
@@ -308,7 +309,7 @@ const ExplorerTab: React.FC<ExplorerTabProps> = ({
       await refetchPipelines();
       await onRefreshFiles();
       // Open the newly created pipeline file in the editor
-      const fileName = filePath.split('/').pop() ?? 'pipeline.yml';
+      const fileName = path.basename(filePath) || 'pipeline.yml';
       onFileSelect({
         id: filePath,
         name: fileName,

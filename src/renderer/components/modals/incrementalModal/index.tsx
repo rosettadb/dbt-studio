@@ -19,6 +19,7 @@ import { projectsServices } from '../../../services';
 import { useUpdateProject } from '../../../controllers';
 import { FileNode, Project } from '../../../../types/backend';
 import { SelectableFileTree } from '../../selectableFileTree';
+import { path as nodePath, splitSegments } from '../../../lib/path';
 
 type Props = {
   isOpen: boolean;
@@ -54,12 +55,12 @@ export const IncrementalModal: React.FC<Props> = ({
 
   // Helper function to get the immediate subdirectory of models for a given path
   const getModelsSubdirectory = (filePath: string): string | null => {
-    const pathParts = filePath.split('/');
-    const modelsIndex = pathParts.findIndex((part) => part === 'models');
+    const pathParts = splitSegments(filePath);
+    const modelsIndex = pathParts.indexOf('models');
 
     if (modelsIndex !== -1 && modelsIndex < pathParts.length - 1) {
       // Return path up to the first subdirectory after models
-      return pathParts.slice(0, modelsIndex + 2).join('/');
+      return pathParts.slice(0, modelsIndex + 2).join(nodePath.sep);
     }
 
     return null;
@@ -250,8 +251,8 @@ export const IncrementalModal: React.FC<Props> = ({
   // Get the display name for restricted directory
   const getRestrictedDirectoryDisplayName = (): string => {
     if (!restrictedDirectory) return '';
-    const pathParts = restrictedDirectory.split('/');
-    const modelsIndex = pathParts.findIndex((part) => part === 'models');
+    const pathParts = splitSegments(restrictedDirectory);
+    const modelsIndex = pathParts.indexOf('models');
     if (modelsIndex !== -1 && modelsIndex < pathParts.length - 1) {
       return `models/${pathParts[modelsIndex + 1]}`;
     }

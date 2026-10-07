@@ -14,6 +14,7 @@ import {
 import { getClassWithColor } from 'file-icons-js';
 import { toast } from 'react-toastify';
 import { isFileUnpushed } from '../../services/git.service';
+import { path, splitSegments, toPosix } from '../../lib/path';
 import { FileNode, FileStatuses } from './types';
 import { GitStatusBadge } from './GitStatusBadge';
 import { PipelineThumbnailPreview } from './PipelineThumbnailPreview';
@@ -114,7 +115,7 @@ interface TreeNodeProps extends NodeRendererProps<FileNode> {
 }
 
 const isPipelineYaml = (filePath: string): boolean => {
-  const parts = filePath.replace(/\\/g, '/').split('/');
+  const parts = splitSegments(filePath);
   const fileName = parts[parts.length - 1] || '';
   const dirParts = parts.slice(0, -1);
   const isYaml =
@@ -319,10 +320,11 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
               );
               return;
             }
-            // Check for unpushed commits
-            const relativePath = node.data.path
-              .replace(projectPath, '')
-              .replace(/^[/\\]/, '');
+            // Check for unpushed commits (git wants a `/`-separated path
+            // relative to the repo root)
+            const relativePath = toPosix(
+              path.relative(projectPath, node.data.path),
+            );
             try {
               const unpushed = await isFileUnpushed(projectPath, relativePath);
               if (unpushed) {
