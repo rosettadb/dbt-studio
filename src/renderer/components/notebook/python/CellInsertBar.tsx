@@ -1,6 +1,7 @@
 /**
  * Cell Insert Bar
- * Colab-style "+ Code" / "+ SQL" / "+ Text" affordance shown between cells on
+ * Colab-style "+ Code" / "+ SQL" / "+ Text" affordance shown between cells.
+ * A small "+" is always visible on the divider and expands into the buttons on
  * hover.
  */
 
@@ -29,12 +30,13 @@ export const CellInsertBar: React.FC<CellInsertBarProps> = ({
       justifyContent: 'center',
       alignItems: 'center',
       gap: 1,
-      height: persistent ? 40 : 24,
+      height: persistent ? 36 : 30,
       my: persistent ? 1 : 0,
-      opacity: persistent ? 1 : 0,
-      transition: 'opacity 120ms ease',
-      '&:hover': { opacity: 1 },
       position: 'relative',
+      '& .cell-insert-options': { display: persistent ? 'flex' : 'none' },
+      '&:hover .cell-insert-options': { display: 'flex' },
+      '&:hover .cell-insert-plus': { display: 'none' },
+      '& .MuiButton-root': persistent ? undefined : { borderRadius: 12 },
       '&::before': persistent
         ? undefined
         : {
@@ -49,57 +51,76 @@ export const CellInsertBar: React.FC<CellInsertBarProps> = ({
           },
     }}
   >
-    <Button
-      size="small"
-      variant="outlined"
-      startIcon={<AddIcon sx={{ fontSize: 18 }} />}
-      onClick={onAddCode}
-      sx={{
-        zIndex: 1,
-        bgcolor: 'background.paper',
-        height: 30,
-        px: 1.5,
-        fontSize: 13,
-        textTransform: 'none',
-        py: 0,
-      }}
-    >
-      Code
-    </Button>
-    <Button
-      size="small"
-      variant="outlined"
-      startIcon={<AddIcon sx={{ fontSize: 18 }} />}
-      onClick={onAddSql}
-      sx={{
-        zIndex: 1,
-        bgcolor: 'background.paper',
-        height: 30,
-        px: 1.5,
-        fontSize: 13,
-        textTransform: 'none',
-        py: 0,
-      }}
-    >
-      SQL
-    </Button>
-    <Button
-      size="small"
-      variant="outlined"
-      startIcon={<AddIcon sx={{ fontSize: 18 }} />}
-      onClick={onAddText}
-      sx={{
-        zIndex: 1,
-        bgcolor: 'background.paper',
-        height: 30,
-        px: 1.5,
-        fontSize: 13,
-        textTransform: 'none',
-        py: 0,
-      }}
-    >
-      Text
-    </Button>
+    {!persistent && (
+      <Box
+        className="cell-insert-plus"
+        sx={{
+          zIndex: 1,
+          width: 22,
+          height: 22,
+          borderRadius: '50%',
+          border: '1px solid',
+          borderColor: 'divider',
+          bgcolor: 'background.paper',
+          color: 'text.secondary',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <AddIcon sx={{ fontSize: 16 }} />
+      </Box>
+    )}
+    <Box className="cell-insert-options" sx={{ gap: 1 }}>
+      <Button
+        size="small"
+        variant="outlined"
+        startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+        onClick={onAddCode}
+        sx={{
+          zIndex: 1,
+          bgcolor: 'background.paper',
+          height: 24,
+          fontSize: 11,
+          textTransform: 'none',
+          py: 0,
+        }}
+      >
+        Code
+      </Button>
+      <Button
+        size="small"
+        variant="outlined"
+        startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+        onClick={onAddSql}
+        sx={{
+          zIndex: 1,
+          bgcolor: 'background.paper',
+          height: 24,
+          fontSize: 11,
+          textTransform: 'none',
+          py: 0,
+        }}
+      >
+        SQL
+      </Button>
+      <Button
+        size="small"
+        variant="outlined"
+        startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+        onClick={onAddText}
+        sx={{
+          zIndex: 1,
+          bgcolor: 'background.paper',
+          height: 24,
+          fontSize: 11,
+          textTransform: 'none',
+          py: 0,
+        }}
+      >
+        Text
+      </Button>
+    </Box>
   </Box>
 );
 

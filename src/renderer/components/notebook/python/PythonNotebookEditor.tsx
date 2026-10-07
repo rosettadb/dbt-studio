@@ -1155,13 +1155,15 @@ export const PythonNotebookEditor = forwardRef<
                             onEditorMount={handleEditorMount}
                             sqlCompletions={sqlCompletions}
                           />
-                          <CellInsertBar
-                            // Always visible after the last cell
-                            persistent={index === cells.length - 1}
-                            onAddCode={() => insertCell('code', index + 1)}
-                            onAddSql={() => insertCell('sql', index + 1)}
-                            onAddText={() => insertCell('markdown', index + 1)}
-                          />
+                          {index < cells.length - 1 && (
+                            <CellInsertBar
+                              onAddCode={() => insertCell('code', index + 1)}
+                              onAddSql={() => insertCell('sql', index + 1)}
+                              onAddText={() =>
+                                insertCell('markdown', index + 1)
+                              }
+                            />
+                          )}
                         </Box>
                       )}
                     </Draggable>
@@ -1170,6 +1172,30 @@ export const PythonNotebookEditor = forwardRef<
                 </Box>
               )}
             </Droppable>
+            <Box
+              sx={{
+                maxWidth: wideView ? 'none' : 1100,
+                mx: 'auto',
+                mt: 1,
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: 1,
+                border: '1px dashed',
+                borderColor: 'divider',
+                borderRadius: 1,
+              }}
+            >
+              <Typography variant="body2" color="text.secondary">
+                Add cell
+              </Typography>
+              <CellInsertBar
+                persistent
+                onAddCode={() => insertCell('code', cells.length)}
+                onAddSql={() => insertCell('sql', cells.length)}
+                onAddText={() => insertCell('markdown', cells.length)}
+              />
+            </Box>
           </DragDropContext>
         )}
       </Box>

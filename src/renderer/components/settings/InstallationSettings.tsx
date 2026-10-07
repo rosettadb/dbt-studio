@@ -3,15 +3,18 @@ import {
   Box,
   Typography,
   Button,
-  Card,
-  CardContent,
   Chip,
   CircularProgress,
   Alert,
-  Divider,
   Backdrop,
 } from '@mui/material';
-import { Download, CheckCircle, Update, Info } from '@mui/icons-material';
+import {
+  Download,
+  CheckCircle,
+  Update,
+  Sync,
+  DesktopWindowsOutlined,
+} from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import {
   useCheckForSettingsUpdates,
@@ -20,6 +23,7 @@ import {
 } from '../../controllers';
 import { UpdateSettingsInfo } from '../../../types/backend';
 import { sanitizeHtml } from '../../utils/sanitizeHtml';
+import { SettingsRow, SettingsSection } from './SettingsLayout';
 
 // Error types for better error handling
 interface ErrorInfo {
@@ -370,8 +374,15 @@ const InstallationSettings: React.FC = () => {
     [updateInfo?.releaseNotes],
   );
 
+  const systemRows = [
+    ['Operating system', systemInfo?.platform],
+    ['Architecture', systemInfo?.arch],
+    ['Electron version', systemInfo?.electronVersion],
+    ['Chrome version', systemInfo?.chromeVersion],
+  ];
+
   return (
-    <Box sx={{ maxWidth: 800, width: '100%' }}>
+    <>
       <Backdrop
         open={isBlocking}
         sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, color: '#fff' }}
@@ -381,7 +392,6 @@ const InstallationSettings: React.FC = () => {
       {error && (
         <Alert
           severity="error"
-          sx={{ mb: 2 }}
           action={
             error.retryable && (
               <Button color="inherit" size="small" onClick={handleRetry}>
@@ -402,181 +412,115 @@ const InstallationSettings: React.FC = () => {
           </Box>
         </Alert>
       )}
-      <Typography variant="h6" gutterBottom>
-        Installation Information
-      </Typography>
-      {/* Current Version Card */}
-      <Card sx={{ mb: 2 }}>
-        <CardContent>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-            <Info color="primary" />
-            <Typography variant="h6">Current Installation</Typography>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-            <Typography variant="body1">Current Version:</Typography>
+      <SettingsSection title="Updates" icon={<Sync />}>
+        <SettingsRow
+          label="Current version"
+          description={
+            lastChecked
+              ? `Last checked: ${lastChecked.toLocaleString()}`
+              : undefined
+          }
+        >
+          <Chip
+            size="small"
+            label={currentVersion}
+            color="primary"
+            variant="outlined"
+            icon={<CheckCircle />}
+          />
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={checkForUpdates}
+            disabled={isCheckingForUpdates}
+            startIcon={
+              isCheckingForUpdates ? (
+                <CircularProgress size={14} />
+              ) : (
+                <Download />
+              )
+            }
+          >
+            {isCheckingForUpdates ? 'Checking...' : 'Check for Updates'}
+          </Button>
+        </SettingsRow>
+        {latestVersion && (
+          <SettingsRow
+            label="Latest version"
+            description={
+              isUpdateAvailable
+                ? `A new version (${latestVersion}) is available!`
+                : `You are running the latest version (${currentVersion})`
+            }
+          >
             <Chip
-              label={currentVersion}
-              color="primary"
+              size="small"
+              label={latestVersion}
+              color={isUpdateAvailable ? 'warning' : 'success'}
               variant="outlined"
-              icon={<CheckCircle />}
+              icon={<Update />}
+            />
+            {isUpdateAvailable && !showRestartButton && (
+              <Button
+                size="small"
+                variant="contained"
+                color="primary"
+                onClick={handleUpdate}
+                disabled={isUpdating}
+                startIcon={
+                  isUpdating ? <CircularProgress size={14} /> : <Download />
+                }
+              >
+                {isUpdating ? 'Downloading...' : 'Update Now'}
+              </Button>
+            )}
+            {isUpdateAvailable && showRestartButton && (
+              <Button
+                size="small"
+                onClick={handleRestart}
+                color="secondary"
+                variant="outlined"
+                disabled={isUpdating}
+              >
+                Restart Now
+              </Button>
+            )}
+          </SettingsRow>
+        )}
+        {isUpdateAvailable && updateInfo?.releaseNotes && (
+          <Box sx={{ px: 1.75, py: 1.25 }}>
+            <Typography variant="caption" color="textSecondary">
+              Release Notes:
+            </Typography>
+            <Typography
+              variant="body2"
+              dangerouslySetInnerHTML={{
+                __html: sanitizedReleaseNotes,
+              }}
             />
           </Box>
-          {latestVersion && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-              <Typography variant="body1">Latest Version:</Typography>
-              <Chip
-                label={latestVersion}
-                color={isUpdateAvailable ? 'warning' : 'success'}
-                variant="outlined"
-                icon={<Update />}
-              />
-            </Box>
-          )}
-          {isUpdateAvailable && !showRestartButton && (
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={handleUpdate}
-              disabled={isUpdating}
-              startIcon={
-                isUpdating ? <CircularProgress size={16} /> : <Download />
-              }
-              sx={{ mt: 1 }}
-            >
-              {isUpdating ? 'Downloading...' : 'Update Now'}
-            </Button>
-          )}
-          {isUpdateAvailable && showRestartButton && (
-            <Button
-              onClick={handleRestart}
-              color="secondary"
-              variant="outlined"
-              disabled={isUpdating}
-              sx={{ mt: 1, ml: 2 }}
-            >
-              Restart Now
-            </Button>
-          )}
-        </CardContent>
-      </Card>
-      {/* Update Check Section */}
-      <Card sx={{ mb: 2 }}>
-        <CardContent>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-            <Update color="primary" />
-            <Typography variant="h6">Updates</Typography>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-            <Button
-              variant="outlined"
-              onClick={checkForUpdates}
-              disabled={isCheckingForUpdates}
-              startIcon={
-                isCheckingForUpdates ? (
-                  <CircularProgress size={16} />
-                ) : (
-                  <Download />
-                )
-              }
-            >
-              {isCheckingForUpdates ? 'Checking...' : 'Check for Updates'}
-            </Button>
-            {lastChecked && (
-              <Typography variant="body2" color="textSecondary">
-                Last checked: {lastChecked.toLocaleString()}
-              </Typography>
-            )}
-          </Box>
-          {updateInfo && (
-            <>
-              <Divider sx={{ my: 2 }} />
-              {isUpdateAvailable ? (
-                <Alert severity="info" sx={{ mb: 2 }}>
-                  <Typography variant="body1" gutterBottom>
-                    A new version ({latestVersion}) is available!
-                  </Typography>
-                  {updateInfo.releaseNotes && (
-                    <Box sx={{ mt: 1, mb: 2 }}>
-                      <Typography variant="body2" color="textSecondary">
-                        Release Notes:
-                      </Typography>
-                      <Typography
-                        variant="body2"
-                        sx={{ mt: 1 }}
-                        dangerouslySetInnerHTML={{
-                          __html: sanitizedReleaseNotes,
-                        }}
-                      />
-                    </Box>
-                  )}
-                </Alert>
-              ) : (
-                <Alert severity="success">
-                  <Typography variant="body1">
-                    You are running the latest version ({currentVersion})
-                  </Typography>
-                </Alert>
-              )}
-            </>
-          )}
-        </CardContent>
-      </Card>
-      {/* System Information */}
-      <Card>
-        <CardContent>
-          <Typography variant="h6" gutterBottom>
-            System Information
-          </Typography>
-          <Box sx={{ display: 'grid', gap: 1 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-              <Typography variant="body2" color="textSecondary">
-                Operating System:
-              </Typography>
-              <Typography variant="body2">
-                {systemInfo?.platform || 'Loading...'}
-              </Typography>
-            </Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-              <Typography variant="body2" color="textSecondary">
-                Architecture:
-              </Typography>
-              <Typography variant="body2">
-                {systemInfo?.arch || 'Loading...'}
-              </Typography>
-            </Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-              <Typography variant="body2" color="textSecondary">
-                Electron Version:
-              </Typography>
-              <Typography variant="body2">
-                {systemInfo?.electronVersion || 'Loading...'}
-              </Typography>
-            </Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-              <Typography variant="body2" color="textSecondary">
-                Chrome Version:
-              </Typography>
-              <Typography variant="body2">
-                {systemInfo?.chromeVersion || 'Loading...'}
-              </Typography>
-            </Box>
-            {systemInfo?.userAgent && (
-              <Box sx={{ mt: 2 }}>
-                <Typography variant="body2" color="textSecondary" gutterBottom>
-                  User Agent:
-                </Typography>
-                <Typography
-                  variant="caption"
-                  sx={{ wordBreak: 'break-all', display: 'block' }}
-                >
-                  {systemInfo.userAgent}
-                </Typography>
+        )}
+      </SettingsSection>
+      <SettingsSection title="System" icon={<DesktopWindowsOutlined />}>
+        {systemRows.map(([label, value]) => (
+          <SettingsRow key={label} label={label}>
+            <Typography variant="body2" color="textSecondary">
+              {value || 'Loading...'}
+            </Typography>
+          </SettingsRow>
+        ))}
+        {systemInfo?.userAgent && (
+          <SettingsRow
+            label="User agent"
+            description={
+              <Box component="span" sx={{ wordBreak: 'break-all' }}>
+                {systemInfo.userAgent}
               </Box>
-            )}
-          </Box>
-        </CardContent>
-      </Card>
-    </Box>
+            }
+          />
+        )}
+      </SettingsSection>
+    </>
   );
 };
 
