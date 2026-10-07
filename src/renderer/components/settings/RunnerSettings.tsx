@@ -4,7 +4,6 @@ import {
   Button,
   Box,
   Chip,
-  Link,
   Typography,
   Alert,
   CircularProgress,
@@ -22,6 +21,7 @@ import {
   ListAltOutlined,
   ExtensionOutlined,
   WarningAmberOutlined,
+  Info,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import {
@@ -295,28 +295,7 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
             key={version.version}
             label={
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                {version.releaseNotes ? (
-                  <Tooltip title="View release notes">
-                    {/* eslint-disable-next-line jsx-a11y/anchor-is-valid */}
-                    <Link
-                      component="button"
-                      variant="body2"
-                      underline="hover"
-                      color="inherit"
-                      fontWeight={500}
-                      onClick={() =>
-                        window.open(
-                          `https://github.com/rosettadb/dbt-studio/releases/tag/${version.version}`,
-                          '_blank',
-                        )
-                      }
-                    >
-                      {version.version}
-                    </Link>
-                  </Tooltip>
-                ) : (
-                  version.version
-                )}
+                {version.version}
                 {version.version === versionInfo.latestStable && (
                   <Chip label="Latest" size="small" variant="outlined" />
                 )}
@@ -326,6 +305,21 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
               version.releaseDate,
             ).toLocaleDateString()}`}
           >
+            {version.releaseNotes && (
+              <Tooltip title="View release notes">
+                <IconButton
+                  size="small"
+                  onClick={() =>
+                    window.open(
+                      `https://github.com/rosettadb/dbt-studio/releases/tag/${version.version}`,
+                      '_blank',
+                    )
+                  }
+                >
+                  <Info fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
             <Button
               size="small"
               variant="outlined"

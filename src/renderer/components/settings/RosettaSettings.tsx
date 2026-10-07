@@ -3,13 +3,13 @@ import {
   Button,
   Box,
   Chip,
-  Link,
   Typography,
   CircularProgress,
   ToggleButton,
   ToggleButtonGroup,
   Tooltip,
   Backdrop,
+  IconButton,
 } from '@mui/material';
 import {
   OpenInNew,
@@ -18,6 +18,7 @@ import {
   ListAltOutlined,
   WarningAmberOutlined,
   Download,
+  Info,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { SettingsType, RosettaVersionInfo } from '../../../types/backend';
@@ -296,28 +297,7 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
               key={version.version}
               label={
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  {version.releaseNotes ? (
-                    <Tooltip title="View release notes">
-                      {/* eslint-disable-next-line jsx-a11y/anchor-is-valid */}
-                      <Link
-                        component="button"
-                        variant="body2"
-                        underline="hover"
-                        color="inherit"
-                        fontWeight={500}
-                        onClick={() =>
-                          window.open(
-                            `https://github.com/rosettadb/rosetta/releases/tag/v${version.version}`,
-                            '_blank',
-                          )
-                        }
-                      >
-                        {version.version}
-                      </Link>
-                    </Tooltip>
-                  ) : (
-                    version.version
-                  )}
+                  {version.version}
                   {version.isPrerelease && (
                     <Chip
                       label="Pre-release"
@@ -336,6 +316,21 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
                 version.releaseDate,
               ).toLocaleDateString()}`}
             >
+              {version.releaseNotes && (
+                <Tooltip title="View release notes">
+                  <IconButton
+                    size="small"
+                    onClick={() =>
+                      window.open(
+                        `https://github.com/rosettadb/rosetta/releases/tag/v${version.version}`,
+                        '_blank',
+                      )
+                    }
+                  >
+                    <Info fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              )}
               <Button
                 size="small"
                 variant="outlined"
