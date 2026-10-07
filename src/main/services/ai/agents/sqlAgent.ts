@@ -89,6 +89,10 @@ You are connected to a DuckLake lakehouse. DuckLake is a DuckDB extension (not a
       connectionHints =
         '\n\n## Dialect Specifics\nYou are connected to Databricks. Ensure all queries use Databricks/Spark SQL syntax and functions.';
       break;
+    case 'oracle':
+      connectionHints =
+        '\n\n## Oracle SQL\nUse FETCH FIRST n ROWS ONLY (no LIMIT); no AS before table aliases; unquoted identifiers are uppercase; dummy table is DUAL; do not end SQL with a semicolon; use DATE literals or TO_DATE; strings are VARCHAR2.';
+      break;
     case 'kinetica':
       connectionHints =
         '\n\n## Dialect Specifics\nYou are connected to Kinetica. Ensure all queries use Kinetica SQL syntax and functions.';

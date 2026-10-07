@@ -1,3 +1,9 @@
+import ProjectsService from '../../../../src/main/services/projects.service';
+import databaseStore from '../../../../src/main/database';
+import ConnectorsService from '../../../../src/main/services/connectors.service';
+import SecureStorageService from '../../../../src/main/services/secureStorage.service';
+import type { Project } from '../../../../src/types/backend';
+
 jest.mock('openai', () => ({
   OpenAI: jest.fn(),
 }));
@@ -46,6 +52,8 @@ const parseProjectConnectionFiles = jest.fn();
 jest.mock('../../../../src/main/services/connectors.service', () => ({
   __esModule: true,
   default: {
+    getConnectionById: jest.fn(),
+    extractSchemaFromConnection: jest.fn(),
     loadConfigurations: (...args: any[]) => loadConfigurations(...args),
     parseProjectConnectionFiles: (...args: any[]) =>
       parseProjectConnectionFiles(...args),
@@ -60,9 +68,6 @@ jest.mock('../../../../src/main/extractor', () => ({
   RedshiftExtractor: jest.fn(),
   SnowflakeExtractor: jest.fn(),
 }));
-
-import ProjectsService from '../../../../src/main/services/projects.service';
-import databaseStore from '../../../../src/main/database';
 
 const mockedGetSnapshot = databaseStore.getSnapshot as jest.Mock;
 const mockedTransaction = databaseStore.transaction as jest.Mock;
@@ -79,7 +84,9 @@ describe('ProjectsService (main)', () => {
     fakeDb = { connections: [], projects: [] };
     mockedGetSnapshot.mockImplementation(() => Promise.resolve(fakeDb));
     mockedTransaction.mockImplementation(
-      (mutator: (db: typeof fakeDb) => { db: typeof fakeDb; result: unknown }) => {
+      (
+        mutator: (db: typeof fakeDb) => { db: typeof fakeDb; result: unknown },
+      ) => {
         const { db, result } = mutator(fakeDb);
         fakeDb = db;
         return Promise.resolve(result);
@@ -176,5 +183,67 @@ describe('ProjectsService (main)', () => {
       const result = await ProjectsService.getProject('p1');
       expect(result).toEqual(expect.objectContaining({ id: 'p1' }));
     });
+  });
+});
+
+describe('Project schema extraction dispatch', () => {
+  const project = { name: 'project', connectionId: 'connection-id' } as Project;
+  beforeEach(() => jest.clearAllMocks());
+  afterEach(() => jest.restoreAllMocks());
+
+  it('routes Oracle through its extractor from the existing switch', async () => {
+    (SecureStorageService.getCredential as jest.Mock).mockResolvedValue(null);
+    const connection = {
+      type: 'oracle',
+      name: 'oracle',
+      username: 'STUDIO',
+      password: '',
+    };
+    (ConnectorsService.getConnectionById as jest.Mock).mockResolvedValue({
+      id: 'connection-id',
+      connection,
+    });
+    const tables = [{ name: 'T', schema: 'STUDIO', columns: [] }];
+    (
+      ConnectorsService.extractSchemaFromConnection as jest.Mock
+    ).mockResolvedValue({ tables });
+    await expect(ProjectsService.extractSchema(project)).resolves.toBe(tables);
+    expect(ConnectorsService.extractSchemaFromConnection).toHaveBeenCalledWith(
+      'connection-id',
+    );
+    expect(connection.password).toBe('');
+  });
+
+  it('keeps Postgres credential hydration and extractor dispatch unchanged', async () => {
+    const connection = {
+      type: 'postgres',
+      name: 'postgres',
+      username: '',
+      password: '',
+    };
+    (ConnectorsService.getConnectionById as jest.Mock).mockResolvedValue({
+      id: 'connection-id',
+      connection,
+    });
+    (SecureStorageService.getCredential as jest.Mock).mockImplementation(
+      async (key: string) =>
+        (
+          ({
+            'db-user-postgres': 'pg-user',
+            'db-password-postgres': 'pg-password',
+          }) as Record<string, string>
+        )[key],
+    );
+    const tables = [{ name: 'T', schema: 'public', columns: [] }];
+    const extract = jest
+      .spyOn(ProjectsService as any, 'extractPgSchema')
+      .mockResolvedValue(tables);
+    await expect(ProjectsService.extractSchema(project)).resolves.toBe(tables);
+    expect(extract).toHaveBeenCalledWith(
+      expect.objectContaining({ username: 'pg-user', password: 'pg-password' }),
+    );
+    expect(
+      ConnectorsService.extractSchemaFromConnection,
+    ).not.toHaveBeenCalled();
   });
 });

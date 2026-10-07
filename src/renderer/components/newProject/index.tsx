@@ -295,7 +295,9 @@ export const NewProject: React.FC<NewProjectProps> = ({
                 </MenuItem>
                 {connections
                   .filter(
-                    (connection) => connection.connection.type !== 'sqlite',
+                    (connection) =>
+                      connection.connection.type !== 'sqlite' &&
+                      connection.connection.type !== 'oracle',
                   )
                   .map((connection) => (
                     <MenuItem key={connection.id} value={connection.id}>

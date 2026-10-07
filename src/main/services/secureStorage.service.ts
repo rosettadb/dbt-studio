@@ -203,6 +203,7 @@ class SecureStorageService {
       // Database connection fields
       `db-user-${connectionId}`,
       `db-password-${connectionId}`,
+      `db-walletpassword-${connectionId}`,
       `db-token-${connectionId}`,
       `db-bigquery-${connectionId}`,
       `db-host-${connectionId}`,

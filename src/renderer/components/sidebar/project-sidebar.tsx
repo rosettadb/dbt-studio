@@ -56,6 +56,8 @@ const getConnectionTypeName = (connectionType?: string) => {
       return 'DuckDB';
     case 'kinetica':
       return 'Kinetica';
+    case 'oracle':
+      return 'Oracle';
     case 'mysql':
       return 'MySQL';
     default:

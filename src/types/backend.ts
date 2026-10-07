@@ -120,6 +120,18 @@ export type MySqlConnection = ConnectionBase & {
   ssl?: boolean;
 };
 
+export type OracleConnectMode = 'basic' | 'connectString' | 'wallet';
+export type OracleConnection = ConnectionBase & {
+  type: 'oracle';
+  connectMode: OracleConnectMode;
+  host?: string;
+  port?: number;
+  serviceName?: string;
+  tls?: boolean;
+  connectString?: string;
+  walletDir?: string;
+};
+
 export type DuckLakeConnectionConfig = Omit<
   ConnectionBase,
   'username' | 'password' | 'database' | 'schema'
@@ -142,11 +154,12 @@ export type ConnectionInput =
   | SQLiteConnection
   | KineticaConnection
   | MySqlConnection
+  | OracleConnection
   | DuckLakeConnectionConfig;
 
 export const canUseAsDbtConnection = (
   type: SupportedConnectionTypes,
-): boolean => type !== 'sqlite' && type !== 'mysql';
+): boolean => type !== 'sqlite' && type !== 'mysql' && type !== 'oracle'; // removed in 82b
 
 export type ConnectionModel = {
   id: string;
