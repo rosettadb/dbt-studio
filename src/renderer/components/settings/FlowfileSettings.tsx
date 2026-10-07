@@ -5,17 +5,14 @@ import {
   Button,
   Alert,
   CircularProgress,
-  Chip,
-  Divider,
   Backdrop,
   Switch,
-  FormControlLabel,
 } from '@mui/material';
 import {
-  CheckCircle,
   CloudDownload,
   Delete,
-  Refresh,
+  AccountTreeOutlined,
+  WarningAmberOutlined,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { SettingsType } from '../../../types/backend';
@@ -27,6 +24,14 @@ import {
 } from '../../services/flowfile.service';
 import { ConfirmationModal } from '../modals';
 import { useInstallPython } from '../../controllers';
+import {
+  SettingsRefreshButton,
+  SettingsRow,
+  SettingsSection,
+  SettingsSectionBody,
+  SettingsStack,
+  SettingsStatus,
+} from './SettingsLayout';
 
 interface FlowfileSettingsProps {
   settings: SettingsType;
@@ -150,144 +155,98 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
   const isPythonConfigured = Boolean(settings.pythonPath);
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      {/* Status */}
-      <Box>
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1,
-            mb: 1,
-          }}
-        >
-          <Typography variant="subtitle1" fontWeight="medium">
-            Installation Status
-          </Typography>
-          <Button
-            size="small"
-            startIcon={
-              isCheckingStatus ? (
-                <CircularProgress size={12} />
-              ) : (
-                <Refresh fontSize="small" />
-              )
-            }
+    <SettingsStack>
+      {!isPythonConfigured && (
+        <Alert severity="info">
+          Python is not installed yet. Installing Flowfile below will install it
+          automatically, or you can install it first from{' '}
+          <strong>Settings &gt; Python</strong>.
+        </Alert>
+      )}
+
+      <SettingsSection
+        title="Flowfile"
+        icon={<AccountTreeOutlined />}
+        action={
+          <SettingsRefreshButton
+            title="Refresh status"
             onClick={checkStatus}
-            disabled={isCheckingStatus}
-          >
-            Refresh
-          </Button>
-        </Box>
-
-        {!isPythonConfigured && (
-          <Alert severity="info" sx={{ mb: 2 }}>
-            Python is not installed yet. Installing Flowfile below will install
-            it automatically, or you can install it first from{' '}
-            <strong>Settings &gt; Python</strong>.
-          </Alert>
-        )}
-
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            loading={isCheckingStatus}
+          />
+        }
+      >
+        <SettingsRow label="Installation Status">
           {installedVersion ? (
-            <Chip
-              icon={<CheckCircle fontSize="small" />}
-              label={`Flowfile ${installedVersion}`}
-              color="success"
-              variant="outlined"
-              size="small"
-            />
+            <SettingsStatus tone="success">
+              Installed · {installedVersion}
+            </SettingsStatus>
           ) : (
-            <Chip
-              label="Not installed"
-              color="default"
-              variant="outlined"
-              size="small"
-            />
+            <SettingsStatus tone="neutral">Not installed</SettingsStatus>
           )}
-        </Box>
-      </Box>
-
-      {/* Auto-start toggle */}
-      <FormControlLabel
-        control={
+        </SettingsRow>
+        <SettingsRow label="Auto-start Flowfile on app launch">
           <Switch
+            size="small"
             checked={autoStart}
             onChange={(_, checked) => handleAutoStartChange(checked)}
           />
-        }
-        label="Auto-start Flowfile on app launch"
-      />
-
-      <Divider />
-
-      {/* Install / Upgrade */}
-      <Box>
-        <Typography variant="subtitle1" fontWeight="medium" gutterBottom>
-          {installedVersion ? 'Upgrade Flowfile' : 'Install Flowfile'}
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Installs <code>Flowfile</code> via <code>pip</code> into the managed
-          Python environment.
-          {!isPythonConfigured &&
-            ' Python will be installed automatically first.'}
-        </Typography>
-
-        {installError && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {installError}
-          </Alert>
-        )}
-
-        <Button
-          variant="contained"
-          startIcon={
-            isInstalling ? (
-              <CircularProgress size={16} color="inherit" />
-            ) : (
-              <CloudDownload />
-            )
+        </SettingsRow>
+        <SettingsRow
+          label={installedVersion ? 'Upgrade Flowfile' : 'Install Flowfile'}
+          description={
+            <>
+              Installs <code>Flowfile</code> via <code>pip</code> into the
+              managed Python environment.
+              {!isPythonConfigured &&
+                ' Python will be installed automatically first.'}
+            </>
           }
-          onClick={handleInstall}
-          disabled={isInstalling}
         >
-          {isInstalling && 'Installing…'}
-          {!isInstalling && installedVersion && 'Upgrade Flowfile'}
-          {!isInstalling && !installedVersion && 'Install Flowfile'}
-        </Button>
-      </Box>
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={
+              isInstalling ? (
+                <CircularProgress size={14} color="inherit" />
+              ) : (
+                <CloudDownload />
+              )
+            }
+            onClick={handleInstall}
+            disabled={isInstalling}
+          >
+            {isInstalling && 'Installing…'}
+            {!isInstalling && installedVersion && 'Upgrade Flowfile'}
+            {!isInstalling && !installedVersion && 'Install Flowfile'}
+          </Button>
+        </SettingsRow>
+        {installError && (
+          <SettingsSectionBody>
+            <Alert severity="error">{installError}</Alert>
+          </SettingsSectionBody>
+        )}
+      </SettingsSection>
 
       {installedVersion && (
-        <>
-          <Divider />
-          <Box sx={{ pt: 1, borderTop: 0 }}>
-            <Typography
-              variant="subtitle1"
-              fontWeight="medium"
-              color="error"
-              gutterBottom
-            >
-              Danger Zone
-            </Typography>
-            <Alert severity="warning" sx={{ mb: 2 }}>
-              <Typography variant="body2">
-                Uninstalling Flowfile will remove it from your Python
-                environment.
-              </Typography>
-            </Alert>
+        <SettingsSection title="Danger Zone" icon={<WarningAmberOutlined />}>
+          <SettingsRow
+            label="Uninstall Flowfile"
+            description="Removes Flowfile from your Python environment."
+          >
             <Button
+              size="small"
               variant="outlined"
               color="error"
               onClick={() => setShowUninstallConfirmation(true)}
               disabled={isUninstalling}
               startIcon={
-                isUninstalling ? <CircularProgress size={16} /> : <Delete />
+                isUninstalling ? <CircularProgress size={14} /> : <Delete />
               }
             >
               {isUninstalling ? 'Uninstalling...' : 'Uninstall Flowfile'}
             </Button>
-          </Box>
-        </>
+          </SettingsRow>
+        </SettingsSection>
       )}
 
       <ConfirmationModal
@@ -315,6 +274,6 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
           </Typography>
         </Box>
       </Backdrop>
-    </Box>
+    </SettingsStack>
   );
 };

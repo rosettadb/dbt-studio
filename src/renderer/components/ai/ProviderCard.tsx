@@ -1,28 +1,19 @@
 import React from 'react';
 import {
-  Card,
-  // CardHeader removed - using Box layout instead
-  CardContent,
-  CardActions,
-  Typography,
   Box,
   Button,
   Chip,
   CircularProgress,
   useTheme,
+  Switch,
+  Tooltip,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   DialogContentText,
 } from '@mui/material';
-import {
-  Edit,
-  Delete,
-  CheckCircle,
-  RadioButtonUnchecked,
-  Cable,
-} from '@mui/icons-material';
+import { Edit, Delete, Logout, Login } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import {
   aiProviderImages,
@@ -33,11 +24,13 @@ import {
   useDeleteAIProvider,
   useTestAIProvider,
   useDeactivateAllAIProviders,
+  useSignOutChatGpt,
 } from '../../controllers/aiProviders.controller';
 import type {
   AIProvider,
   ProviderTestResult,
 } from '../../controllers/aiProviders.controller';
+import { SettingsRow } from '../settings/SettingsLayout';
 
 interface ProviderCardProps {
   provider: AIProvider;
@@ -113,6 +106,18 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
     },
   });
 
+  const { mutate: signOutChatGpt, isLoading: isSigningOut } = useSignOutChatGpt(
+    {
+      onSuccess: () => {
+        toast.success('Signed out of ChatGPT.');
+        onRefresh();
+      },
+      onError: (error) => {
+        toast.error(`Failed to sign out: ${error.message}`);
+      },
+    },
+  );
+
   const handleTest = () => {
     if (!provider.id) {
       toast.error('No provider ID available');
@@ -174,23 +179,10 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
         return 'Google Gemini';
       case 'anthropic':
         return 'Anthropic Claude';
+      case 'openai-codex':
+        return 'ChatGPT (subscription)';
       default:
         return type.charAt(0).toUpperCase() + type.slice(1);
-    }
-  };
-
-  const getProviderTypeColor = (type: string) => {
-    switch (type) {
-      case 'openai':
-        return '#10A37F';
-      case 'ollama':
-        return '#FF6B35';
-      case 'gemini':
-        return '#4285F4';
-      case 'anthropic':
-        return '#CD7F32';
-      default:
-        return '#666';
     }
   };
 
@@ -202,69 +194,48 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
     return defaultIcon;
   };
 
-  // Helper function to get model from config
-  const getProviderModel = () => {
+  const getProviderConfig = () => {
     try {
       // Handle both string and object formats
-      const config =
-        typeof provider.config === 'string'
-          ? JSON.parse(provider.config)
-          : provider.config || {};
-      return config.model || '';
+      return typeof provider.config === 'string'
+        ? JSON.parse(provider.config)
+        : provider.config || {};
     } catch (error) {
-      // If config is not valid JSON, return empty string
-      return '';
+      // If config is not valid JSON, treat it as empty
+      return {};
     }
   };
 
+  // Helper function to get model from config
+  const getProviderModel = () => getProviderConfig().model || '';
+
+  const isChatGpt = provider.type === 'openai-codex';
+  const chatGptConfig = isChatGpt ? getProviderConfig() : {};
+  // A signed-out ChatGPT provider can't run anything, so it can't be made
+  // active until the user signs in. Deactivating stays allowed.
+  const isSignedOutChatGpt = isChatGpt && chatGptConfig.signedOut === true;
+  const isActiveSwitchDisabled =
+    isSettingActive || isDeactivating || (!isActive && isSignedOutChatGpt);
+  const getActiveSwitchTooltip = () => {
+    if (isActive) return 'Active — click to deactivate';
+    if (isSignedOutChatGpt) return 'Sign in to activate';
+    return 'Set active';
+  };
+  const activeSwitchTooltip = getActiveSwitchTooltip();
+
   return (
-    <Card
-      sx={{
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-        transition: 'all 0.3s ease',
-        border: isActive ? 2 : 1,
-        borderColor: isActive ? 'primary.main' : 'divider',
-        '&:hover': {
-          boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
-          transform: 'translateY(-2px)',
-        },
-      }}
-    >
-      {/* Header with title and icon */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          px: 2,
-          pt: 2,
-          pb: 2,
-        }}
-      >
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 2,
-          }}
-        >
-          <Box
-            sx={{
-              width: 48,
-              height: 48,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
+    <>
+      <SettingsRow
+        label={
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <img
               src={getProviderIcon(provider.type)}
               alt={`${provider.type} logo`}
               title={getProviderTypeLabel(provider.type)}
               aria-label={getProviderTypeLabel(provider.type)}
               style={{
-                width: 40,
-                height: 40,
+                width: 18,
+                height: 18,
                 objectFit: 'contain',
                 filter:
                   isDarkMode &&
@@ -274,143 +245,98 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                     : undefined,
               }}
             />
-          </Box>
-
-          <Box>
-            <Typography
-              variant="subtitle1"
-              sx={{
-                fontWeight: 'bold',
-              }}
-            >
-              {provider.name}
-            </Typography>
-            <Typography
-              variant="body2"
-              sx={{
-                bgcolor: getProviderTypeColor(provider.type),
-                padding: '2px 4px',
-                borderRadius: '4px',
-              }}
-            >
-              {getProviderTypeLabel(provider.type)}
-            </Typography>
-          </Box>
-        </Box>
-
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          {isActive ? (
+            {provider.name}
             <Chip
-              label="Active"
+              label={getProviderTypeLabel(provider.type)}
               size="small"
-              color="success"
-              sx={{ fontWeight: 'bold' }}
+              variant="outlined"
             />
-          ) : null}
-        </Box>
-      </Box>
-
-      <CardContent sx={{ pt: 0 }}>
-        {/* Model Information */}
-        <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography variant="body2" color="text.secondary">
-            Model:
-          </Typography>
-          <Typography
-            variant="body1"
-            sx={{
-              fontWeight: 'medium',
-              color: getProviderModel() ? 'text.primary' : 'text.secondary',
-              fontStyle: getProviderModel() ? 'normal' : 'italic',
-            }}
-          >
-            {getProviderModel() || 'No model configured'}
-          </Typography>
-        </Box>
-
+          </Box>
+        }
+        description={[
+          `Model: ${getProviderModel() || 'No model configured'}`,
+          isChatGpt &&
+            (isSignedOutChatGpt
+              ? 'Signed out'
+              : chatGptConfig.accountEmail || 'ChatGPT account'),
+        ]
+          .filter(Boolean)
+          .join(' · ')}
+      >
+        {isChatGpt &&
+          (isSignedOutChatGpt ? (
+            <Button size="small" startIcon={<Login />} onClick={handleEdit}>
+              Sign in
+            </Button>
+          ) : (
+            <Button
+              size="small"
+              startIcon={<Logout />}
+              onClick={() => provider.id && signOutChatGpt(provider.id)}
+              disabled={isSigningOut}
+            >
+              Sign out
+            </Button>
+          ))}
         <Button
           size="small"
-          variant={isActive ? 'contained' : 'outlined'}
-          color={isActive ? 'success' : 'primary'}
-          onClick={handleSetActive}
-          disabled={isSettingActive || isDeactivating}
-          startIcon={isActive ? <CheckCircle /> : <RadioButtonUnchecked />}
+          variant="outlined"
+          onClick={handleTest}
+          disabled={isTesting}
+          startIcon={
+            isTesting ? (
+              <CircularProgress size={14} color="inherit" />
+            ) : (
+              <Box
+                component="span"
+                sx={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  backgroundColor: getIndicatorColor(),
+                }}
+              />
+            )
+          }
         >
-          {isActive ? 'Deactivate' : 'Set Active'}
+          {isTesting ? 'Testing...' : 'Test'}
         </Button>
-      </CardContent>
-
-      <CardActions sx={{ justifyContent: 'space-between', px: 2, pb: 2 }}>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={handleTest}
-            disabled={isTesting}
-            startIcon={
-              isTesting ? (
-                <CircularProgress size={16} color="inherit" sx={{ mr: 1 }} />
-              ) : (
-                <Cable color="primary" />
-              )
-            }
-            sx={{
-              position: 'relative',
-              paddingRight: '36px',
-              minWidth: '120px',
-            }}
-          >
-            {isTesting ? 'Testing...' : 'Test'}
-            <Box
-              sx={{
-                position: 'absolute',
-                right: 8,
-                top: '50%',
-                transform: 'translateY(-50%)',
-                width: 10,
-                height: 10,
-                borderRadius: '50%',
-                backgroundColor: getIndicatorColor(),
-                border: `1px solid ${theme.palette.primary.contrastText}`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            />
-          </Button>
-        </Box>
-
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<Edit />}
-            onClick={handleEdit}
-          >
-            Edit
-          </Button>
-          {!isActive && (
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={<Edit />}
+          onClick={handleEdit}
+        >
+          Edit
+        </Button>
+        <Tooltip title={isActive ? 'Deactivate before deleting' : ''}>
+          <span>
             <Button
               size="small"
               variant="outlined"
               color="error"
               startIcon={<Delete />}
               onClick={handleDelete}
-              disabled={isDeleting}
-              sx={{
-                borderRadius: '8px',
-                '&:hover': {
-                  backgroundColor: 'error.light',
-                  color: 'error.contrastText',
-                  borderColor: 'error.light',
-                },
-              }}
+              disabled={isDeleting || isActive}
             >
               Delete
             </Button>
-          )}
-        </Box>
-      </CardActions>
+          </span>
+        </Tooltip>
+        <Tooltip title={activeSwitchTooltip}>
+          {/* span: a disabled Switch fires no events, so the tooltip needs a wrapper */}
+          <span>
+            <Switch
+              size="small"
+              checked={isActive}
+              onChange={handleSetActive}
+              disabled={isActiveSwitchDisabled}
+              color="success"
+              inputProps={{ 'aria-label': activeSwitchTooltip }}
+            />
+          </span>
+        </Tooltip>
+      </SettingsRow>
 
       {/* Delete Confirmation Dialog */}
       <Dialog
@@ -437,6 +363,6 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
           </Button>
         </DialogActions>
       </Dialog>
-    </Card>
+    </>
   );
 };

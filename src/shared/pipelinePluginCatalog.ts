@@ -61,6 +61,7 @@ export const PIPELINE_PLUGIN_CATALOG: readonly PipelinePluginContract[] = [
         key: 'working_dir',
         label: 'Working Dir',
         required: false,
+        defaultValue: 'rosetta',
         placeholder: 'rosetta',
       },
     ],

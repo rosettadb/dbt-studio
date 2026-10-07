@@ -528,6 +528,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
       const defaultJobName =
         nodes.find((n) => !n.data.isCleanup)?.data.jobName ?? 'run';
       const firstCommandField = def?.fields.find((f) => f.key === 'command');
+      const workingDirField = def?.fields.find((f) => f.key === 'working_dir');
 
       const newId = `node-${Date.now()}`;
       const newNode: Node<PipelineNodeData> = {
@@ -540,7 +541,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
           name: `New ${def?.label ?? pluginId} step`,
           plugin: pluginId,
           command: firstCommandField?.defaultValue ?? '',
-          working_dir: '',
+          working_dir: workingDirField?.defaultValue ?? '',
           stepIndex: nodes.length,
           jobName: defaultJobName,
           editMode: true,
@@ -613,6 +614,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
       const defaultJobName =
         nodes.find((n) => !n.data.isCleanup)?.data.jobName ?? 'run';
       const firstCommandField = def?.fields.find((f) => f.key === 'command');
+      const workingDirField = def?.fields.find((f) => f.key === 'working_dir');
       const offset = nodes.length * 30;
       const newId = `node-${Date.now()}`;
       commitHistory();
@@ -628,7 +630,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
             name: `New ${def?.label ?? pluginId} step`,
             plugin: pluginId,
             command: firstCommandField?.defaultValue ?? '',
-            working_dir: '',
+            working_dir: workingDirField?.defaultValue ?? '',
             stepIndex: nodes.length,
             jobName: defaultJobName,
             editMode: true,
