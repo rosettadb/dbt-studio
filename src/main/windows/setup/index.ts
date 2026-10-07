@@ -19,6 +19,9 @@ export const createSetupWindow = (): BrowserWindow => {
         : path.join(__dirname, '../../.erb/dll/preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      // Same preload as the main window; it requires Node's `path`, which a
+      // sandboxed preload cannot load. contextIsolation keeps Node off-page.
+      sandbox: false,
     },
   });
   projectWindow.loadURL(resolveHtmlPath('index.html', '/setup'));

@@ -21,6 +21,7 @@ import { Close, FolderOpen, Save } from '@mui/icons-material';
 import DatabaseIcon from '@mui/icons-material/Storage';
 
 import { styled } from '@mui/material/styles';
+import { path } from '../../lib/path';
 
 const AddProjectForm = styled(Box)(({ theme }) => ({
   width: '100%',
@@ -175,7 +176,7 @@ export const NewProject: React.FC<NewProjectProps> = ({
             variant="outlined"
             id="rosettaPath"
             name="rosettaPath"
-            value={`${defaultProjectPath}${navigator.appVersion.indexOf('Win') === -1 ? '/' : '\\'}${newProject.name}`}
+            value={path.join(defaultProjectPath, newProject.name)}
             onChange={(event) => setDefaultProjectPath(event.target.value)}
             InputProps={{
               endAdornment: (

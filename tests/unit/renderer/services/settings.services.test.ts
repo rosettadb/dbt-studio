@@ -1,7 +1,6 @@
 import {
   getSettings,
   updateSettings,
-  usePathJoin,
   setOpenAIKey,
   getOpenAIKey,
   deleteOpenAIKey,
@@ -44,17 +43,6 @@ describe('renderer/services/settings.services', () => {
       await updateSettings(settings);
 
       expect(client.post).toHaveBeenCalledWith('settings:save', settings);
-    });
-  });
-
-  describe('usePathJoin', () => {
-    it('should call client.post with settings:usePathJoin and args array', async () => {
-      client.post.mockResolvedValue({ data: '/a/b' });
-
-      const result = await usePathJoin('/a', 'b');
-
-      expect(client.post).toHaveBeenCalledWith('settings:usePathJoin', ['/a', 'b']);
-      expect(result).toBe('/a/b');
     });
   });
 

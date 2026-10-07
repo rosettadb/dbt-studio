@@ -4,6 +4,7 @@ import { Checkbox, FormControlLabel, Box, Typography } from '@mui/material';
 import React from 'react';
 import { TreeItem, SimpleTreeView as TreeView } from '@mui/x-tree-view';
 import { FileNode } from '../../../types/backend';
+import { path } from '../../lib/path';
 
 export type FileTreeMode = 'business' | 'staging' | 'incremental';
 
@@ -133,16 +134,15 @@ export const SelectableFileTree: React.FC<Props> = ({
       return true;
     }
 
-    const pathSeparator = window.electron.app.os === 'win32' ? '\\' : '/';
-
-    const pathParts = filePath.split(pathSeparator);
-
-    // eslint-disable-next-line no-plusplus
-    for (let i = pathParts.length - 1; i > 0; i--) {
-      const parentPath = pathParts.slice(0, i).join(pathSeparator);
-      if (selectedFolders.has(parentPath)) {
+    // Walk up the ancestors until dirname stops changing (filesystem root).
+    let current = filePath;
+    let parent = path.dirname(current);
+    while (parent !== current) {
+      if (selectedFolders.has(parent)) {
         return true;
       }
+      current = parent;
+      parent = path.dirname(current);
     }
 
     return false;

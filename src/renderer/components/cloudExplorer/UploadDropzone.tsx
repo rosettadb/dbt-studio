@@ -20,6 +20,7 @@ import {
   useUploadFolder,
 } from '../../controllers/cloudExplorer.controller';
 import { cloudExplorerService } from '../../services';
+import { path } from '../../lib/path';
 import type {
   CloudProvider,
   CloudStorageConfig,
@@ -132,7 +133,7 @@ const UploadDropzone: React.FC<UploadDropzoneProps> = ({
 
     await (result.filePaths as string[]).reduce(async (prev, localFilePath) => {
       await prev;
-      const fileName = localFilePath.split(/[\\/]/).pop() || 'file';
+      const fileName = path.basename(localFilePath) || 'file';
       const id = `${Date.now()}-${fileName}`;
       setItems((p) => [
         ...p,
@@ -165,7 +166,7 @@ const UploadDropzone: React.FC<UploadDropzoneProps> = ({
     if (result.canceled || !result.filePaths?.length) return;
 
     const localFolderPath: string = result.filePaths[0];
-    const folderName = localFolderPath.split(/[\\/]/).pop() || 'folder';
+    const folderName = path.basename(localFolderPath) || 'folder';
     const id = `${Date.now()}-${folderName}`;
     setItems((p) => [
       ...p,
@@ -240,9 +241,10 @@ const UploadDropzone: React.FC<UploadDropzoneProps> = ({
           } else if (entry.isDirectory) {
             const file = droppedItem.getAsFile();
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const localFolderPath = file
-              ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                (file as any).path?.replace(/[\\/][^\\/]+$/, '')
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const droppedPath = file ? ((file as any).path as string) : null;
+            const localFolderPath = droppedPath
+              ? path.dirname(droppedPath)
               : null;
             if (!localFolderPath) {
               toast.warning(

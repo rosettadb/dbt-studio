@@ -19,6 +19,7 @@ import {
   useUpdateConnection,
 } from '../../controllers';
 import { useConnectionNameValidation } from '../../utils/connectionValidation';
+import { path } from '../../lib/path';
 import ConnectionHeader from './connection-header';
 
 type Props = {
@@ -29,7 +30,7 @@ type Props = {
 };
 
 function shortSQLitePath(databasePath: string): string {
-  return databasePath.split(/[\\/]/).pop() || '';
+  return path.basename(databasePath);
 }
 
 export const SQLite: React.FC<Props> = ({

@@ -32,6 +32,10 @@ export const createMainWindow = (
         : path.join(__dirname, '../../.erb/dll/preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      // The preload exposes Node's `path` module to the renderer (see
+      // src/main/preload.ts); a sandboxed preload cannot require it. Page
+      // code is still isolated from Node by contextIsolation above.
+      sandbox: false,
       webviewTag: true,
     },
   });

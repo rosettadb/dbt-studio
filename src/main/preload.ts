@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
+import nodePath from 'path';
 import { Channels } from '../types/ipc';
 import { version } from '../../package.json';
 import {
@@ -41,7 +42,48 @@ const reviveIpcError = (err: unknown): unknown => {
   return revived;
 };
 
+/**
+ * Node's `path` module, exposed synchronously to the renderer so the UI never
+ * has to detect the OS or hand-roll separator logic. Only an explicit allowlist
+ * of pure string functions crosses the bridge (no module internals), and the
+ * `posix` / `win32` variants are included for the few places that must handle
+ * protocol-defined paths (git, cloud object keys) regardless of host OS.
+ *
+ * Loading `path` here requires `sandbox: false` on the BrowserWindow (a
+ * sandboxed preload can only require electron/events/timers/url).
+ * contextIsolation stays on, so page code still only sees this bridge.
+ */
+type NodePathModule = typeof nodePath;
+
+const pickPathApi = (p: NodePathModule) => ({
+  join: (...parts: string[]) => p.join(...parts),
+  resolve: (...parts: string[]) => p.resolve(...parts),
+  normalize: (filePath: string) => p.normalize(filePath),
+  isAbsolute: (filePath: string) => p.isAbsolute(filePath),
+  relative: (from: string, to: string) => p.relative(from, to),
+  dirname: (filePath: string) => p.dirname(filePath),
+  basename: (filePath: string, suffix?: string) => p.basename(filePath, suffix),
+  extname: (filePath: string) => p.extname(filePath),
+  parse: (filePath: string) => p.parse(filePath),
+  format: (pathObject: Parameters<NodePathModule['format']>[0]) =>
+    p.format(pathObject),
+  sep: p.sep,
+  delimiter: p.delimiter,
+});
+
+export type PathBridge = ReturnType<typeof pickPathApi> & {
+  posix: ReturnType<typeof pickPathApi>;
+  win32: ReturnType<typeof pickPathApi>;
+};
+
+const pathBridge: PathBridge = {
+  ...pickPathApi(nodePath),
+  posix: pickPathApi(nodePath.posix),
+  win32: pickPathApi(nodePath.win32),
+};
+
 const electronHandler = {
+  path: pathBridge,
   ipcRenderer: {
     sendMessage(channel: Channels, ...args: unknown[]) {
       ipcRenderer.send(channel, ...args);

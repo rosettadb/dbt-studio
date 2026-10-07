@@ -26,8 +26,6 @@ const handlerChannels: SettingsChannels[] = [
   'runner:plugins:check',
   'settings:reset-factory',
   'settings:restart',
-  'settings:getBasename',
-  'settings:getDirname',
   'dbt:versions:list',
   'dbt:installed:get',
   'dbt:versionChange:plan',
@@ -73,10 +71,6 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
 
   ipcMain.handle('settings:getDbtPath', async () => {
     return SettingsService.getDbtExePath();
-  });
-
-  ipcMain.handle('settings:usePathJoin', async (_event, body: string[]) => {
-    return SettingsService.usePathJoin(body);
   });
 
   ipcMain.handle(
@@ -163,18 +157,6 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
   ipcMain.handle('settings:restart', async () => {
     app.relaunch();
     app.exit(0);
-  });
-
-  ipcMain.handle('settings:getFileName', async (_event, body: string[]) => {
-    return SettingsService.getFileName(body);
-  });
-
-  ipcMain.handle('settings:getBasename', async (_event, filePath: string) => {
-    return SettingsService.getBasename(filePath);
-  });
-
-  ipcMain.handle('settings:getDirname', async (_event, filePath: string) => {
-    return SettingsService.getDirname(filePath);
   });
 
   // DuckDB management handlers

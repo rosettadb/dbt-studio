@@ -9,6 +9,7 @@ import {
   Description as DescriptionIcon,
 } from '@mui/icons-material';
 import { FileNode } from '../../../types/backend';
+import { path, splitSegments } from '../../lib/path';
 
 // DBT file type icons for context tree
 const DBT_FILE_ICONS = {
@@ -55,15 +56,15 @@ export const ContextFileTree: React.FC<ContextFileTreeProps> = ({
 
   // Helper function to detect DBT file type for styling
   const getDBTFileType = (filePath: string): string => {
-    const normalizedPath = filePath.replace(/\\/g, '/');
+    const dirs = splitSegments(filePath).slice(0, -1);
 
-    if (normalizedPath.includes('/models/')) return 'model';
-    if (normalizedPath.includes('/macros/')) return 'macro';
-    if (normalizedPath.includes('/tests/')) return 'test';
-    if (normalizedPath.includes('/snapshots/')) return 'snapshot';
-    if (normalizedPath.includes('/seeds/')) return 'seed';
+    if (dirs.includes('models')) return 'model';
+    if (dirs.includes('macros')) return 'macro';
+    if (dirs.includes('tests')) return 'test';
+    if (dirs.includes('snapshots')) return 'snapshot';
+    if (dirs.includes('seeds')) return 'seed';
 
-    const fileName = filePath.split('/').pop() || '';
+    const fileName = path.basename(filePath);
     if (fileName === 'dbt_project.yml') return 'project_config';
     if (fileName.endsWith('schema.yml') || fileName.endsWith('_schema.yml'))
       return 'schema';

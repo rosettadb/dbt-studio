@@ -92,7 +92,7 @@ import { AI_PROMPTS } from '../../config/constants';
 import { utils } from '../../helpers';
 import { AppLayout } from '../../layouts';
 import ChatScreen from '../chat';
-import { getFileName } from '../../services/settings.services';
+import { path as nodePath, toPosix, isInside } from '../../lib/path';
 import type { EditorTabId, EditorTabState } from '../../../types/editor';
 import { subscribeToToolResult } from '../../services/agentEvents.service';
 import {
@@ -151,17 +151,17 @@ const getPipelineRelativeName = (
   filePath: string,
   projectPath: string,
 ): string => {
-  const normalizedFile = filePath.replace(/\\/g, '/');
-  const normalizedProject = projectPath.replace(/\\/g, '/').replace(/\/$/, '');
   const baseDirs = [
-    `${normalizedProject}/rosetta/pipelines/`,
-    `${normalizedProject}/.rosetta/`,
+    nodePath.join(projectPath, 'rosetta', 'pipelines'),
+    nodePath.join(projectPath, '.rosetta'),
   ];
 
-  const base = baseDirs.find((dir) => normalizedFile.startsWith(dir));
+  const base = baseDirs.find(
+    (dir) => nodePath.relative(dir, filePath) !== '' && isInside(dir, filePath),
+  );
   const relative = base
-    ? normalizedFile.slice(base.length)
-    : (normalizedFile.split('/').pop() ?? normalizedFile);
+    ? toPosix(nodePath.relative(base, filePath))
+    : nodePath.basename(filePath);
 
   return relative.replace(/\.(yml|yaml)$/, '');
 };
@@ -324,8 +324,7 @@ const ProjectDetails: React.FC = () => {
 
   const activePipelineBasename = React.useMemo(() => {
     if (!activePipelineFilePath) return null;
-    const parts = activePipelineFilePath.split(/[\\/]/);
-    return parts[parts.length - 1] || null;
+    return nodePath.basename(activePipelineFilePath) || null;
   }, [activePipelineFilePath]);
 
   // Identifier matching the PIPELINE_FILE sent to the cloud and the key used
@@ -1115,7 +1114,7 @@ const ProjectDetails: React.FC = () => {
     filePath: string,
     _project: Project,
   ) => {
-    const fileName = await getFileName(filePath);
+    const fileName = nodePath.parse(filePath).name;
     const tables = await projectsServices.extractSchemaFromModelYaml(_project);
     // If Rosetta model.yaml is missing or empty, notify the user gracefully
     if (!tables || tables.length === 0) {
@@ -1190,7 +1189,7 @@ const ProjectDetails: React.FC = () => {
     }
 
     setIsLoadingQuery(true);
-    const fileName = await getFileName(selectedFilePath);
+    const fileName = nodePath.parse(selectedFilePath).name;
 
     try {
       const prompt = utils.format(

@@ -13,6 +13,7 @@ import {
   KeyboardArrowRight,
 } from '@mui/icons-material';
 import { FileTypeBadge } from '../../utils/fileTypeIcon';
+import { path } from '../../lib/path';
 
 interface ChangedFile {
   path: string;
@@ -130,7 +131,7 @@ export const FilesChangedBlock: React.FC<FilesChangedBlockProps> = ({
               }}
               onClick={() => onOpenFile(file.path)}
             >
-              <FileTypeBadge filename={file.path.split('/').pop() || ''} />
+              <FileTypeBadge filename={path.basename(file.path)} />
               <Tooltip title={file.path} placement="top" enterDelay={500}>
                 <Typography
                   variant="caption"
@@ -144,16 +145,19 @@ export const FilesChangedBlock: React.FC<FilesChangedBlockProps> = ({
                     fontSize: '12px',
                   }}
                 >
-                  {file.path.split('/').pop()}
+                  {path.basename(file.path)}
                   <Typography
                     component="span"
                     variant="caption"
                     sx={{ color: 'text.disabled', ml: 0.25, fontSize: '11px' }}
                   >
                     {(() => {
-                      const parts = file.path.split('/');
-                      return parts.length > 2
-                        ? `…/${parts.slice(-2, -1)[0]}/`
+                      // Show the immediate parent folder when there is one
+                      // above it (i.e. the file is at least two levels deep).
+                      const dir = path.dirname(file.path);
+                      const parent = path.basename(dir);
+                      return parent && path.dirname(dir) !== dir
+                        ? `…/${parent}/`
                         : '';
                     })()}
                   </Typography>

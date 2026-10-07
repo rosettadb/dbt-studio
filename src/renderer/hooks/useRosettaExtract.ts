@@ -7,7 +7,7 @@ import {
   useGetConnections,
 } from '../controllers';
 import { Project } from '../../types/backend';
-import { settingsServices } from '../services';
+import { path } from '../lib/path';
 import { buildKineticaUrl } from '../../shared/kineticaUrl';
 
 const useRosettaExtract = () => {
@@ -137,10 +137,7 @@ const useRosettaExtract = () => {
 
       await Promise.all(envPromises);
 
-      const projectPath = await settingsServices.usePathJoin(
-        project.path,
-        'rosetta',
-      );
+      const projectPath = path.join(project.path, 'rosetta');
       await runCommand(
         `cd "${projectPath}" && "${settings?.rosettaPath}" extract -s ${project.rosettaConnection?.name}`,
       );

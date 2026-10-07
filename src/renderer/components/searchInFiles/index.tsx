@@ -16,6 +16,7 @@ import {
 } from '@mui/icons-material';
 import { useTheme } from '@mui/material/styles';
 import { projectsServices } from '../../services';
+import { path as nodePath, isInside } from '../../lib/path';
 import { FileSearchResult } from '../../../types/backend';
 
 export type SearchResultSelection = {
@@ -33,8 +34,8 @@ type Props = {
 const DEBOUNCE_MS = 300;
 
 const toRelativePath = (filePath: string, projectPath: string): string => {
-  if (!projectPath || !filePath.startsWith(projectPath)) return filePath;
-  return filePath.slice(projectPath.length).replace(/^[/\\]/, '');
+  if (!projectPath || !isInside(projectPath, filePath)) return filePath;
+  return nodePath.relative(projectPath, filePath);
 };
 
 const HighlightedLine: React.FC<{

@@ -55,6 +55,7 @@ import {
 } from '../../controllers/agent.controller';
 import { useGetFileContent } from '../../controllers/projects.controller';
 import { projectsServices } from '../../services';
+import { path as nodePath } from '../../lib/path';
 import {
   releaseFileMutations,
   restoreFileMutation,
@@ -177,7 +178,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   // Load canonical project-specific AI context on the project screen only.
   const projectAgentContextPath =
     screenKey === 'project' && project?.path
-      ? `${project.path}/${PROJECT_AGENT_CONTEXT_FILE}`
+      ? nodePath.join(project.path, PROJECT_AGENT_CONTEXT_FILE)
       : undefined;
   const projectMemoryEnabled =
     screenKey === 'project' && projectId !== undefined && projectId !== null
@@ -658,7 +659,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
 
         if (!filePath) return;
 
-        const name = filePath.split('/').pop() ?? filePath;
+        const name = nodePath.basename(filePath) || filePath;
         const alreadyAdded = contextManager.additionalFiles.some(
           (f) => f.path === filePath,
         );

@@ -21,6 +21,7 @@ import {
   isToolResultFailure,
 } from '../../../shared/toolResult';
 import { FileTypeBadge } from '../../utils/fileTypeIcon';
+import { path } from '../../lib/path';
 import type { ToolCallState } from '../../hooks/useAgentStream';
 import { renderArguments, renderResult } from './ToolCallFormatters';
 import { isPipelineTool } from './pipelineToolResults';
@@ -93,9 +94,7 @@ export const ToolCallRow: React.FC<ToolCallRowProps> = ({
         const resultPath = (result as any)?.path;
         const requestedPath = typeof args?.path === 'string' ? args.path : '';
         const filename =
-          String(resultPath || requestedPath)
-            .split('/')
-            .pop() || 'pipeline';
+          path.basename(String(resultPath || requestedPath)) || 'pipeline';
         icon = <FileTypeBadge filename={filename} />;
         label = labelForStatus({
           done: `${toolName === 'studio_pipeline_generate' ? 'Created' : 'Updated'} ${filename}`,
@@ -108,7 +107,7 @@ export const ToolCallRow: React.FC<ToolCallRowProps> = ({
       case 'readDbtModel':
       case 'readFile': {
         const filePath = (args.filePath || args.path || '') as string;
-        const filename = filePath.split('/').pop() || 'file';
+        const filename = path.basename(filePath) || 'file';
         icon = <FileTypeBadge filename={filename} />;
         label = `Analyzed ${filename}`;
         category = 'read';
@@ -198,7 +197,7 @@ export const ToolCallRow: React.FC<ToolCallRowProps> = ({
       case 'writeDbtModel':
       case 'writeFile': {
         const filePath = (args.filePath || args.path || '') as string;
-        const filename = filePath.split('/').pop() || 'file';
+        const filename = path.basename(filePath) || 'file';
         icon = <FileTypeBadge filename={filename} />;
         label = `Edited ${filename}`;
         category = 'write';

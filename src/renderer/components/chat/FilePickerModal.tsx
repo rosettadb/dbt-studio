@@ -20,6 +20,7 @@ import {
   AccountTree as AccountTreeIcon,
 } from '@mui/icons-material';
 import { useGetProjectFiles, useGetSelectedProject } from '../../controllers';
+import { path, splitSegments } from '../../lib/path';
 import { FilePickerTreeView } from './FilePickerTreeView';
 import { FilePickerListView } from './FilePickerListView';
 
@@ -60,7 +61,7 @@ const SelectedFilesSummary: React.FC<SelectedFilesSummaryProps> = ({
       </Typography>
       <Box display="flex" flexWrap="wrap" gap={0.5} mt={0.5}>
         {selectedFiles.slice(0, 5).map((filePath) => {
-          const fileName = filePath.split('/').pop() || filePath;
+          const fileName = path.basename(filePath) || filePath;
           return (
             <Chip
               key={filePath}
@@ -112,15 +113,15 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
 
   // Helper function to detect DBT file type
   const detectFileType = (filePath: string): string => {
-    const normalizedPath = filePath.replace(/\\/g, '/');
+    const dirs = splitSegments(filePath).slice(0, -1);
 
-    if (normalizedPath.includes('/models/')) return 'model';
-    if (normalizedPath.includes('/macros/')) return 'macro';
-    if (normalizedPath.includes('/tests/')) return 'test';
-    if (normalizedPath.includes('/snapshots/')) return 'snapshot';
-    if (normalizedPath.includes('/seeds/')) return 'seed';
+    if (dirs.includes('models')) return 'model';
+    if (dirs.includes('macros')) return 'macro';
+    if (dirs.includes('tests')) return 'test';
+    if (dirs.includes('snapshots')) return 'snapshot';
+    if (dirs.includes('seeds')) return 'seed';
 
-    const fileName = filePath.split('/').pop() || '';
+    const fileName = path.basename(filePath);
     if (fileName === 'dbt_project.yml') return 'project_config';
     if (fileName.endsWith('schema.yml') || fileName.endsWith('_schema.yml'))
       return 'schema';
