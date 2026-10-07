@@ -6,16 +6,15 @@ import { Inputs, RelativeContainer } from './styles';
 import { connectorsServices, projectsServices } from '../../services';
 import { DuckLakeService } from '../../services/duckLake.service';
 import { QueryHistoryType } from '../../../types/frontend';
-import {
-  ConnectionInput,
-  Project,
-  SNOWFLAKE_REAUTH_MESSAGE,
-  Table,
-} from '../../../types/backend';
+import * as connectionTypes from '../../../types/backend';
+import type { ConnectionInput, Project, Table } from '../../../types/backend';
 import { SqlEditorComponent } from './editorComponent';
 import { useAppContext } from '../../hooks';
 import { useSqlEditorBridge } from '../../controllers';
 import { insertTextAtCursor } from '../../lib/monaco/insertText';
+
+// Keep a local runtime binding for the error path in transpile-only builds.
+const snowflakeReauthMessage = connectionTypes.SNOWFLAKE_REAUTH_MESSAGE;
 
 /**
  * Imperative surface exposed through `ref`, used by the Data tree context
@@ -207,7 +206,7 @@ export const SqlEditor = React.forwardRef<SqlEditorHandle, Props>(
           // Missing Snowflake session: toast the shared guidance so it is
           // visible even when the results pane is out of view. All other
           // query errors keep their existing inline-only display.
-          if (result.error === SNOWFLAKE_REAUTH_MESSAGE) {
+          if (result.error === snowflakeReauthMessage) {
             toast.error(result.error);
           }
           setLoadingQuery(false);

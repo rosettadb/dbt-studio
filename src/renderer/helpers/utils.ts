@@ -7,6 +7,7 @@ import {
   ConnectionModel,
   DatabricksConnection,
   DuckDBConnection,
+  Db2Connection,
   PostgresConnection,
   Project,
   RedshiftConnection,
@@ -295,6 +296,20 @@ export const getConnectionInput = (conn: ConnectionModel) => {
         database: mysql.database || '',
         schema: mysql.schema || '',
         ssl: mysql.ssl,
+      };
+    case 'db2':
+      const db2 = connection as Db2Connection;
+      return {
+        type,
+        name: connection.name,
+        host: db2.host,
+        port: db2.port,
+        username: db2.username,
+        password: '',
+        database: db2.database,
+        schema: db2.schema || '',
+        ssl: db2.ssl,
+        sslCaPath: db2.sslCaPath,
       };
     default:
       return undefined;

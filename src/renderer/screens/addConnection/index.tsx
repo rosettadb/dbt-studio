@@ -106,6 +106,12 @@ const baseItems: ItemType[] = [
     img: 'mysql',
     disabled: false,
   },
+  {
+    id: 'db2',
+    name: 'IBM Db2',
+    img: 'db2',
+    disabled: false,
+  },
 ];
 
 const AddConnection: React.FC = () => {
@@ -227,6 +233,15 @@ const AddConnection: React.FC = () => {
           <Connections.MySql
             onCancel={() => setSelectedItem(undefined)}
             projectId={projectId}
+            duplicateFrom={duplicateData}
+            suggestedName={suggestedName}
+          />
+        );
+      }
+      case 'db2': {
+        return (
+          <Connections.Db2
+            onCancel={() => setSelectedItem(undefined)}
             duplicateFrom={duplicateData}
             suggestedName={suggestedName}
           />

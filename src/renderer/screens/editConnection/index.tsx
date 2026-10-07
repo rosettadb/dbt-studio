@@ -107,6 +107,15 @@ const EditConnection: React.FC = () => {
           />
         );
       }
+      case 'db2': {
+        return (
+          <Connections.Db2
+            key={connId}
+            onCancel={handleCancel}
+            connection={conn}
+          />
+        );
+      }
       default: {
         return (
           <Connections.Postgres

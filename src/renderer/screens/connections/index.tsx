@@ -362,6 +362,7 @@ const Connections: React.FC = () => {
     switch (connection.type) {
       case 'postgres':
       case 'redshift':
+      case 'db2':
         return (
           <Typography variant="body2" color="text.secondary">
             Host: {connection.host}:{connection.port}
