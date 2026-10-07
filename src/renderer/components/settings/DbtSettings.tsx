@@ -983,6 +983,18 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                   }
                   description={packageDescriptions[pkg]}
                 >
+                  {!installSource && (
+                    <SettingsRefreshButton
+                      title="Refresh versions"
+                      onClick={() => {
+                        fetchPackageVersions(pkg).catch(() => undefined);
+                        if (!isExpanded) {
+                          setExpandedPackage(pkg);
+                        }
+                      }}
+                      loading={isLoading}
+                    />
+                  )}
                   {installSource && (
                     <Button
                       size="small"
