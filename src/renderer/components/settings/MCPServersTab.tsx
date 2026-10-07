@@ -479,7 +479,11 @@ const ServerRow: React.FC<{
         )}
         {server.connected && (
           <Tooltip title={expanded ? 'Hide tools' : 'Show tools'}>
-            <IconButton size="small" onClick={() => setExpanded((v) => !v)}>
+            <IconButton
+              size="small"
+              aria-expanded={expanded}
+              onClick={() => setExpanded((v) => !v)}
+            >
               <ExpandMoreIcon
                 fontSize="small"
                 sx={{

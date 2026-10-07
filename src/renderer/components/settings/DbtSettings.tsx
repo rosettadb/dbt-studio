@@ -1195,7 +1195,9 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                     </SettingsRow>
                   );
                 })
-            : !isCheckingPackages && (
+            : (isCheckingPackages && (
+                <SettingsRow label="Checking installed packages..." />
+              )) || (
                 <SettingsRow
                   label="No dbt packages found."
                   description="You may need to reinstall dbt."

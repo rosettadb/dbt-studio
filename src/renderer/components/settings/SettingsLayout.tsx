@@ -103,44 +103,56 @@ export const SettingsRow: React.FC<SettingsRowProps> = ({
   label,
   description,
   children,
-}) => (
-  <Box
-    sx={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: 2,
-      px: 1.75,
-      py: 0.875,
-      minHeight: 40,
-    }}
-  >
-    <Box sx={{ minWidth: 0 }}>
-      <Typography variant="body2" fontWeight={500} component="div">
-        {label}
-      </Typography>
-      {description && (
-        <Typography variant="caption" component="div" color="text.secondary">
-          {description}
+}) => {
+  // The visible label names the row, so screen readers announce it for the
+  // control(s) on the right.
+  const labelId = React.useId();
+  return (
+    <Box
+      role={children ? 'group' : undefined}
+      aria-labelledby={children ? labelId : undefined}
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 2,
+        px: 1.75,
+        py: 0.875,
+        minHeight: 40,
+      }}
+    >
+      <Box sx={{ minWidth: 0 }}>
+        <Typography
+          id={labelId}
+          variant="body2"
+          fontWeight={500}
+          component="div"
+        >
+          {label}
         </Typography>
+        {description && (
+          <Typography variant="caption" component="div" color="text.secondary">
+            {description}
+          </Typography>
+        )}
+      </Box>
+      {children && (
+        <Box
+          sx={{
+            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            // The app theme makes every input 48px tall; keep rows compact.
+            '& .MuiInputBase-root': { height: 32, fontSize: 13 },
+          }}
+        >
+          {children}
+        </Box>
       )}
     </Box>
-    {children && (
-      <Box
-        sx={{
-          flexShrink: 0,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1,
-          // The app theme makes every input 48px tall; keep rows compact.
-          '& .MuiInputBase-root': { height: 32, fontSize: 13 },
-        }}
-      >
-        {children}
-      </Box>
-    )}
-  </Box>
-);
+  );
+};
 
 // Free-form content inside a section (lists, editors, empty states).
 export const SettingsSectionBody: React.FC<{ children: React.ReactNode }> = ({

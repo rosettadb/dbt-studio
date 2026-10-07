@@ -421,7 +421,12 @@ export const BackupSettings: React.FC = () => {
 
   const renderPasswordToggle = (visible: boolean, onToggle: () => void) => (
     <InputAdornment position="end">
-      <IconButton size="small" onClick={onToggle} edge="end">
+      <IconButton
+        size="small"
+        onClick={onToggle}
+        edge="end"
+        aria-label={visible ? 'Hide password' : 'Show password'}
+      >
         {visible ? (
           <VisibilityOff fontSize="small" />
         ) : (

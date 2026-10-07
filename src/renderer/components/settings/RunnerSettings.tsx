@@ -284,9 +284,10 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
         {(!versionInfo || versionInfo.availableVersions.length === 0) && (
           <SettingsRow
             label={
-              checkVersions.isLoading
-                ? 'Loading available versions...'
-                : 'No version information yet.'
+              (checkVersions.isLoading && 'Loading available versions...') ||
+              (versionInfo
+                ? 'No versions available.'
+                : 'No version information yet.')
             }
           />
         )}

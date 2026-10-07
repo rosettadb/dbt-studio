@@ -46,10 +46,15 @@ export const AboutSettings: React.FC = () => {
     setIsResetModalOpen(false);
   };
 
-  const renderExternalLinkButton = (label: string, url: string) => (
+  const renderExternalLinkButton = (
+    label: string,
+    url: string,
+    accessibleLabel: string,
+  ) => (
     <Button
       size="small"
       variant="outlined"
+      aria-label={accessibleLabel}
       endIcon={<OpenInNew fontSize="small" />}
       component="a"
       href={url}
@@ -91,16 +96,22 @@ export const AboutSettings: React.FC = () => {
           {renderExternalLinkButton(
             'Open',
             'https://github.com/rosettadb/dbt-studio',
+            'Get help with Rosetta DBT Studio on GitHub',
           )}
         </SettingsRow>
         <SettingsRow label="Report an issue">
           {renderExternalLinkButton(
             'Open',
             'https://github.com/rosettadb/dbt-studio/issues',
+            'Report an issue on GitHub',
           )}
         </SettingsRow>
         <SettingsRow label="Learn more about Rosetta DBT Studio">
-          {renderExternalLinkButton('Open', 'https://rosettadb.io/')}
+          {renderExternalLinkButton(
+            'Open',
+            'https://rosettadb.io/',
+            'Learn more about Rosetta DBT Studio on rosettadb.io',
+          )}
         </SettingsRow>
       </SettingsSection>
 

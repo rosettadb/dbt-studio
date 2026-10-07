@@ -4,8 +4,6 @@ import {
   Box,
   Button,
   LinearProgress,
-  IconButton,
-  Tooltip,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -14,7 +12,6 @@ import {
 } from '@mui/material';
 import {
   Storage,
-  Refresh,
   RestartAlt,
   Warning,
   Close,
@@ -29,6 +26,7 @@ import {
   useDiagnoseDuckDb,
 } from '../../controllers/settings.controller';
 import {
+  SettingsRefreshButton,
   SettingsRow,
   SettingsSection,
   SettingsSectionBody,
@@ -197,11 +195,10 @@ export const DuckDBWorkspaceCard: React.FC = () => {
         icon={<StorageOutlined />}
         description="Local DuckDB instance used for caching, data preview, and persistent storage."
         action={
-          <Tooltip title="Refresh Status">
-            <IconButton onClick={handleRefresh} size="small">
-              <Refresh fontSize="small" />
-            </IconButton>
-          </Tooltip>
+          <SettingsRefreshButton
+            title="Refresh status"
+            onClick={handleRefresh}
+          />
         }
       >
         {isLoading ? (

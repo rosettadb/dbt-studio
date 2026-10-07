@@ -70,6 +70,7 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
                 endAdornment: (
                   <IconButton
                     size="small"
+                    aria-label="Choose projects directory"
                     onClick={() =>
                       onFilePicker(
                         'projectsDirectory',
