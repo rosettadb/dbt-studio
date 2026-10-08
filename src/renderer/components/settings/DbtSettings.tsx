@@ -17,6 +17,8 @@ import {
   DialogContent,
   DialogTitle,
   AlertTitle,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@mui/material';
 import {
   Info,
@@ -122,9 +124,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
   const [isCheckingDbtCoreVersions, setIsCheckingDbtCoreVersions] =
     React.useState(false);
   const [showOlderVersions, setShowOlderVersions] = React.useState(false);
-  const [expandedRuntime, setExpandedRuntime] = React.useState<
-    'v1' | 'v2' | null
-  >(null);
+  const [isVersionListOpen, setIsVersionListOpen] = React.useState(false);
   const warningStyle = useSettingsWarningStyle();
   const [versionChangePlan, setVersionChangePlan] =
     React.useState<DbtVersionChangePlan | null>(null);
@@ -810,41 +810,13 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     );
   }
 
-  const renderRuntimeRow = (
-    runtime: 'v1' | 'v2',
-    label: React.ReactNode,
-    description: string,
-    isActive: boolean,
-  ) => (
-    <SettingsRow label={label} description={description}>
-      {isActive ? (
-        <SettingsStatus tone="success">
-          Active · {settings.dbtVersion}
-        </SettingsStatus>
-      ) : (
-        <SettingsStatus tone="neutral">Not installed</SettingsStatus>
-      )}
-      <IconButton
-        size="small"
-        onClick={() =>
-          setExpandedRuntime((current) =>
-            current === runtime ? null : runtime,
-          )
-        }
-        aria-label={
-          expandedRuntime === runtime ? 'Hide versions' : 'Show versions'
-        }
-      >
-        <ExpandMore
-          fontSize="small"
-          sx={{
-            transform: expandedRuntime === runtime ? 'rotate(180deg)' : 'none',
-            transition: 'transform 0.15s',
-          }}
-        />
-      </IconButton>
-    </SettingsRow>
-  );
+  const activeRuntime: 'v1' | 'v2' = isV2Active ? 'v2' : 'v1';
+  // Choosing a runtime switches to its newest version (list is newest first)
+  // through the same version change flow as the version buttons.
+  const newestRuntimeVersion = {
+    v1: allPythonDbtVersions[0]?.version,
+    v2: allRustDbtVersions[0]?.version,
+  };
 
   const renderRuntimeVersions = (
     versions: DbtVersionListResponse['versions'],
@@ -888,52 +860,94 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
           />
         }
       >
-        {renderRuntimeRow(
-          'v1',
-          'dbt Core v1 · Python',
-          'Stable runtime. Recommended for production projects and broad adapter compatibility.',
-          hasDbt && !isV2Active,
-        )}
-        {expandedRuntime === 'v1' && (
+        <SettingsRow
+          label="Runtime"
+          description="v1 runs on Python and is stable. v2 runs on Rust and is in preview."
+        >
+          <ToggleButtonGroup
+            exclusive
+            size="small"
+            color="success"
+            value={hasDbt ? activeRuntime : null}
+            disabled={isLoadingDialog || isLoadingInstall}
+            onChange={(_, runtime: 'v1' | 'v2' | null) => {
+              const target = runtime && newestRuntimeVersion[runtime];
+              if (!target || (hasDbt && runtime === activeRuntime)) return;
+              prepareDbtVersionChange(target).catch(() => undefined);
+            }}
+            sx={{
+              '& .MuiToggleButton-root': {
+                textTransform: 'none',
+                fontSize: 12,
+                py: 0.25,
+                px: 1.25,
+                whiteSpace: 'nowrap',
+              },
+            }}
+          >
+            <ToggleButton
+              value="v1"
+              disabled={!newestRuntimeVersion.v1}
+              aria-label="Use dbt Core v1"
+            >
+              dbt Core v1
+            </ToggleButton>
+            <ToggleButton
+              value="v2"
+              disabled={!newestRuntimeVersion.v2}
+              aria-label="Use dbt Core v2"
+            >
+              dbt Core v2
+              <Chip
+                label="Preview"
+                size="small"
+                color="warning"
+                variant="outlined"
+                sx={{ ml: 0.75, height: 18, fontSize: 10.5 }}
+              />
+            </ToggleButton>
+          </ToggleButtonGroup>
+        </SettingsRow>
+
+        <SettingsRow
+          label="Versions"
+          description={
+            hasDbt ? `Active · ${settings.dbtVersion}` : 'Not installed'
+          }
+        >
+          <IconButton
+            size="small"
+            onClick={() => setIsVersionListOpen((open) => !open)}
+            aria-label={isVersionListOpen ? 'Hide versions' : 'Show versions'}
+          >
+            <ExpandMore
+              fontSize="small"
+              sx={{
+                transform: isVersionListOpen ? 'rotate(180deg)' : 'none',
+                transition: 'transform 0.15s',
+              }}
+            />
+          </IconButton>
+        </SettingsRow>
+        {isVersionListOpen && (
           <SettingsSectionBody>
-            {!settings.pythonPath && (
+            {activeRuntime === 'v1' && !settings.pythonPath && (
               <Alert severity="info" sx={{ mb: 1.25 }}>
                 Python is not installed yet. Installing a dbt Core v1 version
                 below will install it automatically.
               </Alert>
             )}
-            {renderRuntimeVersions(
-              pythonDbtVersions,
-              'No dbt Core v1 releases are available.',
-              allPythonDbtVersions.length > 5,
-            )}
-          </SettingsSectionBody>
-        )}
-
-        {renderRuntimeRow(
-          'v2',
-          <Box
-            component="span"
-            sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
-          >
-            dbt Core v2 · Rust
-            <Chip
-              label="Preview"
-              size="small"
-              color="warning"
-              variant="outlined"
-            />
-          </Box>,
-          'Preview runtime, still in alpha. Cloud pipeline runs are unavailable while v2 is active.',
-          hasDbt && isV2Active,
-        )}
-        {expandedRuntime === 'v2' && (
-          <SettingsSectionBody>
-            {renderRuntimeVersions(
-              rustDbtVersions,
-              'No dbt Core v2 preview releases are available.',
-              allRustDbtVersions.length > 5,
-            )}
+            {activeRuntime === 'v1'
+              ? renderRuntimeVersions(
+                  pythonDbtVersions,
+                  'No dbt Core v1 releases are available.',
+                  allPythonDbtVersions.length > 5,
+                )
+              : renderRuntimeVersions(
+                  rustDbtVersions,
+                  'No dbt Core v2 preview releases are available.',
+                  allRustDbtVersions.length > 5,
+                )}
           </SettingsSectionBody>
         )}
 
