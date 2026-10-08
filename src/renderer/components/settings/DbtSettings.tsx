@@ -669,14 +669,20 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
   };
 
   const availableVersions = dbtCoreVersions?.versions ?? [];
-  const pythonDbtVersions = availableVersions
-    .filter(
-      (item) => Number.parseInt(item.version, 10) === 1 && !item.isPrerelease,
-    )
-    .slice(0, showOlderVersions ? 15 : 5);
-  const rustDbtVersions = availableVersions
-    .filter((item) => Number.parseInt(item.version, 10) >= 2)
-    .slice(0, showOlderVersions ? 15 : 5);
+  const allPythonDbtVersions = availableVersions.filter(
+    (item) => Number.parseInt(item.version, 10) === 1 && !item.isPrerelease,
+  );
+  const allRustDbtVersions = availableVersions.filter(
+    (item) => Number.parseInt(item.version, 10) >= 2,
+  );
+  const pythonDbtVersions = allPythonDbtVersions.slice(
+    0,
+    showOlderVersions ? 15 : 5,
+  );
+  const rustDbtVersions = allRustDbtVersions.slice(
+    0,
+    showOlderVersions ? 15 : 5,
+  );
 
   const renderVersionList = (
     versions: DbtVersionListResponse['versions'],
@@ -843,6 +849,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
   const renderRuntimeVersions = (
     versions: DbtVersionListResponse['versions'],
     emptyMessage: string,
+    hasOlderVersions: boolean,
   ) => (
     <Box
       sx={(theme) => ({
@@ -854,6 +861,16 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
       })}
     >
       {renderVersionList(versions, emptyMessage)}
+      {hasOlderVersions && (
+        <Box sx={{ px: 1.75, py: 0.75, textAlign: 'center' }}>
+          <Button
+            size="small"
+            onClick={() => setShowOlderVersions((value) => !value)}
+          >
+            {showOlderVersions ? 'Show fewer' : 'Show older versions'}
+          </Button>
+        </Box>
+      )}
     </Box>
   );
 
@@ -864,34 +881,13 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
         icon={<DataObjectOutlined />}
         description="Only one runtime can be installed at a time. Changing it affects all local projects."
         action={
-          <>
-            <Button
-              size="small"
-              onClick={() => setShowOlderVersions((value) => !value)}
-            >
-              {showOlderVersions ? 'Show fewer' : 'Show older'}
-            </Button>
-            <SettingsRefreshButton
-              title="Refresh versions"
-              onClick={handleRefreshDbtCoreVersionsClick}
-              loading={isCheckingDbtCoreVersions}
-            />
-          </>
+          <SettingsRefreshButton
+            title="Refresh versions"
+            onClick={handleRefreshDbtCoreVersionsClick}
+            loading={isCheckingDbtCoreVersions}
+          />
         }
       >
-        <SettingsRow
-          label="dbt Path"
-          description={settings.dbtPath || 'Not installed'}
-        />
-        {settings.pythonPath && settings.pythonVersion && (
-          <SettingsRow
-            label="Python environment"
-            description={settings.pythonPath}
-          >
-            <Chip size="small" label={settings.pythonVersion} />
-          </SettingsRow>
-        )}
-
         {renderRuntimeRow(
           'v1',
           'dbt Core v1 · Python',
@@ -909,6 +905,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
             {renderRuntimeVersions(
               pythonDbtVersions,
               'No dbt Core v1 releases are available.',
+              allPythonDbtVersions.length > 5,
             )}
           </SettingsSectionBody>
         )}
@@ -935,6 +932,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
             {renderRuntimeVersions(
               rustDbtVersions,
               'No dbt Core v2 preview releases are available.',
+              allRustDbtVersions.length > 5,
             )}
           </SettingsSectionBody>
         )}
@@ -947,6 +945,19 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
               release.
             </Alert>
           </SettingsSectionBody>
+        )}
+
+        <SettingsRow
+          label="dbt Path"
+          description={settings.dbtPath || 'Not installed'}
+        />
+        {settings.pythonPath && settings.pythonVersion && (
+          <SettingsRow
+            label="Python environment"
+            description={settings.pythonPath}
+          >
+            <Chip size="small" label={settings.pythonVersion} />
+          </SettingsRow>
         )}
       </SettingsSection>
 
