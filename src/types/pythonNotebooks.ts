@@ -235,3 +235,172 @@ export interface ExecuteCellResult {
   execution_count: number | null;
   outputs: PythonCellOutput[];
 }
+
+/* ------------------------------------------------------------------ */
+/* Notebooks agent (Python notebooks)                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * What the agent sees of a notebook. Built by src/shared/notebookAgentSummary
+ * from the editor's live cells (bridge answers) or the saved file (prompt).
+ */
+export type AgentCellStatus =
+  | 'never_run'
+  | 'queued'
+  | 'running'
+  | 'ok'
+  | 'error';
+
+export interface AgentCellEntry {
+  id: string;
+  /** 1-based position in the notebook */
+  index: number;
+  type: PythonCellType;
+  /** sql cells: the DataFrame variable that receives the result */
+  variable?: string;
+  /** First non-empty line, at most 100 chars */
+  preview: string;
+  lines: number;
+  status: AgentCellStatus;
+  executionCount: number | null;
+  /** One label: "KeyError: 'region'", "DataFrame 1,204 × 7", "image/png", "stdout (12 lines)" or "" */
+  output: string;
+}
+
+export interface AgentNotebookState {
+  notebookId: string;
+  name: string;
+  pythonVersion: string;
+  envStatus: NotebookEnvStatus;
+  kernelStatus: KernelStatus;
+  selectedCellId: string | null;
+  runningAll: boolean;
+  cells: AgentCellEntry[];
+}
+
+export interface AgentCellSource {
+  cellId: string;
+  index: number;
+  type: PythonCellType;
+  variable?: string;
+  source: string;
+  notebookName: string;
+}
+
+export interface AgentCellRef {
+  cellId: string;
+  index: number;
+  variable?: string;
+}
+
+export type AgentOutput =
+  | {
+      kind: 'stream';
+      name: 'stdout' | 'stderr';
+      text: string;
+      truncated: boolean;
+    }
+  | { kind: 'error'; ename: string; evalue: string; traceback: string }
+  | {
+      kind: 'dataframe';
+      columns: { name: string; dtype: string }[];
+      totalRows: number;
+      totalColumns: number;
+      rows: DataFrameCellValue[][];
+      truncated: boolean;
+    }
+  | { kind: 'sql_without_pandas'; variable: string; rowCount: number }
+  | { kind: 'image'; mime: string }
+  | { kind: 'text'; mime: string; text: string; truncated: boolean };
+
+export interface AgentCellResult {
+  cellId: string;
+  index: number;
+  type: PythonCellType;
+  status: AgentCellStatus;
+  executionCount: number | null;
+  outputs: AgentOutput[];
+  omittedOutputs: number;
+}
+
+export interface AgentRunResult extends AgentCellResult {
+  /** false: still running after the wait (check notebooks_cell_result later) */
+  finished: boolean;
+  /** Set when the run didn't start: env not ready, invalid variable, empty cell */
+  blocked?: string;
+}
+
+/**
+ * Agent bridge ops (main → open PythonNotebookEditor). Each op maps its
+ * arguments to its result, so both sides of the IPC seam are type-checked.
+ */
+export interface PythonNotebookAgentOps {
+  state: { args: Record<string, never>; result: AgentNotebookState };
+  'cell-read': { args: { cellId: string }; result: AgentCellSource };
+  'cell-add': {
+    args: {
+      cellType: PythonCellType;
+      source: string;
+      afterCellId?: string;
+      variable?: string;
+    };
+    result: AgentCellRef;
+  };
+  'cell-update': {
+    args: {
+      cellId: string;
+      source?: string;
+      cellType?: PythonCellType;
+      variable?: string;
+    };
+    result: AgentCellRef;
+  };
+  'cell-run': {
+    args: { cellId: string; expectedSource: string; waitMs: number };
+    result: AgentRunResult;
+  };
+  'cell-result': { args: { cellId: string }; result: AgentCellResult };
+}
+
+export type PythonNotebookAgentOp = keyof PythonNotebookAgentOps;
+
+export type PythonNotebookAgentArgs<K extends PythonNotebookAgentOp> =
+  PythonNotebookAgentOps[K]['args'];
+
+export type PythonNotebookAgentResult<K extends PythonNotebookAgentOp> =
+  PythonNotebookAgentOps[K]['result'];
+
+/** Renderer-side implementation of every op. Throw to fail the request. */
+export type PythonNotebookAgentHandlers = {
+  [K in PythonNotebookAgentOp]: (
+    args: PythonNotebookAgentArgs<K>,
+  ) => Promise<PythonNotebookAgentResult<K>>;
+};
+
+export interface PythonNotebookAgentRequest<
+  K extends PythonNotebookAgentOp = PythonNotebookAgentOp,
+> {
+  requestId: string;
+  conversationId: number;
+  /** From the agent context, never from tool input */
+  notebookId: string;
+  op: K;
+  args: PythonNotebookAgentArgs<K>;
+}
+
+export interface PythonNotebookAgentResponse {
+  requestId: string;
+  success: boolean;
+  data?: unknown;
+  error?: string;
+}
+
+/** Result of a silent kernel variable inspection (notebooks_variables). */
+export interface KernelInspectResult {
+  /** false: no kernel is running, so no variables exist yet */
+  kernelRunning: boolean;
+  /** true: the request queued behind a running cell and timed out */
+  busy?: boolean;
+  data?: unknown;
+  error?: string;
+}

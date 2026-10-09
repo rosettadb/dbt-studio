@@ -41,6 +41,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type { editor } from 'monaco-editor';
 import type { Notebook } from '../../../../types/notebooks';
 import type {
+  ExecuteCellResult,
   KernelEvent,
   NotebookRuntime,
   PythonCellOutput,
@@ -64,7 +65,15 @@ import {
   useShutdownKernel,
   useUpdatePythonNotebook,
 } from '../../../controllers/pythonNotebooks.controller';
-import { useMonacoAutocomplete, useSchemaForConnection } from '../../../hooks';
+import {
+  useAppContext,
+  useMonacoAutocomplete,
+  useSchemaForConnection,
+} from '../../../hooks';
+import {
+  PythonNotebookEditorPort,
+  usePythonNotebookAgentBridge,
+} from '../../../hooks/usePythonNotebookAgentBridge';
 import { insertTextAtCursor } from '../../../lib/monaco/insertText';
 import type { SqlSchemaCompletionEntry } from '../../../lib/monaco/completions/sqlSchema';
 import {
@@ -79,9 +88,16 @@ import { CellInsertBar } from './CellInsertBar';
 import { PackagesDialog } from './PackagesDialog';
 import { PythonRuntimePicker } from './PythonRuntimePicker';
 import type { RunMode, EditorMountHandler } from './PythonCodeCell';
+import {
+  AskAgentRequest,
+  EMPTY_CELL_REASON,
+  buildAskAgentPrompt,
+  checkRunnable,
+  metadataForType,
+  newCell,
+} from './pythonCells';
 
 const SAVE_DEBOUNCE_MS = 600;
-const PYTHON_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 const pythonSaveFlushers = new Map<string, () => Promise<void>>();
 
@@ -118,51 +134,6 @@ export type NotebookEditorHandle = {
   /** Append a SQL cell with `source`; optionally run it once saved. */
   addSqlCell: (source: string, run?: boolean) => Promise<string | null>;
 };
-
-/** First of df, df_2, df_3… not used by another SQL cell. */
-function nextSqlVariable(cells: PythonNotebookCell[]): string {
-  const taken = new Set(
-    cells
-      .filter((c) => c.cell_type === 'sql')
-      .map((c) => c.metadata.rosetta?.variable),
-  );
-  if (!taken.has('df')) return 'df';
-  let n = 2;
-  while (taken.has(`df_${n}`)) n += 1;
-  return `df_${n}`;
-}
-
-/** Cell metadata for `type`: sql cells carry the language + result variable. */
-function metadataForType(
-  type: PythonCellType,
-  metadata: PythonNotebookCell['metadata'],
-  cells: PythonNotebookCell[],
-): PythonNotebookCell['metadata'] {
-  const { rosetta, ...rest } = metadata;
-  if (type !== 'sql') return rest;
-  return {
-    ...rest,
-    rosetta: {
-      ...rosetta,
-      language: 'sql',
-      variable: rosetta?.variable || nextSqlVariable(cells),
-    },
-  };
-}
-
-function newCell(
-  type: PythonCellType,
-  cells: PythonNotebookCell[],
-): PythonNotebookCell {
-  return {
-    id: uuidv4(),
-    cell_type: type,
-    source: '',
-    outputs: [],
-    execution_count: null,
-    metadata: metadataForType(type, {}, cells),
-  };
-}
 
 function appendOutput(
   outputs: PythonCellOutput[],
@@ -210,6 +181,7 @@ export const PythonNotebookEditor = forwardRef<
   const deleteNotebook = useDeletePythonNotebook();
   const installPackages = useInstallNotebookPackages();
   const { data: kernel } = useKernelState(notebookId);
+  const { openChatWithMessage, isAiProviderSet } = useAppContext();
 
   const [cells, setCells] = useState<PythonNotebookCell[]>([]);
   const cellsRef = useRef<PythonNotebookCell[]>([]);
@@ -608,24 +580,20 @@ export const PythonNotebookEditor = forwardRef<
   );
 
   // ── Execution ───────────────────────────────────────────────────
-  const runCell = useCallback(
-    async (cellId: string): Promise<boolean> => {
+  /** Run a cell; `result` is the kernel's final result when it ran. */
+  const executeCellRun = useCallback(
+    async (
+      cellId: string,
+    ): Promise<{ ok: boolean; result?: ExecuteCellResult }> => {
       const cell = cellsRef.current.find((c) => c.id === cellId);
-      if (!cell || cell.cell_type === 'markdown') return true;
+      if (!cell || cell.cell_type === 'markdown') return { ok: true };
+      const blocked = checkRunnable(cell, runtime);
+      if (blocked === EMPTY_CELL_REASON) return { ok: true };
+      if (blocked) {
+        toast.warn(blocked);
+        return { ok: false };
+      }
       const variable = cell.metadata.rosetta?.variable ?? '';
-      if (cell.cell_type === 'sql' && !PYTHON_IDENTIFIER.test(variable)) {
-        toast.warn(`"${variable}" is not a valid Python variable name.`);
-        return false;
-      }
-      if (runtime && runtime.status !== 'ready') {
-        toast.warn(
-          runtime.status === 'creating'
-            ? 'The environment is still being created.'
-            : 'The environment is not ready. Recreate it from the kernel bar.',
-        );
-        return false;
-      }
-      if (!cell.source.trim()) return true;
 
       await flushPendingSave();
       setActiveCells((prev) =>
@@ -666,17 +634,23 @@ export const PythonNotebookEditor = forwardRef<
           cellsRef.current = next;
           return next;
         });
-        return result.status === 'ok';
+        return { ok: result.status === 'ok', result };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         toast.error(`Execution failed: ${message}`);
-        return false;
+        return { ok: false };
       } finally {
         runningCellsRef.current.delete(cellId);
         setActiveCells((prev) => prev.filter((id) => id !== cellId));
       }
     },
     [connectionId, notebookId, executeCell, flushPendingSave, runtime],
+  );
+
+  const runCell = useCallback(
+    async (cellId: string): Promise<boolean> =>
+      (await executeCellRun(cellId)).ok,
+    [executeCellRun],
   );
 
   // Append a SQL cell from the Data tree (context menu / drop) and optionally
@@ -711,6 +685,64 @@ export const PythonNotebookEditor = forwardRef<
       notebookId,
       runCell,
     ],
+  );
+
+  // ── Notebooks agent ─────────────────────────────────────────────
+  // The agent reads, edits and runs cells only through this port, so the
+  // editor stays the owner of the cells (see usePythonNotebookAgentBridge).
+  const agentPort: PythonNotebookEditorPort = {
+    snapshot: () => ({
+      name: notebook?.name ?? '',
+      runtime: runtime ?? notebook?.runtime ?? null,
+      kernelStatus: kernel?.status ?? 'stopped',
+      cells: cellsRef.current,
+      activeCellIds: activeCells,
+      selectedCellId,
+      runningAll: isRunningAll,
+    }),
+    commit: async (update) => {
+      cancelPendingSave();
+      const next = update(cellsRef.current);
+      cellsRef.current = next;
+      setCells(next);
+      await updateNotebook.mutateAsync({
+        connectionId,
+        notebookId,
+        updates: { cells: next },
+      });
+    },
+    run: async (cellId) => (await executeCellRun(cellId)).result ?? null,
+    reveal: (cellId) => {
+      // Select without focusCell: that focuses Monaco and takes keyboard
+      // focus away from the chat input.
+      setSelectedCellId(cellId);
+      requestAnimationFrame(() => {
+        document
+          .querySelector(`[data-cell-id="${cellId}"]`)
+          ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      });
+    },
+    isEditing: (cellId) => {
+      const active = document.activeElement;
+      if (!active?.closest(`[data-cell-id="${cellId}"]`)) return false;
+      return Boolean(
+        active.closest('.monaco-editor') ||
+          active.matches('textarea, input, [contenteditable="true"]'),
+      );
+    },
+  };
+  usePythonNotebookAgentBridge(notebookId, agentPort);
+
+  /** "Explain error", "Fix with AI" and "Explain with AI": open the chat. */
+  const handleAskAgent = useCallback(
+    (cellId: string, request: AskAgentRequest) => {
+      const index = cellsRef.current.findIndex((c) => c.id === cellId);
+      if (index === -1) return;
+      openChatWithMessage(
+        buildAskAgentPrompt(cellsRef.current[index], index, request),
+      );
+    },
+    [openChatWithMessage],
   );
 
   useImperativeHandle(
@@ -1154,6 +1186,11 @@ export const PythonNotebookEditor = forwardRef<
                             }
                             onEditorMount={handleEditorMount}
                             sqlCompletions={sqlCompletions}
+                            onAskAgent={
+                              isAiProviderSet
+                                ? (request) => handleAskAgent(cell.id, request)
+                                : undefined
+                            }
                           />
                           {index < cells.length - 1 && (
                             <CellInsertBar

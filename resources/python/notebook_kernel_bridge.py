@@ -10,6 +10,7 @@ Electron.
 
 Commands (stdin, one JSON object per line):
     {"op": "execute", "id": "<request id>", "code": "<source>"}
+    {"op": "inspect", "id": "<request id>", "name": "<variable>" | null}
     {"op": "interrupt"}
     {"op": "shutdown"}
 
@@ -20,10 +21,14 @@ Events (stdout, one JSON object per line):
     {"type": "clear_output", "id": "<request id>"}
     {"type": "execute_done", "id": "<request id>", "status": "ok|error|abort",
      "execution_count": <int|null>}
+    {"type": "inspect_result", "id": "<request id>", "ok": true, "data": {...}}
+    {"type": "inspect_result", "id": "<request id>", "ok": false,
+     "ename": "...", "evalue": "..."}
     {"type": "log", "message": "..."}
     {"type": "fatal", "message": "..."}
 """
 
+import ast
 import json
 import os
 import sys
@@ -175,6 +180,146 @@ del _rosetta_setup
 """ % {"mime": KERNEL_DATAFRAME_MIME}
 
 
+# --------------------------------------------------------------------------
+# Variable inspection for the Notebooks agent. Sent (silently, no history, no
+# execution count) with every "inspect" request, so it survives %reset; the
+# call itself runs as a user expression and returns a JSON string. pandas and
+# numpy objects are recognised by type name and never imported.
+# --------------------------------------------------------------------------
+KERNEL_INSPECT_CODE = r'''
+def _rosetta_inspect(name=None):
+    import json
+    import math
+    import types
+
+    ip = get_ipython()
+    ns = ip.user_ns
+    hidden = getattr(ip, "user_ns_hidden", {})
+    missing = object()
+    skip_names = {"In", "Out", "get_ipython", "exit", "quit"}
+    skip_types = (
+        types.ModuleType,
+        types.FunctionType,
+        types.BuiltinFunctionType,
+        types.MethodType,
+        type,
+    )
+    max_vars = 100
+    max_cols = 100
+    max_value = 200
+    max_repr = 2000
+    max_null_rows = 1000000
+
+    def module_of(value):
+        return (getattr(type(value), "__module__", "") or "").split(".")[0]
+
+    def is_kind(value, module, type_name):
+        return type(value).__name__ == type_name and module_of(value) == module
+
+    def short(text, limit):
+        text = str(text)
+        return text if len(text) <= limit else text[: limit - 1] + "…"
+
+    def cut_values(value):
+        if isinstance(value, str):
+            return short(value, max_value)
+        if isinstance(value, list):
+            return [cut_values(item) for item in value]
+        if isinstance(value, dict):
+            return {key: cut_values(item) for key, item in value.items()}
+        return value
+
+    def json_safe(value):
+        if isinstance(value, float) and not math.isfinite(value):
+            return str(value)
+        if isinstance(value, dict):
+            return {str(key): json_safe(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [json_safe(item) for item in value]
+        return value
+
+    def skipped(key, value):
+        if key.startswith("_") or key in skip_names:
+            return True
+        if hidden.get(key, missing) is value:
+            return True
+        return isinstance(value, skip_types)
+
+    def summary(value):
+        if is_kind(value, "pandas", "DataFrame"):
+            rows, cols = value.shape
+            return "{:,} rows × {:,} cols".format(rows, cols)
+        if is_kind(value, "pandas", "Series"):
+            return "{:,} values, {}".format(len(value), value.dtype)
+        if is_kind(value, "numpy", "ndarray"):
+            return "shape {}, {}".format(tuple(value.shape), value.dtype)
+        if isinstance(value, str):
+            head = value[:40] + ("…" if len(value) > 40 else "")
+            return "{:,} chars: {!r}".format(len(value), head)
+        if value is None or isinstance(value, (bool, int, float, complex)):
+            return short(repr(value), 100)
+        if isinstance(value, (list, tuple, dict, set, frozenset)):
+            return "{:,} items".format(len(value))
+        return type(value).__name__
+
+    def split_json(obj):
+        text = obj.to_json(orient="split", date_format="iso", default_handler=str)
+        return cut_values(json.loads(text))
+
+    def detail(key, value):
+        info = {"name": key, "type": type(value).__name__}
+        try:
+            if is_kind(value, "pandas", "DataFrame"):
+                rows, cols = value.shape
+                part = value.iloc[:, :max_cols]
+                nulls = None
+                if rows <= max_null_rows:
+                    nulls = [int(n) for n in part.isna().sum().tolist()]
+                info["rows"] = int(rows)
+                info["cols"] = int(cols)
+                info["columns"] = [
+                    {
+                        "name": short(column, max_value),
+                        "dtype": str(dtype),
+                        "nulls": None if nulls is None else nulls[i],
+                    }
+                    for i, (column, dtype) in enumerate(zip(part.columns, part.dtypes))
+                ]
+                info["truncatedColumns"] = cols > max_cols
+                info["head"] = split_json(part.head(5))
+            elif is_kind(value, "pandas", "Series"):
+                info["dtype"] = str(value.dtype)
+                info["length"] = int(len(value))
+                info["head"] = split_json(value.head(5))
+            elif is_kind(value, "numpy", "ndarray"):
+                info["dtype"] = str(value.dtype)
+                info["shape"] = [int(n) for n in value.shape]
+                info["repr"] = short(repr(value), max_repr)
+            else:
+                info["repr"] = short(repr(value), max_repr)
+        except Exception as exc:
+            info["error"] = "{}: {}".format(type(exc).__name__, exc)
+        return info
+
+    if name is None:
+        names = sorted(key for key, value in list(ns.items()) if not skipped(key, value))
+        variables = []
+        for key in names[:max_vars]:
+            value = ns[key]
+            try:
+                text = summary(value)
+            except Exception:
+                text = type(value).__name__
+            variables.append({"name": key, "type": type(value).__name__, "summary": text})
+        result = {"variables": variables, "total": len(names), "truncated": len(names) > max_vars}
+    elif name not in ns:
+        result = {"error": "No variable named {!r}".format(name)}
+    else:
+        result = detail(name, ns[name])
+    return json.dumps(json_safe(result), allow_nan=False, default=str)
+'''
+
+
 def _join(value):
     if isinstance(value, list):
         return "".join(value)
@@ -196,6 +341,10 @@ class Bridge:
         self.requests = {}
         # request id -> {"reply": bool, "idle": bool, "status": str, "count": int}
         self.progress = {}
+        # inspect msg_id -> request id (until the shell reply arrives)
+        self.inspects = {}
+        # inspect msg_ids whose busy / idle status must not reach the app
+        self.inspect_msgs = set()
         self.lock = threading.Lock()
         self.stopping = threading.Event()
         self.threads = []
@@ -266,6 +415,47 @@ class Bridge:
                 "count": None,
             }
 
+    def inspect(self, request_id, name):
+        """Run _rosetta_inspect silently as a user expression.
+
+        Silent requests get no execution count and no history, and they
+        queue behind running cells like any other request.
+        """
+        if not isinstance(name, str):
+            name = None
+        msg_id = self.kc.execute(
+            KERNEL_INSPECT_CODE,
+            silent=True,
+            store_history=False,
+            allow_stdin=False,
+            stop_on_error=False,
+            user_expressions={"r": "_rosetta_inspect(%r)" % (name,)},
+        )
+        with self.lock:
+            self.inspects[msg_id] = request_id
+            self.inspect_msgs.add(msg_id)
+
+    def _finish_inspect(self, request_id, content):
+        event = {"type": "inspect_result", "id": request_id, "ok": False}
+        try:
+            if content.get("status") != "ok":
+                event["ename"] = content.get("ename", "Error")
+                event["evalue"] = content.get("evalue", "")
+            else:
+                result = (content.get("user_expressions") or {}).get("r") or {}
+                if result.get("status") == "ok":
+                    text = _join((result.get("data") or {}).get("text/plain", ""))
+                    event["data"] = json.loads(ast.literal_eval(text))
+                    event["ok"] = True
+                else:
+                    event["ename"] = result.get("ename", "Error")
+                    event["evalue"] = result.get("evalue", "")
+        except Exception as exc:
+            event["ok"] = False
+            event["ename"] = type(exc).__name__
+            event["evalue"] = str(exc)
+        emit(event)
+
     def interrupt(self):
         try:
             self.km.interrupt_kernel()
@@ -329,6 +519,13 @@ class Bridge:
 
         if msg_type == "status":
             state = content.get("execution_state")
+            parent_id = (msg.get("parent_header") or {}).get("msg_id")
+            if parent_id in self.inspect_msgs:
+                # Variable inspection is invisible to the app: no busy / idle.
+                if state == "idle":
+                    with self.lock:
+                        self.inspect_msgs.discard(parent_id)
+                return
             if state in ("busy", "idle"):
                 emit({"type": "status", "status": state})
             if state == "idle" and request_id is not None:
@@ -404,6 +601,12 @@ class Bridge:
                 continue
             if msg.get("msg_type") != "execute_reply":
                 continue
+            parent_id = (msg.get("parent_header") or {}).get("msg_id")
+            with self.lock:
+                inspect_id = self.inspects.pop(parent_id, None)
+            if inspect_id is not None:
+                self._finish_inspect(inspect_id, msg.get("content", {}))
+                continue
             request_id = self._request_for(msg)
             if request_id is None:
                 continue
@@ -445,6 +648,8 @@ def main():
             op = command.get("op")
             if op == "execute":
                 bridge.execute(command.get("id"), command.get("code", ""))
+            elif op == "inspect":
+                bridge.inspect(command.get("id"), command.get("name"))
             elif op == "interrupt":
                 bridge.interrupt()
             elif op == "shutdown":

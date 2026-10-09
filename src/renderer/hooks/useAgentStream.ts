@@ -64,6 +64,8 @@ export interface TerminalConfirmRequest {
   toolName: string;
   command: string;
   cwd: string;
+  /** Set when the banner may offer "Allow for this chat" */
+  allowScope?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -321,6 +323,7 @@ export const useAgentStream = (sessionId: number | undefined) => {
           toolName: data.toolName,
           command: data.command,
           cwd: data.cwd,
+          ...(data.allowScope ? { allowScope: data.allowScope } : {}),
         };
         const newQueue = [...prev.confirmQueue, newItem];
         return {
@@ -446,26 +449,29 @@ export const useAgentStream = (sessionId: number | undefined) => {
     }
   }, [sessionId]);
 
-  const confirmTerminal = useCallback(async (allow: boolean) => {
-    const p = stateRef.current.pendingConfirm;
-    if (!p) return;
-    try {
-      await agentService.resolveTerminalConfirm(p.requestId, allow);
-      setStreamState((prev) => {
-        const remaining = prev.confirmQueue.filter(
-          (item) => item.requestId !== p.requestId,
-        );
-        return {
-          ...prev,
-          confirmQueue: remaining,
-          pendingConfirm: remaining.length > 0 ? remaining[0] : null,
-        };
-      });
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error(e);
-    }
-  }, []);
+  const confirmTerminal = useCallback(
+    async (allow: boolean, remember = false) => {
+      const p = stateRef.current.pendingConfirm;
+      if (!p) return;
+      try {
+        await agentService.resolveTerminalConfirm(p.requestId, allow, remember);
+        setStreamState((prev) => {
+          const remaining = prev.confirmQueue.filter(
+            (item) => item.requestId !== p.requestId,
+          );
+          return {
+            ...prev,
+            confirmQueue: remaining,
+            pendingConfirm: remaining.length > 0 ? remaining[0] : null,
+          };
+        });
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error(e);
+      }
+    },
+    [],
+  );
 
   const clearError = useCallback(() => {
     setStreamState((prev) => ({ ...prev, error: null }));

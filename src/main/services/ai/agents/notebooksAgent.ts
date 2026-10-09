@@ -5,19 +5,31 @@ import { createStudioCloudTools } from '../tools/studio/cloud.tools';
 import { createStudioConnectionsTools } from '../tools/studio/connections.tools';
 import { createStudioDuckLakeTools } from '../tools/studio/ducklake.tools';
 import { createStudioNotebooksTools } from '../tools/studio/notebooks.tools';
+import { createPythonNotebookTools } from '../tools/studio/pythonNotebook.tools';
+import { createStudioSqlTools } from '../tools/studio/sql.tools';
+import { TOOL_FLAGS } from '../tools/toolRegistry';
 import { NotebooksService } from '../../notebooks.service';
+import PythonNotebooksService from '../../pythonNotebooks.service';
+import NotebookKernelService from '../../notebookKernel.service';
 
 import type { NotebookCell } from '../../../../types/notebooks';
 import { composeAgentRuntime } from './composeAgentRuntime';
 import { createDbtTools } from '../tools/dbt.tools';
 import { createFilesystemTools } from '../tools/filesystem.tools';
 import { EnrichedConnectionMeta } from './agentTypes';
+import {
+  buildDialectHints,
+  buildPythonNotebookInstructions,
+  formatPythonNotebookContext,
+} from './notebooksAgent.prompts';
 
 export interface NotebooksAgentOptions {
   connectionMeta: EnrichedConnectionMeta;
   notebookId?: string;
   connectionId?: string;
   enabledTools: Record<string, any>;
+  /** Tools the user turned off in Settings → AI */
+  disabledTools?: string[];
   skills: string;
   conversationId: number;
   toolMode: 'chat' | 'agent';
@@ -58,6 +70,50 @@ async function buildNotebookContextSummary(
   }
 }
 
+/** Tools every notebook agent may use in Ask mode (both notebook kinds). */
+const READ_ONLY_TOOLS = [
+  'studio_sql_schema_extract',
+  'studio_ducklake_schema_extract',
+  'studio_connections_list',
+  'studio_cloud_list_objects',
+  'studio_cloud_preview_data',
+  'readDbtModel',
+  'listDbtModels',
+  'getDbtLogs',
+  'listDirectory',
+  'readFile',
+  'pathExists',
+  'notebooks_get_state',
+  'notebooks_cell_read',
+  'notebooks_cell_result',
+];
+
+const PYTHON_READ_ONLY_TOOLS = [
+  ...READ_ONLY_TOOLS,
+  'notebooks_variables',
+  'notebooks_packages_list',
+];
+
+/**
+ * Exactly one schema tool, picked by name: DuckLake's for DuckLake
+ * connections, the SQL one for everything else. The query tools that write
+ * to the SQL editor are never included (that editor isn't on this screen).
+ */
+function pickSchemaTool(
+  connectionMeta: EnrichedConnectionMeta,
+  conversationId: number,
+): Record<string, any> {
+  if (connectionMeta.type === 'ducklake') {
+    const schemaTool =
+      createStudioDuckLakeTools(conversationId).studio_ducklake_schema_extract;
+    return schemaTool ? { studio_ducklake_schema_extract: schemaTool } : {};
+  }
+  const schemaTool = createStudioSqlTools(conversationId, {
+    forceSchemaExtract: true,
+  }).studio_sql_schema_extract;
+  return schemaTool ? { studio_sql_schema_extract: schemaTool } : {};
+}
+
 export async function createNotebooksAgent(
   base: BaseAgentConfig,
   options: NotebooksAgentOptions,
@@ -70,75 +126,15 @@ export async function createNotebooksAgent(
       ? `\n\n## MCP Server Tools\nConnected MCP servers have exposed these external tools:\n${mcpToolKeys.map((k) => `- ${k}`).join('\n')}\nUse these tools when the user asks about MCP-backed documentation, repository/source-code reference, or external MCP capabilities.`
       : '';
 
-  // DuckLake is a DuckDB extension (not a JS package), version is fixed
-  let duckdbVersion = '1.5.2+';
-  const ducklakeVersion = '1.0';
-
-  try {
-    // Dynamically resolve duckdb version the exact same way the footer does
-    // eslint-disable-next-line global-require, @typescript-eslint/no-var-requires
-    const ddbPkg = require('@duckdb/node-api/package.json');
-    if (ddbPkg && ddbPkg.version) {
-      duckdbVersion = ddbPkg.version;
-    }
-  } catch (e) {
-    // fallback
-  }
-
-  let connectionHints = '';
-  switch (connectionMeta.type) {
-    case 'ducklake':
-      connectionHints = `\n\n## DuckLake Specifics
-You are connected to a DuckLake lakehouse. DuckLake is a DuckDB extension (not a separate library).
-- Versions: DuckDB v${duckdbVersion}, DuckLake extension minimal v${ducklakeVersion}.
-- Dialect: Use DuckDB SQL dialect and functions.
-- Attach: \`ATTACH 'ducklake:my.ducklake' AS my_ducklake; USE my_ducklake;\`
-- Time Travel: \`SELECT ... FROM tbl AT (VERSION => 2)\` or \`AT (TIMESTAMP => '2025-01-01')\`
-- Snapshots: \`FROM my_ducklake.snapshots();\`
-- Constraints: No indexes, primary keys, foreign keys, UNIQUE or CHECK constraints.
-- Updates: Modeled as deletes followed by inserts (append-only Parquet storage).
-- Detach: \`USE memory; DETACH my_ducklake;\``;
-      break;
-    case 'duckdb':
-      connectionHints =
-        '\n\n## Dialect Specifics\nYou are connected to DuckDB. Ensure all queries use DuckDB SQL syntax and functions.';
-      break;
-    case 'postgres':
-    case 'postgresql':
-      connectionHints =
-        '\n\n## Dialect Specifics\nYou are connected to PostgreSQL. Ensure all queries use PostgreSQL SQL syntax and functions.';
-      break;
-    case 'bigquery':
-      connectionHints =
-        '\n\n## Dialect Specifics\nYou are connected to Google BigQuery. Ensure all queries use BigQuery Standard SQL syntax.';
-      break;
-    case 'snowflake':
-      connectionHints =
-        '\n\n## Dialect Specifics\nYou are connected to Snowflake. Ensure all queries use Snowflake SQL syntax and functions.';
-      break;
-    case 'redshift':
-      connectionHints =
-        '\n\n## Dialect Specifics\nYou are connected to Amazon Redshift. Ensure all queries use Redshift SQL syntax and functions.';
-      break;
-    case 'databricks':
-      connectionHints =
-        '\n\n## Dialect Specifics\nYou are connected to Databricks. Ensure all queries use Databricks/Spark SQL syntax and functions.';
-      break;
-    case 'kinetica':
-      connectionHints =
-        '\n\n## Dialect Specifics\nYou are connected to Kinetica. Ensure all queries use Kinetica SQL syntax and functions.';
-      break;
-    default:
-      connectionHints = `\n\n## Dialect Specifics\nYou are connected to a ${connectionMeta.type} database. Ensure all queries use the correct dialect for this database.`;
-      break;
-  }
-
+  const connectionHints = buildDialectHints(connectionMeta);
   const isAskMode = options.toolMode === 'chat';
 
-  const notebookContext =
+  // Python notebooks are <id>.ipynb; legacy SQL notebooks are <id>.json.
+  const pythonNotebook =
     connectionId && notebookId
-      ? await buildNotebookContextSummary(connectionId, notebookId)
-      : '\n## Active Notebook\n(No notebook active)\n';
+      ? await PythonNotebooksService.getNotebook(connectionId, notebookId)
+      : null;
+  const isPython = pythonNotebook !== null;
 
   const linkedProjectBlock = connectionMeta.linkedDbtProject
     ? `\n## Linked dbt Project\n\nThis connection is also used by the dbt project **${connectionMeta.linkedDbtProject.name}** ` +
@@ -151,7 +147,14 @@ You are connected to a DuckLake lakehouse. DuckLake is a DuckDB extension (not a
       ? `\nDatabase: ${connectionMeta.database ?? 'N/A'}\nSchema: ${connectionMeta.schema ?? 'N/A'}`
       : '';
 
-  const systemInstructions = isAskMode
+  const schemaTools = pickSchemaTool(connectionMeta, options.conversationId);
+
+  const notebookContext =
+    !isPython && connectionId && notebookId
+      ? await buildNotebookContextSummary(connectionId, notebookId)
+      : '\n## Active Notebook\n(No notebook active)\n';
+
+  const legacyInstructions = isAskMode
     ? `You are an expert AI assistant for data analysis using Notebooks. You are running in **Ask (read-only) mode**.
 
 ## Active Connection
@@ -196,7 +199,7 @@ ${skills ?? ''}
 ${mcpToolsList}
 
 ## Capabilities & Workflow
-1. **Analyze Schema**: Use DuckLake tools to understand the database structure (tables, columns).
+1. **Analyze Schema**: Use the schema tool to understand the database structure (tables, columns).
 2. **Notebook Awareness**: Use \`notebooks_get_state\` to see which cells exist.
 3. **Strict Single-Statement Cells**:
    - **CRITICAL RULE**: You can only write ONE SQL statement per cell. Multiple SQL statements (statement chaining) are strictly forbidden and will fail.
@@ -224,17 +227,31 @@ The notebook UI handles large datasets efficiently using server-side pagination.
 
 `;
 
-  const safeEnabledTools = { ...enabledTools };
-  // The Notebooks screen does not have the SQL Editor bridge, so studio_ducklake_query
-  // (which writes to the Monaco SQL editor) will crash/hang. Remove it.
-  delete safeEnabledTools.studio_ducklake_query;
-  delete safeEnabledTools.studio_sql_query;
+  const systemInstructions = pythonNotebook
+    ? buildPythonNotebookInstructions({
+        isAskMode,
+        connectionBlock: `Name: ${connectionMeta.name}\nType: ${connectionMeta.type}${databaseBlock}${connectionHints}`,
+        linkedProjectBlock,
+        notebookContext: formatPythonNotebookContext(
+          pythonNotebook,
+          NotebookKernelService.getStatus(pythonNotebook.id).status,
+        ),
+        schemaToolName:
+          Object.keys(schemaTools)[0] ?? 'the schema tool (currently disabled)',
+        skills,
+        mcpToolsList,
+      })
+    : legacyInstructions;
 
-  const studioNotebookTools: Record<string, any> = {
+  // Explicit allowlist: connection and cloud tools, one schema tool, the
+  // notebook tools for this kind, and the read-only project tools.
+  const studioTools: Record<string, any> = {
     ...createStudioConnectionsTools(),
     ...createStudioCloudTools(),
-    ...createStudioDuckLakeTools(options.conversationId),
-    ...createStudioNotebooksTools(options.conversationId),
+    ...schemaTools,
+    ...(isPython
+      ? createPythonNotebookTools(options.conversationId)
+      : createStudioNotebooksTools(options.conversationId)),
   };
 
   // If a dbt project is linked, create the pure NodeJS filesystem/DBT tools
@@ -246,23 +263,8 @@ The notebook UI handles large datasets efficiently using server-side pagination.
       }
     : {};
 
-  const READ_ONLY_TOOLS = [
-    'studio_ducklake_schema_extract',
-    'studio_connections_list',
-    'studio_cloud_list_objects',
-    'studio_cloud_preview_data',
-    'notebook_read',
-    'notebook_list',
-    'readDbtModel',
-    'listDbtModels',
-    'getDbtLogs',
-    'listDirectory',
-    'readFile',
-    'pathExists',
-    'notebooks_get_state',
-    'notebooks_cell_read',
-    'notebooks_cell_result',
-  ];
+  const readOnlyTools = isPython ? PYTHON_READ_ONLY_TOOLS : READ_ONLY_TOOLS;
+  const disabledTools = new Set(options.disabledTools ?? []);
 
   const makeAskModeStub = (toolName: string): any => {
     return tool({
@@ -275,27 +277,30 @@ The notebook UI handles large datasets efficiently using server-side pagination.
   };
 
   const baseTools: Record<string, any> = {};
-
-  // Combine native UI tools and project filesystem tools
-  const allAvailableTools = { ...studioNotebookTools, ...projectTools };
-
-  Object.entries(allAvailableTools).forEach(([name, toolDef]) => {
-    const isUI = name in studioNotebookTools;
-    const isAllowedProjectTool = enabledTools && enabledTools[name];
-
-    if ((isUI && enabledTools?.[name] !== false) || isAllowedProjectTool) {
-      if (isAskMode && !READ_ONLY_TOOLS.includes(name)) {
-        baseTools[name] = makeAskModeStub(name);
-      } else {
-        baseTools[name] = toolDef as any;
-      }
+  const register = (name: string, toolDef: any) => {
+    if (
+      (TOOL_FLAGS as Record<string, boolean>)[name] === false ||
+      disabledTools.has(name)
+    ) {
+      return;
     }
+    baseTools[name] =
+      isAskMode && !readOnlyTools.includes(name)
+        ? makeAskModeStub(name)
+        : toolDef;
+  };
+
+  Object.entries(studioTools).forEach(([name, toolDef]) =>
+    register(name, toolDef),
+  );
+  Object.entries(projectTools).forEach(([name, toolDef]) => {
+    if (enabledTools?.[name]) register(name, toolDef);
   });
 
-  // Notebook questions commonly require one step to read notebook state and a
-  // second step to explain the tool result. A single-step limit can otherwise
-  // persist a tool-only assistant message with no natural-language answer.
-  const maxSteps = Math.max(base.maxSteps, 2);
+  // Python: read → write → run → inspect → fix, up to three attempts.
+  // Legacy: one step to read notebook state and one to explain it, so a
+  // single-step limit can't persist a tool-only message with no answer.
+  const maxSteps = Math.max(base.maxSteps, isPython ? 12 : 2);
   const runtime = composeAgentRuntime(base, systemInstructions, baseTools);
 
   return new ToolLoopAgent({

@@ -63,9 +63,9 @@ export const registerAgentHandlers = () => {
       AgentService.getContextOverhead(request),
   );
 
-  ipcMain.handle('agent:terminal-resolve', async (_event, req) => {
-    TerminalConfirmGate.resolve(req.requestId, req.allow);
-  });
+  ipcMain.handle('agent:terminal-resolve', async (_event, req) =>
+    TerminalConfirmGate.resolve(req.requestId, req.allow, req.remember),
+  );
 
   ipcMain.handle(
     'agent:editor:read-response',
@@ -119,6 +119,10 @@ export const registerAgentHandlers = () => {
     'agent:notebook:cell-result-response',
     async (_event, payload) =>
       AgentService.resolveNotebookBridgeResponse(payload),
+  );
+
+  ipcMain.handle('agent:python-notebook:response', async (_event, payload) =>
+    AgentService.resolveNotebookBridgeResponse(payload),
   );
 
   ipcMain.handle('agent:analytics:read-response', async (_event, payload) =>
