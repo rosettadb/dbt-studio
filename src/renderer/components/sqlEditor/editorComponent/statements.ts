@@ -164,8 +164,14 @@ export type SqlStatementModel = {
   getPositionAt(offset: number): { lineNumber: number; column: number };
 };
 
+export type SqlStatementOptions = {
+  /** Treat \' and \" as escaped quotes (MySQL-style). Defaults to true. */
+  backslashEscapes?: boolean;
+};
+
 export const parseSqlEditorStatements = (
   model: SqlStatementModel,
+  { backslashEscapes = true }: SqlStatementOptions = {},
 ): ParsedStatement[] => {
   const value = model.getValue();
   const segments: { start: number; end: number }[] = [];
@@ -239,7 +245,7 @@ export const parseSqlEditorStatements = (
       continue;
     }
     if (inSingleQuote) {
-      if (ch === '\\' && nextCh === "'") {
+      if (backslashEscapes && ch === '\\' && nextCh === "'") {
         i += 2;
         continue;
       }
@@ -256,7 +262,7 @@ export const parseSqlEditorStatements = (
       continue;
     }
     if (inDoubleQuote) {
-      if (ch === '\\' && nextCh === '"') {
+      if (backslashEscapes && ch === '\\' && nextCh === '"') {
         i += 2;
         continue;
       }

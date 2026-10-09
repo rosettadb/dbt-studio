@@ -191,14 +191,12 @@ export const Oracle: React.FC<Props> = ({
     if (!valid()) return;
     setConnectionStatus('idle');
     try {
-      // Wallet secrets use the same keytar path as later queries.
-      await secure.setConnectionField(
-        'walletpassword',
-        walletPassword,
-        form.name,
-      );
+      // The wallet password travels in the test payload; it is persisted only
+      // by persistSecrets when the user saves.
       const result = await test({
         ...form,
+        walletPassword:
+          form.connectMode === 'wallet' ? walletPassword : undefined,
         schema: `"${normalizeOracleIdentifier(form.schema || form.username).replace(/"/g, '""')}"`,
       });
       if (result !== true && !(typeof result === 'object' && result.success))

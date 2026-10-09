@@ -181,18 +181,22 @@ test.describe('Oracle query connection (live)', () => {
         .first()
         .click();
       const editor = new SqlEditorPage(page);
-      await editor.setQuery('BEGIN NULL; END;\n/');
-      await editor.runQuery();
+      // The editor re-parses statements 150 ms after each content change, so
+      // wait past that before clicking the (possibly stale) line-1 run icon.
+      const setAndRun = async (sql: string) => {
+        await editor.setQuery(sql);
+        await page.waitForTimeout(400);
+        await editor.runQuery();
+      };
+      await setAndRun('BEGIN NULL; END;\n/');
       await expect(
         page
           .getByText('Command executed successfully', { exact: false })
           .first(),
       ).toBeVisible();
-      await editor.setQuery(`SELECT * FROM NOPE_${Date.now()}`);
-      await editor.runQuery();
+      await setAndRun(`SELECT * FROM NOPE_${Date.now()}`);
       await expect(page.getByText(/ORA-00942/).first()).toBeVisible();
-      await editor.setQuery('SELECT * FROM BIG_T');
-      await editor.runQuery();
+      await setAndRun('SELECT * FROM BIG_T');
       await expect(
         page.getByText('Showing the first 10,000 rows', { exact: true }),
       ).toBeVisible();

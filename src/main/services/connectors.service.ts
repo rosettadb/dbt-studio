@@ -88,9 +88,11 @@ export default class ConnectorsService {
         )) ||
         '',
       walletPassword:
+        (test ? conn.walletPassword : '') ||
         (await SecureStorageService.getCredential(
           `db-walletpassword-${conn.name}`,
-        )) || undefined,
+        )) ||
+        undefined,
     };
   }
 
@@ -710,6 +712,10 @@ export default class ConnectorsService {
   }: UpdateConnectionBody): Promise<void> {
     await this.validateConnection(connection.connection);
 
+    const previous = (await this.loadConnections(true)).find(
+      (c) => c.id === connection.id,
+    );
+
     const persistedModel =
       connection.connection.type === 'oracle'
         ? {
@@ -742,6 +748,25 @@ export default class ConnectorsService {
       updated.forEach((conn) => sanitizeBigQueryKeyfile(conn));
       return updated;
     });
+
+    if (
+      connection.connection.type === 'oracle' &&
+      previous?.connection.type === 'oracle' &&
+      previous.connection.name !== connection.connection.name
+    ) {
+      // Credentials are keyed by name; drop the ones left under the old name.
+      try {
+        await SecureStorageService.cleanupConnectionCredentials(
+          previous.connection.name,
+        );
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error(
+          `Failed to cleanup credentials for renamed connection ${previous.connection.name}:`,
+          error,
+        );
+      }
+    }
 
     if (
       connection.connection.type === 'sqlite' ||

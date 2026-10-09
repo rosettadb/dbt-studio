@@ -31,10 +31,8 @@ function findBlockEnd(
     }
     if (quote) {
       lastCode = i;
-      if (
-        quote !== '`' &&
-        ((ch === '\\' && next === quote) || (ch === quote && next === quote))
-      ) {
+      // Oracle has no backslash escapes; only a doubled quote is an escape.
+      if (quote !== '`' && ch === quote && next === quote) {
         lastCode = ++i;
       } else if (ch === quote) quote = '';
       continue;
@@ -74,10 +72,13 @@ export function parseOracleEditorStatements(
   let cursor = 0;
   while (cursor < value.length) {
     const offset = cursor;
-    const ordinary = parseSqlEditorStatements({
-      getValue: () => value.slice(offset),
-      getPositionAt: (position) => model.getPositionAt(offset + position),
-    });
+    const ordinary = parseSqlEditorStatements(
+      {
+        getValue: () => value.slice(offset),
+        getPositionAt: (position) => model.getPositionAt(offset + position),
+      },
+      { backslashEscapes: false },
+    );
     const blockIndex = ordinary.findIndex((statement) => {
       const start =
         lineStarts[statement.startLine - 1] + statement.startColumn - 1;

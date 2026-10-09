@@ -61,8 +61,12 @@ export default class OracleExtractor {
 
   async extractSchema(): Promise<{ tables: Table[] }> {
     try {
-      const current =
+      // Same normalization as openOracleConnection's CURRENT_SCHEMA.
+      const configured =
         this.config.schema || normalizeOracleIdentifier(this.config.username);
+      const current = configured.startsWith('"')
+        ? normalizeOracleIdentifier(configured)
+        : configured;
       // Read accessible objects once instead of issuing queries for every owner.
       const objects = await this.rows(
         `SELECT * FROM (SELECT * FROM (

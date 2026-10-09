@@ -130,6 +130,8 @@ export type OracleConnection = ConnectionBase & {
   tls?: boolean;
   connectString?: string;
   walletDir?: string;
+  /** Transient: sent only with connector:test, never persisted. */
+  walletPassword?: string;
 };
 
 export type DuckLakeConnectionConfig = Omit<
