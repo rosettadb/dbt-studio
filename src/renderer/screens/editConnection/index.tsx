@@ -98,6 +98,15 @@ const EditConnection: React.FC = () => {
           />
         );
       }
+      case 'oracle': {
+        return (
+          <Connections.Oracle
+            key={connId}
+            onCancel={handleCancel}
+            connection={conn}
+          />
+        );
+      }
       case 'mysql': {
         return (
           <Connections.MySql

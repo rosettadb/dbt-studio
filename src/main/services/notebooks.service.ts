@@ -16,6 +16,7 @@ import {
 } from '../../types/notebooks';
 import ConnectorsService from './connectors.service';
 import DuckLakeService from './duckLake.service';
+import * as oracleNotebookSql from '../utils/oracleHelper';
 
 const NOTEBOOKS_DIR = path.join(app.getPath('userData'), 'notebooks');
 const ORPHANED_DIR = path.join(NOTEBOOKS_DIR, '_orphaned');
@@ -843,7 +844,15 @@ export class NotebooksService {
       const { pageLimit, pageOffset } = sanitizePagination(limit, offset);
 
       // Strip any explicit LIMIT/OFFSET to avoid syntax errors when we append ours
-      const processedSql = removeTrailingLimit(sql);
+      const oracleSql =
+        !connectionId.startsWith('ducklake-') &&
+        (await ConnectorsService.getConnectionById(connectionId))?.connection
+          .type === 'oracle'
+          ? oracleNotebookSql
+          : undefined;
+      const processedSql = oracleSql
+        ? oracleSql.removeTrailingPagination(sql)
+        : removeTrailingLimit(sql);
 
       // Detect query type - includes WITH...SELECT and other row-returning queries
       const isSelect = isRowReturningQuery(processedSql);
@@ -902,10 +911,15 @@ export class NotebooksService {
         // Regular DB connection
         // For SELECT queries, wrap in a subquery to ensure pagination works
         // and hoist ORDER BY to the outer query for determinism.
-        const { baseSql, orderBy } = extractTrailingOrderBy(sql);
-        const queryToExecute = isSelect
-          ? `SELECT * FROM (${baseSql}) AS subquery${orderBy ? ` ${orderBy}` : ''} LIMIT ${pageLimit} OFFSET ${pageOffset}`
-          : sql;
+        const { baseSql, orderBy } = extractTrailingOrderBy(
+          oracleSql ? processedSql : sql,
+        );
+        let queryToExecute = sql;
+        if (isSelect) {
+          queryToExecute = oracleSql
+            ? oracleSql.buildPagedQuery(baseSql, orderBy, pageLimit, pageOffset)
+            : `SELECT * FROM (${baseSql}) AS subquery${orderBy ? ` ${orderBy}` : ''} LIMIT ${pageLimit} OFFSET ${pageOffset}`;
+        }
 
         result = await ConnectorsService.executeQueryForConnection({
           connectionId,
@@ -922,13 +936,18 @@ export class NotebooksService {
           try {
             // Use subquery to get total rows
             // Use baseSql (without ORDER BY) for better performance.
-            const countQuery = `SELECT COUNT(*) as count FROM (${baseSql}) as subquery`;
+            const countQuery = oracleSql
+              ? oracleSql.buildCountQuery(baseSql)
+              : `SELECT COUNT(*) as count FROM (${baseSql}) as subquery`;
             const countResult =
               await ConnectorsService.executeQueryForConnection({
                 connectionId,
                 query: countQuery,
               });
-            const countValue = (countResult.data?.[0] as any)?.count;
+            const rawCount = (countResult.data?.[0] as any)?.count;
+            const countValue = oracleSql
+              ? oracleSql.normalizeCount(rawCount)
+              : rawCount;
             totalRows =
               typeof countValue === 'bigint'
                 ? Number(countValue)
@@ -1019,7 +1038,15 @@ export class NotebooksService {
       const { pageLimit, pageOffset } = sanitizePagination(limit, offset);
 
       // Detect query type - includes WITH...SELECT and other row-returning queries
-      const processedSql = removeTrailingLimit(sql);
+      const oracleSql =
+        !connectionId.startsWith('ducklake-') &&
+        (await ConnectorsService.getConnectionById(connectionId))?.connection
+          .type === 'oracle'
+          ? oracleNotebookSql
+          : undefined;
+      const processedSql = oracleSql
+        ? oracleSql.removeTrailingPagination(sql)
+        : removeTrailingLimit(sql);
       const isSelect = isRowReturningQuery(processedSql);
 
       // Only paginate SELECT queries
@@ -1073,10 +1100,12 @@ export class NotebooksService {
       } else {
         // Regular DB connection - manually append LIMIT/OFFSET with sanitized values
         // Wrap in a subquery and hoist ORDER BY to the outer query for determinism.
-        const { baseSql, orderBy } = extractTrailingOrderBy(sql);
-        const queryToExecute = `SELECT * FROM (${baseSql}) AS subquery${
-          orderBy ? ` ${orderBy}` : ''
-        } LIMIT ${pageLimit} OFFSET ${pageOffset}`;
+        const { baseSql, orderBy } = extractTrailingOrderBy(
+          oracleSql ? processedSql : sql,
+        );
+        const queryToExecute = oracleSql
+          ? oracleSql.buildPagedQuery(baseSql, orderBy, pageLimit, pageOffset)
+          : `SELECT * FROM (${baseSql}) AS subquery${orderBy ? ` ${orderBy}` : ''} LIMIT ${pageLimit} OFFSET ${pageOffset}`;
 
         result = await ConnectorsService.executeQueryForConnection({
           connectionId,
@@ -1088,13 +1117,18 @@ export class NotebooksService {
           try {
             // Use subquery to get total rows.
             // Use baseSql (without ORDER BY) for better performance.
-            const countQuery = `SELECT COUNT(*) as count FROM (${baseSql}) as subquery`;
+            const countQuery = oracleSql
+              ? oracleSql.buildCountQuery(baseSql)
+              : `SELECT COUNT(*) as count FROM (${baseSql}) as subquery`;
             const countResult =
               await ConnectorsService.executeQueryForConnection({
                 connectionId,
                 query: countQuery,
               });
-            const countValue = (countResult.data?.[0] as any)?.count;
+            const rawCount = (countResult.data?.[0] as any)?.count;
+            const countValue = oracleSql
+              ? oracleSql.normalizeCount(rawCount)
+              : rawCount;
             totalRows =
               typeof countValue === 'bigint'
                 ? Number(countValue)

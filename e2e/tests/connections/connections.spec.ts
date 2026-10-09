@@ -89,6 +89,7 @@ test.describe('Connections', () => {
     for (const type of [
       'PostgreSQL',
       'Snowflake',
+      'Oracle',
       'BigQuery',
       'Redshift',
       'Databricks',

@@ -398,3 +398,11 @@ export const useRevokeSnowflakeToken = () => {
     },
   });
 };
+
+export const useOracleWalletAliases = (walletDir?: string) =>
+  useQuery({
+    queryKey: ['oracle-wallet-aliases', walletDir],
+    queryFn: () => connectorsServices.oracleWalletAliases(walletDir!),
+    enabled: !!walletDir,
+    retry: false,
+  });
