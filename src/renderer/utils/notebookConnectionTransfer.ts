@@ -38,6 +38,8 @@ export async function resolveConnectionCredentials(
     const storedKey = await secureStorage.getBigQueryServiceAccountKey(name);
     if (storedKey) resolved.keyfile = storedKey;
   }
+  // Spanner service-account secrets stay local to this installation.
+  if (resolved.type === 'spanner') resolved.keyfile = '';
 
   return resolved as ConnectionInput;
 }
@@ -68,6 +70,28 @@ export async function storeImportedConnectionCredentials(
   }
 }
 
+/**
+ * The record to save for an imported connection. Exports never include a
+ * Spanner service-account key, so the import dialog asks for it; the key
+ * goes to secure storage here and the saved record only names it.
+ */
+export async function prepareImportedConnection(
+  connection: ConnectionInput,
+  secureStorage: SecureStorage,
+): Promise<ConnectionInput> {
+  if (
+    connection.type !== 'spanner' ||
+    !connection.keyfile?.trimStart().startsWith('{')
+  ) {
+    return connection;
+  }
+  await secureStorage.setSpannerServiceAccountKey(
+    connection.keyfile,
+    connection.name,
+  );
+  return { ...connection, keyfile: `db-spanner-${connection.name}` };
+}
+
 export async function deleteImportedConnectionCredentials(
   connection: ConnectionInput,
   secureStorage: SecureStorage,
@@ -86,6 +110,9 @@ export async function deleteImportedConnectionCredentials(
   }
   if (connection.type === 'bigquery' && asAny.keyfile) {
     await secureStorage.deleteBigQueryServiceAccountKey(name);
+  }
+  if (connection.type === 'spanner') {
+    await secureStorage.deleteSpannerServiceAccountKey(name);
   }
 }
 

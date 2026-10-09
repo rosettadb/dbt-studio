@@ -71,6 +71,12 @@ const baseItems: ItemType[] = [
     disabled: false,
   },
   {
+    id: 'spanner',
+    name: 'Spanner',
+    img: 'spanner',
+    disabled: false,
+  },
+  {
     id: 'redshift',
     name: 'Redshift',
     img: 'redshift',
@@ -168,6 +174,15 @@ const AddConnection: React.FC = () => {
           <Connections.BigQuery
             onCancel={() => setSelectedItem(undefined)}
             projectId={projectId}
+            duplicateFrom={duplicateData}
+            suggestedName={suggestedName}
+          />
+        );
+      }
+      case 'spanner': {
+        return (
+          <Connections.Spanner
+            onCancel={() => setSelectedItem(undefined)}
             duplicateFrom={duplicateData}
             suggestedName={suggestedName}
           />
