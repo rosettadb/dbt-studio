@@ -244,6 +244,19 @@ export const getConnectionInput = (conn: ConnectionModel) => {
         location: bq.location,
         priority: bq.priority,
       };
+    case 'spanner':
+      return {
+        type: connection.type,
+        name: connection.name,
+        project: connection.project,
+        instance: connection.instance,
+        database: connection.database,
+        schema: connection.schema,
+        authMethod: connection.authMethod,
+        keyfile: connection.keyfile,
+        emulatorHost: connection.emulatorHost,
+        dialect: connection.dialect,
+      };
     case 'databricks':
       const db = connection as DatabricksConnection;
       return {

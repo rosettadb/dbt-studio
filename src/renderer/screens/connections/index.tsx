@@ -262,6 +262,8 @@ const Connections: React.FC = () => {
         return 'Snowflake';
       case 'bigquery':
         return 'BigQuery';
+      case 'spanner':
+        return 'Spanner';
       case 'redshift':
         return 'Redshift';
       case 'databricks':
@@ -298,6 +300,8 @@ const Connections: React.FC = () => {
         return '#29b5e8';
       case 'bigquery':
         return '#4285f4';
+      case 'spanner':
+        return '#4285F4';
       case 'redshift':
         return '#8c4fff';
       case 'databricks':
@@ -377,6 +381,12 @@ const Connections: React.FC = () => {
         return (
           <Typography variant="body2" color="text.secondary">
             Project: {connection.project || connection.projectId}
+          </Typography>
+        );
+      case 'spanner':
+        return (
+          <Typography variant="body2" color="text.secondary">
+            {connection.project} / {connection.instance} / {connection.database}
           </Typography>
         );
       case 'databricks':

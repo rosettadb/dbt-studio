@@ -6,6 +6,7 @@ export type SupportedConnectionTypes =
   | 'postgres'
   | 'snowflake'
   | 'bigquery'
+  | 'spanner'
   | 'redshift'
   | 'databricks'
   | 'mysql'
@@ -68,6 +69,20 @@ export type BigQueryConnection = ConnectionBase & {
   schema: string; // Will be set to dataset
   username: string; // Will be set to project ID
   password: string; // Will be empty for BigQuery
+};
+
+export type SpannerAuthMethod = 'service-account' | 'adc' | 'emulator';
+export type SpannerDialect = 'GOOGLE_STANDARD_SQL' | 'POSTGRESQL';
+export type SpannerConnection = ConnectionBase & {
+  type: 'spanner';
+  project: string;
+  instance: string;
+  database: string;
+  schema: string;
+  authMethod: SpannerAuthMethod;
+  keyfile?: string;
+  emulatorHost?: string;
+  dialect?: SpannerDialect;
 };
 
 export type RedshiftConnection = ConnectionBase & {
@@ -136,6 +151,7 @@ export type ConnectionInput =
   | PostgresConnection
   | SnowflakeConnection
   | BigQueryConnection
+  | SpannerConnection
   | RedshiftConnection
   | DatabricksConnection
   | DuckDBConnection
@@ -146,7 +162,7 @@ export type ConnectionInput =
 
 export const canUseAsDbtConnection = (
   type: SupportedConnectionTypes,
-): boolean => type !== 'sqlite' && type !== 'mysql';
+): boolean => type !== 'sqlite' && type !== 'mysql' && type !== 'spanner';
 
 export type ConnectionModel = {
   id: string;
@@ -735,6 +751,8 @@ export type QueryResponseType = {
   duration?: number;
   isCommand?: boolean;
   commandType?: string;
+  truncated?: boolean;
+  operationId?: string;
 };
 
 export type CliUpdateItem = {

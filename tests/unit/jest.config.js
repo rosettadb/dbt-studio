@@ -14,6 +14,8 @@ module.exports = {
     '^mysql2/promise$': '<rootDir>/tests/unit/__setup__/mysql2.mock.ts',
     '^@google-cloud/storage$':
       '<rootDir>/tests/unit/__setup__/googleCloudStorage.mock.ts',
+    '^@google-cloud/spanner$':
+      '<rootDir>/tests/unit/__setup__/spanner.mock.ts',
     '^@azure/storage-blob$':
       '<rootDir>/tests/unit/__setup__/azureStorageBlob.mock.ts',
     '^electron-store$': '<rootDir>/tests/unit/__setup__/electronStore.mock.ts',

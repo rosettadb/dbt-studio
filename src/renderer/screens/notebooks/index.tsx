@@ -102,6 +102,7 @@ import {
 import { NotebookImportPreview } from '../../../types/notebooks';
 import useNotebookTabManager from '../../hooks/useNotebookTabManager';
 import useSecureStorage from '../../hooks/useSecureStorage';
+import { useSqlDialect } from '../../hooks/useSqlDialect';
 import { resolveConnectionCredentials } from '../../utils/notebookConnectionTransfer';
 import {
   useNotebookConnectionState,
@@ -474,6 +475,10 @@ const Notebooks = () => {
   const activeConnectionType = activeConnectionId.startsWith('ducklake-')
     ? 'ducklake'
     : activeConnection?.connection.type;
+  const activeSqlDialect = useSqlDialect(
+    activeConnectionId,
+    activeConnectionType,
+  );
 
   const handleSchemaInsertText = useCallback((text: string) => {
     if (!notebookEditorRef.current?.insertText(text)) {
@@ -561,7 +566,7 @@ const Notebooks = () => {
 
   const { onContextMenu: handleSchemaContextMenu, menu: schemaContextMenu } =
     useSchemaTreeContextMenu({
-      connectionType: activeConnectionType,
+      connectionType: activeSqlDialect,
       onInsertText: handleSchemaInsertText,
       onPreviewSql: handleSchemaPreview,
       onRename: handleSchemaRename,
@@ -801,7 +806,7 @@ const Notebooks = () => {
 
   // Handle confirming the import-connection dialog
   const handleImportConnectionConfirm = useCallback(
-    async (shouldImportConnection: boolean) => {
+    async (shouldImportConnection: boolean, serviceAccountKey?: string) => {
       if (!pendingImport) return;
       const { filePath, preview } = pendingImport;
       setImportConnectionDialogOpen(false);
@@ -810,9 +815,12 @@ const Notebooks = () => {
       let targetConnectionId = activeConnectionId;
       if (shouldImportConnection && preview.connection) {
         try {
-          const { id } = await importConnectionFromNotebook.mutateAsync(
-            preview.connection,
-          );
+          const connectionToImport =
+            serviceAccountKey && preview.connection.type === 'spanner'
+              ? { ...preview.connection, keyfile: serviceAccountKey }
+              : preview.connection;
+          const { id } =
+            await importConnectionFromNotebook.mutateAsync(connectionToImport);
           targetConnectionId = id;
         } catch (err) {
           toast.error(`Failed to import connection: ${(err as Error).message}`);
@@ -2126,6 +2134,10 @@ const Notebooks = () => {
         connectionType={pendingImport?.preview.connection?.type}
         notebookCount={pendingImport?.preview.notebookCount ?? 1}
         hasActiveConnection={!!activeConnectionId}
+        serviceAccountKeyRequired={
+          pendingImport?.preview.connection?.type === 'spanner' &&
+          pendingImport.preview.connection.authMethod === 'service-account'
+        }
         onClose={() => {
           setImportConnectionDialogOpen(false);
           setPendingImport(null);

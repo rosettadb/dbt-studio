@@ -49,6 +49,8 @@ const DIALECT_RULES: Record<string, DialectRules> = {
   db2: { quote: 'double', folding: 'upper', limit: 'fetch' },
   mysql: { quote: 'backtick', folding: 'none', limit: 'limit' },
   bigquery: { quote: 'backtick', folding: 'none', limit: 'limit' },
+  spanner: { quote: 'backtick', folding: 'none', limit: 'limit' },
+  spanner_pg: { quote: 'double', folding: 'lower', limit: 'limit' },
   databricks: { quote: 'backtick', folding: 'none', limit: 'limit' },
   googlecloud: { quote: 'backtick', folding: 'none', limit: 'limit' },
   mssql: { quote: 'bracket', folding: 'none', limit: 'top' },
@@ -147,6 +149,18 @@ export const getDialectRules = (dialect: SqlDialect): DialectRules =>
   (dialect && DIALECT_RULES[dialect]) || DEFAULT_RULES;
 
 /**
+ * Dialect key for a connection: its type, except PostgreSQL-dialect Spanner
+ * databases, which quote and fold like PostgreSQL.
+ */
+export const sqlDialectForConnection = (
+  connectionType: SqlDialect,
+  spannerDialect?: string,
+): SqlDialect =>
+  connectionType === 'spanner' && spannerDialect === 'POSTGRESQL'
+    ? 'spanner_pg'
+    : connectionType;
+
+/**
  * True when `identifier` cannot be written bare in `dialect` without changing
  * its meaning: it contains characters outside `[A-Za-z0-9_]`, starts with a
  * digit, is a reserved word, or has a case that the dialect would fold away.
@@ -203,7 +217,12 @@ export const qualifiedName = (
 ): string => {
   const includeSchema = options.includeSchema ?? true;
   const name = quoteIdentifier(ref.name, dialect);
-  if (!includeSchema || !ref.schema) return name;
+  if (
+    !includeSchema ||
+    !ref.schema ||
+    (dialect === 'spanner' && ref.schema === 'default')
+  )
+    return name;
   return `${quoteIdentifier(ref.schema, dialect)}.${name}`;
 };
 

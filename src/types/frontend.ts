@@ -78,6 +78,7 @@ export type SecureStorageAccount =
   | `iceberg-oauth-secret-${string}`
   | `iceberg-catalog-token-${string}`
   | `db-bigquery-${string}`
+  | `db-spanner-${string}`
   | `db-host-${string}`
   | `db-port-${string}`
   | `db-dbname-${string}`

@@ -23,6 +23,7 @@ import { connectorsServices } from '../services';
 import useSecureStorage from '../hooks/useSecureStorage';
 import {
   getUniqueConnectionName,
+  prepareImportedConnection,
   storeImportedConnectionCredentials,
   deleteImportedConnectionCredentials,
 } from '../utils/notebookConnectionTransfer';
@@ -179,7 +180,9 @@ export const useImportConnectionFromNotebook = (
 
       let id: string | undefined;
       try {
-        id = await connectorsServices.saveConnection(finalConnection);
+        id = await connectorsServices.saveConnection(
+          await prepareImportedConnection(finalConnection, secureStorage),
+        );
         await storeImportedConnectionCredentials(
           finalConnection,
           secureStorage,

@@ -310,6 +310,18 @@ const useSecureStorage = () =>
       await secureStorageService.delete(`db-bigquery-${connectionName}`);
     };
 
+    const setSpannerServiceAccountKey = async (
+      key: string,
+      connectionName: string,
+    ) => {
+      await secureStorageService.set(`db-spanner-${connectionName}`, key);
+    };
+    const getSpannerServiceAccountKey = async (connectionName: string) =>
+      secureStorageService.get(`db-spanner-${connectionName}`);
+    const deleteSpannerServiceAccountKey = async (connectionName: string) => {
+      await secureStorageService.delete(`db-spanner-${connectionName}`);
+    };
+
     const setCloudApiKey = async (apiKey: string): Promise<void> => {
       await secureStorageService.set(CLOUD_DASHBOARD_API_KEY, apiKey);
     };
@@ -368,6 +380,9 @@ const useSecureStorage = () =>
       setBigQueryServiceAccountKey,
       getBigQueryServiceAccountKey,
       deleteBigQueryServiceAccountKey,
+      setSpannerServiceAccountKey,
+      getSpannerServiceAccountKey,
+      deleteSpannerServiceAccountKey,
       setCloudApiKey,
       getCloudApiKey,
       deleteCloudApiKey,
