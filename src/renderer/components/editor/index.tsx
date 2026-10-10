@@ -7,7 +7,13 @@ import {
   useGitIsInitialized,
   useSaveFileContent,
   useGetSettings,
+  useGetSelectedProject,
 } from '../../controllers';
+import { dlog } from '../../../shared/dbtChartsDebug'; // DBT-CHARTS-DEBUG
+import { BoardPreviewPane } from '../dbtCharts/BoardPreviewPane';
+import { isChartBoardFile } from '../dbtCharts/boardFiles';
+import { useBoardMarkers } from '../dbtCharts/useBoardMarkers';
+import type { DbtChartsDiagnostic } from '../../../types/backend';
 import { MonacoCodeEditor } from '../monaco/MonacoCodeEditor';
 import { DiffView } from './diffView';
 import { EditorHeader } from './editorHeader';
@@ -170,6 +176,41 @@ export const Editor: React.FC<EditorProps> = ({
     },
   );
   const { mutate: updateFileContent } = useSaveFileContent();
+
+  const { data: selectedProject } = useGetSelectedProject();
+
+  // dbt Charts boards (charts/**/*.yml): split YAML / board view.
+  type BoardMode = 'board' | 'full' | 'text';
+  const [boardModes, setBoardModes] = React.useState<Record<string, BoardMode>>(
+    {},
+  );
+  const [boardSaveTicks, setBoardSaveTicks] = React.useState<
+    Record<string, number>
+  >({});
+  const [boardDiagnostics, setBoardDiagnostics] = React.useState<
+    DbtChartsDiagnostic[]
+  >([]);
+  const isBoard = Boolean(
+    activeTab && !isPreviewTab && isChartBoardFile(projectPath, activeTab.path),
+  );
+  const boardMode: BoardMode = boardModes[activeFilePath] ?? 'board';
+  const setBoardMode = (mode: BoardMode) =>
+    setBoardModes((m) => ({ ...m, [activeFilePath]: mode }));
+
+  React.useEffect(() => {
+    setBoardDiagnostics([]);
+  }, [activeFilePath]);
+
+  React.useEffect(() => {
+    // DBT-CHARTS-DEBUG
+    if (isBoard)
+      dlog('renderer:editor', 'board tab active', {
+        activeFilePath,
+        boardMode,
+        projectPath,
+        hasProject: Boolean(selectedProject),
+      }); // DBT-CHARTS-DEBUG
+  }, [isBoard, activeFilePath, boardMode, projectPath, selectedProject]); // DBT-CHARTS-DEBUG
 
   const [showDiffView, setShowDiffView] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
@@ -480,6 +521,12 @@ export const Editor: React.FC<EditorProps> = ({
     decorationMode,
   ]);
 
+  useBoardMarkers(
+    editorInstance,
+    boardDiagnostics,
+    isBoard && boardMode !== 'text',
+  );
+
   const handleSave = React.useCallback(() => {
     if (!activeTab || !activeTabId || !activeTab.isModified || isSaving) return;
     setIsSaving(true);
@@ -489,6 +536,13 @@ export const Editor: React.FC<EditorProps> = ({
         onSuccess: () => {
           onTabSaved?.(activeTabId);
           onTabError?.(activeTabId, undefined);
+          if (isChartBoardFile(projectPath, activeTab.path)) {
+            const savedPath = activeTab.path;
+            setBoardSaveTicks((t) => ({
+              ...t,
+              [savedPath]: (t[savedPath] ?? 0) + 1,
+            }));
+          }
           setIsSaving(false);
           onGitStatusRefresh?.();
         },
@@ -506,6 +560,7 @@ export const Editor: React.FC<EditorProps> = ({
     onTabSaved,
     onTabError,
     onGitStatusRefresh,
+    projectPath,
   ]);
 
   React.useEffect(() => {
@@ -639,6 +694,12 @@ export const Editor: React.FC<EditorProps> = ({
             : undefined
         }
         extraActions={extraActions}
+        boardMode={isBoard ? boardMode : undefined}
+        onToggleBoardText={
+          isBoard
+            ? () => setBoardMode(boardMode === 'text' ? 'board' : 'text')
+            : undefined
+        }
       />
 
       <EditorViewport>
@@ -667,14 +728,54 @@ export const Editor: React.FC<EditorProps> = ({
             theme={monacoTheme}
           />
         ) : (
-          <MonacoCodeEditor
-            model={activeModel}
-            modelKey={activeTabId}
-            theme={monacoTheme}
-            readOnly={!isFileEditable}
-            options={{ codeLens: true, codeLensFontSize: 11 }}
-            onMount={handleEditorMount}
-          />
+          <Box sx={{ display: 'flex', height: '100%', width: '100%' }}>
+            {!(isBoard && boardMode === 'full') && (
+              <Box
+                sx={{
+                  flex: isBoard && boardMode === 'board' ? '0 0 50%' : 1,
+                  minWidth: 200,
+                  maxWidth:
+                    isBoard && boardMode === 'board' ? '80%' : undefined,
+                  resize:
+                    isBoard && boardMode === 'board' ? 'horizontal' : 'none',
+                  overflow: 'hidden',
+                  height: '100%',
+                }}
+              >
+                <MonacoCodeEditor
+                  model={activeModel}
+                  modelKey={activeTabId}
+                  theme={monacoTheme}
+                  readOnly={!isFileEditable}
+                  options={{ codeLens: true, codeLensFontSize: 11 }}
+                  onMount={handleEditorMount}
+                />
+              </Box>
+            )}
+            {isBoard && boardMode !== 'text' && (
+              <Box
+                sx={{
+                  flex: 1,
+                  minWidth: 0,
+                  height: '100%',
+                  borderLeft: boardMode === 'board' ? 1 : 0,
+                  borderColor: 'divider',
+                }}
+                data-testid="board-preview-pane"
+              >
+                <BoardPreviewPane
+                  project={selectedProject}
+                  filePath={activeTab.path}
+                  saveTick={boardSaveTicks[activeTab.path] ?? 0}
+                  isFull={boardMode === 'full'}
+                  onToggleFull={() =>
+                    setBoardMode(boardMode === 'full' ? 'board' : 'full')
+                  }
+                  onDiagnostics={setBoardDiagnostics}
+                />
+              </Box>
+            )}
+          </Box>
         )}
       </EditorViewport>
       {dragOverlay}

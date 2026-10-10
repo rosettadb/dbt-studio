@@ -18,7 +18,7 @@ import {
   Sql,
   AddConnection,
   EditConnection,
-  SelectProject,
+  Projects,
   Setup,
   CloudExplorer,
   Connections,
@@ -47,7 +47,10 @@ const App: React.FC = () => {
       <Routes>
         <Route path="/" element={<SelectProjectLayout />}>
           <Route index element={<Navigate to="/app" replace />} />
-          <Route path="select-project" element={<SelectProject />} />
+          <Route
+            path="select-project"
+            element={<Navigate to="/app/projects/list" replace />}
+          />
           <Route path="setup" element={<Setup />} />
           <Route path="*" element={<Navigate to="/app" />} />
         </Route>
@@ -55,7 +58,18 @@ const App: React.FC = () => {
           <Route path="" element={<Dashboard />} />
           <Route path="dbt-project" element={<ProjectDetails />} />
           <Route path="connections" element={<Connections />} />
-          <Route path="select-project" element={<SelectProject />} />
+          <Route
+            path="select-project"
+            element={<Navigate to="/app/projects/list" replace />}
+          />
+          <Route
+            path="projects"
+            element={<Navigate to="/app/projects/dashboard" replace />}
+          />
+          <Route path="projects/dashboard" element={<Projects />} />
+          <Route path="projects/list" element={<Projects />} />
+          <Route path="projects/recent" element={<Projects />} />
+          <Route path="projects/new" element={<Projects />} />
           <Route path="edit-connection/:id" element={<EditConnection />} />
           <Route path="add-connection" element={<AddConnection />} />
           <Route path="add-connection/:projectId" element={<AddConnection />} />
@@ -73,6 +87,7 @@ const App: React.FC = () => {
           <Route path="settings/installation" element={<Settings />} />
           <Route path="settings/about" element={<Settings />} />
           <Route path="settings/flowfile" element={<Settings />} />
+          <Route path="settings/dbt-charts" element={<Settings />} />
           <Route path="settings/runner" element={<Settings />} />
           <Route path="settings/keystore" element={<Settings />} />
           <Route path="settings/task-manager" element={<Settings />} />

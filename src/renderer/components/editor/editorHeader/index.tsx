@@ -30,6 +30,9 @@ interface EditorHeaderProps {
   onNavigate?: (path: string) => void;
   onRun?: () => void;
   extraActions?: React.ReactNode;
+  /** dbt Charts boards: current view mode and the Open as text / board toggle. */
+  boardMode?: 'board' | 'full' | 'text';
+  onToggleBoardText?: () => void;
 }
 
 export const EditorHeader: React.FC<EditorHeaderProps> = ({
@@ -48,6 +51,8 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
   onNavigate,
   onRun,
   extraActions,
+  boardMode,
+  onToggleBoardText,
 }) => {
   const isMarkdown =
     filePath.toLowerCase().endsWith('.md') ||
@@ -125,6 +130,16 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
               </IconButton>
             </span>
           </Tooltip>
+        )}
+        {onToggleBoardText && (
+          <Button
+            size="small"
+            onClick={onToggleBoardText}
+            data-testid="board-text-toggle"
+            sx={{ textTransform: 'none', fontSize: '0.8125rem' }}
+          >
+            {boardMode === 'text' ? 'Open as board' : 'Open as text'}
+          </Button>
         )}
         {/* Diff Button — always visible, disabled when no diff is available */}
         <Tooltip title={getDiffTooltip()}>

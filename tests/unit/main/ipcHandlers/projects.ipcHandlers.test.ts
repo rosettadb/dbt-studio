@@ -49,21 +49,33 @@ describe('projects.ipcHandlers', () => {
       },
     }));
 
-    jest.doMock('../../../../src/main/services/ai/providerManager.service', () => ({
-      AIProviderManager: {
-        generateTypedCompletion: jest.fn(),
-      },
-    }));
+    jest.doMock(
+      '../../../../src/main/services/ai/providerManager.service',
+      () => ({
+        AIProviderManager: {
+          generateTypedCompletion: jest.fn(),
+        },
+      }),
+    );
 
-    const registerProjectHandlers = (await import(
-      '../../../../src/main/ipcHandlers/projects.ipcHandlers'
-    )).default;
+    const registerProjectHandlers = (
+      await import('../../../../src/main/ipcHandlers/projects.ipcHandlers')
+    ).default;
 
     registerProjectHandlers();
 
-    expect(ipcMain.handle).toHaveBeenCalledWith('project:list', expect.any(Function));
-    expect(ipcMain.handle).toHaveBeenCalledWith('project:get', expect.any(Function));
-    expect(ipcMain.handle).toHaveBeenCalledWith('project:add', expect.any(Function));
+    expect(ipcMain.handle).toHaveBeenCalledWith(
+      'project:list',
+      expect.any(Function),
+    );
+    expect(ipcMain.handle).toHaveBeenCalledWith(
+      'project:get',
+      expect.any(Function),
+    );
+    expect(ipcMain.handle).toHaveBeenCalledWith(
+      'project:add',
+      expect.any(Function),
+    );
     expect(ipcMain.handle).toHaveBeenCalledWith(
       'project:enhanceModelQuery',
       expect.any(Function),
@@ -107,15 +119,18 @@ describe('projects.ipcHandlers', () => {
       },
     }));
 
-    jest.doMock('../../../../src/main/services/ai/providerManager.service', () => ({
-      AIProviderManager: {
-        generateTypedCompletion: jest.fn(),
-      },
-    }));
+    jest.doMock(
+      '../../../../src/main/services/ai/providerManager.service',
+      () => ({
+        AIProviderManager: {
+          generateTypedCompletion: jest.fn(),
+        },
+      }),
+    );
 
-    const registerProjectHandlers = (await import(
-      '../../../../src/main/ipcHandlers/projects.ipcHandlers'
-    )).default;
+    const registerProjectHandlers = (
+      await import('../../../../src/main/ipcHandlers/projects.ipcHandlers')
+    ).default;
 
     registerProjectHandlers();
 
@@ -164,15 +179,18 @@ describe('projects.ipcHandlers', () => {
       },
     }));
 
-    jest.doMock('../../../../src/main/services/ai/providerManager.service', () => ({
-      AIProviderManager: {
-        generateTypedCompletion,
-      },
-    }));
+    jest.doMock(
+      '../../../../src/main/services/ai/providerManager.service',
+      () => ({
+        AIProviderManager: {
+          generateTypedCompletion,
+        },
+      }),
+    );
 
-    const registerProjectHandlers = (await import(
-      '../../../../src/main/ipcHandlers/projects.ipcHandlers'
-    )).default;
+    const registerProjectHandlers = (
+      await import('../../../../src/main/ipcHandlers/projects.ipcHandlers')
+    ).default;
 
     registerProjectHandlers();
 

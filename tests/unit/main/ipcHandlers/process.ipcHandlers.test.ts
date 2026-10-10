@@ -5,7 +5,9 @@ describe('process.ipcHandlers', () => {
   });
 
   const getHandleHandler = (ipcMain: any, channel: string) => {
-    const call = (ipcMain.handle as jest.Mock).mock.calls.find(([c]) => c === channel);
+    const call = (ipcMain.handle as jest.Mock).mock.calls.find(
+      ([c]) => c === channel,
+    );
     if (!call) {
       throw new Error(`No handler registered for channel: ${channel}`);
     }
@@ -24,9 +26,9 @@ describe('process.ipcHandlers', () => {
       })),
     }));
 
-    const registerProcessHandlers = (await import(
-      '../../../../src/main/ipcHandlers/process.ipcHandlers'
-    )).default;
+    const registerProcessHandlers = (
+      await import('../../../../src/main/ipcHandlers/process.ipcHandlers')
+    ).default;
 
     registerProcessHandlers({} as any);
 
@@ -35,12 +37,24 @@ describe('process.ipcHandlers', () => {
     expect(ipcMain.removeHandler).toHaveBeenCalledWith('process:status');
     expect(ipcMain.removeAllListeners).toHaveBeenCalledWith('process:output');
 
-    expect(ipcMain.handle).toHaveBeenCalledWith('process:start', expect.any(Function));
-    expect(ipcMain.handle).toHaveBeenCalledWith('process:stop', expect.any(Function));
-    expect(ipcMain.handle).toHaveBeenCalledWith('process:status', expect.any(Function));
+    expect(ipcMain.handle).toHaveBeenCalledWith(
+      'process:start',
+      expect.any(Function),
+    );
+    expect(ipcMain.handle).toHaveBeenCalledWith(
+      'process:stop',
+      expect.any(Function),
+    );
+    expect(ipcMain.handle).toHaveBeenCalledWith(
+      'process:status',
+      expect.any(Function),
+    );
 
     expect(app.on).toHaveBeenCalledWith('before-quit', expect.any(Function));
-    expect(app.on).toHaveBeenCalledWith('window-all-closed', expect.any(Function));
+    expect(app.on).toHaveBeenCalledWith(
+      'window-all-closed',
+      expect.any(Function),
+    );
   });
 
   it('delegates process:status to processAdapter.getStatus', async () => {
@@ -57,9 +71,9 @@ describe('process.ipcHandlers', () => {
       })),
     }));
 
-    const registerProcessHandlers = (await import(
-      '../../../../src/main/ipcHandlers/process.ipcHandlers'
-    )).default;
+    const registerProcessHandlers = (
+      await import('../../../../src/main/ipcHandlers/process.ipcHandlers')
+    ).default;
 
     registerProcessHandlers({} as any);
 

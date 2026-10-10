@@ -31,7 +31,9 @@ const mockConvertDuckDBValue = jest.fn((v: any) => v);
 
 jest.mock('../../../../src/main/helpers', () => ({
   buildCloudSecretQuery: (...args: any[]) => mockBuildCloudSecretQuery(...args),
-  getCloudUrl: jest.fn((provider: string, bucket: string, obj: string) => `s3://${bucket}/${obj}`),
+  getCloudUrl: jest.fn(
+    (provider: string, bucket: string, obj: string) => `s3://${bucket}/${obj}`,
+  ),
   isPreviewSupported: jest.fn(() => true),
   handleProviderError: (...args: any[]) => mockHandleProviderError(...args),
   convertDuckDBValue: (v: any) => mockConvertDuckDBValue(v),
@@ -45,7 +47,11 @@ import CloudPreviewService from '../../../../src/main/services/cloudPreview.serv
 
 const BASE_OPTIONS = {
   provider: 'aws' as const,
-  cloudConfig: { region: 'us-east-1', accessKeyId: 'k', secretAccessKey: 's' } as any,
+  cloudConfig: {
+    region: 'us-east-1',
+    accessKeyId: 'k',
+    secretAccessKey: 's',
+  } as any,
   objectPath: 's3://bucket/data.csv',
   previewType: 'sample' as const,
   pageSize: 25,
@@ -98,13 +104,21 @@ describe('CloudPreviewService.previewCloudData', () => {
       [2, 'bob'],
     ];
 
-    const conn = makeConnection({
-      'COUNT(*)': { getRows: jest.fn().mockResolvedValue([[2]]) },
-      DESCRIBE: { getRows: jest.fn().mockResolvedValue(DESCRIBE_ROWS) },
-    }, {
-      schema: { fields: [{ name: 'id', type: 'INTEGER' }, { name: 'name', type: 'VARCHAR' }] },
-      getRows: jest.fn().mockResolvedValue(dataRows),
-    });
+    const conn = makeConnection(
+      {
+        'COUNT(*)': { getRows: jest.fn().mockResolvedValue([[2]]) },
+        DESCRIBE: { getRows: jest.fn().mockResolvedValue(DESCRIBE_ROWS) },
+      },
+      {
+        schema: {
+          fields: [
+            { name: 'id', type: 'INTEGER' },
+            { name: 'name', type: 'VARCHAR' },
+          ],
+        },
+        getRows: jest.fn().mockResolvedValue(dataRows),
+      },
+    );
 
     mockGetConnection.mockResolvedValue(conn);
 
@@ -126,7 +140,10 @@ describe('CloudPreviewService.previewCloudData', () => {
       'aws',
       expect.stringContaining('s3://'),
     );
-    expect(mockBuildCloudSecretQuery).toHaveBeenCalledWith('aws', expect.any(Object));
+    expect(mockBuildCloudSecretQuery).toHaveBeenCalledWith(
+      'aws',
+      expect.any(Object),
+    );
     expect(mockReleaseConnection).toHaveBeenCalledWith(conn);
   });
 
@@ -136,8 +153,10 @@ describe('CloudPreviewService.previewCloudData', () => {
     const conn = {
       run: jest.fn().mockImplementation(async (sql: string) => {
         callOrder.push(sql.trim().slice(0, 30));
-        if (sql.includes('COUNT(*)')) return { getRows: jest.fn().mockResolvedValue([[0]]) };
-        if (sql.includes('DESCRIBE')) return { getRows: jest.fn().mockResolvedValue(DESCRIBE_ROWS) };
+        if (sql.includes('COUNT(*)'))
+          return { getRows: jest.fn().mockResolvedValue([[0]]) };
+        if (sql.includes('DESCRIBE'))
+          return { getRows: jest.fn().mockResolvedValue(DESCRIBE_ROWS) };
         return {
           schema: { fields: [{ name: 'id', type: 'INTEGER' }] },
           getRows: jest.fn().mockResolvedValue([]),
@@ -183,8 +202,10 @@ describe('CloudPreviewService.previewCloudData', () => {
 
   it('returns column stats for previewType=stats', async () => {
     const conn = makeConnection({
-      DESCRIBE: { getRows: jest.fn().mockResolvedValue([['age', 'INTEGER', 'YES']]) },
-      'null_count': {
+      DESCRIBE: {
+        getRows: jest.fn().mockResolvedValue([['age', 'INTEGER', 'YES']]),
+      },
+      null_count: {
         getRows: jest.fn().mockResolvedValue([[0, 100, '18', '65', '35']]),
       },
     });
@@ -210,7 +231,8 @@ describe('CloudPreviewService.previewCloudData', () => {
     const conn = {
       run: jest.fn().mockImplementation(async (sql: string) => {
         executedQueries.push(sql);
-        if (sql.includes('DESCRIBE')) return { getRows: jest.fn().mockResolvedValue(DESCRIBE_ROWS) };
+        if (sql.includes('DESCRIBE'))
+          return { getRows: jest.fn().mockResolvedValue(DESCRIBE_ROWS) };
         return {
           schema: { fields: [{ name: 'id', type: 'INTEGER' }] },
           getRows: jest.fn().mockResolvedValue([[3], [4]]),
@@ -227,8 +249,9 @@ describe('CloudPreviewService.previewCloudData', () => {
       pageSize: 25,
     });
 
-    const selectQuery = executedQueries.find((q) =>
-      q.includes('SELECT') && q.includes('LIMIT') && q.includes('OFFSET'),
+    const selectQuery = executedQueries.find(
+      (q) =>
+        q.includes('SELECT') && q.includes('LIMIT') && q.includes('OFFSET'),
     );
     expect(selectQuery).toBeDefined();
     expect(selectQuery).toContain('LIMIT 25');
@@ -241,7 +264,8 @@ describe('CloudPreviewService.previewCloudData', () => {
     const conn = {
       run: jest.fn().mockImplementation(async (sql: string) => {
         executedQueries.push(sql);
-        if (sql.includes('DESCRIBE')) return { getRows: jest.fn().mockResolvedValue(DESCRIBE_ROWS) };
+        if (sql.includes('DESCRIBE'))
+          return { getRows: jest.fn().mockResolvedValue(DESCRIBE_ROWS) };
         return {
           schema: { fields: [{ name: 'id', type: 'INTEGER' }] },
           getRows: jest.fn().mockResolvedValue([]),
@@ -309,8 +333,10 @@ describe('CloudPreviewService.previewCloudData', () => {
     const conn = {
       run: jest.fn().mockImplementation(async (sql: string) => {
         executedQueries.push(sql);
-        if (sql.includes('COUNT(*)')) return { getRows: jest.fn().mockResolvedValue([[5]]) };
-        if (sql.includes('DESCRIBE')) return { getRows: jest.fn().mockResolvedValue(DESCRIBE_ROWS) };
+        if (sql.includes('COUNT(*)'))
+          return { getRows: jest.fn().mockResolvedValue([[5]]) };
+        if (sql.includes('DESCRIBE'))
+          return { getRows: jest.fn().mockResolvedValue(DESCRIBE_ROWS) };
         return {
           schema: { fields: [{ name: 'id', type: 'INTEGER' }] },
           getRows: jest.fn().mockResolvedValue([]),
@@ -412,7 +438,7 @@ describe('CloudPreviewService.previewCloudData', () => {
   it('returns success:false for undetectable file format', async () => {
     const conn = makeConnection({
       // read_blob returns null magic bytes
-      'read_blob': { getRows: jest.fn().mockResolvedValue([[null]]) },
+      read_blob: { getRows: jest.fn().mockResolvedValue([[null]]) },
     });
 
     mockGetConnection.mockResolvedValue(conn);
@@ -435,8 +461,10 @@ describe('CloudPreviewService.previewCloudData', () => {
     const conn = {
       run: jest.fn().mockImplementation(async (sql: string) => {
         executedQueries.push(sql);
-        if (sql.includes('COUNT(*)')) return { getRows: jest.fn().mockResolvedValue([[0]]) };
-        if (sql.includes('DESCRIBE')) return { getRows: jest.fn().mockResolvedValue(DESCRIBE_ROWS) };
+        if (sql.includes('COUNT(*)'))
+          return { getRows: jest.fn().mockResolvedValue([[0]]) };
+        if (sql.includes('DESCRIBE'))
+          return { getRows: jest.fn().mockResolvedValue(DESCRIBE_ROWS) };
         return {
           schema: { fields: [{ name: 'id', type: 'INTEGER' }] },
           getRows: jest.fn().mockResolvedValue([]),

@@ -5,7 +5,9 @@ describe('git.ipcHandlers', () => {
   });
 
   const getHandleHandler = (ipcMain: any, channel: string) => {
-    const call = (ipcMain.handle as jest.Mock).mock.calls.find(([c]) => c === channel);
+    const call = (ipcMain.handle as jest.Mock).mock.calls.find(
+      ([c]) => c === channel,
+    );
     if (!call) {
       throw new Error(`No handler registered for channel: ${channel}`);
     }
@@ -42,17 +44,23 @@ describe('git.ipcHandlers', () => {
       })),
     }));
 
-    const registerGitHandlers = (await import(
-      '../../../../src/main/ipcHandlers/git.ipcHandlers'
-    )).default;
+    const registerGitHandlers = (
+      await import('../../../../src/main/ipcHandlers/git.ipcHandlers')
+    ).default;
 
     registerGitHandlers();
 
     expect(ipcMain.removeHandler).toHaveBeenCalledWith('git:init');
     expect(ipcMain.removeHandler).toHaveBeenCalledWith('git:push');
 
-    expect(ipcMain.handle).toHaveBeenCalledWith('git:init', expect.any(Function));
-    expect(ipcMain.handle).toHaveBeenCalledWith('git:clone', expect.any(Function));
+    expect(ipcMain.handle).toHaveBeenCalledWith(
+      'git:init',
+      expect.any(Function),
+    );
+    expect(ipcMain.handle).toHaveBeenCalledWith(
+      'git:clone',
+      expect.any(Function),
+    );
     expect(ipcMain.handle).toHaveBeenCalledWith(
       'git:fileStatusList',
       expect.any(Function),
@@ -91,9 +99,9 @@ describe('git.ipcHandlers', () => {
       })),
     }));
 
-    const registerGitHandlers = (await import(
-      '../../../../src/main/ipcHandlers/git.ipcHandlers'
-    )).default;
+    const registerGitHandlers = (
+      await import('../../../../src/main/ipcHandlers/git.ipcHandlers')
+    ).default;
 
     registerGitHandlers();
 

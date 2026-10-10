@@ -5,7 +5,9 @@ describe('updates.ipcHandlers', () => {
   });
 
   const getHandleHandler = (ipcMain: any, channel: string) => {
-    const call = (ipcMain.handle as jest.Mock).mock.calls.find(([c]) => c === channel);
+    const call = (ipcMain.handle as jest.Mock).mock.calls.find(
+      ([c]) => c === channel,
+    );
     if (!call) {
       throw new Error(`No handler registered for channel: ${channel}`);
     }
@@ -31,13 +33,16 @@ describe('updates.ipcHandlers', () => {
       },
     }));
 
-    const registerUpdateHandlers = (await import(
-      '../../../../src/main/ipcHandlers/updates.ipcHandlers'
-    )).default;
+    const registerUpdateHandlers = (
+      await import('../../../../src/main/ipcHandlers/updates.ipcHandlers')
+    ).default;
 
     registerUpdateHandlers();
 
-    expect(ipcMain.handle).toHaveBeenCalledWith('updates:check', expect.any(Function));
+    expect(ipcMain.handle).toHaveBeenCalledWith(
+      'updates:check',
+      expect.any(Function),
+    );
     expect(ipcMain.handle).toHaveBeenCalledWith(
       'updates:check-settings',
       expect.any(Function),
@@ -73,9 +78,9 @@ describe('updates.ipcHandlers', () => {
       },
     }));
 
-    const registerUpdateHandlers = (await import(
-      '../../../../src/main/ipcHandlers/updates.ipcHandlers'
-    )).default;
+    const registerUpdateHandlers = (
+      await import('../../../../src/main/ipcHandlers/updates.ipcHandlers')
+    ).default;
 
     registerUpdateHandlers();
 

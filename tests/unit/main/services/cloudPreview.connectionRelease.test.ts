@@ -314,5 +314,4 @@ describe('CloudPreviewService — Property 6: connection always released', () =>
     expect(mockGetConnection).toHaveBeenCalledTimes(N);
     expect(mockReleaseConnection).toHaveBeenCalledTimes(N);
   });
-
 });

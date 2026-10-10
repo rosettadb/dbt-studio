@@ -32,6 +32,20 @@ function recoverInterruptedRuns(entries: DbtRunHistoryEntry[]): {
   return { entries: recovered, changed };
 }
 
+/** Read-only parse of a stored run-history value; returns [] for missing or corrupt data. */
+export function parseRunHistory(raw: string | null): DbtRunHistoryEntry[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as DbtRunHistoryEntry[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export const runHistoryStorageKey = (projectId: string) =>
+  `dbt-studio:run-history:${projectId}`;
+
 function dispatchChangeEvent() {
   window.dispatchEvent(new Event(EVENT_NAME));
 }

@@ -13,6 +13,7 @@ export * from './InstallationSettings';
 export * from './DuckDBWorkspaceCard';
 export * from './DuckDBSettings';
 export * from './FlowfileSettings';
+export * from './DbtChartsSettings';
 export * from './KeystoreSettings';
 export * from './TaskManagerSettings';
 export * from './SecondBrainTab';

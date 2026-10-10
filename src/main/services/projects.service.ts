@@ -48,6 +48,7 @@ import {
 import SecureStorageService from './secureStorage.service';
 import ConnectorsService from './connectors.service';
 import MainDatabaseService from './mainDatabase.service';
+import DbtChartsService from './dbtCharts.service';
 import {
   extractPipelineRequiredEnvVars,
   RequiredEnvVarSource,
@@ -81,10 +82,6 @@ export default class ProjectsService {
     const projects = await this.loadProjects();
     const project = projects.find((p) => p.id === id);
     if (project) {
-      await this.updateProject({
-        ...project,
-        lastOpenedAt: Date.now(),
-      });
       // Parse config files to populate rosettaConnection and dbtConnection
       // without regenerating the files
       try {
@@ -1061,7 +1058,13 @@ export default class ProjectsService {
 
   static async selectProject({ projectId }: { projectId: string }) {
     const project = await this.getProject(projectId);
+    if (project) {
+      // Only a real open counts as "recent", not every read of the project.
+      await this.updateProject({ ...project, lastOpenedAt: Date.now() });
+    }
     await databaseStore.updateField('selectedProject', () => project);
+    // Leave no dbt Charts server running for the project we switched away from.
+    await DbtChartsService.stopAllExcept(projectId).catch(() => undefined);
   }
 
   static async extractPgSchema(connection: PostgresConnection) {

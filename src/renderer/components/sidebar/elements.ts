@@ -54,15 +54,15 @@ const baseElements: SideBarElementType[] = [
   },
 ];
 
+/** The DBT Studio entry is never disabled; without a project it opens the Projects dashboard. */
+export const getDbtStudioTarget = (isProjectSelected: boolean): string =>
+  isProjectSelected ? '/app/dbt-project' : '/app/projects/dashboard';
+
 export const getMainElements = (
-  isProjectSelected: boolean,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _isProjectSelected: boolean,
 ): SideBarElementType[] => {
-  return baseElements.map((element) => {
-    if (!isProjectSelected && element.path === '/app/dbt-project') {
-      return { ...element, disabled: true };
-    }
-    return element;
-  });
+  return baseElements;
 };
 
 export const getBottomElements = (): SideBarElementType[] => {

@@ -31,16 +31,18 @@ describe('DuckLakeValidationService', () => {
       const req = validBaseRequest();
       req.name = '';
 
-      expect(() => DuckLakeValidationService.validateCreateRequest(req)).toThrow(
-        'name: Instance name is required',
-      );
+      expect(() =>
+        DuckLakeValidationService.validateCreateRequest(req),
+      ).toThrow('name: Instance name is required');
     });
 
     it('throws when instance name contains invalid characters', () => {
       const req = validBaseRequest();
       req.name = 'bad name';
 
-      expect(() => DuckLakeValidationService.validateCreateRequest(req)).toThrow(
+      expect(() =>
+        DuckLakeValidationService.validateCreateRequest(req),
+      ).toThrow(
         'name: Instance name can only contain letters, numbers, hyphens, and underscores',
       );
     });
@@ -49,7 +51,9 @@ describe('DuckLakeValidationService', () => {
       const req = validBaseRequest();
       req.dataPath = 'relative/path';
 
-      expect(() => DuckLakeValidationService.validateCreateRequest(req)).toThrow(
+      expect(() =>
+        DuckLakeValidationService.validateCreateRequest(req),
+      ).toThrow(
         'dataPath: Data path must be an absolute path or a valid cloud URI',
       );
     });
@@ -64,8 +68,12 @@ describe('DuckLakeValidationService', () => {
 
     it('throws when dataPath is provided but invalid', () => {
       expect(() =>
-        DuckLakeValidationService.validateUpdateRequest({ dataPath: 'x' } as any),
-      ).toThrow('dataPath: Data path must be an absolute path or a valid cloud URI');
+        DuckLakeValidationService.validateUpdateRequest({
+          dataPath: 'x',
+        } as any),
+      ).toThrow(
+        'dataPath: Data path must be an absolute path or a valid cloud URI',
+      );
     });
   });
 

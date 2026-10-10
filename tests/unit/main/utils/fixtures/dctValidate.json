@@ -1,0 +1,34 @@
+[
+  {
+    "success": false,
+    "path": "charts/bad.yml",
+    "errors": [
+      {
+        "code": "ERR-UNKNOWN-QUERY",
+        "message": "Chart 'c' references unknown query 'missing'. Declare the query under `queries:` or fix the typo in `query:`.",
+        "path": "charts.c.query",
+        "range": {
+          "file": "charts/bad.yml",
+          "start_line": 12,
+          "end_line": 12,
+          "columns": { "start_col": 5, "end_col": 19 }
+        },
+        "level": "error"
+      }
+    ],
+    "warnings": [
+      {
+        "code": "WARN-SINGLE-CHART-REDUNDANT-TITLE",
+        "message": "Board title sits above a single chart that carries its own title.",
+        "path": "charts.orders_by_month.title",
+        "range": {
+          "file": "charts/bad.yml",
+          "start_line": 16,
+          "end_line": 16,
+          "columns": { "start_col": 5, "end_col": 18 }
+        },
+        "level": "warning"
+      }
+    ]
+  }
+]

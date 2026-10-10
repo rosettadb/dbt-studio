@@ -10,6 +10,7 @@ import TerminalIcon from '@mui/icons-material/Terminal';
 import CodeIcon from '@mui/icons-material/Code';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import BackupOutlinedIcon from '@mui/icons-material/BackupOutlined';
+import InsertChartOutlinedIcon from '@mui/icons-material/InsertChartOutlined';
 import { SvgIconComponent } from '@mui/icons-material';
 import React from 'react';
 import { Icon } from '../../components/icon';
@@ -116,6 +117,11 @@ export const settingsSidebarCategories: SettingsSidebarCategory[] = [
         icon: AccountTreeIcon as any,
         text: 'Flowfile',
         path: '/app/settings/flowfile',
+      },
+      {
+        icon: InsertChartOutlinedIcon as any,
+        text: 'dbt Charts',
+        path: '/app/settings/dbt-charts',
       },
       {
         icon: TerminalIcon,

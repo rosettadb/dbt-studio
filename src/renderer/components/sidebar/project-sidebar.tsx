@@ -32,8 +32,14 @@ import { SourceControlView } from '../sourceControl';
 import connectionIcons from '../../../../assets/connectionIcons';
 import { useListPipelines } from '../../controllers';
 import { CreatePipelineModal } from '../modals';
+import { ChartsSidebarPanel } from '../dbtCharts/ChartsSidebarPanel';
 
-export type SidebarTab = 'explorer' | 'search' | 'scm' | 'connections';
+export type SidebarTab =
+  | 'explorer'
+  | 'search'
+  | 'scm'
+  | 'connections'
+  | 'charts';
 
 // Helper function to get connection type name
 const getConnectionTypeName = (connectionType?: string) => {
@@ -473,6 +479,9 @@ interface ProjectSidebarProps {
   onEditConnection?: () => void;
   onRemoveConnection?: () => void;
 
+  // dbt Charts
+  onOpenChartsFile?: (absolutePath: string) => void;
+
   // Pipeline
   onRunPipeline?: (filePath: string) => void;
   openCreatePipeline?: boolean;
@@ -508,6 +517,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   onSearchResultSelect,
   onRunPipelineLocal,
   openCreatePipeline,
+  onOpenChartsFile,
 }) => {
   return (
     <Box
@@ -558,6 +568,11 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
             onSynchronize={onSourceControlSynchronize}
             isSynchronizing={isSourceControlSynchronizing}
           />
+        )}
+
+        {/* dbt Charts Tab */}
+        {activeTab === 'charts' && (
+          <ChartsSidebarPanel project={project} onOpenFile={onOpenChartsFile} />
         )}
 
         {/* Connections Tab */}

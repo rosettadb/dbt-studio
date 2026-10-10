@@ -24,6 +24,7 @@ import {
   registerAnalyticsPagesHandlers,
   registerStaticSiteHandlers,
   registerFlowfileHandlers,
+  registerDbtChartsHandlers,
   registerPipelineTemplatesHandlers,
   registerTaskManagerHandlers,
   registerSecondBrainHandlers,
@@ -60,6 +61,7 @@ const registerHandlers = (mainWindow: BrowserWindow) => {
   registerAnalyticsPagesHandlers();
   registerStaticSiteHandlers(mainWindow);
   registerFlowfileHandlers();
+  registerDbtChartsHandlers();
   registerPipelineTemplatesHandlers();
   registerTaskManagerHandlers(mainWindow);
   registerSecondBrainHandlers();

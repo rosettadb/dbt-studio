@@ -22,6 +22,7 @@ import registerSavedQueriesHandlers from './savedQueries.ipcHandlers';
 import { registerAnalyticsPagesHandlers } from './analyticsPages.ipcHandlers';
 import { registerStaticSiteHandlers } from './staticSite.ipcHandlers';
 import registerFlowfileHandlers from './flowfile.ipcHandlers';
+import registerDbtChartsHandlers from './dbtCharts.ipcHandlers';
 import { registerPipelineTemplatesHandlers } from './pipelineTemplates.ipcHandlers';
 import registerTaskManagerHandlers from './taskManager.ipcHandlers';
 import { registerSecondBrainHandlers } from './secondBrain.ipcHandlers';
@@ -55,6 +56,7 @@ export {
   registerAnalyticsPagesHandlers,
   registerStaticSiteHandlers,
   registerFlowfileHandlers,
+  registerDbtChartsHandlers,
   registerPipelineTemplatesHandlers,
   registerTaskManagerHandlers,
   registerSecondBrainHandlers,

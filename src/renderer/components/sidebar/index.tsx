@@ -11,7 +11,11 @@ import {
 import { useTheme } from '@mui/material/styles';
 import { useLocation } from 'react-router-dom';
 import { CollapseLeftIcon } from './collapse-icons';
-import { getMainElements, getBottomElements } from './elements';
+import {
+  getMainElements,
+  getBottomElements,
+  getDbtStudioTarget,
+} from './elements';
 import {
   ACTIVITY_BAR_COLLAPSED_WIDTH,
   ACTIVITY_BAR_EXPANDED_WIDTH,
@@ -50,7 +54,8 @@ export const Sidebar: React.FC<Props> = ({
 
   const activeItemPath = React.useMemo(() => {
     const path = location.pathname;
-    if (path.includes('dbt-project')) return '/app/dbt-project';
+    if (path.includes('dbt-project') || path.startsWith('/app/projects'))
+      return '/app/dbt-project';
     if (path.includes('cloud-explorer')) return '/app/cloud-explorer';
     if (path.includes('data-lake') || path.includes('datalake'))
       return '/app/data-lake';
@@ -83,8 +88,10 @@ export const Sidebar: React.FC<Props> = ({
 
   const renderItem = (element: (typeof mainElements)[0], isActive: boolean) => {
     const isDisabled = element.disabled;
-    const targetPath =
-      element.path === '/app/data-lake' ? lastDataLakeRoute : element.path;
+    let targetPath = element.path;
+    if (element.path === '/app/data-lake') targetPath = lastDataLakeRoute;
+    if (element.path === '/app/dbt-project')
+      targetPath = getDbtStudioTarget(isProjectSelected);
 
     const listItem = (
       <ListItem

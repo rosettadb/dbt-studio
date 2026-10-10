@@ -1219,3 +1219,97 @@ export interface GetQueryResultsRequest {
   /** Maximum rows to include in the summary (1–50, default 20). */
   maxRows?: number;
 }
+
+// ---------------------------------------------------------------------------
+// dbt Charts (dct)
+// ---------------------------------------------------------------------------
+
+export type DbtChartsAdapterSupport = {
+  supported: boolean;
+  /** dct pip extra to install (undefined for built-in adapters). */
+  extra?: string;
+  /** Why the connection cannot be used, or a caveat for supported ones. */
+  reason?: string;
+};
+
+export type DbtChartsStatus = {
+  installed: boolean;
+  version: string | null;
+  pythonVersion: string | null;
+  extras: string[];
+};
+
+export type DbtChartsResult = {
+  ok: boolean;
+  error?: string;
+};
+
+export type DbtChartsProjectState = {
+  support: DbtChartsAdapterSupport;
+  configExists: boolean;
+  /** Board files relative to the project root, e.g. "charts/index.yml". */
+  boards: string[];
+  manifestStale: boolean;
+  extraInstalled: boolean;
+};
+
+export type DbtChartsSetupResult = {
+  configPath: string;
+  indexPath: string;
+};
+
+export type DbtChartsCreateBoardInput = {
+  projectId: string;
+  name: string;
+};
+
+export type DbtChartsManifestResult = {
+  ran: boolean;
+  ok: boolean;
+  error?: string;
+};
+
+export type DbtChartsValidateInput = {
+  projectId: string;
+  /** Board file, relative to the project root or absolute inside it. */
+  filePath: string;
+};
+
+export type DbtChartsDiagnostic = {
+  severity: 'error' | 'warning' | 'info';
+  code: string;
+  message: string;
+  line?: number;
+  column?: number;
+};
+
+export type DbtChartsServerState =
+  | 'stopped'
+  | 'starting'
+  | 'running'
+  | 'crashed';
+
+export type DbtChartsServerStatus = {
+  state: DbtChartsServerState;
+  url?: string;
+  error?: string;
+};
+
+/** Payload of the 'dbt-charts:serverStatus' broadcast. */
+export type DbtChartsServerEvent = DbtChartsServerStatus & {
+  projectId: string;
+};
+
+export type DbtChartsInstallPhase =
+  | 'python'
+  | 'venv'
+  | 'pip'
+  | 'done'
+  | 'error';
+
+/** Payload of the 'dbt-charts:installProgress' broadcast. */
+export type DbtChartsInstallProgress = {
+  phase: DbtChartsInstallPhase;
+  message: string;
+  percentage?: number;
+};

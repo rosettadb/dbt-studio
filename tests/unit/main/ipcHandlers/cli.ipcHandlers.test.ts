@@ -5,7 +5,9 @@ describe('cli.ipcHandlers', () => {
   });
 
   const getHandleHandler = (ipcMain: any, channel: string) => {
-    const call = (ipcMain.handle as jest.Mock).mock.calls.find(([c]) => c === channel);
+    const call = (ipcMain.handle as jest.Mock).mock.calls.find(
+      ([c]) => c === channel,
+    );
     if (!call) {
       throw new Error(`No handler registered for channel: ${channel}`);
     }
@@ -13,7 +15,9 @@ describe('cli.ipcHandlers', () => {
   };
 
   const getOnHandler = (ipcMain: any, channel: string) => {
-    const call = (ipcMain.on as jest.Mock).mock.calls.find(([c]) => c === channel);
+    const call = (ipcMain.on as jest.Mock).mock.calls.find(
+      ([c]) => c === channel,
+    );
     if (!call) {
       throw new Error(`No listener registered for channel: ${channel}`);
     }
@@ -32,9 +36,9 @@ describe('cli.ipcHandlers', () => {
       })),
     }));
 
-    const registerCliHandlers = (await import(
-      '../../../../src/main/ipcHandlers/cli.ipcHandlers'
-    )).default;
+    const registerCliHandlers = (
+      await import('../../../../src/main/ipcHandlers/cli.ipcHandlers')
+    ).default;
 
     registerCliHandlers({} as any);
 
@@ -43,8 +47,14 @@ describe('cli.ipcHandlers', () => {
     expect(ipcMain.removeAllListeners).toHaveBeenCalledWith('cli:output');
     expect(ipcMain.removeAllListeners).toHaveBeenCalledWith('cli:done');
 
-    expect(ipcMain.handle).toHaveBeenCalledWith('cli:run', expect.any(Function));
-    expect(ipcMain.handle).toHaveBeenCalledWith('cli:status', expect.any(Function));
+    expect(ipcMain.handle).toHaveBeenCalledWith(
+      'cli:run',
+      expect.any(Function),
+    );
+    expect(ipcMain.handle).toHaveBeenCalledWith(
+      'cli:status',
+      expect.any(Function),
+    );
     expect(ipcMain.on).toHaveBeenCalledWith('cli:input', expect.any(Function));
     expect(ipcMain.on).toHaveBeenCalledWith('cli:stop', expect.any(Function));
   });
@@ -63,9 +73,9 @@ describe('cli.ipcHandlers', () => {
       })),
     }));
 
-    const registerCliHandlers = (await import(
-      '../../../../src/main/ipcHandlers/cli.ipcHandlers'
-    )).default;
+    const registerCliHandlers = (
+      await import('../../../../src/main/ipcHandlers/cli.ipcHandlers')
+    ).default;
 
     registerCliHandlers({} as any);
 
@@ -89,9 +99,9 @@ describe('cli.ipcHandlers', () => {
       })),
     }));
 
-    const registerCliHandlers = (await import(
-      '../../../../src/main/ipcHandlers/cli.ipcHandlers'
-    )).default;
+    const registerCliHandlers = (
+      await import('../../../../src/main/ipcHandlers/cli.ipcHandlers')
+    ).default;
 
     registerCliHandlers({} as any);
 

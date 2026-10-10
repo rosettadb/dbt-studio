@@ -43,25 +43,34 @@ describe('settings.ipcHandlers', () => {
       },
     }));
 
-    const registerSettingsHandlers = (await import(
-      '../../../../src/main/ipcHandlers/settings.ipcHandlers'
-    )).default;
+    const registerSettingsHandlers = (
+      await import('../../../../src/main/ipcHandlers/settings.ipcHandlers')
+    ).default;
 
     registerSettingsHandlers({} as any);
 
     expect(ipcMain.removeHandler).toHaveBeenCalledWith('settings:load');
     expect(ipcMain.removeHandler).toHaveBeenCalledWith('settings:save');
-    expect(ipcMain.handle).toHaveBeenCalledWith('settings:load', expect.any(Function));
+    expect(ipcMain.handle).toHaveBeenCalledWith(
+      'settings:load',
+      expect.any(Function),
+    );
     expect(ipcMain.handle).toHaveBeenCalledWith(
       'settings:load-with-db-info',
       expect.any(Function),
     );
-    expect(ipcMain.handle).toHaveBeenCalledWith('settings:save', expect.any(Function));
+    expect(ipcMain.handle).toHaveBeenCalledWith(
+      'settings:save',
+      expect.any(Function),
+    );
     expect(ipcMain.handle).toHaveBeenCalledWith(
       'settings:duckdb:metadata',
       expect.any(Function),
     );
-    expect(ipcMain.handle).toHaveBeenCalledWith('settings:restart', expect.any(Function));
+    expect(ipcMain.handle).toHaveBeenCalledWith(
+      'settings:restart',
+      expect.any(Function),
+    );
 
     const session = { clearStorageData: jest.fn() };
     const resetHandler = getHandleHandler(ipcMain, 'settings:reset-factory');
@@ -100,9 +109,9 @@ describe('settings.ipcHandlers', () => {
       },
     }));
 
-    const registerSettingsHandlers = (await import(
-      '../../../../src/main/ipcHandlers/settings.ipcHandlers'
-    )).default;
+    const registerSettingsHandlers = (
+      await import('../../../../src/main/ipcHandlers/settings.ipcHandlers')
+    ).default;
 
     registerSettingsHandlers({} as any);
 
@@ -140,9 +149,9 @@ describe('settings.ipcHandlers', () => {
       },
     }));
 
-    const registerSettingsHandlers = (await import(
-      '../../../../src/main/ipcHandlers/settings.ipcHandlers'
-    )).default;
+    const registerSettingsHandlers = (
+      await import('../../../../src/main/ipcHandlers/settings.ipcHandlers')
+    ).default;
 
     registerSettingsHandlers({} as any);
 

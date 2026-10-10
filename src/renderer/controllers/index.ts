@@ -18,3 +18,4 @@ export * from './analyticsPages.controller';
 export * from './dbtVersions.controller';
 export * from './secondBrain.controller';
 export * from './pythonNotebooks.controller';
+export * from './dbtCharts.controller';

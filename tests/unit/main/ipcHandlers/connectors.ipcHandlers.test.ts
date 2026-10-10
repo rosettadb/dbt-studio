@@ -40,9 +40,9 @@ describe('connectors.ipcHandlers', () => {
       },
     }));
 
-    const registerConnectorsHandlers = (await import(
-      '../../../../src/main/ipcHandlers/connectors.ipcHandlers'
-    )).default;
+    const registerConnectorsHandlers = (
+      await import('../../../../src/main/ipcHandlers/connectors.ipcHandlers')
+    ).default;
 
     registerConnectorsHandlers();
 
@@ -51,14 +51,19 @@ describe('connectors.ipcHandlers', () => {
     expect(ipcMain.removeHandler).toHaveBeenCalledWith('connector:validate');
     expect(ipcMain.removeHandler).toHaveBeenCalledWith('connector:getJdbcUrl');
     expect(ipcMain.removeHandler).toHaveBeenCalledWith('connector:query');
-    expect(ipcMain.removeHandler).toHaveBeenCalledWith('connector:cancel-query');
+    expect(ipcMain.removeHandler).toHaveBeenCalledWith(
+      'connector:cancel-query',
+    );
     expect(ipcMain.removeHandler).toHaveBeenCalledWith('connector:list');
 
     expect(ipcMain.handle).toHaveBeenCalledWith(
       'connector:configure',
       expect.any(Function),
     );
-    expect(ipcMain.handle).toHaveBeenCalledWith('connector:test', expect.any(Function));
+    expect(ipcMain.handle).toHaveBeenCalledWith(
+      'connector:test',
+      expect.any(Function),
+    );
     expect(ipcMain.handle).toHaveBeenCalledWith(
       'connector:validate',
       expect.any(Function),
@@ -93,9 +98,9 @@ describe('connectors.ipcHandlers', () => {
       },
     }));
 
-    const registerConnectorsHandlers = (await import(
-      '../../../../src/main/ipcHandlers/connectors.ipcHandlers'
-    )).default;
+    const registerConnectorsHandlers = (
+      await import('../../../../src/main/ipcHandlers/connectors.ipcHandlers')
+    ).default;
     registerConnectorsHandlers();
 
     const handler = getHandleHandler(ipcMain, 'connector:test');
@@ -133,9 +138,9 @@ describe('connectors.ipcHandlers', () => {
       },
     }));
 
-    const registerConnectorsHandlers = (await import(
-      '../../../../src/main/ipcHandlers/connectors.ipcHandlers'
-    )).default;
+    const registerConnectorsHandlers = (
+      await import('../../../../src/main/ipcHandlers/connectors.ipcHandlers')
+    ).default;
     registerConnectorsHandlers();
 
     const handler = getHandleHandler(ipcMain, 'connector:validate');
@@ -149,11 +154,9 @@ describe('connectors.ipcHandlers', () => {
   it('connector:validate returns {valid:false,error} when validation throws', async () => {
     const { ipcMain } = await import('electron');
 
-    const validateConnection = jest
-      .fn()
-      .mockImplementation(() => {
-        throw new Error('Connection type is required');
-      });
+    const validateConnection = jest.fn().mockImplementation(() => {
+      throw new Error('Connection type is required');
+    });
 
     jest.doMock('../../../../src/main/services', () => ({
       ConnectorsService: {
@@ -178,9 +181,9 @@ describe('connectors.ipcHandlers', () => {
       },
     }));
 
-    const registerConnectorsHandlers = (await import(
-      '../../../../src/main/ipcHandlers/connectors.ipcHandlers'
-    )).default;
+    const registerConnectorsHandlers = (
+      await import('../../../../src/main/ipcHandlers/connectors.ipcHandlers')
+    ).default;
     registerConnectorsHandlers();
 
     const handler = getHandleHandler(ipcMain, 'connector:validate');

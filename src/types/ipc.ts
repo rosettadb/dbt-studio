@@ -584,6 +584,21 @@ export type FlowfileChannels =
   | 'flowfile:start'
   | 'flowfile:stop';
 
+export type DbtChartsChannels =
+  | 'dbt-charts:getStatus'
+  | 'dbt-charts:install'
+  | 'dbt-charts:uninstall'
+  | 'dbt-charts:getProjectState'
+  | 'dbt-charts:setupProject'
+  | 'dbt-charts:createBoard'
+  | 'dbt-charts:ensureManifest'
+  | 'dbt-charts:validate'
+  | 'dbt-charts:startServer'
+  | 'dbt-charts:stopServer'
+  | 'dbt-charts:getServerStatus'
+  | 'dbt-charts:installProgress' // main → renderer (install progress)
+  | 'dbt-charts:serverStatus'; // main → renderer (server lifecycle)
+
 export type PipelineTemplatesChannels =
   | 'pipeline-templates:list'
   | 'pipeline-templates:fetch-content'
@@ -637,6 +652,7 @@ export type Channels =
   | AnalyticsPagesChannels
   | StaticSiteChannels
   | FlowfileChannels
+  | DbtChartsChannels
   | PipelineTemplatesChannels
   | SecondBrainChannels
   | IcebergChannels

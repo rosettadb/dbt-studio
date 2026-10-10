@@ -36,6 +36,7 @@ import {
   AIProvidersSettings,
   DuckDBSettings,
   FlowfileSettings,
+  DbtChartsSettings,
   KeystoreSettings,
   TaskManagerSettings,
   BackupSettings,
@@ -161,6 +162,7 @@ const Settings: React.FC = () => {
     if (section === 'profile') return 'Rosetta Cloud';
     if (section === 'duckdb') return 'DuckDB';
     if (section === 'flowfile') return 'Flowfile';
+    if (section === 'dbt-charts') return 'dbt Charts';
     if (section === 'runner') return 'Local Runner';
     if (section === 'keystore') return 'Keystore';
     if (section === 'task-manager') return 'Task Manager';
@@ -183,6 +185,7 @@ const Settings: React.FC = () => {
     rosetta: 'Rosetta CLI versions and installation.',
     duckdb: 'Local DuckDB instance used for caching, data preview and storage.',
     flowfile: 'Install and manage Flowfile.',
+    'dbt-charts': 'Install and manage dbt Charts (YAML dashboards).',
     runner: 'Run pipelines on this machine and manage their tool dependencies.',
     about: 'Version, help links and advanced options.',
   };
@@ -230,6 +233,8 @@ const Settings: React.FC = () => {
             onSettingsChange={handleChangeV2}
           />
         );
+      case 'dbt-charts':
+        return <DbtChartsSettings />;
       case 'keystore':
         return <KeystoreSettings />;
       case 'task-manager':

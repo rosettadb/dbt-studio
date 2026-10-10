@@ -138,7 +138,7 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
             ]}
             onSelect={async (value) => {
               if (value === 'all') {
-                navigate('/app/select-project');
+                navigate('/app/projects/list');
               } else {
                 await selectProject({ projectId: value });
                 navigate('/app/dbt-project');

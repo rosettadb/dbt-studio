@@ -6,18 +6,21 @@ const deleteInstance = jest.fn();
 const retrieveCredentials = jest.fn();
 const getStorageStats = jest.fn();
 
-jest.mock('../../../../src/main/services/duckLake/instanceStore.service', () => ({
-  __esModule: true,
-  default: {
-    initialize: (...args: any[]) => initializeStore(...args),
-    loadInstances: (...args: any[]) => loadInstances(...args),
-    getInstance: (...args: any[]) => getInstance(...args),
-    saveInstance: (...args: any[]) => saveInstance(...args),
-    deleteInstance: (...args: any[]) => deleteInstance(...args),
-    retrieveCredentials: (...args: any[]) => retrieveCredentials(...args),
-    getStorageStats: (...args: any[]) => getStorageStats(...args),
-  },
-}));
+jest.mock(
+  '../../../../src/main/services/duckLake/instanceStore.service',
+  () => ({
+    __esModule: true,
+    default: {
+      initialize: (...args: any[]) => initializeStore(...args),
+      loadInstances: (...args: any[]) => loadInstances(...args),
+      getInstance: (...args: any[]) => getInstance(...args),
+      saveInstance: (...args: any[]) => saveInstance(...args),
+      deleteInstance: (...args: any[]) => deleteInstance(...args),
+      retrieveCredentials: (...args: any[]) => retrieveCredentials(...args),
+      getStorageStats: (...args: any[]) => getStorageStats(...args),
+    },
+  }),
+);
 
 const validateCreateRequest = jest.fn();
 const validateUpdateRequest = jest.fn();
@@ -31,7 +34,8 @@ jest.mock('../../../../src/main/services/duckLake/validation.service', () => ({
     validateCreateRequest: (...args: any[]) => validateCreateRequest(...args),
     validateUpdateRequest: (...args: any[]) => validateUpdateRequest(...args),
     validateDataPathAccess: (...args: any[]) => validateDataPathAccess(...args),
-    validateCatalogPathAccess: (...args: any[]) => validateCatalogPathAccess(...args),
+    validateCatalogPathAccess: (...args: any[]) =>
+      validateCatalogPathAccess(...args),
     validateStorageConfig: (...args: any[]) => validateStorageConfig(...args),
   },
 }));
@@ -39,28 +43,34 @@ jest.mock('../../../../src/main/services/duckLake/validation.service', () => ({
 const isExtensionAvailable = jest.fn();
 const initializeExtension = jest.fn();
 
-jest.mock('../../../../src/main/services/duckLake/extensionManager.service', () => ({
-  __esModule: true,
-  default: {
-    initialize: (...args: any[]) => initializeExtension(...args),
-    isExtensionAvailable: (...args: any[]) => isExtensionAvailable(...args),
-  },
-}));
+jest.mock(
+  '../../../../src/main/services/duckLake/extensionManager.service',
+  () => ({
+    __esModule: true,
+    default: {
+      initialize: (...args: any[]) => initializeExtension(...args),
+      isExtensionAvailable: (...args: any[]) => isExtensionAvailable(...args),
+    },
+  }),
+);
 
 const cmInitialize = jest.fn();
 const getConnectionStatus = jest.fn();
 const cmGetConnection = jest.fn();
 const cmDisconnect = jest.fn();
 
-jest.mock('../../../../src/main/services/duckLake/connectionManager.service', () => ({
-  __esModule: true,
-  default: {
-    initialize: (...args: any[]) => cmInitialize(...args),
-    getConnectionStatus: (...args: any[]) => getConnectionStatus(...args),
-    getConnection: (...args: any[]) => cmGetConnection(...args),
-    disconnect: (...args: any[]) => cmDisconnect(...args),
-  },
-}));
+jest.mock(
+  '../../../../src/main/services/duckLake/connectionManager.service',
+  () => ({
+    __esModule: true,
+    default: {
+      initialize: (...args: any[]) => cmInitialize(...args),
+      getConnectionStatus: (...args: any[]) => getConnectionStatus(...args),
+      getConnection: (...args: any[]) => cmGetConnection(...args),
+      disconnect: (...args: any[]) => cmDisconnect(...args),
+    },
+  }),
+);
 
 const createAdapter = jest.fn();
 
@@ -92,7 +102,10 @@ describe('DuckLakeService (main)', () => {
     isExtensionAvailable.mockReturnValue(true);
 
     getConnectionStatus.mockReturnValue({ connected: true });
-    retrieveCredentials.mockResolvedValue({ catalog: { type: 'duckdb' }, storage: undefined });
+    retrieveCredentials.mockResolvedValue({
+      catalog: { type: 'duckdb' },
+      storage: undefined,
+    });
 
     const adapter = {
       executeQuery: jest.fn(),
@@ -113,7 +126,9 @@ describe('DuckLakeService (main)', () => {
     it('initializes once and delegates to DuckLakeInstanceStore.loadInstances', async () => {
       loadInstances.mockResolvedValue([{ id: 'i1' }]);
 
-      await expect(DuckLakeService.listInstances()).resolves.toEqual([{ id: 'i1' }]);
+      await expect(DuckLakeService.listInstances()).resolves.toEqual([
+        { id: 'i1' },
+      ]);
 
       expect(initializeStore).toHaveBeenCalled();
       expect(initializeExtension).toHaveBeenCalled();

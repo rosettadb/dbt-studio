@@ -5,7 +5,9 @@ describe('secureStorage.ipcHandlers', () => {
   });
 
   const getHandleHandler = (ipcMain: any, channel: string) => {
-    const call = (ipcMain.handle as jest.Mock).mock.calls.find(([c]) => c === channel);
+    const call = (ipcMain.handle as jest.Mock).mock.calls.find(
+      ([c]) => c === channel,
+    );
     if (!call) {
       throw new Error(`No handler registered for channel: ${channel}`);
     }
@@ -24,9 +26,9 @@ describe('secureStorage.ipcHandlers', () => {
       },
     }));
 
-    const registerSecureStorageHandlers = (await import(
-      '../../../../src/main/ipcHandlers/secureStorage.ipcHandlers'
-    )).default;
+    const registerSecureStorageHandlers = (
+      await import('../../../../src/main/ipcHandlers/secureStorage.ipcHandlers')
+    ).default;
 
     registerSecureStorageHandlers();
 
@@ -58,9 +60,9 @@ describe('secureStorage.ipcHandlers', () => {
       },
     }));
 
-    const registerSecureStorageHandlers = (await import(
-      '../../../../src/main/ipcHandlers/secureStorage.ipcHandlers'
-    )).default;
+    const registerSecureStorageHandlers = (
+      await import('../../../../src/main/ipcHandlers/secureStorage.ipcHandlers')
+    ).default;
 
     registerSecureStorageHandlers();
 

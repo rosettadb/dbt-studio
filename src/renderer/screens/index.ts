@@ -3,7 +3,7 @@ import ProjectDetails from './projectDetails';
 import Sql from './sql';
 import AddConnection from './addConnection';
 import EditConnection from './editConnection';
-import SelectProject from './selectProject';
+import Projects from './projects';
 import Setup from './setup';
 import Connections from './connections';
 import CloudExplorer from './cloudExplorer';
@@ -18,7 +18,7 @@ export {
   Sql,
   AddConnection,
   EditConnection,
-  SelectProject,
+  Projects,
   Setup,
   Connections,
   CloudExplorer,

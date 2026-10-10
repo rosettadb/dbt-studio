@@ -97,7 +97,7 @@ const features = [
     description:
       'Manage and explore your dbt models, sources, and documentation.',
     icon: DbtCardIcon,
-    path: '/app/select-project',
+    path: '/app/projects/dashboard',
   },
   {
     id: 'notebook',
@@ -177,7 +177,7 @@ const Dashboard: React.FC = () => {
   const handleCardClick = (feature: (typeof features)[number]) => {
     if (feature.id === 'pipeline') {
       if (!selectedProject) {
-        navigate('/app/select-project');
+        navigate('/app/projects/list');
         return;
       }
       setIsSidebarOpen(true);
@@ -187,6 +187,12 @@ const Dashboard: React.FC = () => {
     if (feature.id === 'analytics') {
       setIsSidebarOpen(true);
       navigate('/app/sql', { state: { tab: 2 } });
+      return;
+    }
+    if (feature.id === 'dbt-project') {
+      handleFeatureClick(
+        selectedProject ? '/app/dbt-project' : '/app/projects/dashboard',
+      );
       return;
     }
     handleFeatureClick(feature.path);
@@ -280,7 +286,7 @@ const Dashboard: React.FC = () => {
           <Button
             variant="outlined"
             startIcon={<FolderOpenIcon />}
-            onClick={() => handleFeatureClick('/app/select-project')}
+            onClick={() => handleFeatureClick('/app/projects/list')}
             data-tour="tour-open-project-btn"
             sx={{
               borderColor: theme.palette.divider,
@@ -472,7 +478,7 @@ const Dashboard: React.FC = () => {
               </Typography>
               <Button
                 size="small"
-                onClick={() => navigate('/app/select-project')}
+                onClick={() => navigate('/app/projects/list')}
                 sx={{
                   textTransform: 'none',
                   color: theme.palette.primary.main,

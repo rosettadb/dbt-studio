@@ -5,7 +5,9 @@ describe('duckLake.ipcHandlers', () => {
   });
 
   const getHandleHandler = (ipcMain: any, channel: string) => {
-    const call = (ipcMain.handle as jest.Mock).mock.calls.find(([c]) => c === channel);
+    const call = (ipcMain.handle as jest.Mock).mock.calls.find(
+      ([c]) => c === channel,
+    );
     if (!call) {
       throw new Error(`No handler registered for channel: ${channel}`);
     }
@@ -43,9 +45,9 @@ describe('duckLake.ipcHandlers', () => {
       },
     }));
 
-    const registerDuckLakeHandlers = (await import(
-      '../../../../src/main/ipcHandlers/duckLake.ipcHandlers'
-    )).default;
+    const registerDuckLakeHandlers = (
+      await import('../../../../src/main/ipcHandlers/duckLake.ipcHandlers')
+    ).default;
 
     registerDuckLakeHandlers();
 
@@ -96,9 +98,9 @@ describe('duckLake.ipcHandlers', () => {
       },
     }));
 
-    const registerDuckLakeHandlers = (await import(
-      '../../../../src/main/ipcHandlers/duckLake.ipcHandlers'
-    )).default;
+    const registerDuckLakeHandlers = (
+      await import('../../../../src/main/ipcHandlers/duckLake.ipcHandlers')
+    ).default;
 
     registerDuckLakeHandlers();
 

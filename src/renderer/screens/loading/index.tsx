@@ -41,7 +41,7 @@ const Loading = () => {
       />
       <Button
         variant="contained"
-        onClick={() => navigate('/app/select-project')}
+        onClick={() => navigate('/app/projects/list')}
         sx={{ mt: 2 }}
       >
         Navigate to Select Project

@@ -5,7 +5,9 @@ describe('utils.ipcHandlers', () => {
   });
 
   const getHandleHandler = (ipcMain: any, channel: string) => {
-    const call = (ipcMain.handle as jest.Mock).mock.calls.find(([c]) => c === channel);
+    const call = (ipcMain.handle as jest.Mock).mock.calls.find(
+      ([c]) => c === channel,
+    );
     if (!call) {
       throw new Error(`No handler registered for channel: ${channel}`);
     }
@@ -21,15 +23,18 @@ describe('utils.ipcHandlers', () => {
       },
     }));
 
-    const registerUtilsHandlers = (await import(
-      '../../../../src/main/ipcHandlers/utils.ipcHandlers'
-    )).default;
+    const registerUtilsHandlers = (
+      await import('../../../../src/main/ipcHandlers/utils.ipcHandlers')
+    ).default;
 
     registerUtilsHandlers();
 
     expect(ipcMain.removeHandler).toHaveBeenCalledWith('open:external');
 
-    expect(ipcMain.handle).toHaveBeenCalledWith('open:external', expect.any(Function));
+    expect(ipcMain.handle).toHaveBeenCalledWith(
+      'open:external',
+      expect.any(Function),
+    );
     expect(ipcMain.handle).toHaveBeenCalledWith(
       'utils:getFileContentList',
       expect.any(Function),
@@ -45,9 +50,9 @@ describe('utils.ipcHandlers', () => {
       },
     }));
 
-    const registerUtilsHandlers = (await import(
-      '../../../../src/main/ipcHandlers/utils.ipcHandlers'
-    )).default;
+    const registerUtilsHandlers = (
+      await import('../../../../src/main/ipcHandlers/utils.ipcHandlers')
+    ).default;
 
     registerUtilsHandlers();
 
@@ -60,7 +65,9 @@ describe('utils.ipcHandlers', () => {
   it('delegates utils:getFileContentList to UtilsService.getFilesWithContent', async () => {
     const { ipcMain } = await import('electron');
 
-    const getFilesWithContent = jest.fn().mockResolvedValue([{ path: 'a', content: 'x' }]);
+    const getFilesWithContent = jest
+      .fn()
+      .mockResolvedValue([{ path: 'a', content: 'x' }]);
 
     jest.doMock('../../../../src/main/services', () => ({
       UtilsService: {
@@ -68,15 +75,17 @@ describe('utils.ipcHandlers', () => {
       },
     }));
 
-    const registerUtilsHandlers = (await import(
-      '../../../../src/main/ipcHandlers/utils.ipcHandlers'
-    )).default;
+    const registerUtilsHandlers = (
+      await import('../../../../src/main/ipcHandlers/utils.ipcHandlers')
+    ).default;
 
     registerUtilsHandlers();
 
     const handler = getHandleHandler(ipcMain, 'utils:getFileContentList');
 
-    await expect(handler(null, ['a'])).resolves.toEqual([{ path: 'a', content: 'x' }]);
+    await expect(handler(null, ['a'])).resolves.toEqual([
+      { path: 'a', content: 'x' },
+    ]);
     expect(getFilesWithContent).toHaveBeenCalledWith(['a']);
   });
 });

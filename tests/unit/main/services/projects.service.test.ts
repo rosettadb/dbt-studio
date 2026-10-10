@@ -79,7 +79,9 @@ describe('ProjectsService (main)', () => {
     fakeDb = { connections: [], projects: [] };
     mockedGetSnapshot.mockImplementation(() => Promise.resolve(fakeDb));
     mockedTransaction.mockImplementation(
-      (mutator: (db: typeof fakeDb) => { db: typeof fakeDb; result: unknown }) => {
+      (
+        mutator: (db: typeof fakeDb) => { db: typeof fakeDb; result: unknown },
+      ) => {
         const { db, result } = mutator(fakeDb);
         fakeDb = db;
         return Promise.resolve(result);

@@ -14,6 +14,7 @@ import {
   RosettaCloudService,
   DuckLakeConnectionManager,
   FlowfileService,
+  DbtChartsService,
 } from './services';
 import { copyAssetsToUserData } from './utils/fileHelper';
 import { MCPClientManager } from './services/ai/mcp/mcpClientManager';
@@ -334,6 +335,9 @@ app.on('before-quit', async (event) => {
 
     // Stop Flowfile service
     await FlowfileService.stop();
+
+    // Stop every dbt Charts (dct serve) process
+    await DbtChartsService.stopAll();
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('[App] Error during app cleanup:', error);

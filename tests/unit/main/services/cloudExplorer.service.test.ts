@@ -3,12 +3,23 @@ const getSignedUrl = jest.fn();
 
 jest.mock('@aws-sdk/client-s3', () => {
   return {
-    S3Client: jest.fn().mockImplementation(() => ({ send: (...args: any[]) => s3Send(...args) })),
-    ListBucketsCommand: jest.fn().mockImplementation((input) => ({ input, __type: 'ListBucketsCommand' })),
+    S3Client: jest
+      .fn()
+      .mockImplementation(() => ({
+        send: (...args: any[]) => s3Send(...args),
+      })),
+    ListBucketsCommand: jest
+      .fn()
+      .mockImplementation((input) => ({ input, __type: 'ListBucketsCommand' })),
     ListObjectsV2Command: jest
       .fn()
-      .mockImplementation((input) => ({ input, __type: 'ListObjectsV2Command' })),
-    GetObjectCommand: jest.fn().mockImplementation((input) => ({ input, __type: 'GetObjectCommand' })),
+      .mockImplementation((input) => ({
+        input,
+        __type: 'ListObjectsV2Command',
+      })),
+    GetObjectCommand: jest
+      .fn()
+      .mockImplementation((input) => ({ input, __type: 'GetObjectCommand' })),
   };
 });
 

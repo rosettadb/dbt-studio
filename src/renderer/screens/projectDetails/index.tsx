@@ -9,6 +9,7 @@ import {
   Cable,
   Delete,
   Edit,
+  InsertChartOutlined,
   Search as SearchIcon,
 } from '@mui/icons-material';
 import {
@@ -1282,7 +1283,7 @@ const ProjectDetails: React.FC = () => {
   }
 
   if (!project?.id) {
-    return <Navigate to="/app/select-project" />;
+    return <Navigate to="/app/projects/dashboard" />;
   }
 
   return (
@@ -1429,6 +1430,23 @@ const ProjectDetails: React.FC = () => {
                 iconPosition="start"
                 label="Database"
               />
+              <Tab
+                value="charts"
+                data-testid="sidebar-tab-charts"
+                icon={
+                  <InsertChartOutlined
+                    sx={{
+                      fontSize: 15,
+                      color:
+                        sidebarTab === 'charts'
+                          ? theme.palette.primary.main
+                          : theme.palette.text.secondary,
+                    }}
+                  />
+                }
+                iconPosition="start"
+                label="Charts"
+              />
             </Tabs>
           </Box>
           <Box sx={{ flex: 1, overflow: 'hidden' }}>
@@ -1530,6 +1548,10 @@ const ProjectDetails: React.FC = () => {
               }}
               onRunPipeline={handleRunPipelineFile}
               onRunPipelineLocal={handleRunPipelineFileLocally}
+              onOpenChartsFile={(absolutePath) => {
+                setSelectedFilePath(absolutePath);
+                openTab(absolutePath);
+              }}
               openCreatePipeline={openCreatePipeline}
             />
           </Box>

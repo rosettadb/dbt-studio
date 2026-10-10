@@ -50,9 +50,12 @@ describe('DuckLakeInstanceStore (main)', () => {
 
     await DuckLakeInstanceStore.initialize();
 
-    expect(fs.mkdirSync).toHaveBeenCalledWith(expect.stringContaining('datalake'), {
-      recursive: true,
-    });
+    expect(fs.mkdirSync).toHaveBeenCalledWith(
+      expect.stringContaining('datalake'),
+      {
+        recursive: true,
+      },
+    );
     expect(fs.writeFileSync).toHaveBeenCalledWith(
       expect.stringContaining('instances.json'),
       expect.any(String),
@@ -162,11 +165,17 @@ describe('DuckLakeInstanceStore (main)', () => {
 
     await DuckLakeInstanceStore.deleteInstance('i1');
 
-    expect(deleteCredential).toHaveBeenCalledWith('ducklake-i1-postgresql-password');
+    expect(deleteCredential).toHaveBeenCalledWith(
+      'ducklake-i1-postgresql-password',
+    );
     expect(deleteCredential).toHaveBeenCalledWith('ducklake-i1-azure-key');
-    expect(deleteCredential).toHaveBeenCalledWith('ducklake-i1-azure-conn-string');
+    expect(deleteCredential).toHaveBeenCalledWith(
+      'ducklake-i1-azure-conn-string',
+    );
 
-    const writtenJson = JSON.parse((fs.writeFileSync as jest.Mock).mock.calls[0][1]);
+    const writtenJson = JSON.parse(
+      (fs.writeFileSync as jest.Mock).mock.calls[0][1],
+    );
     expect(writtenJson.instances).toHaveLength(0);
   });
 });

@@ -20,7 +20,9 @@ jest.mock('../../../../src/main/services/connectors.service', () => ({
   },
 }));
 
-import GitService, { isAuthError } from '../../../../src/main/services/git.service';
+import GitService, {
+  isAuthError,
+} from '../../../../src/main/services/git.service';
 
 describe('GitService (main)', () => {
   beforeEach(() => {
@@ -38,7 +40,9 @@ describe('GitService (main)', () => {
         isAuthError({ message: 'fatal: Authentication failed for https://x' }),
       ).toBe(true);
 
-      expect(isAuthError({ stderr: 'Permission denied (publickey).' })).toBe(true);
+      expect(isAuthError({ stderr: 'Permission denied (publickey).' })).toBe(
+        true,
+      );
     });
 
     it('returns false when error has no message/stderr', () => {
@@ -69,7 +73,9 @@ describe('GitService (main)', () => {
       const service = new GitService();
       jest.spyOn(service, 'isTrackingSet').mockResolvedValue(false);
 
-      await expect(service.getAheadBehindCount('/tmp/repo')).resolves.toBeNull();
+      await expect(
+        service.getAheadBehindCount('/tmp/repo'),
+      ).resolves.toBeNull();
       expect(gitMock.raw).not.toHaveBeenCalled();
     });
 
@@ -102,7 +108,9 @@ describe('GitService (main)', () => {
 
       gitMock.raw.mockRejectedValue(new Error('no upstream configured'));
 
-      await expect(service.getAheadBehindCount('/tmp/repo')).resolves.toBeNull();
+      await expect(
+        service.getAheadBehindCount('/tmp/repo'),
+      ).resolves.toBeNull();
 
       consoleErrorSpy.mockRestore();
     });
