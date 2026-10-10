@@ -74,7 +74,7 @@ const checkReady = (port: number): Promise<boolean> =>
     req.on('error', (err) => {
       dlog(
         'main:server',
-        `poll error port=${port}: ${(err as NodeJS.ErrnoException).code ?? err.message}`,
+        `poll error port=${port}: ${(err as Error & { code?: string }).code ?? err.message}`,
       ); // DBT-CHARTS-DEBUG
       resolve(false);
     });

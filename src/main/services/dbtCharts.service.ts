@@ -13,8 +13,8 @@
 
 import { app } from 'electron';
 import fs from 'fs-extra';
-import { dlog } from '../../shared/dbtChartsDebug'; // DBT-CHARTS-DEBUG
 import path from 'path';
+import { dlog } from '../../shared/dbtChartsDebug'; // DBT-CHARTS-DEBUG
 import type {
   DbtChartsCreateBoardInput,
   DbtChartsDiagnostic,

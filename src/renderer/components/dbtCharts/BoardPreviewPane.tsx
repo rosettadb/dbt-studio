@@ -61,10 +61,12 @@ const ServerView: React.FC<Props> = ({
     if (status.state === 'stopped') {
       requested.current = true;
       dlog('renderer:pane', 'lazy start requested', { projectId }); // DBT-CHARTS-DEBUG
-      start().then(
-        (r) => dlog('renderer:pane', 'start resolved', r),
-        (e) => dlog('renderer:pane', 'start REJECTED', e?.message ?? e),
-      ); // DBT-CHARTS-DEBUG
+      start()
+        .then(
+          (r) => dlog('renderer:pane', 'start resolved', r),
+          (e) => dlog('renderer:pane', 'start REJECTED', e?.message ?? e),
+        )
+        .catch(() => {}); // DBT-CHARTS-DEBUG
     }
   }, [status.state, start, projectId]);
 
@@ -92,10 +94,12 @@ const ServerView: React.FC<Props> = ({
   const retry = () => {
     requested.current = true;
     dlog('renderer:pane', 'Retry clicked'); // DBT-CHARTS-DEBUG
-    start().then(
-      (r) => dlog('renderer:pane', 'retry resolved', r),
-      (e) => dlog('renderer:pane', 'retry REJECTED', e?.message ?? e),
-    ); // DBT-CHARTS-DEBUG
+    start()
+      .then(
+        (r) => dlog('renderer:pane', 'retry resolved', r),
+        (e) => dlog('renderer:pane', 'retry REJECTED', e?.message ?? e),
+      )
+      .catch(() => {}); // DBT-CHARTS-DEBUG
   };
 
   let body: React.ReactNode;
