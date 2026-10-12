@@ -1,73 +1,82 @@
 import React from 'react';
-import {
-  Box,
-  Typography,
-  Button,
-  Alert,
-  CircularProgress,
-} from '@mui/material';
+import { Box, Typography, Button, LinearProgress } from '@mui/material';
+import { Check, CodeOutlined } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { SettingsType } from '../../../types/backend';
 import { useInstallPython } from '../../controllers';
+import {
+  SettingsSection,
+  SettingsSectionBody,
+} from '../settings/SettingsLayout';
+import { SetupInstallStatus } from '../setupInstallStatus';
 
 type Props = {
   settings: SettingsType;
-  onInstallComplete: (pythonPath: string) => void;
+  isAnyInstallRunning: boolean;
+  onInstallingChange: (isInstalling: boolean) => void;
 };
 
 export const PythonSetup: React.FC<Props> = ({
   settings,
-  onInstallComplete,
+  isAnyInstallRunning,
+  onInstallingChange,
 }) => {
   const installPython = useInstallPython({
     onSuccess: (result) => {
       if (result.success) {
         toast.info('Python installation completed');
-        onInstallComplete(result.path);
       } else {
         toast.error(`Python installation failed: ${result.error}`);
       }
+      onInstallingChange(false);
     },
     onError: (error) => {
       toast.error(`Python installation failed: ${error.message}`);
+      onInstallingChange(false);
     },
   });
 
   const isInstalled = Boolean(settings.pythonPath);
-  let installButtonLabel = isInstalled ? 'Reinstall Python' : 'Install Python';
-  if (installPython.isLoading) installButtonLabel = 'Installing...';
 
   return (
-    <Box>
-      <Typography variant="body1">
-        Rosetta DBT Studio uses its own embedded Python interpreter to run dbt
-        Core v1, separate from any Python already on your system.
-      </Typography>
-
-      {isInstalled ? (
-        <Alert severity="success" sx={{ mt: 2, mb: 2 }}>
-          Python (version {settings.pythonVersion}) is already installed at:{' '}
-          {settings.pythonPath}
-        </Alert>
-      ) : (
-        <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
-          Python is not installed yet. Click Install to set it up now.
-        </Alert>
-      )}
-
-      <Box sx={{ mt: 2 }}>
-        <Button
-          variant="contained"
-          onClick={() => installPython.mutate()}
-          disabled={installPython.isLoading}
-          data-testid="setup-install-python-btn"
-          startIcon={
-            installPython.isLoading ? <CircularProgress size={16} /> : null
-          }
-        >
-          {installButtonLabel}
-        </Button>
-      </Box>
-    </Box>
+    <SettingsSection
+      title="Python"
+      icon={<CodeOutlined />}
+      action={
+        <SetupInstallStatus
+          isInstalling={installPython.isLoading}
+          isInstalled={isInstalled}
+          version={settings.pythonVersion}
+        />
+      }
+    >
+      <SettingsSectionBody>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+          Rosetta DBT Studio uses its own embedded Python interpreter to run dbt
+          Core v1, separate from any Python already on your system.
+        </Typography>
+        {installPython.isLoading ? (
+          <Box>
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              Installing Python...
+            </Typography>
+            <LinearProgress />
+          </Box>
+        ) : (
+          <Button
+            variant="contained"
+            onClick={() => {
+              onInstallingChange(true);
+              installPython.mutate();
+            }}
+            disabled={isInstalled || isAnyInstallRunning}
+            data-testid="setup-install-python-btn"
+            startIcon={isInstalled ? <Check /> : null}
+          >
+            {isInstalled ? 'Installed' : 'Install Python'}
+          </Button>
+        )}
+      </SettingsSectionBody>
+    </SettingsSection>
   );
 };

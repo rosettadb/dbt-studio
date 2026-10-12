@@ -5,13 +5,13 @@ import { test as base, expect } from '../../fixtures/electron.fixture';
 import { SetupWizardPage } from '../../page-objects/screens/SetupWizard';
 import { CURRENT_SCHEMA_VERSION } from '../../../src/main/database/migrations';
 
-const test = base.extend<{ seedSetupStep: 'runner' | null }>({
+const test = base.extend<{ seedSetupStep: 'runner' | 'complete' | null }>({
   seedSetupStep: [null, { option: true }],
 
   // Seed database.json before the app launches so the wizard resumes at the
   // requested step (isSetup stays 'false' so the setup window still opens).
   userData: async ({ userData, seedSetupStep }, use) => {
-    if (seedSetupStep === 'runner') {
+    if (seedSetupStep) {
       // The wizard only checks that these paths are non-empty, but main.ts
       // re-embeds Python when pythonPath doesn't exist on disk, so point at a
       // binary that is guaranteed to exist to avoid a download during tests.
@@ -21,6 +21,9 @@ const test = base.extend<{ seedSetupStep: 'runner' | null }>({
           isSetup: 'false',
           pythonPath: process.execPath,
           dbtPath: process.execPath,
+          ...(seedSetupStep === 'complete' && {
+            runnerPath: process.execPath,
+          }),
         },
         projects: [],
         connections: [],
@@ -92,21 +95,26 @@ test.describe('First Run Experience', () => {
     await setupWizard.expectToBeVisible();
   });
 
-  test('should show CLI install step initially', async ({ electronApp }) => {
+  test('should show python, dbt and runner on the first page', async ({
+    electronApp,
+  }) => {
     const setupWindow = await findSetupWindow(electronApp);
     if (!setupWindow) throw new Error('Setup window not found');
     await setupWindow.waitForLoadState('domcontentloaded');
 
     const setupWizard = new SetupWizardPage(setupWindow);
 
-    // The first step corresponds to CLI install in the actual app
+    // All three installs share the first of two pages
+    await expect(setupWizard.stepLabel).toHaveText('Step 1 of 2');
+    await expect(setupWizard.pythonSetupStep).toBeVisible();
     await expect(setupWizard.cliInstallStep).toBeVisible();
+    await expect(setupWizard.runnerSetupStep).toBeVisible();
 
     // Verify install button is present
     const installBtn = setupWindow.getByTestId('setup-install-btn');
     await expect(installBtn).toBeVisible();
 
-    // verify Next button is present but disabled (until install)
+    // verify Next button is present but disabled (until everything is installed)
     await expect(setupWizard.nextButton).toBeVisible();
     await expect(setupWizard.nextButton).toBeDisabled();
   });
@@ -117,7 +125,7 @@ test.describe('First Run Experience', () => {
 test.describe('First Run Experience - Local Runner step', () => {
   test.use({ seedSetupStep: 'runner' });
 
-  test('should show local runner install step after python and dbt are set', async ({
+  test('should leave only the local runner to install after python and dbt are set', async ({
     electronApp,
   }) => {
     const setupWindow = await findSetupWindow(electronApp);
@@ -127,10 +135,15 @@ test.describe('First Run Experience - Local Runner step', () => {
     const setupWizard = new SetupWizardPage(setupWindow);
     await setupWizard.expectToBeVisible();
 
-    // With pythonPath and dbtPath seeded, the wizard resumes at the runner step
+    // With pythonPath and dbtPath seeded, the wizard stays on the first page
+    await expect(setupWizard.stepLabel).toHaveText('Step 1 of 2');
     await setupWizard.expectCurrentStep('runner');
-    await expect(setupWizard.cliInstallStep).toBeHidden();
     await expect(setupWizard.completionStep).toBeHidden();
+
+    // dbt is already installed, so its button is disabled
+    const dbtInstallBtn = setupWindow.getByTestId('setup-install-btn');
+    await expect(dbtInstallBtn).toHaveText('Installed');
+    await expect(dbtInstallBtn).toBeDisabled();
 
     // Verify runner install button is present
     const installBtn = setupWindow.getByTestId('setup-install-runner-btn');
@@ -142,5 +155,25 @@ test.describe('First Run Experience - Local Runner step', () => {
 
     // Skip is still available as an escape hatch
     await expect(setupWizard.skipButton).toBeVisible();
+  });
+});
+
+test.describe('First Run Experience - everything installed', () => {
+  test.use({ seedSetupStep: 'complete' });
+
+  test('should open on the finish page when everything is installed', async ({
+    electronApp,
+  }) => {
+    const setupWindow = await findSetupWindow(electronApp);
+    if (!setupWindow) throw new Error('Setup window not found');
+    await setupWindow.waitForLoadState('domcontentloaded');
+
+    const setupWizard = new SetupWizardPage(setupWindow);
+    await setupWizard.expectToBeVisible();
+
+    await expect(setupWizard.stepLabel).toHaveText('Step 2 of 2');
+    await setupWizard.expectCurrentStep('complete');
+    await expect(setupWizard.runnerSetupStep).toBeHidden();
+    await expect(setupWizard.finishButton).toBeEnabled();
   });
 });

@@ -23,6 +23,8 @@ export class SetupWizardPage extends BasePage {
 
   readonly completionStep: Locator;
 
+  readonly stepLabel: Locator;
+
   // Navigation buttons
   readonly nextButton: Locator;
 
@@ -40,6 +42,7 @@ export class SetupWizardPage extends BasePage {
     this.pythonSetupStep = this.getByTestId('setup-step-python');
     this.runnerSetupStep = this.getByTestId('setup-step-runner');
     this.completionStep = this.getByTestId('setup-step-complete');
+    this.stepLabel = this.getByTestId('setup-step-label');
     this.nextButton = this.getByTestId('setup-next-btn');
     this.backButton = this.getByTestId('setup-back-btn');
     this.skipButton = this.getByTestId('setup-skip-btn');
