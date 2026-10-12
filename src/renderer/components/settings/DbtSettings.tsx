@@ -125,6 +125,10 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     React.useState(false);
   const [showOlderVersions, setShowOlderVersions] = React.useState(false);
   const [isVersionListOpen, setIsVersionListOpen] = React.useState(false);
+  // Which runtime's versions are shown; null follows the active runtime.
+  const [viewedRuntime, setViewedRuntime] = React.useState<'v1' | 'v2' | null>(
+    null,
+  );
   const warningStyle = useSettingsWarningStyle();
   const [versionChangePlan, setVersionChangePlan] =
     React.useState<DbtVersionChangePlan | null>(null);
@@ -811,11 +815,14 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
   }
 
   const activeRuntime: 'v1' | 'v2' = isV2Active ? 'v2' : 'v1';
-  // Choosing a runtime switches to its newest version (list is newest first)
-  // through the same version change flow as the version buttons.
-  const newestRuntimeVersion = {
-    v1: allPythonDbtVersions[0]?.version,
-    v2: allRustDbtVersions[0]?.version,
+  const shownRuntime = viewedRuntime ?? activeRuntime;
+  const isShownRuntimeActive = hasDbt && shownRuntime === activeRuntime;
+
+  // The toggle stays green on the installed runtime; clicking either side
+  // only opens that runtime's versions. Installing a version does the switch.
+  const showRuntimeVersions = (runtime: 'v1' | 'v2') => {
+    setViewedRuntime(runtime);
+    setIsVersionListOpen(true);
   };
 
   const renderRuntimeVersions = (
@@ -869,12 +876,6 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
             size="small"
             color="success"
             value={hasDbt ? activeRuntime : null}
-            disabled={isLoadingDialog || isLoadingInstall}
-            onChange={(_, runtime: 'v1' | 'v2' | null) => {
-              const target = runtime && newestRuntimeVersion[runtime];
-              if (!target || (hasDbt && runtime === activeRuntime)) return;
-              prepareDbtVersionChange(target).catch(() => undefined);
-            }}
             sx={{
               '& .MuiToggleButton-root': {
                 textTransform: 'none',
@@ -887,15 +888,15 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
           >
             <ToggleButton
               value="v1"
-              disabled={!newestRuntimeVersion.v1}
-              aria-label="Use dbt Core v1"
+              aria-label="Show dbt Core v1 versions"
+              onClick={() => showRuntimeVersions('v1')}
             >
               dbt Core v1
             </ToggleButton>
             <ToggleButton
               value="v2"
-              disabled={!newestRuntimeVersion.v2}
-              aria-label="Use dbt Core v2"
+              aria-label="Show dbt Core v2 versions"
+              onClick={() => showRuntimeVersions('v2')}
             >
               dbt Core v2
               <Chip
@@ -910,9 +911,11 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
         </SettingsRow>
 
         <SettingsRow
-          label="Versions"
+          label={`dbt Core ${shownRuntime} versions`}
           description={
-            hasDbt ? `Active · ${settings.dbtVersion}` : 'Not installed'
+            isShownRuntimeActive
+              ? `Active · ${settings.dbtVersion}`
+              : `Not installed. Installing a version below switches to dbt Core ${shownRuntime}.`
           }
         >
           <IconButton
@@ -931,13 +934,13 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
         </SettingsRow>
         {isVersionListOpen && (
           <SettingsSectionBody>
-            {activeRuntime === 'v1' && !settings.pythonPath && (
+            {shownRuntime === 'v1' && !settings.pythonPath && (
               <Alert severity="info" sx={{ mb: 1.25 }}>
                 Python is not installed yet. Installing a dbt Core v1 version
                 below will install it automatically.
               </Alert>
             )}
-            {activeRuntime === 'v1'
+            {shownRuntime === 'v1'
               ? renderRuntimeVersions(
                   pythonDbtVersions,
                   'No dbt Core v1 releases are available.',
