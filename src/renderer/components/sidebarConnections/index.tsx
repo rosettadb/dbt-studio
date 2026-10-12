@@ -360,9 +360,10 @@ export const ConnectionsSidebar: React.FC = () => {
           variant="contained"
           color="primary"
           fullWidth
+          size="small"
           startIcon={<Add />}
           onClick={() => navigate('/app/add-connection')}
-          sx={{ mb: 1, width: '100%', boxSizing: 'border-box' }}
+          sx={{ width: '100%', boxSizing: 'border-box' }}
         >
           New Connection
         </Button>
@@ -370,6 +371,7 @@ export const ConnectionsSidebar: React.FC = () => {
           variant="outlined"
           color="primary"
           fullWidth
+          size="small"
           startIcon={<CloudIcon />}
           onClick={() => navigate('/app/cloud-explorer/new-connection')}
           sx={{ width: '100%', boxSizing: 'border-box' }}
