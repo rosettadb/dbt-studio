@@ -21,7 +21,8 @@ export const StyledSettingsNavLink = styled(NavLink)(({ theme }) => ({
   textDecoration: 'none',
   color: theme.palette.grey[600],
   display: 'block',
-  width: '270px',
+  width: '100%',
+  margin: 0,
   marginBottom: '2px',
   '&.active': {
     color: theme.palette.primary.main,
@@ -97,7 +98,7 @@ export const ExplorerSidebar: React.FC = () => {
   return (
     <Box
       sx={{
-        p: 2,
+        p: 1,
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
@@ -106,23 +107,6 @@ export const ExplorerSidebar: React.FC = () => {
       }}
     >
       <Box sx={{ flex: 1, overflow: 'hidden' }}>
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            mb: 2,
-            gap: 1,
-            justifyContent: 'space-between',
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Cloud color="primary" fontSize="small" />
-            <Typography variant="h6" sx={{ m: 0 }}>
-              Cloud Explorer
-            </Typography>
-          </Box>
-        </Box>
-
         <Box sx={{ overflow: 'auto', maxHeight: 'calc(100vh - 200px)' }}>
           {/* Main Navigation */}
           <List
@@ -130,11 +114,12 @@ export const ExplorerSidebar: React.FC = () => {
               py: 0,
               width: '100%',
               '& .MuiListItem-root': {
-                py: 0.25,
+                py: 0,
                 px: 1,
-                minHeight: '32px',
-                width: '270px',
+                minHeight: '28px',
+                width: '100%',
               },
+              '& .MuiListItemText-primary': { fontSize: 13 },
             }}
           >
             {explorerSidebarElements.map((element) => (
@@ -144,7 +129,7 @@ export const ExplorerSidebar: React.FC = () => {
                     cursor: 'pointer',
                     borderRadius: 1,
                     mb: 0,
-                    width: '270px',
+                    width: '100%',
                     backgroundColor:
                       location.pathname === element.path
                         ? theme.palette.divider
@@ -169,17 +154,18 @@ export const ExplorerSidebar: React.FC = () => {
 
           {/* Current Bucket */}
           {selectedConnection && bucketName && (
-            <Box sx={{ mt: 3 }}>
+            <Box sx={{ mt: 1 }}>
               <Typography
                 variant="caption"
                 sx={{
                   display: 'block',
-                  px: 2,
-                  pb: 1,
+                  px: 1,
+                  pb: 0.5,
                   fontWeight: 600,
                   color: theme.palette.text.secondary,
                   textTransform: 'uppercase',
                   letterSpacing: '0.5px',
+                  fontSize: '0.65rem',
                 }}
               >
                 Current Bucket
@@ -189,10 +175,10 @@ export const ExplorerSidebar: React.FC = () => {
                   borderRadius: 1,
                   backgroundColor: theme.palette.divider,
                   mb: 0,
-                  width: '270px',
-                  py: 0.25,
+                  width: '100%',
+                  py: 0,
                   px: 1,
-                  minHeight: '32px',
+                  minHeight: '28px',
                 }}
               >
                 <ListItemIcon sx={{ minWidth: 32 }}>
@@ -203,7 +189,7 @@ export const ExplorerSidebar: React.FC = () => {
                   primaryTypographyProps={{
                     variant: 'body2',
                     sx: {
-                      fontSize: '0.875rem',
+                      fontSize: 13,
                       color: theme.palette.primary.main,
                     },
                   }}
@@ -214,17 +200,18 @@ export const ExplorerSidebar: React.FC = () => {
 
           {/* Connections List */}
           {connections.length > 0 && (
-            <Box sx={{ mt: 3 }}>
+            <Box sx={{ mt: 1 }}>
               <Typography
                 variant="caption"
                 sx={{
                   display: 'block',
-                  px: 2,
-                  pb: 1,
+                  px: 1,
+                  pb: 0.5,
                   fontWeight: 600,
                   color: theme.palette.text.secondary,
                   textTransform: 'uppercase',
                   letterSpacing: '0.5px',
+                  fontSize: '0.65rem',
                 }}
               >
                 Connections
@@ -234,9 +221,9 @@ export const ExplorerSidebar: React.FC = () => {
                   py: 0,
                   width: '100%',
                   '& .MuiListItem-root': {
-                    py: 0.25,
+                    py: 0,
                     px: 1,
-                    minHeight: '32px',
+                    minHeight: '28px',
                     width: '100%',
                   },
                 }}
@@ -251,7 +238,7 @@ export const ExplorerSidebar: React.FC = () => {
                         cursor: 'pointer',
                         borderRadius: 1,
                         mb: 0,
-                        width: '270px',
+                        width: '100%',
                         backgroundColor:
                           selectedConnection?.id === connection.id
                             ? theme.palette.divider
@@ -265,7 +252,7 @@ export const ExplorerSidebar: React.FC = () => {
                         primary={connection.name}
                         primaryTypographyProps={{
                           variant: 'body2',
-                          sx: { fontSize: '0.875rem' },
+                          sx: { fontSize: 13 },
                         }}
                       />
                     </ListItem>
@@ -280,9 +267,9 @@ export const ExplorerSidebar: React.FC = () => {
       <Box
         sx={{
           mt: 'auto',
-          pt: 2,
+          pt: 1,
           borderTop: `1px solid ${theme.palette.divider}`,
-          width: '270px',
+          width: '100%',
           boxSizing: 'border-box',
         }}
       >

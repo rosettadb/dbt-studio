@@ -38,7 +38,8 @@ export const StyledDuckLakeNavLink = styled(NavLink)(({ theme }) => ({
   textDecoration: 'none',
   color: theme.palette.grey[600],
   display: 'block',
-  width: '270px',
+  width: '100%',
+  margin: 0,
   marginBottom: '2px',
   '&.active': {
     color: theme.palette.primary.main,
@@ -100,7 +101,7 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
   return (
     <Box
       sx={{
-        p: 2,
+        p: 1,
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
@@ -109,22 +110,6 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
       }}
     >
       <Box sx={{ flex: 1, overflow: 'hidden' }}>
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            mb: 2,
-            gap: 1,
-            justifyContent: 'space-between',
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <DataLakeSVG width={18} height={18} />
-            <Typography variant="h6" sx={{ m: 0 }}>
-              DataLake
-            </Typography>
-          </Box>
-        </Box>
         <Box sx={{ overflow: 'auto', maxHeight: 'calc(100vh - 200px)' }}>
           {/* Main Navigation */}
           <List
@@ -132,11 +117,12 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
               py: 0,
               width: '100%',
               '& .MuiListItem-root': {
-                py: 0.25,
+                py: 0,
                 px: 1,
-                minHeight: '32px',
-                width: '270px',
+                minHeight: '28px',
+                width: '100%',
               },
+              '& .MuiListItemText-primary': { fontSize: 13 },
             }}
           >
             {dataLakeSidebarElements.map((element) => (
@@ -146,7 +132,7 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
                     cursor: 'pointer',
                     borderRadius: 1,
                     mb: 0,
-                    width: '270px',
+                    width: '100%',
                     backgroundColor:
                       location.pathname === element.path
                         ? theme.palette.divider
@@ -171,17 +157,18 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
 
           {/* DuckLake Instances */}
           {instances.length > 0 && (
-            <Box sx={{ mt: 3 }}>
+            <Box sx={{ mt: 1 }}>
               <Typography
                 variant="caption"
                 sx={{
                   display: 'block',
-                  px: 2,
-                  pb: 1,
+                  px: 1,
+                  pb: 0.5,
                   fontWeight: 600,
                   color: theme.palette.text.secondary,
                   textTransform: 'uppercase',
                   letterSpacing: '0.5px',
+                  fontSize: '0.65rem',
                 }}
               >
                 DuckLake
@@ -191,9 +178,9 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
                   py: 0,
                   width: '100%',
                   '& .MuiListItem-root': {
-                    py: 0.25,
+                    py: 0,
                     px: 1,
-                    minHeight: '32px',
+                    minHeight: '28px',
                     width: '100%',
                   },
                 }}
@@ -208,7 +195,7 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
                         cursor: 'pointer',
                         borderRadius: 1,
                         mb: 0,
-                        width: '270px',
+                        width: '100%',
                         backgroundColor:
                           selectedDuckLakeInstance?.id === instance.id
                             ? theme.palette.divider
@@ -222,7 +209,7 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
                         primary={instance.name}
                         primaryTypographyProps={{
                           variant: 'body2',
-                          sx: { fontSize: '0.875rem' },
+                          sx: { fontSize: 13 },
                         }}
                       />
                     </ListItem>
@@ -234,14 +221,14 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
 
           {/* Iceberg Instances */}
           {icebergInstances.length > 0 && (
-            <Box sx={{ mt: 3 }}>
+            <Box sx={{ mt: 1 }}>
               <Box
                 sx={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: 1,
-                  px: 2,
-                  pb: 1,
+                  px: 1,
+                  pb: 0.5,
                 }}
               >
                 <Typography
@@ -251,6 +238,7 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
                     color: theme.palette.text.secondary,
                     textTransform: 'uppercase',
                     letterSpacing: '0.5px',
+                    fontSize: '0.65rem',
                   }}
                 >
                   Apache Iceberg
@@ -267,9 +255,9 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
                   py: 0,
                   width: '100%',
                   '& .MuiListItem-root': {
-                    py: 0.25,
+                    py: 0,
                     px: 1,
-                    minHeight: '32px',
+                    minHeight: '28px',
                     width: '100%',
                   },
                 }}
@@ -284,7 +272,7 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
                         cursor: 'pointer',
                         borderRadius: 1,
                         mb: 0,
-                        width: '270px',
+                        width: '100%',
                         backgroundColor:
                           selectedIcebergInstance?.id === instance.id
                             ? theme.palette.divider
@@ -298,7 +286,7 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
                         primary={instance.name}
                         primaryTypographyProps={{
                           variant: 'body2',
-                          sx: { fontSize: '0.875rem' },
+                          sx: { fontSize: 13 },
                         }}
                       />
                     </ListItem>
@@ -313,9 +301,9 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
       <Box
         sx={{
           mt: 'auto',
-          pt: 2,
+          pt: 1,
           borderTop: `1px solid ${theme.palette.divider}`,
-          width: '270px',
+          width: '100%',
           boxSizing: 'border-box',
         }}
       >

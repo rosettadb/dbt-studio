@@ -78,6 +78,7 @@ export const Sidebar: React.FC<Props> = ({
       setIsSidebarOpen(false);
     } else {
       setIsSidebarOpen(true);
+      setIsBarExpanded(false);
     }
   }, [location.pathname, setIsSidebarOpen]);
 
@@ -100,6 +101,7 @@ export const Sidebar: React.FC<Props> = ({
           },
           transition: 'all 0.2s ease',
           pointerEvents: isDisabled ? 'none' : 'auto',
+          py: 0.5,
           px: isBarExpanded ? 2 : undefined,
         }}
       >
@@ -116,7 +118,7 @@ export const Sidebar: React.FC<Props> = ({
           <ListItemText
             primary={element.text}
             primaryTypographyProps={{
-              fontSize: '0.8rem',
+              fontSize: 13,
               noWrap: true,
             }}
           />
