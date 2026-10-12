@@ -78,8 +78,8 @@ export const Sidebar: React.FC<Props> = ({
       setIsSidebarOpen(false);
     } else {
       setIsSidebarOpen(true);
-      setIsBarExpanded(false);
     }
+    setIsBarExpanded(false);
   }, [location.pathname, setIsSidebarOpen]);
 
   const renderItem = (element: (typeof mainElements)[0], isActive: boolean) => {
