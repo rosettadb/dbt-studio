@@ -1,3 +1,4 @@
+/** @jest-environment-options {"customExportConditions": ["node", "node-addons"]} */
 describe('settings.ipcHandlers', () => {
   beforeEach(() => {
     jest.resetModules();
