@@ -52,8 +52,8 @@ export const PythonSetup: React.FC<Props> = ({
     >
       <SettingsSectionBody>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-          Rosetta DBT Studio uses its own embedded Python interpreter to run dbt
-          Core v1, separate from any Python already on your system.
+          Embedded Python interpreter for dbt Core v1, separate from your system
+          Python.
         </Typography>
         {installPython.isLoading ? (
           <Box>

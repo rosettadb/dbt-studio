@@ -50,6 +50,7 @@ const AdapterSelection: React.FC<AdapterSelectionProps> = ({
           control={
             <Checkbox
               size="small"
+              sx={{ py: 0.5 }}
               checked={selectedAdapters.includes(adapter.name)}
               disabled={disabled || index === 0}
               onChange={() => {

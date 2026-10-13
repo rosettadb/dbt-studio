@@ -82,7 +82,7 @@ const Setup: React.FC = () => {
           justifyContent: 'space-between',
           borderBottom: '1px solid',
           pb: 1,
-          mb: 2,
+          mb: 1.5,
           flexShrink: 0,
         }}
       >
