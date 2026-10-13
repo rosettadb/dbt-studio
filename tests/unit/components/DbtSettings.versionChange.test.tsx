@@ -47,13 +47,14 @@ const pythonPreviewItem = {
   channel: 'preview' as const,
 };
 
-const previewItem = {
-  version: '2.0.0a4',
-  isPrerelease: true,
-  isLatestStable: false,
+// dbt 2.x is listed from the dbt-oss package as stable releases.
+const v2Items = ['2.0.5', '2.0.4'].map((version, index) => ({
+  version,
+  isPrerelease: false,
+  isLatestStable: index === 0,
   isInstalled: false,
-  channel: 'preview' as const,
-};
+  channel: 'stable' as const,
+}));
 
 const olderStableItem = (version: string) => ({
   version,
@@ -71,7 +72,7 @@ const mockVersionList = (stableItems: (typeof stableItem)[]) =>
   listVersions.mockImplementation(
     async ({ includePrerelease }: { includePrerelease?: boolean }) => ({
       versions: includePrerelease
-        ? [previewItem, pythonPreviewItem, ...stableItems]
+        ? [...v2Items, pythonPreviewItem, ...stableItems]
         : stableItems,
       latestStable: '1.11.12',
       currentVersion: '1.11.12',
@@ -97,9 +98,9 @@ describe('DbtSettings runtime switch', () => {
     mockVersionList([stableItem, ...previousStableItems]);
     planVersionChange.mockResolvedValue({
       currentVersion: '1.11.12',
-      targetVersion: '2.0.0a4',
-      direction: 'preview-install',
-      channel: 'preview',
+      targetVersion: '2.0.5',
+      direction: 'upgrade',
+      channel: 'stable',
       isMajorVersionChange: true,
       globalImpactWarning:
         'This changes the global dbt-core version used by all local projects.',
@@ -110,14 +111,17 @@ describe('DbtSettings runtime switch', () => {
   });
 
   // dbtPath 'dbt' is how the page represents "dbt is not installed".
-  const renderSettings = (dbtPath = '/managed/venv/bin/dbt') =>
+  const renderSettings = ({
+    dbtPath = '/managed/venv/bin/dbt',
+    pythonPath = '/managed/venv/bin/python3',
+  } = {}) =>
     render(
       <DbtSettings
         settings={
           {
             dbtPath,
             dbtVersion: '1.11.12',
-            pythonPath: '/managed/venv/bin/python3',
+            pythonPath,
             pythonVersion: '3.12.0',
           } as any
         }
@@ -128,11 +132,17 @@ describe('DbtSettings runtime switch', () => {
   const runtimeToggle = (runtime: 'v1' | 'v2') =>
     screen.getByRole('button', { name: `Show dbt Core ${runtime} versions` });
 
-  const openV2InstallDialog = async () => {
+  // Clicks the action on the newest v2 row (2.0.5, listed first).
+  const clickNewestV2Version = async () => {
     fireEvent.click(runtimeToggle('v2'));
-    fireEvent.click(
-      await screen.findByRole('button', { name: 'Install Preview' }),
-    );
+    const [newestV2Action] = await screen.findAllByRole('button', {
+      name: 'Upgrade',
+    });
+    fireEvent.click(newestV2Action);
+  };
+
+  const openV2InstallDialog = async () => {
+    await clickNewestV2Version();
     await screen.findByText('Switch to dbt Core v2?');
   };
 
@@ -153,8 +163,14 @@ describe('DbtSettings runtime switch', () => {
 
     fireEvent.click(runtimeToggle('v2'));
 
-    expect(await screen.findByText('2.0.0a4')).toBeInTheDocument();
+    expect(await screen.findByText('2.0.5')).toBeInTheDocument();
+    expect(screen.getByText('2.0.4')).toBeInTheDocument();
+    expect(screen.getByText('Latest stable')).toBeInTheDocument();
+    expect(screen.queryByText(/Preview/)).not.toBeInTheDocument();
     expect(screen.getByText('dbt Core v2 versions')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Installed from the Apache-licensed dbt-oss package/),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/Installing a version below switches to dbt Core v2/),
     ).toBeInTheDocument();
@@ -184,14 +200,14 @@ describe('DbtSettings runtime switch', () => {
     await openV2InstallDialog();
 
     expect(planVersionChange).toHaveBeenCalledWith({
-      targetVersion: '2.0.0a4',
+      targetVersion: '2.0.5',
       includeAdapters: true,
     });
     expect(
       screen.getByText('dbt Core v1 · Python 1.11.12 will be uninstalled.'),
     ).toBeInTheDocument();
     expect(
-      screen.getByText('dbt Core v2 · Rust 2.0.0a4 will be installed.'),
+      screen.getByText('dbt Core v2 · Rust 2.0.5 will be installed.'),
     ).toBeInTheDocument();
     expect(
       screen.getByText('Your adapter packages stay installed.'),
@@ -214,7 +230,7 @@ describe('DbtSettings runtime switch', () => {
   it('switches after confirmation and offers a rollback', async () => {
     installVersionChange.mockResolvedValue({
       ok: true,
-      installedVersion: '2.0.0a4',
+      installedVersion: '2.0.5',
       dbtPath: '/managed/venv/bin/dbt',
       previousVersion: '1.11.12',
       adapterWarnings: [],
@@ -231,11 +247,11 @@ describe('DbtSettings runtime switch', () => {
 
     await waitFor(() =>
       expect(installVersionChange).toHaveBeenCalledWith(
-        expect.objectContaining({ targetVersion: '2.0.0a4' }),
+        expect.objectContaining({ targetVersion: '2.0.5' }),
       ),
     );
     expect(
-      await screen.findByText('Verified dbt-core 2.0.0a4 is now active.'),
+      await screen.findByText('Verified dbt-core 2.0.5 is now active.'),
     ).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
@@ -268,10 +284,21 @@ describe('DbtSettings runtime switch', () => {
     ).toBeInTheDocument();
 
     fireEvent.click(runtimeToggle('v2'));
-    expect(await screen.findByText('2.0.0a4')).toBeInTheDocument();
+    expect(await screen.findByText('2.0.5')).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: /Show older versions|Show fewer/ }),
     ).not.toBeInTheDocument();
+  });
+
+  it('asks for Python 3.11+ instead of planning v2 when Python is missing', async () => {
+    renderSettings({ pythonPath: '' });
+
+    await clickNewestV2Version();
+
+    expect(
+      await screen.findByText(/dbt Core 2.x requires Python 3.11 or newer/),
+    ).toBeInTheDocument();
+    expect(planVersionChange).not.toHaveBeenCalled();
   });
 
   it('preserves every adapter failure from the package install loop', async () => {
@@ -281,7 +308,7 @@ describe('DbtSettings runtime switch', () => {
           ? { ok: false, error: `${packageName} failed` }
           : { ok: true },
     );
-    renderSettings('dbt');
+    renderSettings({ dbtPath: 'dbt' });
 
     fireEvent.click(
       await screen.findByRole('button', {
