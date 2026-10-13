@@ -216,14 +216,14 @@ export const Sidebar: React.FC<Props> = ({
 
         {/* Main items */}
         <Box sx={{ flex: 1 }}>
-          <List sx={{ width: activityBarWidth, pt: 0.5 }}>
+          <List sx={{ width: '100%', pt: 0.5 }}>
             {mainElements.map((el) =>
               renderItem(el, activeItemPath === el.path),
             )}
           </List>
         </Box>
 
-        <List sx={{ width: activityBarWidth, pb: 0.5 }}>
+        <List sx={{ width: '100%', pb: 0.5 }}>
           {bottomElements.map((el) =>
             renderItem(el, activeItemPath === el.path),
           )}

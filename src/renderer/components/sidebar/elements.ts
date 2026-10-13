@@ -43,7 +43,7 @@ const baseElements: SideBarElementType[] = [
   {
     path: '/app/data-lake',
     text: 'DataLake',
-    icon: Icons.DataLakeSVG,
+    icon: Icons.DataLakeMenuIcon,
     testId: 'nav-item-data-lake',
   },
   {

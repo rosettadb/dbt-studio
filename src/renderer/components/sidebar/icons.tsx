@@ -139,6 +139,24 @@ export const DataLakeSVG: React.FC<{ width?: number; height?: number }> = ({
   );
 };
 
+// Main menu version: no right margin so it centers like the other menu icons
+export const DataLakeMenuIcon: React.FC = () => {
+  const theme = useTheme();
+  return (
+    <Icon
+      src={icons.dataLakeSVG}
+      width={24}
+      height={24}
+      style={{
+        display: 'inline-block',
+        verticalAlign: 'middle',
+        overflow: 'hidden',
+      }}
+      color={theme.palette.primary.main}
+    />
+  );
+};
+
 export const DataLake: React.FC = () => {
   return (
     <img
