@@ -1,41 +1,22 @@
 import React from 'react';
-import {
-  Card,
-  CardContent,
-  Avatar,
-  Typography,
-  Chip,
-  Box,
-  CircularProgress,
-} from '@mui/material';
+import { Avatar, Chip, Box, CircularProgress } from '@mui/material';
 import { Person, AdminPanelSettings } from '@mui/icons-material';
 import { useProfile } from '../../controllers/profile.controller';
+import { SettingsRow } from '../settings/SettingsLayout';
 
 export const ProfileCard: React.FC = () => {
   const { data: profile, isLoading, error } = useProfile();
 
   if (isLoading) {
     return (
-      <Card>
-        <CardContent>
-          <Box display="flex" justifyContent="center" p={2}>
-            <CircularProgress size={24} />
-          </Box>
-        </CardContent>
-      </Card>
+      <SettingsRow label="Loading profile...">
+        <CircularProgress size={18} />
+      </SettingsRow>
     );
   }
 
   if (error || !profile) {
-    return (
-      <Card>
-        <CardContent>
-          <Typography color="textSecondary">
-            Profile information unavailable
-          </Typography>
-        </CardContent>
-      </Card>
-    );
+    return <SettingsRow label="Profile information unavailable" />;
   }
 
   const getInitials = (name: string | null, email: string) => {
@@ -50,28 +31,23 @@ export const ProfileCard: React.FC = () => {
   };
 
   return (
-    <Card>
-      <CardContent>
-        <Box display="flex" alignItems="center" gap={2}>
-          <Avatar>{getInitials(profile.name, profile.email)}</Avatar>
-          <Box flex={1}>
-            <Typography variant="h6">{profile.name || 'User'}</Typography>
-            <Typography variant="body2" color="textSecondary">
-              {profile.email}
-            </Typography>
-            <Box mt={1}>
-              <Chip
-                icon={
-                  profile.role === 'ADMIN' ? <AdminPanelSettings /> : <Person />
-                }
-                label={profile.role}
-                size="small"
-                color={profile.role === 'ADMIN' ? 'primary' : 'default'}
-              />
-            </Box>
-          </Box>
+    <SettingsRow
+      label={
+        <Box display="flex" alignItems="center" gap={1}>
+          <Avatar sx={{ width: 24, height: 24, fontSize: 12 }}>
+            {getInitials(profile.name, profile.email)}
+          </Avatar>
+          {profile.name || 'User'}
         </Box>
-      </CardContent>
-    </Card>
+      }
+      description={profile.email}
+    >
+      <Chip
+        icon={profile.role === 'ADMIN' ? <AdminPanelSettings /> : <Person />}
+        label={profile.role}
+        size="small"
+        color={profile.role === 'ADMIN' ? 'primary' : 'default'}
+      />
+    </SettingsRow>
   );
 };
