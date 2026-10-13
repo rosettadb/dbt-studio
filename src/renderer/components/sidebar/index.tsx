@@ -208,7 +208,7 @@ export const Sidebar: React.FC<Props> = ({
               <img
                 src={rosettaIcon}
                 alt="Icon"
-                style={{ width: 20, height: 20 }}
+                style={{ width: 24, height: 24 }}
               />
             </Box>
           )}
