@@ -19,7 +19,7 @@ const baseElements: SideBarElementType[] = [
   {
     path: '/app/dbt-project',
     text: 'DBT Studio',
-    icon: Icons.DBTProjects,
+    icon: Icons.DBTStudioMenuIcon,
     testId: 'nav-item-files',
   },
   {

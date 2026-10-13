@@ -101,15 +101,22 @@ export const Sidebar: React.FC<Props> = ({
           },
           transition: 'all 0.2s ease',
           pointerEvents: isDisabled ? 'none' : 'auto',
-          py: 0.5,
-          px: isBarExpanded ? 2 : undefined,
+          py: 0,
+          minHeight: 48,
+          // 6px left keeps the expanded icon centre (~28px) where it sits in the collapsed bar
+          pl: isBarExpanded ? 0.75 : 0,
+          pr: isBarExpanded ? 1 : 0,
+          justifyContent: isBarExpanded ? undefined : 'center',
         }}
       >
         <ListItemIcon
           sx={{
             cursor: isDisabled ? 'not-allowed' : 'pointer',
             opacity: isDisabled ? 0.5 : 1,
-            minWidth: isBarExpanded ? 36 : undefined,
+            minWidth: isBarExpanded ? 44 : 0,
+            width: isBarExpanded ? 44 : undefined,
+            justifyContent: 'center',
+            '& > *': { transform: 'scale(1.2)' },
           }}
         >
           <element.icon />
