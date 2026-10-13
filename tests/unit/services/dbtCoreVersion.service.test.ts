@@ -87,24 +87,55 @@ describe('DbtCoreVersionService', () => {
 
   it('verifies the dbt executable beside the managed Python interpreter', async () => {
     mockCommands([
-      { exitCode: 0, stdout: 'Name: dbt-core\nVersion: 2.0.0a4\n' },
       { exitCode: 1 },
-      { exitCode: 0, stdout: 'dbt Fusion 2.0.0-alpha.4\n' },
+      { exitCode: 0, stdout: 'Name: dbt-oss\nVersion: 2.0.5\n' },
+      { exitCode: 1 },
+      { exitCode: 0, stdout: 'dbt-oss 2.0.5\n' },
     ]);
 
     const installed = await DbtCoreVersionService.getInstalledDbtCore();
 
     expect(installed).toMatchObject({
-      version: '2.0.0a4',
+      version: '2.0.5',
       pythonPath,
       dbtPath,
       isDbtCorePackage: true,
       isExecutableVerified: true,
       hasProprietaryDbtPackage: false,
     });
+    expect(spawnMock).toHaveBeenNthCalledWith(
+      1,
+      pythonPath,
+      ['-m', 'pip', 'show', 'dbt-core'],
+      { shell: false },
+    );
+    expect(spawnMock).toHaveBeenNthCalledWith(
+      2,
+      pythonPath,
+      ['-m', 'pip', 'show', 'dbt-oss'],
+      { shell: false },
+    );
     expect(spawnMock).toHaveBeenLastCalledWith(dbtPath, ['--version'], {
       shell: false,
     });
+  });
+
+  it('does not verify when both dbt-core and dbt-oss are installed', async () => {
+    mockCommands([
+      { exitCode: 0, stdout: 'Name: dbt-core\nVersion: 2.0.0rc8\n' },
+      { exitCode: 0, stdout: 'Name: dbt-oss\nVersion: 2.0.5\n' },
+      { exitCode: 1 },
+    ]);
+
+    const installed = await DbtCoreVersionService.getInstalledDbtCore();
+
+    expect(installed).toMatchObject({
+      version: null,
+      isDbtCorePackage: false,
+      isExecutableVerified: false,
+    });
+    expect(installed.error).toContain('Both dbt-core and dbt-oss');
+    expect(spawnMock).toHaveBeenCalledTimes(3);
   });
 
   it('does not fall back to a different Python interpreter', async () => {
@@ -122,27 +153,35 @@ describe('DbtCoreVersionService', () => {
     expect(spawnMock).not.toHaveBeenCalled();
   });
 
-  it('updates settings only after package and executable verification', async () => {
+  it('installs 2.x from dbt-oss after removing dbt-core, then verifies before saving', async () => {
     mockCommands([
       { exitCode: 0 },
-      { exitCode: 0, stdout: 'Name: dbt-core\nVersion: 2.0.0a4\n' },
+      { exitCode: 0 },
       { exitCode: 1 },
-      { exitCode: 0, stdout: 'dbt Fusion 2.0.0-alpha.4\n' },
+      { exitCode: 0, stdout: 'Name: dbt-oss\nVersion: 2.0.5\n' },
+      { exitCode: 1 },
+      { exitCode: 0, stdout: 'dbt-oss 2.0.5\n' },
     ]);
 
     const result = await DbtCoreVersionService.installDbtCoreVersion({
       pythonPath,
       packageName: 'dbt-core',
-      version: '2.0.0a4',
+      version: '2.0.5',
     });
 
     expect(result).toEqual({
       ok: true,
-      installedVersion: '2.0.0a4',
+      installedVersion: '2.0.5',
       dbtPath,
     });
     expect(spawnMock).toHaveBeenNthCalledWith(
       1,
+      pythonPath,
+      ['-m', 'pip', 'uninstall', '--yes', 'dbt-core'],
+      { shell: false },
+    );
+    expect(spawnMock).toHaveBeenNthCalledWith(
+      2,
       pythonPath,
       [
         '-m',
@@ -151,13 +190,65 @@ describe('DbtCoreVersionService', () => {
         '--upgrade',
         '--force-reinstall',
         '--no-cache-dir',
-        'dbt-core==2.0.0a4',
+        'dbt-oss==2.0.5',
       ],
       { shell: false },
     );
     expect(saveSettingsMock).toHaveBeenCalledWith(
-      expect.objectContaining({ dbtPath, dbtVersion: '2.0.0a4' }),
+      expect.objectContaining({ dbtPath, dbtVersion: '2.0.5' }),
     );
+  });
+
+  it('installs 1.x from dbt-core after removing dbt-oss', async () => {
+    mockCommands([
+      { exitCode: 0 },
+      { exitCode: 0 },
+      { exitCode: 0, stdout: 'Name: dbt-core\nVersion: 1.12.5\n' },
+      { exitCode: 1 },
+      { exitCode: 1 },
+      { exitCode: 0, stdout: 'Core:\n  - installed: 1.12.5\n' },
+    ]);
+
+    const result = await DbtCoreVersionService.installDbtCoreVersion({
+      pythonPath,
+      packageName: 'dbt-core',
+      version: '1.12.5',
+    });
+
+    expect(result).toEqual({ ok: true, installedVersion: '1.12.5', dbtPath });
+    expect(spawnMock).toHaveBeenNthCalledWith(
+      1,
+      pythonPath,
+      ['-m', 'pip', 'uninstall', '--yes', 'dbt-oss'],
+      { shell: false },
+    );
+    expect(spawnMock).toHaveBeenNthCalledWith(
+      2,
+      pythonPath,
+      expect.arrayContaining(['dbt-core==1.12.5']),
+      { shell: false },
+    );
+  });
+
+  it('rejects a dbt-core 2.x pre-release whose binary reports the dbt-oss version', async () => {
+    mockCommands([
+      { exitCode: 0 },
+      { exitCode: 0 },
+      { exitCode: 1 },
+      { exitCode: 0, stdout: 'Name: dbt-oss\nVersion: 2.0.0rc2\n' },
+      { exitCode: 1 },
+      { exitCode: 0, stdout: 'dbt-oss 2.0.5\n' },
+    ]);
+
+    const result = await DbtCoreVersionService.installDbtCoreVersion({
+      pythonPath,
+      packageName: 'dbt-core',
+      version: '2.0.0rc2',
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('did not report the installed');
+    expect(saveSettingsMock).not.toHaveBeenCalled();
   });
 
   it('installs dbt-kinetica from its GitHub source archive', async () => {
@@ -240,19 +331,33 @@ describe('DbtCoreVersionService', () => {
     expect(installed.error).toContain('Managed Python environment not found');
   });
 
-  it('lists stable versions by default and adds typed preview metadata on demand', async () => {
-    axiosGetMock.mockResolvedValue({
-      data: {
-        releases: {
-          '1.11.12': [{}],
-          '1.10.22': [{}],
-          '2.0.0a4': [{}],
-          '2.0.0a10': [{}],
-          '1.12.0rc2': [{}],
-          '9.9.9': [{ yanked: true }],
-        },
+  const mockPypiReleases = (
+    releasesByPackage: Record<string, Record<string, { yanked?: boolean }[]>>,
+  ) => {
+    axiosGetMock.mockImplementation(async (url: string) => {
+      const packageName = url.replace(/^.*\/pypi\/([^/]+)\/json$/, '$1');
+      const releases = releasesByPackage[packageName];
+      if (!releases) throw new Error(`Not found: ${url}`);
+      return { data: { releases } } as any;
+    });
+  };
+
+  it("lists 1.x from dbt-core and 2.x from dbt-oss, marking each line's latest stable", async () => {
+    mockPypiReleases({
+      'dbt-core': {
+        '1.11.12': [{}],
+        '1.10.22': [{}],
+        '1.12.0rc2': [{}],
+        '2.0.0rc8': [{}],
+        '9.9.9': [{ yanked: true }],
       },
-    } as any);
+      'dbt-oss': {
+        '0.0.0': [{}],
+        '2.0.0rc2': [{}],
+        '2.0.5': [{}],
+        '2.0.4': [{}],
+      },
+    });
 
     const stable = await DbtCoreVersionService.listDbtCoreVersions();
     const preview = await DbtCoreVersionService.listDbtCoreVersions({
@@ -261,27 +366,67 @@ describe('DbtCoreVersionService', () => {
     });
 
     expect(stable.versions.map((item) => item.version)).toEqual([
+      '2.0.5',
+      '2.0.4',
       '1.11.12',
       '1.10.22',
     ]);
-    expect(stable.latestStable).toBe('1.11.12');
+    expect(stable.latestStable).toBe('2.0.5');
     expect(stable.versions[0]).toMatchObject({
       isLatestStable: true,
-      isInstalled: true,
+      isInstalled: false,
       channel: 'stable',
     });
+    expect(stable.versions[2]).toMatchObject({
+      version: '1.11.12',
+      isLatestStable: true,
+      isInstalled: true,
+    });
+    expect(stable.versions[3].isLatestStable).toBe(false);
     expect(preview.versions.map((item) => item.version)).toEqual([
-      '2.0.0a10',
-      '2.0.0a4',
+      '2.0.5',
+      '2.0.4',
+      '2.0.0rc2',
       '1.12.0rc2',
       '1.11.12',
       '1.10.22',
     ]);
-    expect(preview.versions[0]).toMatchObject({
+    expect(preview.versions[2]).toMatchObject({
       isPrerelease: true,
       isLatestStable: false,
       channel: 'preview',
     });
+  });
+
+  it('still lists 1.x when the dbt-oss lookup fails', async () => {
+    mockPypiReleases({ 'dbt-core': { '1.12.5': [{}], '2.0.0rc8': [{}] } });
+
+    const result = await DbtCoreVersionService.listDbtCoreVersions({
+      includePrerelease: true,
+    });
+
+    expect(result.versions.map((item) => item.version)).toEqual(['1.12.5']);
+  });
+
+  it('refuses to plan a 2.x install on a managed Python older than 3.11', async () => {
+    loadSettingsMock.mockResolvedValue({
+      pythonPath,
+      pythonVersion: '3.10.17',
+      dbtVersion: '1.11.12',
+    } as any);
+
+    await expect(
+      DbtCoreVersionService.planVersionChange({
+        targetVersion: '2.0.5',
+        includeAdapters: false,
+      }),
+    ).rejects.toThrow('requires Python 3.11 or newer');
+
+    const v1Plan = await DbtCoreVersionService.planVersionChange({
+      targetVersion: '1.12.5',
+      includeAdapters: false,
+    });
+    expect(v1Plan.direction).toBe('upgrade');
   });
 
   it.each([
@@ -336,7 +481,8 @@ describe('DbtCoreVersionService', () => {
     mockCommands([
       { exitCode: 1 },
       { exitCode: 1 },
-      { exitCode: 0, stdout: 'dbt Fusion 2.0.0-alpha.4\n' },
+      { exitCode: 1 },
+      { exitCode: 0, stdout: 'dbt-oss 2.0.5\n' },
     ]);
 
     const installed = await DbtCoreVersionService.verifyDbtInstall(pythonPath);
@@ -348,15 +494,17 @@ describe('DbtCoreVersionService', () => {
   it('blocks a proprietary dbt package and preserves settings', async () => {
     mockCommands([
       { exitCode: 0 },
-      { exitCode: 0, stdout: 'Name: dbt-core\nVersion: 2.0.0a4\n' },
-      { exitCode: 0, stdout: 'Name: dbt\nVersion: 1.0.0\n' },
-      { exitCode: 0, stdout: 'dbt Fusion 2.0.0-alpha.4\n' },
+      { exitCode: 0 },
+      { exitCode: 1 },
+      { exitCode: 0, stdout: 'Name: dbt-oss\nVersion: 2.0.5\n' },
+      { exitCode: 0, stdout: 'Name: dbt\nVersion: 2.0.8\n' },
+      { exitCode: 0, stdout: 'dbt-oss 2.0.5\n' },
     ]);
 
     const result = await DbtCoreVersionService.installDbtCoreVersion({
       pythonPath,
       packageName: 'dbt-core',
-      version: '2.0.0a4',
+      version: '2.0.5',
     });
 
     expect(result).toEqual({
@@ -368,7 +516,10 @@ describe('DbtCoreVersionService', () => {
   });
 
   it('preserves settings when pip installation fails', async () => {
-    mockCommands([{ exitCode: 1, stderr: 'No matching distribution' }]);
+    mockCommands([
+      { exitCode: 0 },
+      { exitCode: 1, stderr: 'No matching distribution' },
+    ]);
 
     const result = await DbtCoreVersionService.installDbtCoreVersion({
       pythonPath,
@@ -420,9 +571,10 @@ describe('DbtCoreVersionService', () => {
       async () => '/tmp/rosetta-dbt-compatibility-test',
     );
     mockCommands([
-      { exitCode: 0, stdout: 'Name: dbt-core\nVersion: 2.0.0a4\n' },
       { exitCode: 1 },
-      { exitCode: 0, stdout: 'dbt Fusion 2.0.0-alpha.4\n' },
+      { exitCode: 0, stdout: 'Name: dbt-oss\nVersion: 2.0.5\n' },
+      { exitCode: 1 },
+      { exitCode: 0, stdout: 'dbt-oss 2.0.5\n' },
       { exitCode: 0, stdout: 'parse complete\n' },
       { exitCode: 0, stdout: 'compile complete\n' },
     ]);
@@ -464,9 +616,10 @@ describe('DbtCoreVersionService', () => {
       connection: { type: 'postgres' } as any,
     });
     mockCommands([
-      { exitCode: 0, stdout: 'Name: dbt-core\nVersion: 2.0.0a4\n' },
       { exitCode: 1 },
-      { exitCode: 0, stdout: 'dbt Fusion 2.0.0-alpha.4\n' },
+      { exitCode: 0, stdout: 'Name: dbt-oss\nVersion: 2.0.5\n' },
+      { exitCode: 1 },
+      { exitCode: 0, stdout: 'dbt-oss 2.0.5\n' },
     ]);
 
     const result =
