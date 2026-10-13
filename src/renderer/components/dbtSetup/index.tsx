@@ -40,6 +40,9 @@ const adapterGridSx = {
 
 const LINE_MAJOR: Record<DbtLine, number> = { v1: 1, v2: 2 };
 
+// Same as the dbt settings page's full version list.
+const MAX_VERSIONS_PER_LINE = 15;
+
 type Props = {
   dbtLine: DbtLine;
   setDbtLine: (line: DbtLine) => void;
@@ -72,9 +75,12 @@ export const DbtSetup: React.FC<Props> = ({
     >
       {DBT_LINE_OPTIONS.map((option) => {
         const isSelected = dbtLine === option.line;
-        const lineVersions = (availableVersions ?? []).filter(
-          (version) => Number.parseInt(version, 10) === LINE_MAJOR[option.line],
-        );
+        const lineVersions = (availableVersions ?? [])
+          .filter(
+            (version) =>
+              Number.parseInt(version, 10) === LINE_MAJOR[option.line],
+          )
+          .slice(0, MAX_VERSIONS_PER_LINE);
         let versionItems: React.ReactNode;
         if (availableVersions === null) {
           versionItems = <MenuItem value="">Loading versions...</MenuItem>;

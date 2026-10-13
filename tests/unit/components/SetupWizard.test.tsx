@@ -316,4 +316,18 @@ describe('Setup wizard', () => {
       expect.objectContaining({ dbtVersion: '1.11.12' }),
     );
   });
+  it('lists at most the newest 15 versions of a line', async () => {
+    listDbtCoreVersions.mockResolvedValue({
+      versions: Array.from({ length: 20 }, (_, index) => ({
+        version: `1.11.${20 - index}`,
+      })),
+    });
+    render(<Setup />);
+    await openVersionMenu('v1');
+
+    const options = screen.getAllByRole('option');
+    expect(options).toHaveLength(15);
+    expect(options[0]).toHaveTextContent('1.11.20 (latest)');
+    expect(options[14]).toHaveTextContent('1.11.6');
+  });
 });
