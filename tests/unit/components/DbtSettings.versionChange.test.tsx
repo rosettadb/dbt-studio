@@ -9,6 +9,19 @@ const installPackageVersion = jest.fn();
 const installLatestPackage = jest.fn();
 const getInstalledPackages = jest.fn();
 const getActiveAdapterCapabilities = jest.fn();
+const installPython = jest.fn();
+
+// DbtSettings -> modals -> editor pulls in the ESM-only markdown stack.
+jest.mock('react-markdown', () => ({
+  __esModule: true,
+  default: ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+}));
+jest.mock('remark-gfm', () => jest.fn());
+jest.mock('rehype-raw', () => jest.fn());
+jest.mock('rehype-highlight', () => jest.fn());
+jest.mock('rehype-sanitize', () => jest.fn());
 
 jest.mock('../../../src/renderer/controllers', () => ({
   useListDbtCoreVersions: () => listVersions,
@@ -22,6 +35,7 @@ jest.mock('../../../src/renderer/controllers', () => ({
   useInstallDbtVersionChange: () => installVersionChange,
   useCheckCurrentProjectCompatibility: () => jest.fn(),
   useGetActiveAdapterCapabilities: () => getActiveAdapterCapabilities,
+  useInstallPython: () => ({ mutateAsync: installPython }),
 }));
 
 const stableItem = {
@@ -62,6 +76,11 @@ describe('DbtSettings version change flow', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     getInstalledPackages.mockResolvedValue({ packages: {} });
+    installPython.mockResolvedValue({
+      success: true,
+      path: '/managed/venv/bin/python3',
+      version: '3.12.0',
+    });
     installPackageVersion.mockResolvedValue({
       ok: true,
       installedVersion: '1.11.12',
@@ -117,8 +136,8 @@ describe('DbtSettings version change flow', () => {
 
     expect(await screen.findByText('1.11.12')).toBeInTheDocument();
     expect(screen.getByText('2.0.0a4')).toBeInTheDocument();
-    expect(screen.getByText('dbt Core v1')).toBeInTheDocument();
-    expect(screen.getByText('dbt Core v2')).toBeInTheDocument();
+    expect(screen.getByText('dbt Core v1 · Python')).toBeInTheDocument();
+    expect(screen.getByText('dbt Core v2 · Rust')).toBeInTheDocument();
     expect(screen.queryByText(/Fusion/)).not.toBeInTheDocument();
     expect(screen.queryByText('1.12.0rc2')).not.toBeInTheDocument();
     expect(screen.queryByText(/Show preview/)).not.toBeInTheDocument();

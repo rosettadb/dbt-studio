@@ -69,8 +69,12 @@ export const test = base.extend<TestFixtures>({
           connection: {
             type: 'duckdb',
             name: 'test_db',
-            database_path: ':memory:',
-            short_database_path: ':memory:',
+            // File-backed, not ':memory:': the app opens a fresh DuckDB
+            // instance per query and per schema fetch, so an in-memory
+            // database would be empty again on every call and tables
+            // created by a test would never show up in the Data tree.
+            database_path: path.join(userDataDir, 'test_db.duckdb'),
+            short_database_path: 'test_db.duckdb',
           },
         },
       ],

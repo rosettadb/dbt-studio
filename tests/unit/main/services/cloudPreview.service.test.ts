@@ -303,51 +303,61 @@ describe('CloudPreviewService.previewCloudData', () => {
 
   // ── WHERE clause ────────────────────────────────────────────────────────────
 
-  it('appends WHERE clause to the SELECT query', async () => {
-    const executedQueries: string[] = [];
-
-    const conn = {
-      run: jest.fn().mockImplementation(async (sql: string) => {
-        executedQueries.push(sql);
-        if (sql.includes('COUNT(*)')) return { getRows: jest.fn().mockResolvedValue([[5]]) };
-        if (sql.includes('DESCRIBE')) return { getRows: jest.fn().mockResolvedValue(DESCRIBE_ROWS) };
-        return {
-          schema: { fields: [{ name: 'id', type: 'INTEGER' }] },
-          getRows: jest.fn().mockResolvedValue([]),
-        };
-      }),
-    };
-
-    mockGetConnection.mockResolvedValue(conn);
-
-    await CloudPreviewService.previewCloudData({
-      ...BASE_OPTIONS,
-      objectPath: `s3://bucket/where-test-${Date.now()}.csv`,
-      whereClause: 'age > 18',
-    });
-
-    const selectQuery = executedQueries.find(
-      (q) => q.includes('SELECT') && q.includes('WHERE'),
-    );
-    expect(selectQuery).toBeDefined();
-    expect(selectQuery).toContain('WHERE age > 18');
+  const makeRecordingConnection = (executedQueries: string[]) => ({
+    run: jest.fn().mockImplementation(async (sql: string) => {
+      executedQueries.push(sql);
+      if (sql.includes('COUNT(*)')) return { getRows: jest.fn().mockResolvedValue([[5]]) };
+      if (sql.includes('DESCRIBE')) return { getRows: jest.fn().mockResolvedValue(DESCRIBE_ROWS) };
+      return {
+        schema: { fields: [{ name: 'id', type: 'INTEGER' }] },
+        getRows: jest.fn().mockResolvedValue([]),
+      };
+    }),
   });
 
-  it('returns success:false when WHERE clause contains forbidden keyword', async () => {
-    const consoleErrorSpy = jest
-      .spyOn(console, 'error')
-      .mockImplementation(() => undefined);
-
-    const conn = makeConnection();
-    mockGetConnection.mockResolvedValue(conn);
+  it('compiles structured filterConditions into an escaped WHERE clause', async () => {
+    const executedQueries: string[] = [];
+    mockGetConnection.mockResolvedValue(
+      makeRecordingConnection(executedQueries),
+    );
 
     const result = await CloudPreviewService.previewCloudData({
       ...BASE_OPTIONS,
+      objectPath: `s3://bucket/where-test-${Date.now()}.csv`,
+      filterConditions: [
+        { id: 'f1', column: 'age', operator: '>', value: '18' },
+        { id: 'f2', column: 'name', operator: 'LIKE', value: "O'Brien%" },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    const selectQuery = executedQueries.find(
+      (q) => q.includes('SELECT *') && q.includes('WHERE'),
+    );
+    expect(selectQuery).toBeDefined();
+    expect(selectQuery).toContain(
+      `WHERE "age" > '18' AND "name" LIKE 'O''Brien%'`,
+    );
+    expect(result.activeWhereClause).toBe(
+      `"age" > '18' AND "name" LIKE 'O''Brien%'`,
+    );
+  });
+
+  it('ignores a raw whereClause; only structured filterConditions reach SQL', async () => {
+    const executedQueries: string[] = [];
+    mockGetConnection.mockResolvedValue(
+      makeRecordingConnection(executedQueries),
+    );
+
+    const result = await CloudPreviewService.previewCloudData({
+      ...BASE_OPTIONS,
+      objectPath: `s3://bucket/raw-where-${Date.now()}.csv`,
       whereClause: 'col = SECRET',
     });
 
-    expect(result.success).toBe(false);
-    consoleErrorSpy.mockRestore();
+    expect(result.success).toBe(true);
+    expect(executedQueries.some((q) => q.includes('WHERE'))).toBe(false);
+    expect(result.activeWhereClause).toBeUndefined();
   });
 
   // ── Error handling ──────────────────────────────────────────────────────────
