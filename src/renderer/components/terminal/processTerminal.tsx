@@ -19,6 +19,7 @@ import {
 } from '@mui/icons-material';
 import AnsiToHtml from 'ansi-to-html';
 import { useAppContext, useProcess } from '../../hooks';
+import { isMac } from '../../lib/path';
 import { OutputBox, TerminalContainer } from './styles';
 import { buildTerminalAiPrompt } from './aiAssist';
 
@@ -173,11 +174,11 @@ const ProcessTerminal: React.FC = () => {
     if (!container) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      const isMac = window.electron.app.os === 'darwin';
+      const onMac = isMac();
       const isStopCombo =
-        (isMac && e.metaKey && e.key === 'c') ||
-        (!isMac && e.ctrlKey && e.key === 'c');
-      const isClearCombo = !isMac && e.ctrlKey && e.key === 'l';
+        (onMac && e.metaKey && e.key === 'c') ||
+        (!onMac && e.ctrlKey && e.key === 'c');
+      const isClearCombo = !onMac && e.ctrlKey && e.key === 'l';
 
       if (isStopCombo && isRunning) {
         e.preventDefault();

@@ -19,7 +19,7 @@ import {
   MonacoAutocompleteSQLKeywords,
   MonacoCompletionItemKind,
 } from '../config/constants';
-import { settingsServices } from '../services';
+import { path, splitSegments } from '../lib/path';
 
 export const capitalizeFirstLetter = (str: string): string => {
   if (!str) return '';
@@ -57,14 +57,14 @@ export const extractSchemaAndTable = (
   return { schema, table };
 };
 
-export const splitPath = (path: string, projectName: string): string => {
-  const startIndex = path.indexOf(projectName);
+export const splitPath = (filePath: string, projectName: string): string => {
+  const startIndex = filePath.indexOf(projectName);
 
   if (startIndex === -1) {
-    return path;
+    return filePath;
   }
 
-  const projectPart = path.slice(startIndex);
+  const projectPart = filePath.slice(startIndex);
 
   return projectPart.replace(projectName, '');
 };
@@ -178,9 +178,8 @@ export const generateMonacoCompletions = (
   return completions;
 };
 
-export const convertToSourcePath = (path: string): string => {
-  const parts = path.split('/');
-  const modelName = parts[parts.length - 1];
+export const convertToSourcePath = (filePath: string): string => {
+  const modelName = path.basename(filePath);
 
   const underscoreParts = modelName.split('_');
   if (underscoreParts.length >= 2) {
@@ -304,15 +303,17 @@ export const getConnectionInput = (conn: ConnectionModel) => {
 export const extractModelNameFromPath = (filePath: string): string => {
   // Extract model name from file path
   // Example: /path/to/project/models/staging/my_model.sql -> staging.my_model
-  const sep = filePath.includes('\\') ? '\\' : '/';
-  const pathParts = filePath.split(sep);
-  const modelsIndex = pathParts.findIndex((part) => part === 'models');
+  const segments = splitSegments(filePath);
+  const modelsIndex = segments.indexOf('models');
   if (modelsIndex === -1) return '';
 
-  const modelPath = pathParts.slice(modelsIndex + 1).join(sep);
-  const modelName = modelPath.replace('.sql', '');
+  const modelSegments = segments.slice(modelsIndex + 1);
+  if (modelSegments.length === 0) return '';
 
-  return modelName.replace(new RegExp(`\\${sep}`, 'g'), '.');
+  const last = modelSegments.length - 1;
+  modelSegments[last] = path.basename(modelSegments[last], '.sql');
+
+  return modelSegments.join('.');
 };
 
 /**
@@ -326,9 +327,7 @@ const NON_EDITABLE_EXTENSIONS = ['.duckdb', '.db', '.sqlite', '.sqlite3'];
  * @returns the file extension in lowercase (including the dot)
  */
 export const getFileExtension = (filePath: string): string => {
-  const parts = filePath.toLowerCase().split('.');
-  if (parts.length < 2) return '';
-  return `.${parts[parts.length - 1]}`;
+  return path.extname(filePath).toLowerCase();
 };
 
 /**
@@ -348,7 +347,7 @@ export const isEditableFile = (filePath: string): boolean => {
  */
 export const getNonEditableFileMessage = (filePath: string): string => {
   const extension = getFileExtension(filePath);
-  const fileName = filePath.split('/').pop() || 'Unknown file';
+  const fileName = path.basename(filePath) || 'Unknown file';
 
   switch (extension) {
     case '.duckdb':
@@ -401,10 +400,7 @@ export const compileCommand = async (
   settings: any,
   command: Command,
 ): Promise<string> => {
-  const projectPath = await settingsServices.usePathJoin(
-    project.path,
-    'rosetta',
-  );
+  const projectPath = path.join(project.path, 'rosetta');
   // Set command missing defaults for rosetta
   if (
     !command.arguments.has('-s') &&

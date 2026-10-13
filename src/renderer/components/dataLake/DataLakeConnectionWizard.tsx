@@ -48,6 +48,7 @@ import connectionIcons, {
 import sqliteIcon from '../../../../assets/connectionIcons/sqlite.png';
 import { DuckLakeService } from '../../services/duckLake.service';
 import { useFilePicker } from '../../controllers';
+import { isWindows } from '../../lib/path';
 import { DataLakeConnectionSelector } from './DataLakeConnectionSelector';
 
 // Database icons mapping - import from assets
@@ -290,8 +291,7 @@ interface DuckLakeConnectionWizardProps {
 
 // Get default temp directory based on OS
 const getDefaultTempDirectory = (): string => {
-  const platform = navigator.platform.toLowerCase();
-  if (platform.includes('win')) {
+  if (isWindows()) {
     return 'C:\\temp\\ducklake';
   }
   // macOS and Linux
