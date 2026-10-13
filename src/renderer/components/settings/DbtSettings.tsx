@@ -237,10 +237,13 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
       }
 
       const availableDbtVersions =
-        dbtCoreVersions ?? (await listDbtCoreVersions({ limit: 5 }));
-      const targetDbtVersion = availableDbtVersions.latestStable;
+        dbtCoreVersions ?? (await listDbtCoreVersions({ limit: 100 }));
+      // This flow installs Python adapter packages, which only dbt Core v1 uses.
+      const targetDbtVersion = availableDbtVersions.versions.find(
+        (item) => Number.parseInt(item.version, 10) === 1 && !item.isPrerelease,
+      )?.version;
       if (!targetDbtVersion) {
-        throw new Error('No stable dbt-core version is available.');
+        throw new Error('No stable dbt Core v1 version is available.');
       }
 
       for (let i = 0; i < packages.length; i++) {
@@ -346,8 +349,18 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
   };
 
   const ensurePythonForVersion = async (version: string): Promise<boolean> => {
-    const isPythonRuntime = Number.parseInt(version, 10) === 1;
-    if (!isPythonRuntime || settings.pythonPath) return true;
+    if (settings.pythonPath) return true;
+
+    // v2 is a pip wheel too, but needs Python 3.11+ while the automatic
+    // install provisions the recommended (older) version.
+    if (Number.parseInt(version, 10) >= 2) {
+      setVersionChangeResult({
+        ok: false,
+        error:
+          'dbt Core 2.x requires Python 3.11 or newer. Install it from the Python settings first.',
+      });
+      return false;
+    }
 
     toast.info(
       'Python is required for dbt Core v1 and will be installed automatically.',
@@ -869,7 +882,11 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
       >
         <SettingsRow
           label="Runtime"
-          description="v1 runs on Python and is stable. v2 runs on Rust and is in preview."
+          description={
+            shownRuntime === 'v1'
+              ? 'dbt Core v1 · Python. Stable runtime. Recommended for production projects and broad adapter compatibility.'
+              : 'dbt Core v2 · Rust. Installed from the Apache-licensed dbt-oss package. Requires Python 3.11+. Cloud pipeline runs are unavailable while v2 is active.'
+          }
         >
           <ToggleButtonGroup
             exclusive
@@ -899,13 +916,6 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
               onClick={() => showRuntimeVersions('v2')}
             >
               dbt Core v2
-              <Chip
-                label="Preview"
-                size="small"
-                color="warning"
-                variant="outlined"
-                sx={{ ml: 0.75, height: 18, fontSize: 10.5 }}
-              />
             </ToggleButton>
           </ToggleButtonGroup>
         </SettingsRow>
@@ -948,7 +958,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                 )
               : renderRuntimeVersions(
                   rustDbtVersions,
-                  'No dbt Core v2 preview releases are available.',
+                  'No dbt Core v2 releases are available.',
                   allRustDbtVersions.length > 5,
                 )}
           </SettingsSectionBody>
@@ -957,9 +967,8 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
         {hasDbt && isV2Active && (
           <SettingsSectionBody>
             <Alert severity="warning">
-              dbt Core v2 is still in alpha — cloud pipeline runs and other
-              cloud features are unavailable until the first official v2
-              release.
+              Cloud pipeline runs and other cloud features are unavailable while
+              dbt Core v2 is active.
             </Alert>
           </SettingsSectionBody>
         )}
