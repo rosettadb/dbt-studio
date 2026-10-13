@@ -4,7 +4,9 @@ import {
   Checkbox,
   Chip,
   FormControlLabel,
+  MenuItem,
   Radio,
+  Select,
   Typography,
 } from '@mui/material';
 import { Check, InfoOutlined } from '@mui/icons-material';
@@ -36,9 +38,15 @@ const adapterGridSx = {
   columnGap: 2,
 } as const;
 
+const LINE_MAJOR: Record<DbtLine, number> = { v1: 1, v2: 2 };
+
 type Props = {
   dbtLine: DbtLine;
   setDbtLine: (line: DbtLine) => void;
+  // Stable dbt versions, newest first; null while they load.
+  availableVersions: string[] | null;
+  chosenVersions: Record<DbtLine, string | null>;
+  setChosenVersion: (line: DbtLine, version: string) => void;
   adapters: Array<{ name: string; description: string }>;
   selectedAdapters: string[];
   setSelectedAdapters: React.Dispatch<React.SetStateAction<string[]>>;
@@ -47,6 +55,9 @@ type Props = {
 export const DbtSetup: React.FC<Props> = ({
   dbtLine,
   setDbtLine,
+  availableVersions,
+  chosenVersions,
+  setChosenVersion,
   adapters,
   selectedAdapters,
   setSelectedAdapters,
@@ -61,10 +72,26 @@ export const DbtSetup: React.FC<Props> = ({
     >
       {DBT_LINE_OPTIONS.map((option) => {
         const isSelected = dbtLine === option.line;
+        const lineVersions = (availableVersions ?? []).filter(
+          (version) => Number.parseInt(version, 10) === LINE_MAJOR[option.line],
+        );
+        let versionItems: React.ReactNode;
+        if (availableVersions === null) {
+          versionItems = <MenuItem value="">Loading versions...</MenuItem>;
+        } else if (lineVersions.length === 0) {
+          // The list couldn't load; the install step then picks the latest.
+          versionItems = <MenuItem value="">Latest</MenuItem>;
+        } else {
+          versionItems = lineVersions.map((version, index) => (
+            <MenuItem key={version} value={version}>
+              {index === 0 ? `${version} (latest)` : version}
+            </MenuItem>
+          ));
+        }
         return (
           <Box
             key={option.line}
-            component="label"
+            onClick={() => setDbtLine(option.line)}
             data-testid={`setup-dbt-${option.line}`}
             sx={{
               display: 'flex',
@@ -86,7 +113,15 @@ export const DbtSetup: React.FC<Props> = ({
               sx={{ p: 0.25 }}
               inputProps={{ 'aria-label': option.title }}
             />
-            <Box>
+            <Box
+              sx={{
+                flex: 1,
+                minWidth: 0,
+                alignSelf: 'stretch',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+            >
               <Typography
                 component="div"
                 sx={{ fontSize: 13, fontWeight: 500 }}
@@ -102,9 +137,30 @@ export const DbtSetup: React.FC<Props> = ({
                   />
                 )}
               </Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                 {option.description}
               </Typography>
+              <Select
+                size="small"
+                fullWidth
+                displayEmpty
+                value={chosenVersions[option.line] ?? ''}
+                disabled={!isSelected || availableVersions === null}
+                onChange={(event) =>
+                  setChosenVersion(option.line, event.target.value)
+                }
+                data-testid={`setup-dbt-version-${option.line}`}
+                inputProps={{ 'aria-label': `${option.title} version` }}
+                sx={{
+                  // Keep both cards' dropdowns level, and compact (the app
+                  // theme makes inputs 48px tall).
+                  mt: 'auto',
+                  height: 36,
+                  fontSize: 13,
+                }}
+              >
+                {versionItems}
+              </Select>
             </Box>
           </Box>
         );

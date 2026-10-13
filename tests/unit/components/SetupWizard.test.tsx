@@ -1,5 +1,11 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import Setup from '../../../src/renderer/screens/setup';
 
 // Every install records its name here, so tests can check the order.
@@ -11,7 +17,9 @@ const installPythonVersion = jest.fn();
 const checkPythonVersions = jest.fn();
 const checkRunnerVersions = jest.fn();
 const installRunnerVersion = jest.fn();
+const saveSettings = jest.fn();
 const listDbtCoreVersions = jest.fn();
+const getInstalledDbtCore = jest.fn();
 const installPackageVersion = jest.fn();
 const installLatestPackage = jest.fn();
 const flowfileInstall = jest.fn();
@@ -36,6 +44,7 @@ jest.mock('../../../src/renderer/services', () => ({
     checkPythonVersions: () => checkPythonVersions(),
     checkRunnerVersions: () => checkRunnerVersions(),
     installRunnerVersion: (version: string) => installRunnerVersion(version),
+    updateSettings: (value: unknown) => saveSettings(value),
   },
 }));
 
@@ -43,6 +52,7 @@ jest.mock('../../../src/renderer/services/dbtVersions.service', () => ({
   listDbtCoreVersions: (options: unknown) => listDbtCoreVersions(options),
   installPackageVersion: (request: unknown) => installPackageVersion(request),
   installLatestPackage: (request: unknown) => installLatestPackage(request),
+  getInstalledDbtCore: () => getInstalledDbtCore(),
 }));
 
 jest.mock('../../../src/renderer/services/flowfile.service', () => ({
@@ -61,6 +71,13 @@ jest.mock('../../../src/renderer/components', () => ({
 const goToInstallStep = () => {
   fireEvent.click(screen.getByTestId('setup-next-btn'));
   fireEvent.click(screen.getByTestId('setup-install-btn'));
+};
+
+const openVersionMenu = async (line: 'v1' | 'v2') => {
+  const versionSelect = screen.getByTestId(`setup-dbt-version-${line}`);
+  // Wait for the version list to load before opening the menu.
+  await waitFor(() => expect(versionSelect).not.toHaveClass('Mui-disabled'));
+  fireEvent.mouseDown(within(versionSelect).getByRole('combobox'));
 };
 
 const waitForInstallsToFinish = () =>
@@ -99,11 +116,17 @@ describe('Setup wizard', () => {
         { version: '2.0.2', isLatestStable: false },
         { version: '1.11.12', isLatestStable: true },
         { version: '1.11.11', isLatestStable: false },
+        { version: '1.10.4', isLatestStable: false },
       ],
     });
+    let installedDbtVersion = '';
+    getInstalledDbtCore.mockImplementation(async () => ({
+      version: installedDbtVersion,
+    }));
     installPackageVersion.mockImplementation(
       async (request: { version: string }) => {
         installLog.push(`dbt ${request.version}`);
+        installedDbtVersion = request.version;
         return {
           ok: true,
           installedVersion: request.version,
@@ -236,6 +259,61 @@ describe('Setup wizard', () => {
           runnerPath: '/runner/bin',
         }),
       ),
+    );
+  });
+  it('installs the dbt version picked in the card dropdown', async () => {
+    render(<Setup />);
+    await openVersionMenu('v1');
+    fireEvent.click(screen.getByRole('option', { name: '1.10.4' }));
+
+    goToInstallStep();
+    expect(
+      screen.getByText('dbt Core 1.10.4 and 7 adapters'),
+    ).toBeInTheDocument();
+    await waitForInstallsToFinish();
+
+    expect(installLog[0]).toBe('dbt 1.10.4');
+    expect(saveSettings).not.toHaveBeenCalled();
+  });
+
+  it('lists only the chosen line, newest first and marked latest', async () => {
+    render(<Setup />);
+    fireEvent.click(screen.getByLabelText('dbt Core 2.x'));
+    await openVersionMenu('v2');
+
+    const options = screen.getAllByRole('option').map((o) => o.textContent);
+    expect(options).toEqual(['2.0.3 (latest)', '2.0.2']);
+  });
+
+  it('installs the latest when the version list cannot load', async () => {
+    listDbtCoreVersions.mockRejectedValueOnce(new Error('offline'));
+    render(<Setup />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('setup-dbt-version-v1')).toHaveTextContent(
+        'Latest',
+      ),
+    );
+    goToInstallStep();
+    await waitForInstallsToFinish();
+
+    expect(installLog[0]).toBe('dbt 1.11.12');
+  });
+
+  it('warns and corrects settings when an adapter changes the dbt version', async () => {
+    getInstalledDbtCore.mockResolvedValue({ version: '1.11.12' });
+    render(<Setup />);
+    await openVersionMenu('v1');
+    fireEvent.click(screen.getByRole('option', { name: '1.10.4' }));
+
+    goToInstallStep();
+    await waitForInstallsToFinish();
+
+    expect(
+      screen.getByText('An adapter changed dbt to 1.11.12.'),
+    ).toBeInTheDocument();
+    expect(saveSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ dbtVersion: '1.11.12' }),
     );
   });
 });

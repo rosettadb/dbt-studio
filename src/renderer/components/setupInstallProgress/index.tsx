@@ -15,6 +15,7 @@ import {
 import { toast } from 'react-toastify';
 import { settingsServices } from '../../services';
 import {
+  getInstalledDbtCore,
   installLatestPackage,
   installPackageVersion,
   listDbtCoreVersions,
@@ -31,6 +32,7 @@ type RowState = {
   version?: string;
   path?: string;
   error?: string;
+  warning?: string;
   // What is being installed right now, and how far along (dbt only).
   detail?: string;
   progress?: number;
@@ -58,6 +60,8 @@ const toInstalledItem = (result: InstallResult): InstalledItem => {
 
 type Props = {
   dbtLine: DbtLine;
+  // null when the version list couldn't load: install the line's latest.
+  dbtVersion: string | null;
   selectedAdapters: string[];
   includeFlowfile: boolean;
   onRunningChange: (isRunning: boolean) => void;
@@ -68,6 +72,7 @@ type Props = {
 // was pip-installed into it.
 export const SetupInstallProgress: React.FC<Props> = ({
   dbtLine,
+  dbtVersion,
   selectedAdapters,
   includeFlowfile,
   onRunningChange,
@@ -80,12 +85,13 @@ export const SetupInstallProgress: React.FC<Props> = ({
   ];
   const adapterPackages =
     dbtLine === 'v1' ? selectedAdapters.filter((a) => a !== 'dbt-core') : [];
+  const dbtLabel = `dbt Core ${dbtVersion ?? (dbtLine === 'v1' ? '1.x' : '2.x')}`;
   const rowLabels: Record<RowKey, string> = {
     python: 'Python',
     dbt:
       dbtLine === 'v1'
-        ? `dbt Core 1.x and ${adapterPackages.length} adapters`
-        : 'dbt Core 2.x with built-in adapters',
+        ? `${dbtLabel} and ${adapterPackages.length} adapters`
+        : `${dbtLabel} with built-in adapters`,
     runner: 'Local runner',
     flowfile: 'Flowfile',
   };
@@ -139,19 +145,23 @@ export const SetupInstallProgress: React.FC<Props> = ({
       );
     }
 
-    const major = dbtLine === 'v2' ? 2 : 1;
-    const { versions } = await listDbtCoreVersions({ limit: 100 });
-    const target = versions.find(
-      (item) =>
-        item.isLatestStable && Number.parseInt(item.version, 10) === major,
-    );
-    if (!target) {
-      throw new Error(`No stable dbt Core ${major}.x release is available.`);
+    let targetVersion = dbtVersion;
+    if (!targetVersion) {
+      const major = dbtLine === 'v2' ? 2 : 1;
+      const { versions } = await listDbtCoreVersions({ limit: 100 });
+      targetVersion =
+        versions.find(
+          (item) =>
+            item.isLatestStable && Number.parseInt(item.version, 10) === major,
+        )?.version ?? null;
+      if (!targetVersion) {
+        throw new Error(`No stable dbt Core ${major}.x release is available.`);
+      }
     }
 
     const total = adapterPackages.length + 1;
     updateRow('dbt', {
-      detail: `Installing dbt Core ${target.version} (1 of ${total})`,
+      detail: `Installing dbt Core ${targetVersion} (1 of ${total})`,
       progress: 0,
     });
     // Installs dbt-core for 1.x and dbt-oss for 2.x, and saves dbtPath and
@@ -159,7 +169,7 @@ export const SetupInstallProgress: React.FC<Props> = ({
     const dbtResult = await installPackageVersion({
       pythonPath: settings.pythonPath,
       packageName: 'dbt-core',
-      version: target.version,
+      version: targetVersion,
     });
     if (!dbtResult.ok) {
       throw new Error(dbtResult.error || 'dbt Core installation failed.');
@@ -179,12 +189,31 @@ export const SetupInstallProgress: React.FC<Props> = ({
       });
       if (!result.ok) failedAdapters.push(packageName);
     }
+
+    // The newest adapters can make pip move dbt-core to another version.
+    // Report it, and keep the saved dbt version truthful.
+    let { installedVersion } = dbtResult;
+    if (adapterPackages.length > 0) {
+      const installedDbt = await getInstalledDbtCore();
+      if (installedDbt.version && installedDbt.version !== installedVersion) {
+        installedVersion = installedDbt.version;
+        const latestSettings = await settingsServices.getSettings();
+        await settingsServices.updateSettings({
+          ...latestSettings,
+          dbtVersion: installedVersion,
+        });
+        updateRow('dbt', {
+          warning: `An adapter changed dbt to ${installedVersion}.`,
+        });
+      }
+    }
+
     if (failedAdapters.length > 0) {
       throw new Error(
         `dbt Core installed, but these adapters failed: ${failedAdapters.join(', ')}`,
       );
     }
-    return { version: dbtResult.installedVersion, path: dbtResult.dbtPath };
+    return { version: installedVersion, path: dbtResult.dbtPath };
   };
 
   const installRunnerStep = async (): Promise<InstalledItem> => {
@@ -225,6 +254,7 @@ export const SetupInstallProgress: React.FC<Props> = ({
       updateRow(key, {
         status: 'installing',
         error: undefined,
+        warning: undefined,
         detail: undefined,
         progress: undefined,
       });
@@ -332,15 +362,28 @@ export const SetupInstallProgress: React.FC<Props> = ({
         </Typography>
       );
     }
-    if (row.status === 'done' && row.path) {
+    if (row.status === 'done') {
       return (
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          sx={{ display: 'block', overflowWrap: 'anywhere' }}
-        >
-          {row.path}
-        </Typography>
+        <>
+          {row.warning && (
+            <Typography
+              variant="caption"
+              color="warning.main"
+              sx={{ display: 'block' }}
+            >
+              {row.warning}
+            </Typography>
+          )}
+          {row.path && (
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ display: 'block', overflowWrap: 'anywhere' }}
+            >
+              {row.path}
+            </Typography>
+          )}
+        </>
       );
     }
     return null;

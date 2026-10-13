@@ -71,10 +71,22 @@ test.describe('First Run Experience', () => {
 
     await expect(setupWizard.stepLabel).toHaveText('Step 1 of 3');
     await setupWizard.expectCurrentStep('cli');
-    await expect(setupWindow.getByLabel('dbt Core 1.x')).toBeChecked();
+    await expect(
+      setupWindow.getByLabel('dbt Core 1.x', { exact: true }),
+    ).toBeChecked();
     await expect(
       setupWindow.getByTestId('setup-adapter-checkboxes'),
     ).toBeVisible();
+
+    // Each card has its own version dropdown; only the chosen card's is
+    // active. It shows the newest version, or "Latest" when offline.
+    await expect(setupWindow.getByTestId('setup-dbt-version-v1')).toHaveText(
+      /latest/i,
+      { timeout: 30000 },
+    );
+    await expect(setupWindow.getByTestId('setup-dbt-version-v2')).toHaveClass(
+      /Mui-disabled/,
+    );
 
     // Nothing installs on the choice pages; Back only shows from step 2
     await expect(setupWizard.nextButton).toBeEnabled();
@@ -91,7 +103,9 @@ test.describe('First Run Experience', () => {
 
     await setupWindow.getByTestId('setup-dbt-v2').click();
 
-    await expect(setupWindow.getByLabel('dbt Core 2.x')).toBeChecked();
+    await expect(
+      setupWindow.getByLabel('dbt Core 2.x', { exact: true }),
+    ).toBeChecked();
     await expect(
       setupWindow.getByTestId('setup-adapter-included'),
     ).toBeVisible();
@@ -120,6 +134,8 @@ test.describe('First Run Experience', () => {
 
     await setupWizard.clickBack();
     await expect(setupWizard.stepLabel).toHaveText('Step 1 of 3');
-    await expect(setupWindow.getByLabel('dbt Core 2.x')).toBeChecked();
+    await expect(
+      setupWindow.getByLabel('dbt Core 2.x', { exact: true }),
+    ).toBeChecked();
   });
 });

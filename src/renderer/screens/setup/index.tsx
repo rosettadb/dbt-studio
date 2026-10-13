@@ -9,6 +9,7 @@ import {
 } from '../../components';
 import { client } from '../../config/client';
 import { settingsServices } from '../../services';
+import { listDbtCoreVersions } from '../../services/dbtVersions.service';
 import {
   DBT_ADAPTER_PACKAGES,
   DBT_ADAPTER_PACKAGE_DESCRIPTIONS,
@@ -31,11 +32,37 @@ const Setup: React.FC = () => {
   const { mutateAsync: updateSettings } = useUpdateSettings();
   const [currentStep, setCurrentStep] = React.useState(DBT_STEP);
   const [dbtLine, setDbtLine] = React.useState<DbtLine>('v1');
+  const [availableDbtVersions, setAvailableDbtVersions] = React.useState<
+    string[] | null
+  >(null);
+  const [chosenDbtVersions, setChosenDbtVersions] = React.useState<
+    Record<DbtLine, string | null>
+  >({ v1: null, v2: null });
   const [selectedAdapters, setSelectedAdapters] = React.useState<string[]>(
     ADAPTERS.map((a) => a.name),
   );
   const [includeFlowfile, setIncludeFlowfile] = React.useState(false);
   const [isInstalling, setIsInstalling] = React.useState(false);
+
+  React.useEffect(() => {
+    const loadDbtVersions = async () => {
+      try {
+        // Stable only (the default), newest first, so each line's first
+        // match is its latest.
+        const { versions } = await listDbtCoreVersions({ limit: 100 });
+        const stableVersions = versions.map((item) => item.version);
+        const newestOf = (major: number) =>
+          stableVersions.find((v) => Number.parseInt(v, 10) === major) ?? null;
+        setChosenDbtVersions({ v1: newestOf(1), v2: newestOf(2) });
+        setAvailableDbtVersions(stableVersions);
+      } catch {
+        // No list (e.g. offline): the dropdowns show "Latest" and the
+        // install step looks the latest version up itself.
+        setAvailableDbtVersions([]);
+      }
+    };
+    loadDbtVersions();
+  }, []);
 
   const finishSetup = async () => {
     // Load fresh settings: the installs saved new paths and versions that
@@ -78,6 +105,14 @@ const Setup: React.FC = () => {
             <DbtSetup
               dbtLine={dbtLine}
               setDbtLine={setDbtLine}
+              availableVersions={availableDbtVersions}
+              chosenVersions={chosenDbtVersions}
+              setChosenVersion={(line, version) =>
+                setChosenDbtVersions((previous) => ({
+                  ...previous,
+                  [line]: version,
+                }))
+              }
               adapters={ADAPTERS}
               selectedAdapters={selectedAdapters}
               setSelectedAdapters={setSelectedAdapters}
@@ -96,6 +131,7 @@ const Setup: React.FC = () => {
           <div data-testid="setup-step-install">
             <SetupInstallProgress
               dbtLine={dbtLine}
+              dbtVersion={chosenDbtVersions[dbtLine]}
               selectedAdapters={selectedAdapters}
               includeFlowfile={includeFlowfile}
               onRunningChange={setIsInstalling}
