@@ -320,6 +320,7 @@
     "linux": {
       "target": [
         "deb",
+        "rpm",
         "flatpak",
         "tar.gz"
       ],

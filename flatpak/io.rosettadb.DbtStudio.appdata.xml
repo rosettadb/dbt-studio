@@ -76,13 +76,12 @@
   </screenshots>
 
   <releases>
-    <!-- This block is auto-updated by the publish CI — do not edit manually.
-         See .github/workflows/publish.yml (update-appdata step). -->
-    <release version="@@VERSION@@" date="@@DATE@@">
+    <!-- Auto-updated by npm version via .erb/scripts/sync-version.js — do not edit manually. -->
+    <release version="1.7.2" date="2026-10-13">
       <description>
         <p>See the full release notes at the link below.</p>
       </description>
-      <url>https://github.com/rosettadb/dbt-studio/releases/tag/@@VERSION@@</url>
+      <url>https://github.com/rosettadb/dbt-studio/releases/tag/1.7.2</url>
     </release>
   </releases>
 

@@ -738,19 +738,12 @@ jobs:
       - name: Build project
         run: npm run build
 
-      - name: Inject version into AppStream metadata
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          DATE=$(date -u +%Y-%m-%d)
-          echo "Injecting version=$VERSION date=$DATE into appdata.xml"
-          sed -i "s/@@VERSION@@/$VERSION/g" flatpak/io.rosettadb.DbtStudio.appdata.xml
-          sed -i "s/@@DATE@@/$DATE/g"       flatpak/io.rosettadb.DbtStudio.appdata.xml
 
       - name: Build for Linux (no publish yet)
         env:
           DEBUG: "@malept/flatpak-bundler"
         run: |
-          npm exec electron-builder -- --publish never --linux deb flatpak tar.gz
+          npm exec electron-builder -- --publish never --linux deb rpm flatpak tar.gz
 
       - name: Recalculate hashes for latest-linux.yml
         run: |

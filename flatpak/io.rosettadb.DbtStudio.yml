@@ -52,12 +52,11 @@ modules:
   - name: rosetta-dbt-studio
     buildsystem: simple
     build-commands:
-      # Unpack the pre-built Electron archive
-      - tar -xf rosetta-dbt-studio.tar.gz
-
-      # Install the app into /app/lib/rosetta-dbt-studio
+      # Unpack the pre-built Electron archive directly into the target dir,
+      # using --strip-components=1 to avoid depending on the archive's internal
+      # folder name (electron-builder uses "Rosetta-DBT-Studio-VERSION-x64/")
       - mkdir -p /app/lib/rosetta-dbt-studio
-      - cp -r "rosetta-dbt-studio-linux-x64/." /app/lib/rosetta-dbt-studio/
+      - tar -xf rosetta-dbt-studio.tar.gz --strip-components=1 -C /app/lib/rosetta-dbt-studio
 
       # Make the main binary executable
       - chmod +x /app/lib/rosetta-dbt-studio/rosetta-dbt-studio
