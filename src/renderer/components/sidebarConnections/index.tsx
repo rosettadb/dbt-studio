@@ -159,7 +159,7 @@ export const ConnectionsSidebar: React.FC = () => {
                   color: theme.palette.text.secondary,
                   textTransform: 'uppercase',
                   letterSpacing: '0.5px',
-                  fontSize: '0.65rem',
+                  fontSize: '0.6875rem',
                 }}
               >
                 <DatabaseIcon fontSize="small" />
@@ -183,7 +183,7 @@ export const ConnectionsSidebar: React.FC = () => {
                             ? theme.palette.divider
                             : 'transparent',
                         overflow: 'hidden',
-                        minHeight: '28px',
+                        minHeight: '32px',
                         width: '100%',
                       }}
                     >
@@ -229,7 +229,7 @@ export const ConnectionsSidebar: React.FC = () => {
                   color: theme.palette.text.secondary,
                   textTransform: 'uppercase',
                   letterSpacing: '0.5px',
-                  fontSize: '0.65rem',
+                  fontSize: '0.6875rem',
                 }}
               >
                 <CloudIcon fontSize="small" />
@@ -260,7 +260,7 @@ export const ConnectionsSidebar: React.FC = () => {
                           backgroundColor: theme.palette.action.hover,
                         },
                         overflow: 'hidden',
-                        minHeight: '28px',
+                        minHeight: '32px',
                         width: '100%',
                       }}
                     >

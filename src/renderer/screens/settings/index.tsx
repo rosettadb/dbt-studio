@@ -271,7 +271,7 @@ const Settings: React.FC = () => {
                 '& .MuiListItem-root': {
                   py: 0,
                   px: 1,
-                  minHeight: '28px',
+                  minHeight: '32px',
                   width: '100%',
                 },
                 '& .MuiListItemText-primary': { fontSize: 13 },
@@ -298,7 +298,7 @@ const Settings: React.FC = () => {
                         fontWeight: 600,
                         textTransform: 'uppercase',
                         letterSpacing: '0.05em',
-                        fontSize: '0.65rem',
+                        fontSize: '0.6875rem',
                       }}
                     >
                       {category.label}
@@ -331,7 +331,7 @@ const Settings: React.FC = () => {
                               : 'transparent',
                         }}
                       >
-                        <ListItemIcon sx={{ minWidth: 28 }}>
+                        <ListItemIcon sx={{ minWidth: 32 }}>
                           <element.icon
                             fontSize="small"
                             color={

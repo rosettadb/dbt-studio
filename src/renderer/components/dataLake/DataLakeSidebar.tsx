@@ -28,8 +28,8 @@ export const DataLakeIcon: React.FC<{
     src={icons.duckLake}
     alt="DuckLake"
     sx={{
-      width: fontSize === 'small' ? 14 : 18,
-      height: fontSize === 'small' ? 14 : 18,
+      width: fontSize === 'small' ? 14 : 20,
+      height: fontSize === 'small' ? 14 : 20,
     }}
   />
 );
@@ -55,7 +55,7 @@ export const StyledDuckLakeNavLink = styled(NavLink)(({ theme }) => ({
 
 // Create a wrapper component for DataLakeSVG to use as an icon
 const DataLakeIconSmall: React.FC = () => (
-  <DataLakeSVG width={18} height={18} />
+  <DataLakeSVG width={20} height={20} />
 );
 
 export const dataLakeSidebarElements: SettingsSidebarElement[] = [
@@ -119,7 +119,7 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
               '& .MuiListItem-root': {
                 py: 0,
                 px: 1,
-                minHeight: '28px',
+                minHeight: '32px',
                 width: '100%',
               },
               '& .MuiListItemText-primary': { fontSize: 13 },
@@ -168,7 +168,7 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
                   color: theme.palette.text.secondary,
                   textTransform: 'uppercase',
                   letterSpacing: '0.5px',
-                  fontSize: '0.65rem',
+                  fontSize: '0.6875rem',
                 }}
               >
                 DuckLake
@@ -180,7 +180,7 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
                   '& .MuiListItem-root': {
                     py: 0,
                     px: 1,
-                    minHeight: '28px',
+                    minHeight: '32px',
                     width: '100%',
                   },
                 }}
@@ -203,7 +203,7 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
                       }}
                     >
                       <ListItemIcon sx={{ minWidth: 32 }}>
-                        <DataLakeIcon fontSize="small" />
+                        <DataLakeIcon fontSize="medium" />
                       </ListItemIcon>
                       <ListItemText
                         primary={instance.name}
@@ -238,7 +238,7 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
                     color: theme.palette.text.secondary,
                     textTransform: 'uppercase',
                     letterSpacing: '0.5px',
-                    fontSize: '0.65rem',
+                    fontSize: '0.6875rem',
                   }}
                 >
                   Apache Iceberg
@@ -257,7 +257,7 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
                   '& .MuiListItem-root': {
                     py: 0,
                     px: 1,
-                    minHeight: '28px',
+                    minHeight: '32px',
                     width: '100%',
                   },
                 }}
@@ -280,7 +280,7 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
                       }}
                     >
                       <ListItemIcon sx={{ minWidth: 32 }}>
-                        <IcebergIcon size={18} />
+                        <IcebergIcon size={20} />
                       </ListItemIcon>
                       <ListItemText
                         primary={instance.name}
@@ -311,6 +311,7 @@ export const DataLakeSidebar: React.FC<DataLakeSidebarProps> = ({
           variant="contained"
           color="primary"
           fullWidth
+          size="small"
           startIcon={<Add />}
           onClick={() => navigate('/app/data-lake/new-instance')}
           sx={{ width: '100%', boxSizing: 'border-box' }}

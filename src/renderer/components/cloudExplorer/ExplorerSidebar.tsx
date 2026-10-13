@@ -116,7 +116,7 @@ export const ExplorerSidebar: React.FC = () => {
               '& .MuiListItem-root': {
                 py: 0,
                 px: 1,
-                minHeight: '28px',
+                minHeight: '32px',
                 width: '100%',
               },
               '& .MuiListItemText-primary': { fontSize: 13 },
@@ -165,7 +165,7 @@ export const ExplorerSidebar: React.FC = () => {
                   color: theme.palette.text.secondary,
                   textTransform: 'uppercase',
                   letterSpacing: '0.5px',
-                  fontSize: '0.65rem',
+                  fontSize: '0.6875rem',
                 }}
               >
                 Current Bucket
@@ -178,7 +178,7 @@ export const ExplorerSidebar: React.FC = () => {
                   width: '100%',
                   py: 0,
                   px: 1,
-                  minHeight: '28px',
+                  minHeight: '32px',
                 }}
               >
                 <ListItemIcon sx={{ minWidth: 32 }}>
@@ -211,7 +211,7 @@ export const ExplorerSidebar: React.FC = () => {
                   color: theme.palette.text.secondary,
                   textTransform: 'uppercase',
                   letterSpacing: '0.5px',
-                  fontSize: '0.65rem',
+                  fontSize: '0.6875rem',
                 }}
               >
                 Connections
@@ -223,7 +223,7 @@ export const ExplorerSidebar: React.FC = () => {
                   '& .MuiListItem-root': {
                     py: 0,
                     px: 1,
-                    minHeight: '28px',
+                    minHeight: '32px',
                     width: '100%',
                   },
                 }}
@@ -277,6 +277,7 @@ export const ExplorerSidebar: React.FC = () => {
           variant="contained"
           color="primary"
           fullWidth
+          size="small"
           startIcon={<Cloud />}
           onClick={() => navigate('/app/cloud-explorer/new-connection')}
         >
