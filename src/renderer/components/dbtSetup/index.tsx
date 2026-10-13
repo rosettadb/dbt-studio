@@ -2,218 +2,178 @@ import React from 'react';
 import {
   Box,
   Checkbox,
+  Chip,
   FormControlLabel,
+  Radio,
   Typography,
-  LinearProgress,
-  Button,
 } from '@mui/material';
-import { Check, DataObjectOutlined } from '@mui/icons-material';
-import { toast } from 'react-toastify';
-import { useCli } from '../../hooks';
-import { settingsServices } from '../../services';
-import { SettingsType } from '../../../types/backend';
-import { useGetInstalledDbtCore, useInstallPython } from '../../controllers';
-import { getPipInstallRequirement } from '../../../shared/dbtAdapterPackages';
-import {
-  SettingsSection,
-  SettingsSectionBody,
-} from '../settings/SettingsLayout';
-import { SetupInstallStatus } from '../setupInstallStatus';
+import { Check, InfoOutlined } from '@mui/icons-material';
+import { DBT_V2_BUILT_IN_ADAPTERS } from '../../../shared/dbtAdapterPackages';
 
-type AdapterSelectionProps = {
-  adapters: Array<{ name: string; description: string }>;
-  selectedAdapters: string[];
-  setSelectedAdapters: React.Dispatch<React.SetStateAction<string[]>>;
-  disabled: boolean;
-};
+export type DbtLine = 'v1' | 'v2';
 
-const AdapterSelection: React.FC<AdapterSelectionProps> = ({
-  adapters,
-  selectedAdapters,
-  setSelectedAdapters,
-  disabled,
-}) => {
-  return (
-    <Box
-      sx={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-        columnGap: 2,
-        mb: 1.5,
-      }}
-    >
-      {adapters.map((adapter, index) => (
-        <FormControlLabel
-          key={adapter.name}
-          title={adapter.description}
-          sx={{ m: 0 }}
-          control={
-            <Checkbox
-              size="small"
-              sx={{ py: 0.5 }}
-              checked={selectedAdapters.includes(adapter.name)}
-              disabled={disabled || index === 0}
-              onChange={() => {
-                if (selectedAdapters.includes(adapter.name)) {
-                  setSelectedAdapters(
-                    selectedAdapters.filter((a) => a !== adapter.name),
-                  );
-                } else {
-                  setSelectedAdapters([...selectedAdapters, adapter.name]);
-                }
-              }}
-            />
-          }
-          label={<Typography sx={{ fontSize: 13 }}>{adapter.name}</Typography>}
-        />
-      ))}
-    </Box>
-  );
-};
+const DBT_LINE_OPTIONS: Array<{
+  line: DbtLine;
+  title: string;
+  description: string;
+}> = [
+  {
+    line: 'v1',
+    title: 'dbt Core 1.x',
+    description: 'Python engine. Works with all 7 databases.',
+  },
+  {
+    line: 'v2',
+    title: 'dbt Core 2.x',
+    description:
+      'Rust engine with built-in adapters. 5 databases. Needs Python 3.11 (installed for you).',
+  },
+];
+
+const adapterGridSx = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+  columnGap: 2,
+} as const;
 
 type Props = {
-  settings: SettingsType;
+  dbtLine: DbtLine;
+  setDbtLine: (line: DbtLine) => void;
   adapters: Array<{ name: string; description: string }>;
   selectedAdapters: string[];
   setSelectedAdapters: React.Dispatch<React.SetStateAction<string[]>>;
-  isAnyInstallRunning: boolean;
-  onInstallingChange: (isInstalling: boolean) => void;
-  onInstallComplete: (dbtPath: string, dbtVersion: string) => Promise<void>;
 };
 
 export const DbtSetup: React.FC<Props> = ({
-  settings,
-  selectedAdapters,
-  onInstallComplete,
+  dbtLine,
+  setDbtLine,
   adapters,
+  selectedAdapters,
   setSelectedAdapters,
-  isAnyInstallRunning,
-  onInstallingChange,
-}) => {
-  const { runCommand } = useCli();
-  const installPython = useInstallPython();
-  const getInstalledDbtCore = useGetInstalledDbtCore();
-  const [loading, setLoading] = React.useState(false);
-  const [currentPkg, setCurrentPkg] = React.useState('');
-  const [progress, setProgress] = React.useState(0);
-
-  const isInstalled = Boolean(settings.dbtPath);
-
-  const handleInstall = async () => {
-    setLoading(true);
-    onInstallingChange(true);
-    setProgress(0);
-
-    try {
-      let { pythonPath } = settings;
-      if (!pythonPath) {
-        toast.info(
-          'Python is required for dbt Core v1 and will be installed automatically.',
-        );
-        setCurrentPkg('Installing Python...');
-        const pythonResult = await installPython.mutateAsync();
-        if (!pythonResult.success) {
-          toast.error(`Failed to install Python: ${pythonResult.error}`);
-          return;
-        }
-        pythonPath = pythonResult.path;
-      }
-      const python = pythonPath ? `"${pythonPath}"` : 'python';
-
-      // eslint-disable-next-line no-plusplus
-      for (let i = 0; i < selectedAdapters.length; i++) {
-        const pkg = selectedAdapters[i];
-        setCurrentPkg(pkg);
-        setProgress((i / selectedAdapters.length) * 100);
-        try {
-          // Source-installed adapters (e.g. dbt-kinetica) resolve to a
-          // "name @ url" requirement, which needs quoting for the shell.
-          const requirement = getPipInstallRequirement(pkg);
-          // eslint-disable-next-line no-await-in-loop
-          await runCommand(`${python} -m pip install "${requirement}"`);
-        } catch {
-          // continue
-        }
-      }
-
-      setCurrentPkg('Locating dbt path...');
-      setProgress(100);
-      const dbtPath = await settingsServices.getDbtPath();
-      const installedDbt = await getInstalledDbtCore();
-      await onInstallComplete(
-        dbtPath,
-        installedDbt.isExecutableVerified && installedDbt.version
-          ? installedDbt.version
-          : '',
-      );
-    } catch (error) {
-      toast.error(
-        `Installation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
-    } finally {
-      setLoading(false);
-      onInstallingChange(false);
-    }
-  };
-
-  let installArea: React.ReactNode;
-  if (loading) {
-    installArea = (
-      <Box>
-        <Typography variant="body2" sx={{ mb: 1 }}>
-          Installing: {currentPkg}
-        </Typography>
-        <LinearProgress variant="determinate" value={progress} />
-      </Box>
-    );
-  } else if (isInstalled) {
-    installArea = (
-      <Button
-        variant="contained"
-        disabled
-        data-testid="setup-install-btn"
-        startIcon={<Check />}
-      >
-        Installed
-      </Button>
-    );
-  } else {
-    installArea = (
-      <Button
-        variant="contained"
-        onClick={handleInstall}
-        disabled={isAnyInstallRunning}
-        data-testid="setup-install-btn"
-      >
-        Install dbt and adapters
-      </Button>
-    );
-  }
-
-  return (
-    <SettingsSection
-      title="dbt™ Core and adapters"
-      icon={<DataObjectOutlined />}
-      action={
-        <SetupInstallStatus
-          isInstalling={loading}
-          isInstalled={isInstalled}
-          version={settings.dbtVersion}
-        />
-      }
+}) => (
+  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+    <Typography sx={{ fontSize: 14, fontWeight: 500 }}>
+      Which dbt™ Core version do you want?
+    </Typography>
+    <Box
+      sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}
+      role="radiogroup"
     >
-      <SettingsSectionBody>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          Pick the dbt™ adapters you need for your databases.
+      {DBT_LINE_OPTIONS.map((option) => {
+        const isSelected = dbtLine === option.line;
+        return (
+          <Box
+            key={option.line}
+            component="label"
+            data-testid={`setup-dbt-${option.line}`}
+            sx={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 1,
+              p: 1.25,
+              cursor: 'pointer',
+              borderRadius: 1,
+              border: '1px solid',
+              borderColor: isSelected ? 'primary.main' : 'divider',
+              outline: isSelected ? '1px solid' : 'none',
+              outlineColor: 'primary.main',
+            }}
+          >
+            <Radio
+              size="small"
+              checked={isSelected}
+              onChange={() => setDbtLine(option.line)}
+              sx={{ p: 0.25 }}
+              inputProps={{ 'aria-label': option.title }}
+            />
+            <Box>
+              <Typography
+                component="div"
+                sx={{ fontSize: 13, fontWeight: 500 }}
+              >
+                {option.title}
+                {option.line === 'v1' && (
+                  <Chip
+                    label="Recommended"
+                    size="small"
+                    color="primary"
+                    variant="outlined"
+                    sx={{ ml: 1, height: 20, fontSize: 11 }}
+                  />
+                )}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {option.description}
+              </Typography>
+            </Box>
+          </Box>
+        );
+      })}
+    </Box>
+
+    {dbtLine === 'v1' ? (
+      <Box data-testid="setup-adapter-checkboxes">
+        <Typography sx={{ fontSize: 14, fontWeight: 500, mb: 0.5 }}>
+          Adapters to install
         </Typography>
-        <AdapterSelection
-          adapters={adapters}
-          selectedAdapters={selectedAdapters}
-          setSelectedAdapters={setSelectedAdapters}
-          disabled={loading || isInstalled}
-        />
-        {installArea}
-      </SettingsSectionBody>
-    </SettingsSection>
-  );
-};
+        <Box sx={adapterGridSx}>
+          {adapters.map((adapter, index) => (
+            <FormControlLabel
+              key={adapter.name}
+              title={adapter.description}
+              sx={{ m: 0 }}
+              control={
+                <Checkbox
+                  size="small"
+                  sx={{ py: 0.5 }}
+                  checked={selectedAdapters.includes(adapter.name)}
+                  disabled={index === 0}
+                  onChange={() => {
+                    if (selectedAdapters.includes(adapter.name)) {
+                      setSelectedAdapters(
+                        selectedAdapters.filter((a) => a !== adapter.name),
+                      );
+                    } else {
+                      setSelectedAdapters([...selectedAdapters, adapter.name]);
+                    }
+                  }}
+                />
+              }
+              label={
+                <Typography sx={{ fontSize: 13 }}>{adapter.name}</Typography>
+              }
+            />
+          ))}
+        </Box>
+      </Box>
+    ) : (
+      <Box data-testid="setup-adapter-included">
+        <Typography sx={{ fontSize: 14, fontWeight: 500, mb: 0.5 }}>
+          Included adapters
+        </Typography>
+        <Box sx={{ ...adapterGridSx, rowGap: 0.75, mb: 1 }}>
+          {DBT_V2_BUILT_IN_ADAPTERS.map((adapter) => (
+            <Box
+              key={adapter}
+              sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}
+            >
+              <Check fontSize="small" color="disabled" />
+              <Typography sx={{ fontSize: 13 }} color="text.secondary">
+                {adapter}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}
+        >
+          <InfoOutlined fontSize="small" />
+          Postgres and Kinetica aren&apos;t supported on 2.x yet. Choose 1.x if
+          you need them.
+        </Typography>
+      </Box>
+    )}
+  </Box>
+);

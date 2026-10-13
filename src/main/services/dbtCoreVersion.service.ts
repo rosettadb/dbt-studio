@@ -60,6 +60,7 @@ const PROCESS_TIMEOUT_MS = 5 * 60 * 1000;
 
 const ADAPTER_PACKAGES = DBT_ADAPTER_PACKAGES;
 
+// Keep in sync with DBT_V2_BUILT_IN_ADAPTERS in shared/dbtAdapterPackages.ts.
 const V2_ADAPTERS: Record<
   string,
   Omit<DbtAdapterCapability, 'adapter' | 'displayName' | 'source'>

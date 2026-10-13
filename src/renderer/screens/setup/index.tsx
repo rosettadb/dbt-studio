@@ -1,13 +1,11 @@
 import React from 'react';
 import { Box, Button, Typography } from '@mui/material';
-import { toast } from 'react-toastify';
-import { useGetSettings, useUpdateSettings } from '../../controllers';
+import { useUpdateSettings } from '../../controllers';
 import {
-  Loader,
-  FinishSetup,
   DbtSetup,
-  PythonSetup,
-  RunnerSetup,
+  DbtLine,
+  FlowfileSetup,
+  SetupInstallProgress,
 } from '../../components';
 import { client } from '../../config/client';
 import { settingsServices } from '../../services';
@@ -24,51 +22,28 @@ const ADAPTERS = [
   })),
 ];
 
-const FINAL_STEP = 1;
-const STEP_COUNT = 2;
+const DBT_STEP = 0;
+const FLOWFILE_STEP = 1;
+const INSTALL_STEP = 2;
+const STEP_COUNT = 3;
 
 const Setup: React.FC = () => {
-  const { data: settings, isLoading } = useGetSettings();
   const { mutateAsync: updateSettings } = useUpdateSettings();
-  const [isInitialized, setIsInitialized] = React.useState(false);
-  const [currentStep, setCurrentStep] = React.useState<number>(0);
+  const [currentStep, setCurrentStep] = React.useState(DBT_STEP);
+  const [dbtLine, setDbtLine] = React.useState<DbtLine>('v1');
   const [selectedAdapters, setSelectedAdapters] = React.useState<string[]>(
     ADAPTERS.map((a) => a.name),
   );
-  // Only one install runs at a time; while one runs, the other install
-  // buttons, Skip Setup and Next are disabled.
-  const [isAnyInstallRunning, setIsAnyInstallRunning] = React.useState(false);
+  const [includeFlowfile, setIncludeFlowfile] = React.useState(false);
+  const [isInstalling, setIsInstalling] = React.useState(false);
 
-  const handleSkip = async () => {
-    if (settings) {
-      await updateSettings({ ...settings, isSetup: 'true' });
-    }
+  const finishSetup = async () => {
+    // Load fresh settings: the installs saved new paths and versions that
+    // this screen never loaded.
+    const latestSettings = await settingsServices.getSettings();
+    await updateSettings({ ...latestSettings, isSetup: 'true' });
     await client.get('windows:closeSetup');
   };
-
-  const saveDbtInstall = async (dbtPath: string, dbtVersion: string) => {
-    toast.info('Installation completed');
-    // Load fresh settings: the dbt install may have installed Python first,
-    // and the settings from this render would not have its path yet.
-    const latestSettings = await settingsServices.getSettings();
-    await updateSettings({ ...latestSettings, dbtPath, dbtVersion });
-  };
-
-  React.useEffect(() => {
-    if (settings && !isInitialized) {
-      if (settings.pythonPath && settings.dbtPath && settings.runnerPath) {
-        setCurrentStep(FINAL_STEP);
-      }
-      setIsInitialized(true);
-    }
-  }, [settings]);
-
-  if (isLoading) return <Loader />;
-  if (!settings) return null;
-
-  const isEverythingInstalled = Boolean(
-    settings.pythonPath && settings.dbtPath && settings.runnerPath,
-  );
 
   return (
     <Box
@@ -98,76 +73,96 @@ const Setup: React.FC = () => {
         </Typography>
       </Box>
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', pr: 0.5 }}>
-        {currentStep === 0 && (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-            <div data-testid="setup-step-python">
-              <PythonSetup
-                settings={settings}
-                isAnyInstallRunning={isAnyInstallRunning}
-                onInstallingChange={setIsAnyInstallRunning}
-              />
-            </div>
-            <div data-testid="setup-step-cli">
-              <DbtSetup
-                settings={settings}
-                adapters={ADAPTERS}
-                selectedAdapters={selectedAdapters}
-                setSelectedAdapters={setSelectedAdapters}
-                isAnyInstallRunning={isAnyInstallRunning}
-                onInstallingChange={setIsAnyInstallRunning}
-                onInstallComplete={saveDbtInstall}
-              />
-            </div>
-            <div data-testid="setup-step-runner">
-              <RunnerSetup
-                settings={settings}
-                isAnyInstallRunning={isAnyInstallRunning}
-                onInstallingChange={setIsAnyInstallRunning}
-              />
-            </div>
-          </Box>
+        {currentStep === DBT_STEP && (
+          <div data-testid="setup-step-cli">
+            <DbtSetup
+              dbtLine={dbtLine}
+              setDbtLine={setDbtLine}
+              adapters={ADAPTERS}
+              selectedAdapters={selectedAdapters}
+              setSelectedAdapters={setSelectedAdapters}
+            />
+          </div>
         )}
-        {currentStep === FINAL_STEP && (
-          <div data-testid="setup-step-complete" style={{ width: '100%' }}>
-            <FinishSetup settings={settings} />
+        {currentStep === FLOWFILE_STEP && (
+          <div data-testid="setup-step-flowfile">
+            <FlowfileSetup
+              includeFlowfile={includeFlowfile}
+              setIncludeFlowfile={setIncludeFlowfile}
+            />
+          </div>
+        )}
+        {currentStep === INSTALL_STEP && (
+          <div data-testid="setup-step-install">
+            <SetupInstallProgress
+              dbtLine={dbtLine}
+              selectedAdapters={selectedAdapters}
+              includeFlowfile={includeFlowfile}
+              onRunningChange={setIsInstalling}
+            />
           </div>
         )}
       </Box>
       <Box
         sx={{
           display: 'flex',
-          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 1,
           pt: 2,
           flexShrink: 0,
         }}
       >
-        <Button
-          variant="outlined"
-          data-testid="setup-skip-btn"
-          disabled={isAnyInstallRunning}
-          onClick={handleSkip}
-        >
-          Skip Setup
-        </Button>
-        <Button
-          variant="contained"
-          disabled={
-            isAnyInstallRunning || (currentStep === 0 && !isEverythingInstalled)
-          }
-          style={{ marginLeft: 'auto' }}
-          data-testid={
-            currentStep === FINAL_STEP ? 'setup-finish-btn' : 'setup-next-btn'
-          }
-          onClick={() => {
-            if (currentStep === FINAL_STEP) {
-              handleSkip();
-              return;
-            }
-            setCurrentStep(currentStep + 1);
-          }}
-        >
-          {currentStep === FINAL_STEP ? 'Finish' : 'Next'}
-        </Button>
+        {currentStep !== INSTALL_STEP && (
+          <Button
+            variant="outlined"
+            data-testid="setup-skip-btn"
+            onClick={finishSetup}
+          >
+            Skip Setup
+          </Button>
+        )}
+        <Box sx={{ ml: 'auto', display: 'flex', gap: 1 }}>
+          {currentStep === FLOWFILE_STEP && (
+            <Button
+              variant="outlined"
+              data-testid="setup-back-btn"
+              onClick={() => setCurrentStep(DBT_STEP)}
+            >
+              Back
+            </Button>
+          )}
+          {currentStep === DBT_STEP && (
+            <Button
+              variant="contained"
+              data-testid="setup-next-btn"
+              onClick={() => setCurrentStep(FLOWFILE_STEP)}
+            >
+              Next
+            </Button>
+          )}
+          {currentStep === FLOWFILE_STEP && (
+            <Button
+              variant="contained"
+              data-testid="setup-install-btn"
+              onClick={() => {
+                setIsInstalling(true);
+                setCurrentStep(INSTALL_STEP);
+              }}
+            >
+              Install
+            </Button>
+          )}
+          {currentStep === INSTALL_STEP && (
+            <Button
+              variant="contained"
+              data-testid="setup-finish-btn"
+              disabled={isInstalling}
+              onClick={finishSetup}
+            >
+              Finish
+            </Button>
+          )}
+        </Box>
       </Box>
     </Box>
   );
