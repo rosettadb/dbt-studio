@@ -20,8 +20,15 @@ jest.mock('../../../src/renderer/controllers', () => ({
   useListPackageVersions: () => jest.fn(),
   usePlanDbtVersionChange: () => planVersionChange,
   useInstallDbtVersionChange: () => installVersionChange,
+  useInstallPython: () => ({ mutateAsync: jest.fn() }),
   useCheckCurrentProjectCompatibility: () => jest.fn(),
   useGetActiveAdapterCapabilities: () => getActiveAdapterCapabilities,
+}));
+
+// The real modals barrel pulls in the code editor (monaco-editor), which
+// Jest cannot load. The dbt page only needs ConfirmationModal from it.
+jest.mock('../../../src/renderer/components/modals', () => ({
+  ConfirmationModal: () => null,
 }));
 
 const stableItem = {
@@ -48,17 +55,30 @@ const previewItem = {
   channel: 'preview' as const,
 };
 
+const olderStableItem = (version: string) => ({
+  version,
+  isPrerelease: false,
+  isLatestStable: false,
+  isInstalled: false,
+  channel: 'stable' as const,
+});
+
 const previousStableItems = ['1.11.11', '1.11.10', '1.11.9', '1.11.8'].map(
-  (version) => ({
-    version,
-    isPrerelease: false,
-    isLatestStable: false,
-    isInstalled: false,
-    channel: 'stable' as const,
-  }),
+  olderStableItem,
 );
 
-describe('DbtSettings version change flow', () => {
+const mockVersionList = (stableItems: (typeof stableItem)[]) =>
+  listVersions.mockImplementation(
+    async ({ includePrerelease }: { includePrerelease?: boolean }) => ({
+      versions: includePrerelease
+        ? [previewItem, pythonPreviewItem, ...stableItems]
+        : stableItems,
+      latestStable: '1.11.12',
+      currentVersion: '1.11.12',
+    }),
+  );
+
+describe('DbtSettings runtime switch', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     getInstalledPackages.mockResolvedValue({ packages: {} });
@@ -74,15 +94,7 @@ describe('DbtSettings version change flow', () => {
       packageProvenance: 'apache-dbt-core',
       adapters: [],
     });
-    listVersions.mockImplementation(
-      async ({ includePrerelease }: { includePrerelease?: boolean }) => ({
-        versions: includePrerelease
-          ? [previewItem, pythonPreviewItem, stableItem, ...previousStableItems]
-          : [stableItem, ...previousStableItems],
-        latestStable: '1.11.12',
-        currentVersion: '1.11.12',
-      }),
-    );
+    mockVersionList([stableItem, ...previousStableItems]);
     planVersionChange.mockResolvedValue({
       currentVersion: '1.11.12',
       targetVersion: '2.0.0a4',
@@ -97,12 +109,13 @@ describe('DbtSettings version change flow', () => {
     });
   });
 
-  const renderSettings = () =>
+  // dbtPath 'dbt' is how the page represents "dbt is not installed".
+  const renderSettings = (dbtPath = '/managed/venv/bin/dbt') =>
     render(
       <DbtSettings
         settings={
           {
-            dbtPath: 'dbt',
+            dbtPath,
             dbtVersion: '1.11.12',
             pythonPath: '/managed/venv/bin/python3',
             pythonVersion: '3.12.0',
@@ -112,31 +125,81 @@ describe('DbtSettings version change flow', () => {
       />,
     );
 
-  it('shows Python and Rust runtimes together and opens global confirmation', async () => {
+  const runtimeToggle = (runtime: 'v1' | 'v2') =>
+    screen.getByRole('button', { name: `Show dbt Core ${runtime} versions` });
+
+  const openV2InstallDialog = async () => {
+    fireEvent.click(runtimeToggle('v2'));
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Install Preview' }),
+    );
+    await screen.findByText('Switch to dbt Core v2?');
+  };
+
+  it('marks the installed runtime on the toggle', async () => {
     renderSettings();
 
-    expect(await screen.findByText('1.11.12')).toBeInTheDocument();
-    expect(screen.getByText('2.0.0a4')).toBeInTheDocument();
-    expect(screen.getByText('dbt Core v1')).toBeInTheDocument();
-    expect(screen.getByText('dbt Core v2')).toBeInTheDocument();
-    expect(screen.queryByText(/Fusion/)).not.toBeInTheDocument();
-    expect(screen.queryByText('1.12.0rc2')).not.toBeInTheDocument();
-    expect(screen.queryByText(/Show preview/)).not.toBeInTheDocument();
-    previousStableItems.forEach(({ version }) => {
-      expect(screen.getByText(version)).toBeInTheDocument();
-    });
+    expect(await screen.findByText('Active · 1.11.12')).toBeInTheDocument();
+    expect(runtimeToggle('v1')).toHaveAttribute('aria-pressed', 'true');
+    expect(runtimeToggle('v2')).toHaveAttribute('aria-pressed', 'false');
     expect(listVersions).toHaveBeenCalledWith({
       includePrerelease: true,
       limit: 100,
     });
-    expect(screen.getByRole('button', { name: 'Installed' })).toBeDisabled();
-    expect(screen.getByText('Latest stable')).toBeInTheDocument();
+  });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Install Preview' }));
+  it('shows v2 versions without installing when dbt Core v2 is clicked', async () => {
+    renderSettings();
 
+    fireEvent.click(runtimeToggle('v2'));
+
+    expect(await screen.findByText('2.0.0a4')).toBeInTheDocument();
+    expect(screen.getByText('dbt Core v2 versions')).toBeInTheDocument();
     expect(
-      await screen.findByText('Confirm global dbt-core version change'),
+      screen.getByText(/Installing a version below switches to dbt Core v2/),
     ).toBeInTheDocument();
+    expect(screen.queryByText('1.11.11')).not.toBeInTheDocument();
+    expect(runtimeToggle('v1')).toHaveAttribute('aria-pressed', 'true');
+    expect(runtimeToggle('v2')).toHaveAttribute('aria-pressed', 'false');
+    expect(planVersionChange).not.toHaveBeenCalled();
+    expect(installVersionChange).not.toHaveBeenCalled();
+  });
+
+  it('shows the v1 versions without Python previews', async () => {
+    renderSettings();
+
+    fireEvent.click(runtimeToggle('v1'));
+
+    expect(await screen.findByText('Latest stable')).toBeInTheDocument();
+    previousStableItems.forEach(({ version }) => {
+      expect(screen.getByText(version)).toBeInTheDocument();
+    });
+    expect(screen.queryByText('1.12.0rc2')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Installed' })).toBeDisabled();
+  });
+
+  it('explains a v1 to v2 switch before installing', async () => {
+    renderSettings();
+
+    await openV2InstallDialog();
+
+    expect(planVersionChange).toHaveBeenCalledWith({
+      targetVersion: '2.0.0a4',
+      includeAdapters: true,
+    });
+    expect(
+      screen.getByText('dbt Core v1 · Python 1.11.12 will be uninstalled.'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('dbt Core v2 · Rust 2.0.0a4 will be installed.'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Your adapter packages stay installed.'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('You can roll back to 1.11.12 afterwards.'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Be careful')).toBeInTheDocument();
     expect(
       screen.getByText(
         'This changes the global dbt-core version used by all local projects.',
@@ -145,9 +208,10 @@ describe('DbtSettings version change flow', () => {
     expect(
       screen.getByText(/Apache-licensed dbt-core package/),
     ).toBeInTheDocument();
+    expect(installVersionChange).not.toHaveBeenCalled();
   });
 
-  it('shows a verified result and rollback action after confirmation', async () => {
+  it('switches after confirmation and offers a rollback', async () => {
     installVersionChange.mockResolvedValue({
       ok: true,
       installedVersion: '2.0.0a4',
@@ -157,18 +221,13 @@ describe('DbtSettings version change flow', () => {
     });
     renderSettings();
 
+    await openV2InstallDialog();
     fireEvent.click(
-      await screen.findByRole('button', { name: 'Install Preview' }),
-    );
-    await screen.findByText('Confirm global dbt-core version change');
-    fireEvent.click(
-      await screen.findByRole('checkbox', {
+      screen.getByRole('checkbox', {
         name: /Check current project after install/,
       }),
     );
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Confirm version change' }),
-    );
+    fireEvent.click(screen.getByRole('button', { name: 'Switch to v2' }));
 
     await waitFor(() =>
       expect(installVersionChange).toHaveBeenCalledWith(
@@ -186,6 +245,35 @@ describe('DbtSettings version change flow', () => {
     ).toBeInTheDocument();
   });
 
+  it('shows older versions only when a runtime has more than five', async () => {
+    mockVersionList([
+      stableItem,
+      ...previousStableItems,
+      olderStableItem('1.11.7'),
+      olderStableItem('1.11.6'),
+    ]);
+    renderSettings();
+
+    fireEvent.click(runtimeToggle('v1'));
+    expect(await screen.findByText('1.11.8')).toBeInTheDocument();
+    expect(screen.queryByText('1.11.7')).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Show older versions' }),
+    );
+    expect(screen.getByText('1.11.7')).toBeInTheDocument();
+    expect(screen.getByText('1.11.6')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Show fewer' }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(runtimeToggle('v2'));
+    expect(await screen.findByText('2.0.0a4')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Show older versions|Show fewer/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it('preserves every adapter failure from the package install loop', async () => {
     installLatestPackage.mockImplementation(
       async ({ packageName }: { packageName: string }) =>
@@ -193,7 +281,7 @@ describe('DbtSettings version change flow', () => {
           ? { ok: false, error: `${packageName} failed` }
           : { ok: true },
     );
-    renderSettings();
+    renderSettings('dbt');
 
     fireEvent.click(
       await screen.findByRole('button', {
