@@ -19,22 +19,50 @@ let currentRunId = null;
 // the tab's memory on a long run. Keep only the most recent lines.
 const MAX_LOG_LINES = 5000;
 let logLines = [];
+// Lines received since the last paint. Touching the DOM per SSE event (a
+// textContent rewrite plus a forced layout for the scroll) is what froze the
+// tab during npm/webpack bursts; one write per animation frame is cheap.
+let pendingLines = [];
+let flushScheduled = false;
 
 /**
- * Appends one line to the live log view, trimming to MAX_LOG_LINES, and keeps
- * the view scrolled to the bottom.
+ * Writes all pending lines into the log view in one go, trimming to
+ * MAX_LOG_LINES, and keeps the view scrolled to the bottom.
+ */
+function flushLogLines() {
+  flushScheduled = false;
+  if (pendingLines.length === 0) return;
+  logLines = logLines.concat(pendingLines).slice(-MAX_LOG_LINES);
+  pendingLines = [];
+  liveLog.textContent = `${logLines.join('\n')}\n`;
+  liveLog.scrollTop = liveLog.scrollHeight;
+}
+
+/**
+ * Queues one line for the live log view; the DOM is updated on the next
+ * animation frame. A background tab gets no frames, so the queue is capped
+ * too — anything older than MAX_LOG_LINES would be trimmed on flush anyway.
  *
  * @param {string} line Line of test output.
  */
 function appendLogLine(line) {
-  logLines.push(line);
-  if (logLines.length > MAX_LOG_LINES) {
-    logLines = logLines.slice(-MAX_LOG_LINES);
-    liveLog.textContent = `${logLines.join('\n')}\n`;
-  } else {
-    liveLog.textContent += `${line}\n`;
+  pendingLines.push(line);
+  if (pendingLines.length > MAX_LOG_LINES) {
+    pendingLines = pendingLines.slice(-MAX_LOG_LINES);
   }
-  liveLog.scrollTop = liveLog.scrollHeight;
+  if (!flushScheduled) {
+    flushScheduled = true;
+    requestAnimationFrame(flushLogLines);
+  }
+}
+
+/**
+ * Empties the live log view and anything queued for it.
+ */
+function resetLogView() {
+  logLines = [];
+  pendingLines = [];
+  liveLog.textContent = '';
 }
 
 const TERMINAL_STATUSES = ['passed', 'failed', 'error', 'cancelled'];
@@ -61,8 +89,14 @@ function formatDuration(run) {
  * @returns {Promise<void>}
  */
 async function loadHistory() {
-  const res = await fetch('/api/runs');
-  const { runs } = await res.json();
+  let runs;
+  try {
+    const res = await fetch('/api/runs');
+    ({ runs } = await res.json());
+  } catch (_) {
+    // Server restarting or unreachable; the 5s interval tries again.
+    return;
+  }
   historyBody.innerHTML = runs
     .map(
       (r) => `
@@ -201,14 +235,17 @@ function watchRun(run) {
   live.classList.remove('hidden');
   liveId.textContent = run.id;
   liveBranch.textContent = run.branch;
-  logLines = [];
-  liveLog.textContent = '';
+  resetLogView();
   liveReport.classList.add('hidden');
   liveStop.classList.toggle('hidden', !ACTIVE_STATUSES.includes(run.status));
   setStatusBadge(liveStatus, run.status);
 
   const stream = new EventSource(`/api/runs/${run.id}/stream`);
   currentStream = stream;
+
+  // Sent first on every (re)connect, right before the server replays the
+  // run's output, so a reconnect doesn't duplicate what's already shown.
+  stream.addEventListener('reset', resetLogView);
 
   stream.addEventListener('log', (e) => {
     appendLogLine(JSON.parse(e.data));

@@ -100,9 +100,10 @@ test.describe('Sidebar Navigation', () => {
     await expect(
       mainWindow.getByText('Database Connections (1)'),
     ).toBeVisible();
-    // The name also appears in the side panel list, so scope to the card grid
+    // The name also appears in the side panel list, so scope to the card grid;
+    // exact so the card's "Path: test_db.duckdb" line doesn't match as well
     await expect(
-      mainWindow.getByRole('main').getByText('test_db'),
+      mainWindow.getByRole('main').getByText('test_db', { exact: true }),
     ).toBeVisible();
     await nav.expectActiveItem('connections');
   });
