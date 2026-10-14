@@ -24,6 +24,8 @@ export const SettingsStack: React.FC<{ children: React.ReactNode }> = ({
 interface SettingsSectionProps {
   title: string;
   icon?: React.ReactElement;
+  // Small pill shown right after the title (e.g. the installed version).
+  badge?: React.ReactNode;
   description?: React.ReactNode;
   action?: React.ReactNode;
   children: React.ReactNode;
@@ -32,6 +34,7 @@ interface SettingsSectionProps {
 export const SettingsSection: React.FC<SettingsSectionProps> = ({
   title,
   icon,
+  badge,
   description,
   action,
   children,
@@ -66,6 +69,7 @@ export const SettingsSection: React.FC<SettingsSectionProps> = ({
       <Typography sx={{ fontSize: 13, fontWeight: 600, flexShrink: 0 }}>
         {title}
       </Typography>
+      {badge}
       <Typography
         variant="caption"
         color="text.secondary"

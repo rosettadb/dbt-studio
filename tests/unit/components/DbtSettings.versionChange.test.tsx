@@ -142,7 +142,7 @@ describe('DbtSettings runtime switch', () => {
     );
 
   const runtimeToggle = (runtime: 'v1' | 'v2') =>
-    screen.getByRole('button', { name: `Show dbt Core ${runtime} versions` });
+    screen.getByRole('button', { name: `Show dbt ${runtime} versions` });
 
   // Clicks the action on the newest v2 row (2.0.5, listed first).
   const clickNewestV2Version = async () => {
@@ -158,10 +158,13 @@ describe('DbtSettings runtime switch', () => {
     await screen.findByText('Switch to dbt Core v2?');
   };
 
-  it('marks the installed runtime on the toggle', async () => {
+  it('shows the installed version in the header and starts on that runtime', async () => {
     renderSettings();
 
-    expect(await screen.findByText('Active · 1.11.12')).toBeInTheDocument();
+    expect(
+      await screen.findByText('v1 · 1.11.12 installed'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/^Active ·/)).not.toBeInTheDocument();
     expect(runtimeToggle('v1')).toHaveAttribute('aria-pressed', 'true');
     expect(runtimeToggle('v2')).toHaveAttribute('aria-pressed', 'false');
     expect(listVersions).toHaveBeenCalledWith({
@@ -170,7 +173,7 @@ describe('DbtSettings runtime switch', () => {
     });
   });
 
-  it('shows v2 versions without installing when dbt Core v2 is clicked', async () => {
+  it('shows v2 versions without installing when dbt v2 is clicked', async () => {
     renderSettings();
 
     fireEvent.click(runtimeToggle('v2'));
@@ -179,16 +182,18 @@ describe('DbtSettings runtime switch', () => {
     expect(screen.getByText('2.0.4')).toBeInTheDocument();
     expect(screen.getByText('Latest stable')).toBeInTheDocument();
     expect(screen.queryByText(/Preview/)).not.toBeInTheDocument();
-    expect(screen.getByText('dbt Core v2 versions')).toBeInTheDocument();
+    expect(screen.getByText('dbt v2 versions')).toBeInTheDocument();
     expect(
       screen.getByText(/Installed from the Apache-licensed dbt-oss package/),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Installing a version below switches to dbt Core v2/),
+      screen.getByText(/Installing a version below switches to dbt v2/),
     ).toBeInTheDocument();
     expect(screen.queryByText('1.11.11')).not.toBeInTheDocument();
-    expect(runtimeToggle('v1')).toHaveAttribute('aria-pressed', 'true');
-    expect(runtimeToggle('v2')).toHaveAttribute('aria-pressed', 'false');
+    // The toggle follows what is shown; the header still shows what is installed.
+    expect(runtimeToggle('v1')).toHaveAttribute('aria-pressed', 'false');
+    expect(runtimeToggle('v2')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('v1 · 1.11.12 installed')).toBeInTheDocument();
     expect(planVersionChange).not.toHaveBeenCalled();
     expect(installVersionChange).not.toHaveBeenCalled();
   });

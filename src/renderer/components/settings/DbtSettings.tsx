@@ -831,8 +831,8 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
   const shownRuntime = viewedRuntime ?? activeRuntime;
   const isShownRuntimeActive = hasDbt && shownRuntime === activeRuntime;
 
-  // The toggle stays green on the installed runtime; clicking either side
-  // only opens that runtime's versions. Installing a version does the switch.
+  // The toggle picks which runtime's versions are shown (the header pill shows
+  // what is installed). Installing a version does the switch.
   const showRuntimeVersions = (runtime: 'v1' | 'v2') => {
     setViewedRuntime(runtime);
     setIsVersionListOpen(true);
@@ -871,6 +871,18 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
       <SettingsSection
         title="dbt Core"
         icon={<DataObjectOutlined />}
+        badge={
+          hasDbt ? (
+            <Chip
+              label={`${activeRuntime} · ${settings.dbtVersion} installed`}
+              size="small"
+              color="success"
+              variant="outlined"
+            />
+          ) : (
+            <Chip label="Not installed" size="small" variant="outlined" />
+          )
+        }
         description="Only one runtime can be installed at a time. Changing it affects all local projects."
         action={
           <SettingsRefreshButton
@@ -884,16 +896,17 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
           label="Runtime"
           description={
             shownRuntime === 'v1'
-              ? 'dbt Core v1 · Python. Stable runtime. Recommended for production projects and broad adapter compatibility.'
-              : 'dbt Core v2 · Rust. Installed from the Apache-licensed dbt-oss package. Requires Python 3.11+. Cloud pipeline runs are unavailable while v2 is active.'
+              ? 'dbt v1 · Python. Stable runtime. Recommended for production projects and broad adapter compatibility.'
+              : 'dbt v2 · Rust. Installed from the Apache-licensed dbt-oss package. Requires Python 3.11+. Cloud pipeline runs are unavailable while v2 is active.'
           }
         >
           <ToggleButtonGroup
             exclusive
             size="small"
-            color="success"
-            value={hasDbt ? activeRuntime : null}
+            color="info"
+            value={shownRuntime}
             sx={{
+              flexShrink: 0,
               '& .MuiToggleButton-root': {
                 textTransform: 'none',
                 fontSize: 12,
@@ -905,27 +918,27 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
           >
             <ToggleButton
               value="v1"
-              aria-label="Show dbt Core v1 versions"
+              aria-label="Show dbt v1 versions"
               onClick={() => showRuntimeVersions('v1')}
             >
-              dbt Core v1
+              dbt v1
             </ToggleButton>
             <ToggleButton
               value="v2"
-              aria-label="Show dbt Core v2 versions"
+              aria-label="Show dbt v2 versions"
               onClick={() => showRuntimeVersions('v2')}
             >
-              dbt Core v2
+              dbt v2
             </ToggleButton>
           </ToggleButtonGroup>
         </SettingsRow>
 
         <SettingsRow
-          label={`dbt Core ${shownRuntime} versions`}
+          label={`dbt ${shownRuntime} versions`}
           description={
             isShownRuntimeActive
-              ? `Active · ${settings.dbtVersion}`
-              : `Not installed. Installing a version below switches to dbt Core ${shownRuntime}.`
+              ? undefined
+              : `Not installed. Installing a version below switches to dbt ${shownRuntime}.`
           }
         >
           <IconButton
@@ -946,19 +959,19 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
           <SettingsSectionBody>
             {shownRuntime === 'v1' && !settings.pythonPath && (
               <Alert severity="info" sx={{ mb: 1.25 }}>
-                Python is not installed yet. Installing a dbt Core v1 version
-                below will install it automatically.
+                Python is not installed yet. Installing a dbt v1 version below
+                will install it automatically.
               </Alert>
             )}
             {shownRuntime === 'v1'
               ? renderRuntimeVersions(
                   pythonDbtVersions,
-                  'No dbt Core v1 releases are available.',
+                  'No dbt v1 releases are available.',
                   allPythonDbtVersions.length > 5,
                 )
               : renderRuntimeVersions(
                   rustDbtVersions,
-                  'No dbt Core v2 releases are available.',
+                  'No dbt v2 releases are available.',
                   allRustDbtVersions.length > 5,
                 )}
           </SettingsSectionBody>
@@ -968,7 +981,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
           <SettingsSectionBody>
             <Alert severity="warning">
               Cloud pipeline runs and other cloud features are unavailable while
-              dbt Core v2 is active.
+              dbt v2 is active.
             </Alert>
           </SettingsSectionBody>
         )}
