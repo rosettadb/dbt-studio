@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -7,7 +7,7 @@ import {
   Button,
   Typography,
 } from '@mui/material';
-import { settingsServices } from '../../services';
+import { path as nodePath } from '../../lib/path';
 
 interface DeleteConfirmDialogProps {
   open: boolean;
@@ -22,23 +22,8 @@ export const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
   onConfirm,
   onCancel,
 }) => {
-  const [fileName, setFileName] = useState<string>('');
-
-  useEffect(() => {
-    const fetchFileName = async () => {
-      if (path) {
-        try {
-          const name = await settingsServices.getBasename(path);
-          setFileName(name);
-        } catch (error) {
-          // Fallback to the path itself if service fails
-          setFileName(path);
-        }
-      }
-    };
-
-    fetchFileName();
-  }, [path]);
+  // Fall back to the path itself when it has no basename (e.g. a drive root).
+  const fileName = path ? nodePath.basename(path) || path : '';
 
   return (
     <Dialog open={open} onClose={onCancel} maxWidth="sm" fullWidth>

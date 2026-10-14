@@ -310,19 +310,4 @@ describe('SettingsService (main)', () => {
     });
   });
 
-  describe('usePathJoin', () => {
-    it('joins path chunks', async () => {
-      await expect(SettingsService.usePathJoin(['a', 'b'])).resolves.toContain(
-        'a',
-      );
-    });
-  });
-
-  describe('getFileName', () => {
-    it('returns the basename without extension', async () => {
-      await expect(
-        SettingsService.getFileName(['a', 'b', 'file.sql']),
-      ).resolves.toBe('file');
-    });
-  });
 });

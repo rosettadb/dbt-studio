@@ -6,7 +6,7 @@ const tar = require('tar-fs');
 
 const db = require('./db');
 const { authenticatedUrl, redact } = require('./git');
-const { appendLog, emitStatus } = require('./logBus');
+const { appendLog, emitStatus, clearBuffer } = require('./logBus');
 
 const docker = new Docker({ socketPath: '/var/run/docker.sock' });
 
@@ -14,6 +14,9 @@ const TEST_RUNNER_IMAGE =
   process.env.TEST_RUNNER_IMAGE || 'e2e-test-runner:latest';
 const NPM_CACHE_VOLUME = 'e2e-runner-npm-cache';
 const PLAYWRIGHT_CACHE_VOLUME = 'e2e-runner-playwright-cache';
+// Every test container carries its run id, so a restarted web app can still
+// find (and remove) containers it no longer tracks in memory.
+const RUN_LABEL = 'e2e-runner.run-id';
 
 // Memory and MemoryReservation set to the same value give the container a
 // fixed allocation up front instead of growing it on demand, which is
@@ -27,25 +30,113 @@ const TEST_CONTAINER_MEMORY_BYTES = TEST_CONTAINER_MEMORY_MB * 1024 * 1024;
 
 const activeContainers = new Map(); // runId -> dockerode container
 const cancelledRuns = new Set();
+// Runs executeRun has picked up but whose container may not exist yet.
+const startedRuns = new Set();
+// runId -> reject fn that aborts executeRun's container.wait(). Needed when
+// the container disappears underneath us (daemon restart, manual `docker rm`):
+// wait() then never settles, which would pin the run at "running" and leak
+// the queue slot for good.
+const waitAborts = new Map();
+
+/**
+ * Appends a runner line to a run's output.log on disk and to the live log bus.
+ * Used outside executeRun, where there's no open log stream for the run.
+ *
+ * @param {number} runId Run the line belongs to.
+ * @param {string} line Line to record.
+ */
+function logOutside(runId, line) {
+  appendLog(runId, line);
+  fs.appendFileSync(path.join(runDir(runId), 'output.log'), `${line}\n`);
+}
+
+/**
+ * Writes a terminal status for a run that executeRun is not going to finish
+ * itself — there is no live container and no in-flight job for it (typically
+ * the web app restarted mid-run). Any leftover container carrying the run's
+ * label is force-removed first.
+ *
+ * @param {number} runId Run to finalize.
+ * @param {'cancelled'|'error'} status Terminal status to record.
+ * @param {string} reason Explanation written to the run's log.
+ * @returns {Promise<object|undefined>} The updated run row.
+ */
+async function finalizeOrphan(runId, status, reason) {
+  try {
+    const leftovers = await docker.listContainers({
+      all: true,
+      filters: { label: [`${RUN_LABEL}=${runId}`] },
+    });
+    await Promise.all(
+      leftovers.map((info) =>
+        docker
+          .getContainer(info.Id)
+          .remove({ force: true })
+          .catch(() => undefined),
+      ),
+    );
+  } catch (_) {
+    // Docker unreachable; the run still has to be closed out below.
+  }
+  logOutside(runId, `[runner] ${reason}`);
+  const updated = db.updateRun(runId, {
+    status,
+    finished_at: new Date().toISOString(),
+  });
+  emitStatus(runId, status);
+  clearBuffer(runId);
+  return updated;
+}
+
+/**
+ * Closes out every run the database still shows as queued/running. Called
+ * once at startup: nothing is tracked in memory at that point, so all of them
+ * are orphans of a previous process.
+ *
+ * @returns {Promise<number>} How many runs were finalized.
+ */
+async function reconcileOrphans() {
+  const stale = db.listActiveRuns();
+  await Promise.all(
+    stale.map((run) =>
+      finalizeOrphan(
+        run.id,
+        'error',
+        `runner restarted while this run was ${run.status}; marking it as error`,
+      ),
+    ),
+  );
+  return stale.length;
+}
 
 /**
  * Stops a run's container if it's currently active. The run's final
  * "cancelled" status is written by {@link executeRun}, once the container
- * actually exits.
+ * actually exits (or once the wait is aborted because the container is gone).
  *
  * @param {number} runId Run to stop.
- * @returns {Promise<boolean>} False if the run has no active container
- *   (already finished, or never started — try `queue.cancelQueued` for that
- *   case instead).
+ * @returns {Promise<boolean>} False if the run has no in-flight job at all
+ *   (already finished, never started, or orphaned by a restart — see
+ *   `queue.cancelQueued` and {@link finalizeOrphan} for those cases).
  */
 async function cancelRun(runId) {
-  const container = activeContainers.get(runId);
-  if (!container) return false;
+  if (!startedRuns.has(runId)) return false;
   cancelledRuns.add(runId);
+
+  const container = activeContainers.get(runId);
+  // executeRun is between picking the run up and creating its container; it
+  // checks cancelledRuns right after creation and stops the container itself.
+  if (!container) return true;
+
   try {
     await container.stop({ t: 5 }); // SIGTERM, then SIGKILL after 5s if still stuck
-  } catch (_) {
-    // already stopped/removed
+  } catch (err) {
+    if (err.statusCode === 404) {
+      // Container no longer exists, so wait() will never return on its own.
+      const abort = waitAborts.get(runId);
+      if (abort) abort(new Error('container is gone'));
+    }
+    // 304 = already stopped; wait() settles normally in that case.
   }
   return true;
 }
@@ -145,6 +236,7 @@ async function executeRun(run) {
     logStream.write(`${line}\n`);
   };
 
+  startedRuns.add(runId);
   db.updateRun(runId, {
     status: 'running',
     started_at: new Date().toISOString(),
@@ -159,6 +251,7 @@ async function executeRun(run) {
     container = await docker.createContainer({
       Image: TEST_RUNNER_IMAGE,
       Env: [`GIT_URL=${gitUrl}`, `BRANCH=${run.branch}`],
+      Labels: { [RUN_LABEL]: String(runId) },
       HostConfig: {
         AutoRemove: false,
         Binds: [
@@ -176,6 +269,10 @@ async function executeRun(run) {
       },
     });
     activeContainers.set(runId, container);
+    if (cancelledRuns.has(runId)) {
+      // Stop arrived while the container was being created.
+      throw new Error('run was stopped before its container started');
+    }
 
     const attachStream = await container.attach({
       stream: true,
@@ -188,7 +285,12 @@ async function executeRun(run) {
 
     await container.start();
 
-    const waitResult = await container.wait();
+    const waitResult = await Promise.race([
+      container.wait(),
+      new Promise((_resolve, reject) => {
+        waitAborts.set(runId, reject);
+      }),
+    ]);
     const exitCode = waitResult.StatusCode;
 
     await extractReport(runId, container, dir);
@@ -210,16 +312,27 @@ async function executeRun(run) {
       `[runner] run ${wasCancelled ? 'cancelled' : `finished with exit code ${exitCode}`}`,
     );
   } catch (err) {
-    log(`[runner] error: ${redact(err.message)}`);
+    // A stop that raced container creation, or a container that vanished
+    // after Stop was pressed, is still a cancel from the user's point of view.
+    const wasCancelled = cancelledRuns.delete(runId);
+    const status = wasCancelled ? 'cancelled' : 'error';
+    log(
+      `[runner] ${wasCancelled ? 'run cancelled' : 'error'}: ${redact(err.message)}`,
+    );
     db.updateRun(runId, {
-      status: 'error',
+      status,
       finished_at: new Date().toISOString(),
     });
-    emitStatus(runId, 'error');
+    emitStatus(runId, status);
   } finally {
     activeContainers.delete(runId);
     cancelledRuns.delete(runId);
+    startedRuns.delete(runId);
+    waitAborts.delete(runId);
     logStream.end();
+    // Finished runs replay from output.log; keeping every line of every run
+    // in memory would grow the process without bound.
+    clearBuffer(runId);
     if (container) {
       try {
         await container.remove({ force: true });
@@ -230,4 +343,4 @@ async function executeRun(run) {
   }
 }
 
-module.exports = { executeRun, cancelRun };
+module.exports = { executeRun, cancelRun, finalizeOrphan, reconcileOrphans };

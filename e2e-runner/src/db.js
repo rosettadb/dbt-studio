@@ -55,6 +55,21 @@ function listRuns(limit = 100) {
 }
 
 /**
+ * Returns every run that has not reached a terminal status, oldest first.
+ * After a process restart these are all orphans — nothing in memory tracks
+ * them any more.
+ *
+ * @returns {object[]} Run rows with status "queued" or "running".
+ */
+function listActiveRuns() {
+  return db
+    .prepare(
+      "SELECT * FROM runs WHERE status IN ('queued', 'running') ORDER BY id",
+    )
+    .all();
+}
+
+/**
  * Updates the given columns on a run. Column names are interpolated into the
  * SQL, so `fields` keys must only ever come from this codebase — never from
  * request data.
@@ -77,5 +92,6 @@ module.exports = {
   createRun,
   getRun,
   listRuns,
+  listActiveRuns,
   updateRun,
 };

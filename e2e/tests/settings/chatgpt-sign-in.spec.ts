@@ -89,7 +89,7 @@ const openAddProviderDialog = async (electronApp: ElectronApplication) => {
   await mockChatGptMainProcess(electronApp);
   await new NavigationSidebarComponent(window).goToSettings();
   await window.getByText('AI Settings', { exact: true }).click();
-  await window.getByRole('button', { name: 'Add Your First Provider' }).click();
+  await window.getByRole('button', { name: 'Add Provider' }).click();
   const dialog = window.getByRole('dialog', { name: /Add AI Provider/ });
   await expect(dialog).toBeVisible();
   return { window, dialog };

@@ -1,3 +1,4 @@
+/** @jest-environment-options {"customExportConditions": ["node", "node-addons"]} */
 describe('settings.ipcHandlers', () => {
   beforeEach(() => {
     jest.resetModules();
@@ -30,12 +31,10 @@ describe('settings.ipcHandlers', () => {
         saveSettings: jest.fn(),
         checkCliUpdates: jest.fn(),
         getDbtExePath: jest.fn(),
-        usePathJoin: jest.fn(),
         checkRosettaVersions: jest.fn(),
         installRosettaVersion: jest.fn(),
         uninstallRosetta: jest.fn(),
         resetFactorySettings,
-        getFileName: jest.fn(),
         getDuckDbMetadata: jest.fn(),
         refreshDuckDbMetadata: jest.fn(),
         reinitializeDuckDb: jest.fn(),
@@ -87,12 +86,10 @@ describe('settings.ipcHandlers', () => {
         saveSettings: jest.fn(),
         checkCliUpdates: jest.fn(),
         getDbtExePath: jest.fn(),
-        usePathJoin: jest.fn(),
         checkRosettaVersions: jest.fn(),
         installRosettaVersion: jest.fn(),
         uninstallRosetta: jest.fn(),
         resetFactorySettings: jest.fn(),
-        getFileName: jest.fn(),
         getDuckDbMetadata: jest.fn(),
         refreshDuckDbMetadata: jest.fn(),
         reinitializeDuckDb: jest.fn(),
@@ -127,12 +124,10 @@ describe('settings.ipcHandlers', () => {
         saveSettings: jest.fn(),
         checkCliUpdates: jest.fn(),
         getDbtExePath: jest.fn(),
-        usePathJoin: jest.fn(),
         checkRosettaVersions: jest.fn(),
         installRosettaVersion: jest.fn(),
         uninstallRosetta: jest.fn(),
         resetFactorySettings: jest.fn(),
-        getFileName: jest.fn(),
         getDuckDbMetadata: jest.fn(),
         refreshDuckDbMetadata: jest.fn(),
         reinitializeDuckDb: jest.fn(),

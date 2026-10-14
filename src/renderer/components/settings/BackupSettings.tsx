@@ -27,6 +27,7 @@ import { toast } from 'react-toastify';
 import { useQueryClient } from 'react-query';
 import { QUERY_KEYS } from '../../config/constants';
 import { cloudExplorerKeys } from '../../controllers/cloudExplorer.controller';
+import { path } from '../../lib/path';
 import {
   SettingsRow,
   SettingsSection,
@@ -611,7 +612,7 @@ export const BackupSettings: React.FC = () => {
           label="Backup File"
           description={
             selectedImportPath
-              ? (selectedImportPath.split('/').pop() ?? selectedImportPath)
+              ? path.basename(selectedImportPath) || selectedImportPath
               : 'No file selected'
           }
         >
@@ -668,7 +669,7 @@ export const BackupSettings: React.FC = () => {
                   color="text.secondary"
                   ml={1}
                 >
-                  from {importFilePath.split('/').pop()}
+                  from {path.basename(importFilePath)}
                 </Typography>
               )}
             </Typography>

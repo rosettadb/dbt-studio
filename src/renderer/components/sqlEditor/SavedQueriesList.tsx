@@ -28,6 +28,7 @@ import {
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'react-toastify';
 import { SavedQuery } from '../../../types/backend';
+import { path } from '../../lib/path';
 import {
   useGetSavedQueries,
   useDeleteSavedQuery,
@@ -157,9 +158,7 @@ export const SavedQueriesList: React.FC<SavedQueriesListProps> = ({
         if (validFiles.length > 0) {
           await Promise.all(
             validFiles.map((file: any) => {
-              const name =
-                file.path.split(/[/\\]/).pop()?.replace('.sql', '') ||
-                'Imported Query';
+              const name = path.basename(file.path, '.sql') || 'Imported Query';
               return createQueryMutation.mutateAsync({
                 connectionId,
                 name,

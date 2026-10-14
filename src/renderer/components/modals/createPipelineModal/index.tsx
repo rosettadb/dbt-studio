@@ -41,6 +41,7 @@ import {
   RemotePipelineTemplate,
 } from '../../../services/pipelineTemplates.service';
 import { PipelineFolderTree } from './PipelineFolderTree';
+import { path } from '../../../lib/path';
 
 interface PipelineTemplate {
   id: string;
@@ -202,7 +203,7 @@ export const CreatePipelineModal: React.FC<CreatePipelineModalProps> = ({
       name: relativeDir,
     });
 
-    const pipelinePath = `${project.path}/${relativeDir}/${fileName}`;
+    const pipelinePath = path.join(project.path, relativeDir, fileName);
     await projectsServices.saveFileContent({
       path: pipelinePath,
       content,
