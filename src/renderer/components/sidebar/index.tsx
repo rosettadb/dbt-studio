@@ -116,7 +116,7 @@ export const Sidebar: React.FC<Props> = ({
             minWidth: isBarExpanded ? 44 : 0,
             width: isBarExpanded ? 44 : undefined,
             justifyContent: 'center',
-            '& > *': { transform: 'scale(1.2)' },
+            '& > *': { transform: 'scale(1.08)' },
           }}
         >
           <element.icon />
@@ -208,7 +208,7 @@ export const Sidebar: React.FC<Props> = ({
               <img
                 src={rosettaIcon}
                 alt="Icon"
-                style={{ width: 24, height: 24 }}
+                style={{ width: 22, height: 22 }}
               />
             </Box>
           )}
