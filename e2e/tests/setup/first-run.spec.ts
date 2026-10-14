@@ -60,7 +60,7 @@ test.describe('First Run Experience', () => {
     await setupWizard.expectToBeVisible();
   });
 
-  test('should start on the dbt choice with 1.x and its adapters', async ({
+  test('should open with everything collapsed and 1.x picked', async ({
     electronApp,
   }) => {
     const setupWindow = await findSetupWindow(electronApp);
@@ -69,73 +69,68 @@ test.describe('First Run Experience', () => {
 
     const setupWizard = new SetupWizardPage(setupWindow);
 
-    await expect(setupWizard.stepLabel).toHaveText('Step 1 of 3');
+    await expect(setupWizard.stepLabel).toHaveText('Step 1 of 2');
     await setupWizard.expectCurrentStep('cli');
     await expect(
-      setupWindow.getByLabel('dbt Core 1.x', { exact: true }),
+      setupWindow.getByLabel('dbt 1.x', { exact: true }),
     ).toBeChecked();
-    await expect(
-      setupWindow.getByTestId('setup-adapter-checkboxes'),
-    ).toBeVisible();
-
-    // Each card has its own version dropdown; only the chosen card's is
-    // active. It shows the newest version, or "Latest" when offline.
-    await expect(setupWindow.getByTestId('setup-dbt-version-v1')).toHaveText(
+    // The picked row shows its newest version, or "Latest" when offline.
+    await expect(setupWindow.getByTestId('setup-dbt-v1-summary')).toHaveText(
       /latest/i,
       { timeout: 30000 },
     );
-    await expect(setupWindow.getByTestId('setup-dbt-version-v2')).toHaveClass(
-      /Mui-disabled/,
+    await expect(setupWindow.getByTestId('setup-adapters-summary')).toHaveText(
+      'All 7 selected',
     );
-
-    // Nothing installs on the choice pages; Back only shows from step 2
-    await expect(setupWizard.nextButton).toBeEnabled();
-    await expect(setupWizard.backButton).toBeHidden();
-    await expect(setupWizard.skipButton).toBeVisible();
-  });
-
-  test('should show the built-in adapters when dbt 2.x is chosen', async ({
-    electronApp,
-  }) => {
-    const setupWindow = await findSetupWindow(electronApp);
-    if (!setupWindow) throw new Error('Setup window not found');
-    await setupWindow.waitForLoadState('domcontentloaded');
-
-    await setupWindow.getByTestId('setup-dbt-v2').click();
-
-    await expect(
-      setupWindow.getByLabel('dbt Core 2.x', { exact: true }),
-    ).toBeChecked();
-    await expect(
-      setupWindow.getByTestId('setup-adapter-included'),
-    ).toBeVisible();
+    await expect(setupWindow.getByTestId('setup-tools-summary')).toHaveText(
+      'None',
+    );
     await expect(
       setupWindow.getByTestId('setup-adapter-checkboxes'),
     ).toBeHidden();
+
+    // Install is one click away; nothing installs until it's clicked
+    await expect(setupWindow.getByTestId('setup-install-btn')).toBeEnabled();
+    await expect(setupWizard.skipButton).toBeVisible();
   });
 
-  test('should go to the Flowfile step and back, keeping the dbt choice', async ({
+  test('should open dbt 2.x with its versions and built-in adapters', async ({
     electronApp,
   }) => {
     const setupWindow = await findSetupWindow(electronApp);
     if (!setupWindow) throw new Error('Setup window not found');
     await setupWindow.waitForLoadState('domcontentloaded');
 
-    const setupWizard = new SetupWizardPage(setupWindow);
-    await setupWindow.getByTestId('setup-dbt-v2').click();
-    await setupWizard.clickNext();
+    await setupWindow.getByTestId('setup-dbt-v2-header').click();
 
-    // Flowfile is optional and off by default; this step starts the installs,
-    // so the test stops here instead of clicking Install.
-    await expect(setupWizard.stepLabel).toHaveText('Step 2 of 3');
-    await setupWizard.expectCurrentStep('flowfile');
-    await expect(setupWindow.getByLabel('Flowfile')).not.toBeChecked();
-    await expect(setupWindow.getByTestId('setup-install-btn')).toBeEnabled();
-
-    await setupWizard.clickBack();
-    await expect(setupWizard.stepLabel).toHaveText('Step 1 of 3');
     await expect(
-      setupWindow.getByLabel('dbt Core 2.x', { exact: true }),
+      setupWindow.getByLabel('dbt 2.x', { exact: true }),
     ).toBeChecked();
+    await expect(setupWindow.getByTestId('setup-adapters-summary')).toHaveText(
+      '5 included with 2.x',
+    );
+
+    await setupWindow.getByTestId('setup-adapters-header').click();
+    await expect(
+      setupWindow.getByTestId('setup-adapter-included'),
+    ).toBeVisible();
+  });
+
+  test('should pick Flowfile under Optional tools on the same page', async ({
+    electronApp,
+  }) => {
+    const setupWindow = await findSetupWindow(electronApp);
+    if (!setupWindow) throw new Error('Setup window not found');
+    await setupWindow.waitForLoadState('domcontentloaded');
+
+    await setupWindow.getByTestId('setup-tools-header').click();
+    const flowfile = setupWindow.getByLabel('Flowfile');
+    await expect(flowfile).not.toBeChecked();
+    await flowfile.check();
+
+    await expect(setupWindow.getByTestId('setup-tools-summary')).toHaveText(
+      'Flowfile',
+    );
+    // The test stops here instead of clicking Install, so nothing downloads.
   });
 });

@@ -6,12 +6,7 @@ import {
   LinearProgress,
   Typography,
 } from '@mui/material';
-import {
-  AccountTreeOutlined,
-  CodeOutlined,
-  DataObjectOutlined,
-  TerminalOutlined,
-} from '@mui/icons-material';
+import { AccountTreeOutlined, DataObjectOutlined } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { settingsServices } from '../../services';
 import {
@@ -24,8 +19,11 @@ import { flowfileInstall } from '../../services/flowfile.service';
 import { InstallResult } from '../../../types/backend';
 import { SettingsStatus } from '../settings/SettingsLayout';
 import { DbtLine } from '../dbtSetup';
+import { PythonLogoIcon } from '../notebook/NotebookKindIcon';
 
 type RowKey = 'python' | 'dbt' | 'runner' | 'flowfile';
+// The local runner is always installed but gets no row.
+type VisibleRowKey = Exclude<RowKey, 'runner'>;
 
 type RowState = {
   status: 'waiting' | 'installing' | 'done' | 'failed';
@@ -40,10 +38,9 @@ type RowState = {
 
 type InstalledItem = { version?: string; path?: string };
 
-const ROW_ICONS: Record<RowKey, React.ReactElement> = {
-  python: <CodeOutlined fontSize="small" />,
+const ROW_ICONS: Record<VisibleRowKey, React.ReactElement> = {
+  python: <PythonLogoIcon fontSize="small" />,
   dbt: <DataObjectOutlined fontSize="small" />,
-  runner: <TerminalOutlined fontSize="small" />,
   flowfile: <AccountTreeOutlined fontSize="small" />,
 };
 
@@ -77,22 +74,24 @@ export const SetupInstallProgress: React.FC<Props> = ({
   includeFlowfile,
   onRunningChange,
 }) => {
-  const rowKeys: RowKey[] = [
+  const installKeys: RowKey[] = [
     'python',
     'dbt',
     'runner',
     ...(includeFlowfile ? (['flowfile'] as RowKey[]) : []),
   ];
+  const visibleKeys = installKeys.filter(
+    (key): key is VisibleRowKey => key !== 'runner',
+  );
   const adapterPackages =
     dbtLine === 'v1' ? selectedAdapters.filter((a) => a !== 'dbt-core') : [];
-  const dbtLabel = `dbt Core ${dbtVersion ?? (dbtLine === 'v1' ? '1.x' : '2.x')}`;
-  const rowLabels: Record<RowKey, string> = {
+  const dbtLabel = `dbt ${dbtVersion ?? (dbtLine === 'v1' ? '1.x' : '2.x')}`;
+  const rowLabels: Record<VisibleRowKey, string> = {
     python: 'Python',
     dbt:
       dbtLine === 'v1'
         ? `${dbtLabel} and ${adapterPackages.length} adapters`
         : `${dbtLabel} with built-in adapters`,
-    runner: 'Local runner',
     flowfile: 'Flowfile',
   };
 
@@ -110,6 +109,7 @@ export const SetupInstallProgress: React.FC<Props> = ({
       [key]: { ...previous[key], ...patch },
     }));
 
+  // The Python row shows only the version, not the path.
   const installPythonStep = async (): Promise<InstalledItem> => {
     const settings = await settingsServices.getSettings();
     if (dbtLine === 'v2' && !isPythonReadyForDbtV2(settings.pythonVersion)) {
@@ -124,14 +124,14 @@ export const SetupInstallProgress: React.FC<Props> = ({
       updateRow('python', {
         detail: `Installing Python ${target.version} for dbt 2.x...`,
       });
-      return toInstalledItem(
+      const installed = toInstalledItem(
         await settingsServices.installPythonVersion(target.version),
       );
+      return { version: installed.version };
     }
-    if (settings.pythonPath) {
-      return { version: settings.pythonVersion, path: settings.pythonPath };
-    }
-    return toInstalledItem(await settingsServices.installPython());
+    if (settings.pythonPath) return { version: settings.pythonVersion };
+    const installed = toInstalledItem(await settingsServices.installPython());
+    return { version: installed.version };
   };
 
   const installDbtStep = async (): Promise<InstalledItem> => {
@@ -276,7 +276,7 @@ export const SetupInstallProgress: React.FC<Props> = ({
   };
 
   React.useEffect(() => {
-    runRows(rowKeys);
+    runRows(installKeys);
   }, []);
 
   const renderStatus = (key: RowKey) => {
@@ -389,7 +389,7 @@ export const SetupInstallProgress: React.FC<Props> = ({
     return null;
   };
 
-  const hasFailedRow = rowKeys.some((key) => rows[key].status === 'failed');
+  const hasFailedRow = visibleKeys.some((key) => rows[key].status === 'failed');
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -401,7 +401,7 @@ export const SetupInstallProgress: React.FC<Props> = ({
           overflow: 'hidden',
         }}
       >
-        {rowKeys.map((key, index) => (
+        {visibleKeys.map((key, index) => (
           <Box
             key={key}
             data-testid={`setup-install-row-${key}`}
@@ -427,6 +427,16 @@ export const SetupInstallProgress: React.FC<Props> = ({
           </Box>
         ))}
       </Box>
+      {rows.runner.status === 'failed' && (
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          data-testid="setup-runner-failed"
+        >
+          The local runner couldn&apos;t be installed. You can install it later
+          in Settings.
+        </Typography>
+      )}
       {hasFailedRow && !isRunning && (
         <Typography variant="body2" color="text.secondary">
           You can also install anything that failed later from Settings.

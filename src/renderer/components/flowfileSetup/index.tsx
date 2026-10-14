@@ -1,30 +1,36 @@
 import React from 'react';
 import { Box, Checkbox, Typography } from '@mui/material';
+import { HandymanOutlined } from '@mui/icons-material';
+import { SetupChoiceRow } from '../setupChoiceRow';
 
 type Props = {
   includeFlowfile: boolean;
   setIncludeFlowfile: (includeFlowfile: boolean) => void;
+  isOpen: boolean;
+  onToggle: () => void;
 };
 
 export const FlowfileSetup: React.FC<Props> = ({
   includeFlowfile,
   setIncludeFlowfile,
+  isOpen,
+  onToggle,
 }) => (
-  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-    <Typography sx={{ fontSize: 14, fontWeight: 500 }}>
-      Optional tools
-    </Typography>
+  <SetupChoiceRow
+    testId="setup-tools"
+    leading={<HandymanOutlined fontSize="small" />}
+    title="Optional tools"
+    summary={includeFlowfile ? 'Flowfile' : 'None'}
+    isOpen={isOpen}
+    onToggle={onToggle}
+  >
     <Box
       component="label"
       sx={{
         display: 'flex',
         alignItems: 'flex-start',
         gap: 1,
-        p: 1.25,
         cursor: 'pointer',
-        borderRadius: 1,
-        border: '1px solid',
-        borderColor: 'divider',
       }}
     >
       <Checkbox
@@ -42,9 +48,5 @@ export const FlowfileSetup: React.FC<Props> = ({
         </Typography>
       </Box>
     </Box>
-    <Typography variant="body2" color="text.secondary">
-      Install sets up everything you picked, plus Python and the local runner,
-      which are always needed.
-    </Typography>
-  </Box>
+  </SetupChoiceRow>
 );

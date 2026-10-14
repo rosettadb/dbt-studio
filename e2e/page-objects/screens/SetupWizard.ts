@@ -17,8 +17,6 @@ export class SetupWizardPage extends BasePage {
 
   readonly cliInstallStep: Locator;
 
-  readonly flowfileStep: Locator;
-
   readonly installStep: Locator;
 
   readonly completionStep: Locator;
@@ -39,7 +37,6 @@ export class SetupWizardPage extends BasePage {
     this.wizardContainer = this.getByTestId('setup-wizard');
     this.welcomeStep = this.getByTestId('setup-step-welcome');
     this.cliInstallStep = this.getByTestId('setup-step-cli');
-    this.flowfileStep = this.getByTestId('setup-step-flowfile');
     this.installStep = this.getByTestId('setup-step-install');
     this.completionStep = this.getByTestId('setup-step-complete');
     this.stepLabel = this.getByTestId('setup-step-label');
@@ -174,12 +171,11 @@ export class SetupWizardPage extends BasePage {
    * Expect a specific step to be the current/visible step
    */
   async expectCurrentStep(
-    step: 'welcome' | 'cli' | 'flowfile' | 'install' | 'complete',
+    step: 'welcome' | 'cli' | 'install' | 'complete',
   ): Promise<void> {
     const stepMap = {
       welcome: this.welcomeStep,
       cli: this.cliInstallStep,
-      flowfile: this.flowfileStep,
       install: this.installStep,
       complete: this.completionStep,
     };

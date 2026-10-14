@@ -2,10 +2,13 @@ import React from 'react';
 import { Box, Button, Typography } from '@mui/material';
 import { useUpdateSettings } from '../../controllers';
 import {
+  DbtAdaptersRow,
   DbtSetup,
   DbtLine,
   FlowfileSetup,
   SetupInstallProgress,
+  SetupSection,
+  setupChoiceListSx,
 } from '../../components';
 import { client } from '../../config/client';
 import { settingsServices } from '../../services';
@@ -23,14 +26,19 @@ const ADAPTERS = [
   })),
 ];
 
-const DBT_STEP = 0;
-const FLOWFILE_STEP = 1;
-const INSTALL_STEP = 2;
-const STEP_COUNT = 3;
+const CHOICES_STEP = 0;
+const INSTALL_STEP = 1;
+const STEP_COUNT = 2;
 
 const Setup: React.FC = () => {
   const { mutateAsync: updateSettings } = useUpdateSettings();
-  const [currentStep, setCurrentStep] = React.useState(DBT_STEP);
+  const [currentStep, setCurrentStep] = React.useState(CHOICES_STEP);
+  // Everything starts collapsed; opening one section closes the others.
+  const [openSection, setOpenSection] = React.useState<SetupSection | null>(
+    null,
+  );
+  const toggleSection = (section: SetupSection) =>
+    setOpenSection((previous) => (previous === section ? null : section));
   const [dbtLine, setDbtLine] = React.useState<DbtLine>('v1');
   const [availableDbtVersions, setAvailableDbtVersions] = React.useState<
     string[] | null
@@ -89,7 +97,7 @@ const Setup: React.FC = () => {
         }}
       >
         <Typography variant="h6" component="h2">
-          Rosetta dbt™ Studio - Setup
+          Rosetta Studio - Setup
         </Typography>
         <Typography
           variant="body2"
@@ -100,8 +108,11 @@ const Setup: React.FC = () => {
         </Typography>
       </Box>
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', pr: 0.5 }}>
-        {currentStep === DBT_STEP && (
-          <div data-testid="setup-step-cli">
+        {currentStep === CHOICES_STEP && (
+          <Box
+            data-testid="setup-step-cli"
+            sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}
+          >
             <DbtSetup
               dbtLine={dbtLine}
               setDbtLine={setDbtLine}
@@ -113,19 +124,26 @@ const Setup: React.FC = () => {
                   [line]: version,
                 }))
               }
-              adapters={ADAPTERS}
-              selectedAdapters={selectedAdapters}
-              setSelectedAdapters={setSelectedAdapters}
+              openSection={openSection}
+              setOpenSection={setOpenSection}
             />
-          </div>
-        )}
-        {currentStep === FLOWFILE_STEP && (
-          <div data-testid="setup-step-flowfile">
-            <FlowfileSetup
-              includeFlowfile={includeFlowfile}
-              setIncludeFlowfile={setIncludeFlowfile}
-            />
-          </div>
+            <Box sx={setupChoiceListSx}>
+              <DbtAdaptersRow
+                dbtLine={dbtLine}
+                adapters={ADAPTERS}
+                selectedAdapters={selectedAdapters}
+                setSelectedAdapters={setSelectedAdapters}
+                isOpen={openSection === 'adapters'}
+                onToggle={() => toggleSection('adapters')}
+              />
+              <FlowfileSetup
+                includeFlowfile={includeFlowfile}
+                setIncludeFlowfile={setIncludeFlowfile}
+                isOpen={openSection === 'tools'}
+                onToggle={() => toggleSection('tools')}
+              />
+            </Box>
+          </Box>
         )}
         {currentStep === INSTALL_STEP && (
           <div data-testid="setup-step-install">
@@ -158,25 +176,7 @@ const Setup: React.FC = () => {
           </Button>
         )}
         <Box sx={{ ml: 'auto', display: 'flex', gap: 1 }}>
-          {currentStep === FLOWFILE_STEP && (
-            <Button
-              variant="outlined"
-              data-testid="setup-back-btn"
-              onClick={() => setCurrentStep(DBT_STEP)}
-            >
-              Back
-            </Button>
-          )}
-          {currentStep === DBT_STEP && (
-            <Button
-              variant="contained"
-              data-testid="setup-next-btn"
-              onClick={() => setCurrentStep(FLOWFILE_STEP)}
-            >
-              Next
-            </Button>
-          )}
-          {currentStep === FLOWFILE_STEP && (
+          {currentStep === CHOICES_STEP && (
             <Button
               variant="contained"
               data-testid="setup-install-btn"
