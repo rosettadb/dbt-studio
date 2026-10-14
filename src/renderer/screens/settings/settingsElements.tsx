@@ -7,12 +7,12 @@ import InfoIcon from '@mui/icons-material/Info';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import ChecklistIcon from '@mui/icons-material/Checklist';
 import TerminalIcon from '@mui/icons-material/Terminal';
-import CodeIcon from '@mui/icons-material/Code';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import BackupOutlinedIcon from '@mui/icons-material/BackupOutlined';
 import { SvgIconComponent } from '@mui/icons-material';
 import React from 'react';
 import { Icon } from '../../components/icon';
+import { PythonMonoIcon } from '../../components/notebook/NotebookKindIcon';
 import { icons } from '../../../../assets';
 
 // Custom icon wrapper to make custom SVG icons compatible with Material-UI icon interface
@@ -98,7 +98,7 @@ export const settingsSidebarCategories: SettingsSidebarCategory[] = [
         path: '/app/settings/dbt',
       },
       {
-        icon: CodeIcon,
+        icon: PythonMonoIcon as any,
         text: 'Python',
         path: '/app/settings/python',
       },
