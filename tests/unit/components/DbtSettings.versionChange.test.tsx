@@ -9,6 +9,19 @@ const installPackageVersion = jest.fn();
 const installLatestPackage = jest.fn();
 const getInstalledPackages = jest.fn();
 const getActiveAdapterCapabilities = jest.fn();
+const installPython = jest.fn();
+
+// DbtSettings -> modals -> editor pulls in the ESM-only markdown stack.
+jest.mock('react-markdown', () => ({
+  __esModule: true,
+  default: ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+}));
+jest.mock('remark-gfm', () => jest.fn());
+jest.mock('rehype-raw', () => jest.fn());
+jest.mock('rehype-highlight', () => jest.fn());
+jest.mock('rehype-sanitize', () => jest.fn());
 
 jest.mock('../../../src/renderer/controllers', () => ({
   useListDbtCoreVersions: () => listVersions,
@@ -20,15 +33,9 @@ jest.mock('../../../src/renderer/controllers', () => ({
   useListPackageVersions: () => jest.fn(),
   usePlanDbtVersionChange: () => planVersionChange,
   useInstallDbtVersionChange: () => installVersionChange,
-  useInstallPython: () => ({ mutateAsync: jest.fn() }),
   useCheckCurrentProjectCompatibility: () => jest.fn(),
   useGetActiveAdapterCapabilities: () => getActiveAdapterCapabilities,
-}));
-
-// The real modals barrel pulls in the code editor (monaco-editor), which
-// Jest cannot load. The dbt page only needs ConfirmationModal from it.
-jest.mock('../../../src/renderer/components/modals', () => ({
-  ConfirmationModal: () => null,
+  useInstallPython: () => ({ mutateAsync: installPython }),
 }));
 
 const stableItem = {
@@ -83,6 +90,11 @@ describe('DbtSettings runtime switch', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     getInstalledPackages.mockResolvedValue({ packages: {} });
+    installPython.mockResolvedValue({
+      success: true,
+      path: '/managed/venv/bin/python3',
+      version: '3.12.0',
+    });
     installPackageVersion.mockResolvedValue({
       ok: true,
       installedVersion: '1.11.12',
