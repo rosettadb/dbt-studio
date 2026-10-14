@@ -25,9 +25,20 @@ import {
   RosettaConnection,
   SnowflakeConnection,
   SQLiteConnection,
+  SpannerConnection,
 } from '../../types/backend';
 import databaseStore from '../database';
 import { sanitizeBigQueryKeyfile } from '../utils/sanitizeBigQueryKeyfile';
+import {
+  applySpannerDialect,
+  executeSpannerQuery,
+  testSpannerConnection,
+} from '../utils/spannerQuery';
+import SpannerExtractor from '../extractor/spanner.extractor';
+import {
+  validateSpannerEmulatorHost,
+  validateSpannerIds,
+} from '../../shared/spanner';
 import { ProjectsService } from './index';
 import MainDatabaseService from './mainDatabase.service';
 import { ConfigureConnectionBody, UpdateConnectionBody } from '../../types/ipc';
@@ -245,6 +256,16 @@ export default class ConnectorsService {
             (conn2 as BigQueryConnection).keyfile
         );
 
+      case 'spanner':
+        return (
+          conn1.project === (conn2 as SpannerConnection).project &&
+          conn1.instance === (conn2 as SpannerConnection).instance &&
+          conn1.database === (conn2 as SpannerConnection).database &&
+          conn1.authMethod === (conn2 as SpannerConnection).authMethod &&
+          conn1.emulatorHost === (conn2 as SpannerConnection).emulatorHost &&
+          conn1.keyfile === (conn2 as SpannerConnection).keyfile
+        );
+
       case 'redshift':
         return (
           (conn1 as RedshiftConnection).host ===
@@ -348,6 +369,9 @@ export default class ConnectorsService {
         break;
       case 'bigquery':
         baseName = (connection as BigQueryConnection).project;
+        break;
+      case 'spanner':
+        baseName = (connection as SpannerConnection).database;
         break;
       case 'databricks':
         baseName = connection.database;
@@ -574,10 +598,14 @@ export default class ConnectorsService {
     }
 
     if (projectIndex !== -1 && !canUseAsDbtConnection(connection.type)) {
-      throw new Error('MySQL connections cannot be used by dbt projects');
+      throw new Error(
+        `${connection.type} connections cannot be used by dbt projects`,
+      );
     }
 
     await this.validateConnection(connection);
+
+    await applySpannerDialect(connection);
 
     if (!connectionId) {
       // Allow reserved name "DBT Connection" for Getting Started template
@@ -640,6 +668,7 @@ export default class ConnectorsService {
     connection,
   }: UpdateConnectionBody): Promise<void> {
     await this.validateConnection(connection.connection);
+    await applySpannerDialect(connection.connection);
 
     await databaseStore.updateField('connections', (current) => {
       const connections = current ?? [];
@@ -797,6 +826,8 @@ export default class ConnectorsService {
         }
       case 'bigquery':
         return testBigQueryConnection(connection);
+      case 'spanner':
+        return testSpannerConnection(connection);
       case 'databricks':
         return testDatabricksConnection(connection);
       case 'duckdb':
@@ -968,6 +999,13 @@ export default class ConnectorsService {
         case 'bigquery':
           // BigQuery cancellation not yet implemented in utils
           response = await executeBigQueryQuery(connection, query);
+          break;
+        case 'spanner':
+          response = await executeSpannerQuery(
+            connection,
+            query,
+            registerCancel,
+          );
           break;
         case 'databricks':
           response = await executeDatabricksQuery(
@@ -1152,6 +1190,28 @@ export default class ConnectorsService {
       case 'bigquery':
         if (!('project' in conn)) throw new Error('Project ID is required');
         break;
+      case 'spanner': {
+        const spanner = conn as SpannerConnection;
+        if (
+          !['service-account', 'adc', 'emulator'].includes(spanner.authMethod)
+        ) {
+          throw new Error('Choose a supported Spanner authentication method.');
+        }
+        const idError = validateSpannerIds(spanner);
+        if (idError) throw new Error(idError);
+        if (spanner.authMethod === 'service-account' && !spanner.keyfile) {
+          throw new Error('Spanner service account key is required.');
+        }
+        if (
+          spanner.authMethod === 'emulator' &&
+          !validateSpannerEmulatorHost(spanner.emulatorHost || '')
+        ) {
+          throw new Error(
+            'Enter an emulator host as host:port (for example localhost:9010).',
+          );
+        }
+        break;
+      }
       case 'databricks':
         if (!conn.host) throw new Error('Host is required');
         if (!('httpPath' in conn)) throw new Error('HTTP Path is required');
@@ -2093,6 +2153,10 @@ export default class ConnectorsService {
     } = await import('../extractor');
 
     switch (connection.type) {
+      case 'spanner':
+        return new SpannerExtractor(
+          connection as SpannerConnection,
+        ).extractSchema();
       case 'postgres': {
         const pgConn = connection as PostgresConnection;
         const extractor = new PGSchemaExtractor({

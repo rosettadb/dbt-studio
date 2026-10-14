@@ -60,6 +60,8 @@ describe('quoteIdentifier', () => {
     expect(quoteIdentifier('my table', 'postgres')).toBe('"my table"');
     expect(quoteIdentifier('my table', 'mysql')).toBe('`my table`');
     expect(quoteIdentifier('my table', 'bigquery')).toBe('`my table`');
+    expect(quoteIdentifier('my table', 'spanner')).toBe('`my table`');
+    expect(quoteIdentifier('my table', 'spanner_pg')).toBe('"my table"');
     expect(quoteIdentifier('my table', 'mssql')).toBe('[my table]');
   });
 
@@ -92,6 +94,12 @@ describe('qualifiedName / qualifiedColumnName', () => {
     expect(qualifiedName({ schema: '', name: 'orders' }, 'sqlite')).toBe(
       'orders',
     );
+    expect(
+      qualifiedName({ schema: 'default', name: 'orders' }, 'spanner'),
+    ).toBe('orders');
+    expect(
+      qualifiedName({ schema: 'public', name: 'Orders' }, 'spanner_pg'),
+    ).toBe('public."Orders"');
     expect(qualifiedName(orders, 'postgres', { includeSchema: false })).toBe(
       'orders',
     );

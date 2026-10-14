@@ -112,6 +112,10 @@ You are connected to a DuckLake lakehouse. DuckLake is a DuckDB extension (not a
       connectionHints =
         '\n\n## Dialect Specifics\nYou are connected to Google BigQuery. Ensure all queries use BigQuery Standard SQL syntax.';
       break;
+    case 'spanner':
+      connectionHints =
+        '\n\n## Dialect Specifics\nYou are connected to Google Cloud Spanner. A Spanner database uses either GoogleSQL or the PostgreSQL dialect; tell which from the column types in the schema (INT64, FLOAT64, STRING, BYTES mean GoogleSQL; bigint, double precision, character varying mean PostgreSQL). GoogleSQL: quote identifiers with backticks, there is no ILIKE (use LOWER(x) LIKE). PostgreSQL dialect: quote identifiers with double quotes; it is a subset of PostgreSQL with no user-defined functions. In both, use LIMIT and avoid full scans on large tables.';
+      break;
     case 'snowflake':
       connectionHints =
         '\n\n## Dialect Specifics\nYou are connected to Snowflake. Ensure all queries use Snowflake SQL syntax and functions.';

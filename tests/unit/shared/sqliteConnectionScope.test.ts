@@ -7,4 +7,9 @@ describe('SQLite connection scope', () => {
     expect(canUseAsDbtConnection('duckdb')).toBe(true);
     expect(canUseAsDbtConnection('ducklake')).toBe(true);
   });
+
+  it('keeps Spanner and MySQL out of dbt project pickers', () => {
+    expect(canUseAsDbtConnection('spanner')).toBe(false);
+    expect(canUseAsDbtConnection('mysql')).toBe(false);
+  });
 });

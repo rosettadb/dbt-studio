@@ -49,6 +49,8 @@ const getConnectionTypeName = (connectionType?: string) => {
       return 'Snowflake';
     case 'bigquery':
       return 'BigQuery';
+    case 'spanner':
+      return 'Spanner';
     case 'redshift':
       return 'Redshift';
     case 'databricks':
@@ -73,6 +75,8 @@ const getConnectionTypeColor = (connectionType: string) => {
       return '#29b5e8';
     case 'bigquery':
       return '#4285f4';
+    case 'spanner':
+      return '#4285F4';
     case 'redshift':
       return '#8c4fff';
     case 'databricks':

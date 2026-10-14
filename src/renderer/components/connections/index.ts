@@ -7,6 +7,7 @@ import { DuckDB } from './duckdb';
 import { SQLite } from './sqlite';
 import { Kinetica } from './kinetica';
 import { MySql } from './mysql';
+import { Spanner } from './spanner';
 
 export const Connections = {
   Postgres,
@@ -18,4 +19,5 @@ export const Connections = {
   SQLite,
   Kinetica,
   MySql,
+  Spanner,
 };

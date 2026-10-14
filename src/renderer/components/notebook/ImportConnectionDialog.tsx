@@ -15,8 +15,10 @@ import {
   Button,
   FormControlLabel,
   Checkbox,
+  TextField,
   Typography,
 } from '@mui/material';
+import { validateServiceAccountKeyJson } from '../../../shared/spanner';
 
 interface ImportConnectionDialogProps {
   open: boolean;
@@ -25,8 +27,10 @@ interface ImportConnectionDialogProps {
   notebookCount: number;
   /** Whether there's a currently active connection the user can import onto instead */
   hasActiveConnection: boolean;
+  /** Ask for a service-account key, which exports never include (Spanner). */
+  serviceAccountKeyRequired?: boolean;
   onClose: () => void;
-  onConfirm: (importConnection: boolean) => void;
+  onConfirm: (importConnection: boolean, serviceAccountKey?: string) => void;
 }
 
 export const ImportConnectionDialog: React.FC<ImportConnectionDialogProps> = ({
@@ -35,10 +39,20 @@ export const ImportConnectionDialog: React.FC<ImportConnectionDialogProps> = ({
   connectionType,
   notebookCount,
   hasActiveConnection,
+  serviceAccountKeyRequired = false,
   onClose,
   onConfirm,
 }) => {
   const [importConnection, setImportConnection] = useState(true);
+  const [keyJson, setKeyJson] = useState('');
+  const needsKey = serviceAccountKeyRequired && importConnection;
+  const keyError = needsKey
+    ? validateServiceAccountKeyJson(keyJson)
+    : undefined;
+
+  useEffect(() => {
+    if (open) setKeyJson('');
+  }, [open]);
 
   // Force-enable when there's no fallback connection to import onto
   useEffect(() => {
@@ -48,7 +62,7 @@ export const ImportConnectionDialog: React.FC<ImportConnectionDialogProps> = ({
   }, [hasActiveConnection, open]);
 
   const handleConfirm = () => {
-    onConfirm(importConnection);
+    onConfirm(importConnection, needsKey ? keyJson : undefined);
   };
 
   return (
@@ -76,6 +90,24 @@ export const ImportConnectionDialog: React.FC<ImportConnectionDialogProps> = ({
             file must be imported to continue.
           </Typography>
         )}
+        {needsKey && (
+          <TextField
+            label="Service account JSON"
+            multiline
+            minRows={4}
+            fullWidth
+            required
+            sx={{ mt: 2 }}
+            value={keyJson}
+            onChange={(event) => setKeyJson(event.target.value)}
+            error={keyJson.length > 0 && !!keyError}
+            helperText={
+              keyJson.length > 0 && keyError
+                ? keyError
+                : 'Exports never include the key. Paste it to import this connection; it is stored in the OS keychain.'
+            }
+          />
+        )}
         {hasActiveConnection && !importConnection && (
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
             The notebook(s) will be imported onto the currently selected
@@ -85,7 +117,11 @@ export const ImportConnectionDialog: React.FC<ImportConnectionDialogProps> = ({
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        <Button onClick={handleConfirm} variant="contained">
+        <Button
+          onClick={handleConfirm}
+          variant="contained"
+          disabled={needsKey && !!keyError}
+        >
           Import
         </Button>
       </DialogActions>

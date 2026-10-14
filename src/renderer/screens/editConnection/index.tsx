@@ -53,6 +53,15 @@ const EditConnection: React.FC = () => {
           />
         );
       }
+      case 'spanner': {
+        return (
+          <Connections.Spanner
+            key={connId}
+            onCancel={handleCancel}
+            connection={conn}
+          />
+        );
+      }
       case 'redshift': {
         return (
           <Connections.Redshift
