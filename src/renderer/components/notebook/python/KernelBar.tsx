@@ -26,7 +26,6 @@ import {
   Delete as DeleteIcon,
   Edit as EditIcon,
   GetApp as ExportIcon,
-  Inventory2 as PackagesIcon,
   MoreVert as MoreIcon,
   PlayArrow as RunAllIcon,
   PowerSettingsNew as ShutdownIcon,
@@ -42,7 +41,7 @@ import type {
   KernelState,
   NotebookRuntime,
 } from '../../../../types/pythonNotebooks';
-import { PythonLogoIcon } from '../NotebookKindIcon';
+import { PythonLogoIcon, PythonMonoIcon } from '../NotebookKindIcon';
 
 interface KernelBarProps {
   name: string;
@@ -255,7 +254,7 @@ export const KernelBar: React.FC<KernelBarProps> = ({
               disabled={!envReady}
               sx={iconButtonSx}
             >
-              <PackagesIcon sx={{ fontSize: 18 }} />
+              <PythonMonoIcon sx={{ fontSize: 18 }} />
             </IconButton>
           </span>
         </Tooltip>
