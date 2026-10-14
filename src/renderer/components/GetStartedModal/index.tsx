@@ -89,7 +89,7 @@ export const GetStartedModal: React.FC<GetStartedModalProps> = ({
       });
       toast.success('Getting started project created successfully!');
       onClose();
-      navigate('/app/loading');
+      navigate('/app/dbt-project');
     } catch (error) {
       toast.error(
         'Failed to create getting started project. Please try again.',
