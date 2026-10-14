@@ -28,9 +28,11 @@ import { registerSecondBrainHandlers } from './secondBrain.ipcHandlers';
 import { registerIcebergDatalakeHandlers } from './icebergDatalake.ipcHandlers';
 import registerBackupHandlers from './backup.ipcHandlers';
 import { registerPythonNotebooksHandlers } from './pythonNotebooks.ipcHandlers';
+import { registerSpeechHandlers } from './speech.ipcHandlers';
 
 export {
   registerPythonNotebooksHandlers,
+  registerSpeechHandlers,
   registerCliHandlers,
   registerProjectHandlers,
   registerSettingsHandlers,
