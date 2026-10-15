@@ -53,6 +53,7 @@ export const StyledSettingsNavLink = styled(NavLink)(({ theme }) => ({
   color: theme.palette.grey[600],
   display: 'block',
   width: '100%',
+  margin: 0,
   marginBottom: '2px',
   '&.active': {
     color: theme.palette.primary.main,

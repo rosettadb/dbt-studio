@@ -79,6 +79,7 @@ export const Sidebar: React.FC<Props> = ({
     } else {
       setIsSidebarOpen(true);
     }
+    setIsBarExpanded(false);
   }, [location.pathname, setIsSidebarOpen]);
 
   const renderItem = (element: (typeof mainElements)[0], isActive: boolean) => {
@@ -100,14 +101,22 @@ export const Sidebar: React.FC<Props> = ({
           },
           transition: 'all 0.2s ease',
           pointerEvents: isDisabled ? 'none' : 'auto',
-          px: isBarExpanded ? 2 : undefined,
+          py: 0,
+          minHeight: 48,
+          // 6px left keeps the expanded icon centre (~28px) where it sits in the collapsed bar
+          pl: isBarExpanded ? 0.75 : 0,
+          pr: isBarExpanded ? 1 : 0,
+          justifyContent: isBarExpanded ? undefined : 'center',
         }}
       >
         <ListItemIcon
           sx={{
             cursor: isDisabled ? 'not-allowed' : 'pointer',
             opacity: isDisabled ? 0.5 : 1,
-            minWidth: isBarExpanded ? 36 : undefined,
+            minWidth: isBarExpanded ? 44 : 0,
+            width: isBarExpanded ? 44 : undefined,
+            justifyContent: 'center',
+            '& > *': { transform: 'scale(1.08)' },
           }}
         >
           <element.icon />
@@ -116,7 +125,7 @@ export const Sidebar: React.FC<Props> = ({
           <ListItemText
             primary={element.text}
             primaryTypographyProps={{
-              fontSize: '0.8rem',
+              fontSize: 13,
               noWrap: true,
             }}
           />
@@ -199,7 +208,7 @@ export const Sidebar: React.FC<Props> = ({
               <img
                 src={rosettaIcon}
                 alt="Icon"
-                style={{ width: 20, height: 20 }}
+                style={{ width: 22, height: 22 }}
               />
             </Box>
           )}
@@ -207,14 +216,14 @@ export const Sidebar: React.FC<Props> = ({
 
         {/* Main items */}
         <Box sx={{ flex: 1 }}>
-          <List sx={{ width: activityBarWidth, pt: 0.5 }}>
+          <List sx={{ width: '100%', pt: 0.5 }}>
             {mainElements.map((el) =>
               renderItem(el, activeItemPath === el.path),
             )}
           </List>
         </Box>
 
-        <List sx={{ width: activityBarWidth, pb: 0.5 }}>
+        <List sx={{ width: '100%', pb: 0.5 }}>
           {bottomElements.map((el) =>
             renderItem(el, activeItemPath === el.path),
           )}

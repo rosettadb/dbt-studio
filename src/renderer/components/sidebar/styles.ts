@@ -77,6 +77,9 @@ export const ActivityBarHeader = styled(Box)(({ theme }) => ({
 
 export const StyledNavLink = styled(NavLink)(({ theme }) => ({
   textDecoration: 'none',
+  display: 'block',
+  width: '100%',
+  margin: 0,
   color: theme.palette.grey[600],
   '&.active': {
     color: theme.palette.primary.main,
