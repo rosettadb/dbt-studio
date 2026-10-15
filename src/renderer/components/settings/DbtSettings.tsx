@@ -869,7 +869,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
   return (
     <SettingsStack>
       <SettingsSection
-        title="dbt Core"
+        title="dbt™ Core"
         icon={<DataObjectOutlined />}
         badge={
           hasDbt ? (
