@@ -27,6 +27,7 @@ import { useListPipelines } from '../../../controllers';
 import { Project } from '../../../../types/backend';
 import { projectsServices } from '../../../services';
 import { getFileStatus, isFileUnpushed } from '../../../services/git.service';
+import { path, toPosix } from '../../../lib/path';
 
 interface PipelineSelectorModalProps {
   isOpen: boolean;
@@ -97,9 +98,8 @@ export const PipelineSelectorModal: React.FC<PipelineSelectorModalProps> = ({
     setFileStatus(null);
     setIsUnpushed(false);
 
-    const relativePath = pipeline.path
-      .replace(project.path, '')
-      .replace(/^[/\\]/, '');
+    // git wants a `/`-separated path relative to the repo root
+    const relativePath = toPosix(path.relative(project.path, pipeline.path));
 
     Promise.all([
       getFileStatus(project.path, relativePath),

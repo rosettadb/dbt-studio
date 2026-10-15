@@ -3,6 +3,7 @@ import { Box } from '@mui/material';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
+import { path } from '../../lib/path';
 
 const PIPELINE_DISPLAY_LIMIT = 20;
 const PIPELINE_DIAGNOSTIC_LIMIT = 5;
@@ -435,7 +436,7 @@ export const renderResult = (toolName: string, result: any) => {
                 {result.entries.map((entry: any, idx: number) => (
                   <li key={idx}>
                     {entry.type === 'directory' ? '📁 ' : '📄 '}
-                    {entry.path.split('/').pop() || entry.path}
+                    {path.basename(entry.path) || entry.path}
                   </li>
                 ))}
               </Box>
@@ -501,8 +502,13 @@ export const renderResult = (toolName: string, result: any) => {
           return (
             <Box>
               <Box sx={{ mb: 1, fontSize: '0.85rem', opacity: 0.9 }}>
-                ✅ Skill <b>{result.skillDirectory?.split('/').pop()}</b> loaded
-                successfully.
+                ✅ Skill{' '}
+                <b>
+                  {result.skillDirectory
+                    ? path.basename(result.skillDirectory)
+                    : ''}
+                </b>{' '}
+                loaded successfully.
               </Box>
               <Box
                 sx={{

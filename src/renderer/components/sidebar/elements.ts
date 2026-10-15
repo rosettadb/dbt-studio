@@ -19,7 +19,7 @@ const baseElements: SideBarElementType[] = [
   {
     path: '/app/dbt-project',
     text: 'DBT Studio',
-    icon: Icons.DBTProjects,
+    icon: Icons.DBTStudioMenuIcon,
     testId: 'nav-item-files',
   },
   {
@@ -43,7 +43,7 @@ const baseElements: SideBarElementType[] = [
   {
     path: '/app/data-lake',
     text: 'DataLake',
-    icon: Icons.DataLakeSVG,
+    icon: Icons.DataLakeMenuIcon,
     testId: 'nav-item-data-lake',
   },
   {

@@ -6,9 +6,19 @@ const express = require('express');
 
 const db = require('./db');
 const { listBranches } = require('./git');
-const { executeRun, cancelRun } = require('./runner');
+const {
+  executeRun,
+  cancelRun,
+  finalizeOrphan,
+  reconcileOrphans,
+} = require('./runner');
 const { enqueue, cancelQueued } = require('./queue');
-const { emitter, getBuffer, emitStatus } = require('./logBus');
+const {
+  emitter,
+  getBuffer,
+  emitStatus,
+  MAX_BUFFER_LINES,
+} = require('./logBus');
 
 const TERMINAL_STATUSES = ['passed', 'failed', 'error', 'cancelled'];
 
@@ -63,9 +73,14 @@ app.post('/api/runs/:id/cancel', async (req, res) => {
 
   const stopped = await cancelRun(runId);
   if (!stopped) {
-    return res
-      .status(409)
-      .json({ error: 'run is finishing up, could not cancel in time' });
+    // Not queued, not in flight, yet not terminal: the run was orphaned by a
+    // runner restart. Nothing else is going to close it out, so do it here.
+    const updated = await finalizeOrphan(
+      runId,
+      'cancelled',
+      'stopped: no container is tracked for this run (runner restarted while it was in progress)',
+    );
+    return res.json({ run: updated });
   }
   // executeRun's own finally block updates status to "cancelled" once the
   // container actually stops; the client picks that up over the SSE stream.
@@ -82,13 +97,23 @@ app.get('/api/runs/:id/stream', (req, res) => {
   });
   res.flushHeaders();
 
+  // The client clears its view on this so an EventSource reconnect (server
+  // restart, dropped connection) doesn't append the replay below the lines it
+  // already shows.
+  res.write('event: reset\ndata: null\n\n');
+
   // Replay past output: prefer the in-memory buffer, but fall back to the
-  // log file on disk so a run's history survives a server restart.
+  // log file on disk so a run's history survives a server restart. Only the
+  // tail is sent — the browser keeps the same number of lines anyway.
   let pastLines = getBuffer(runId);
   if (pastLines.length === 0) {
     const logPath = path.join(db.dataDir, 'runs', String(runId), 'output.log');
     if (fs.existsSync(logPath)) {
-      pastLines = fs.readFileSync(logPath, 'utf8').split('\n').filter(Boolean);
+      pastLines = fs
+        .readFileSync(logPath, 'utf8')
+        .split('\n')
+        .filter(Boolean)
+        .slice(-MAX_BUFFER_LINES);
     }
   }
   pastLines.forEach((line) => {
@@ -139,7 +164,24 @@ app.use('/api/runs/:id/report', (req, res, next) => {
 });
 
 const port = process.env.PORT || 4300;
-app.listen(port, () => {
-  // eslint-disable-next-line no-console -- a server announcing its port is intended output
-  console.log(`e2e-runner listening on :${port}`);
-});
+reconcileOrphans()
+  .then((count) => {
+    if (count > 0) {
+      // eslint-disable-next-line no-console -- startup housekeeping is intended output
+      console.log(
+        `e2e-runner: closed out ${count} run(s) left over from a previous process`,
+      );
+    }
+  })
+  .catch((err) => {
+    // eslint-disable-next-line no-console
+    console.error(
+      `e2e-runner: failed to reconcile leftover runs: ${err.message}`,
+    );
+  })
+  .finally(() => {
+    app.listen(port, () => {
+      // eslint-disable-next-line no-console -- a server announcing its port is intended output
+      console.log(`e2e-runner listening on :${port}`);
+    });
+  });

@@ -18,6 +18,16 @@ export const DBT_ADAPTER_PACKAGES = [
 
 export type DbtAdapterPackage = (typeof DBT_ADAPTER_PACKAGES)[number];
 
+// Adapters built into dbt Core 2.x (dbt-oss), which needs no Python adapter
+// packages. Keep in sync with V2_ADAPTERS in main/services/dbtCoreVersion.service.ts.
+export const DBT_V2_BUILT_IN_ADAPTERS = [
+  'snowflake',
+  'bigquery',
+  'redshift',
+  'databricks',
+  'duckdb',
+] as const;
+
 export const DBT_ADAPTER_PACKAGE_DESCRIPTIONS: Record<
   DbtAdapterPackage,
   string

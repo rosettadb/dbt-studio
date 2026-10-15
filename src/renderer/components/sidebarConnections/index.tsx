@@ -12,7 +12,6 @@ import {
   Divider,
 } from '@mui/material';
 import {
-  Cable,
   Add,
   Storage as DatabaseIcon,
   Cloud as CloudIcon,
@@ -31,6 +30,7 @@ const StyledNavLink = styled(NavLink)(({ theme }) => ({
   color: theme.palette.text.primary,
   display: 'block',
   width: '100%',
+  margin: 0,
   '&.active': {
     color: theme.palette.primary.main,
     textDecoration: 'none',
@@ -115,7 +115,7 @@ export const ConnectionsSidebar: React.FC = () => {
   return (
     <Box
       sx={{
-        p: 2,
+        p: 1,
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
@@ -136,20 +136,6 @@ export const ConnectionsSidebar: React.FC = () => {
       >
         <Box
           sx={{
-            display: 'flex',
-            alignItems: 'center',
-            mb: 2,
-            gap: 1,
-          }}
-        >
-          <Cable color="primary" fontSize="small" />
-          <Typography variant="h6" sx={{ m: 0 }}>
-            Connections & Sources
-          </Typography>
-        </Box>
-
-        <Box
-          sx={{
             overflow: 'auto',
             flex: 1,
             overflowX: 'hidden',
@@ -160,7 +146,7 @@ export const ConnectionsSidebar: React.FC = () => {
         >
           {/* Database Connections List */}
           {connections.length > 0 && (
-            <Box sx={{ mb: 2 }}>
+            <Box sx={{ mb: 1 }}>
               <Typography
                 variant="caption"
                 sx={{
@@ -168,11 +154,12 @@ export const ConnectionsSidebar: React.FC = () => {
                   alignItems: 'center',
                   gap: 1,
                   px: 1,
-                  pb: 1,
+                  pb: 0.5,
                   fontWeight: 600,
                   color: theme.palette.text.secondary,
                   textTransform: 'uppercase',
                   letterSpacing: '0.5px',
+                  fontSize: '0.6875rem',
                 }}
               >
                 <DatabaseIcon fontSize="small" />
@@ -188,8 +175,8 @@ export const ConnectionsSidebar: React.FC = () => {
                       sx={{
                         cursor: 'pointer',
                         borderRadius: 1,
-                        mb: 0.5,
-                        py: 0.5,
+                        mb: 0,
+                        py: 0,
                         px: 1,
                         backgroundColor:
                           selectedConnection?.id === connection.id
@@ -197,7 +184,7 @@ export const ConnectionsSidebar: React.FC = () => {
                             : 'transparent',
                         overflow: 'hidden',
                         minHeight: '32px',
-                        width: '270px',
+                        width: '100%',
                       }}
                     >
                       <ListItemIcon sx={{ minWidth: 32 }}>
@@ -208,7 +195,7 @@ export const ConnectionsSidebar: React.FC = () => {
                         primaryTypographyProps={{
                           variant: 'body2',
                           sx: {
-                            fontSize: '0.875rem',
+                            fontSize: 13,
                             fontWeight:
                               selectedConnection?.id === connection.id
                                 ? 600
@@ -228,8 +215,8 @@ export const ConnectionsSidebar: React.FC = () => {
 
           {/* Cloud Sources List */}
           {cloudConnections.length > 0 && (
-            <Box sx={{ mb: 2 }}>
-              {connections.length > 0 && <Divider sx={{ mb: 2 }} />}
+            <Box sx={{ mb: 1 }}>
+              {connections.length > 0 && <Divider sx={{ mb: 1 }} />}
               <Typography
                 variant="caption"
                 sx={{
@@ -237,11 +224,12 @@ export const ConnectionsSidebar: React.FC = () => {
                   alignItems: 'center',
                   gap: 1,
                   px: 1,
-                  pb: 1,
+                  pb: 0.5,
                   fontWeight: 600,
                   color: theme.palette.text.secondary,
                   textTransform: 'uppercase',
                   letterSpacing: '0.5px',
+                  fontSize: '0.6875rem',
                 }}
               >
                 <CloudIcon fontSize="small" />
@@ -257,8 +245,8 @@ export const ConnectionsSidebar: React.FC = () => {
                       sx={{
                         cursor: 'pointer',
                         borderRadius: 1,
-                        mb: 0.5,
-                        py: 0.5,
+                        mb: 0,
+                        py: 0,
                         px: 1,
                         backgroundColor:
                           selectedCloudConnection?.id === cloudConnection.id
@@ -273,7 +261,7 @@ export const ConnectionsSidebar: React.FC = () => {
                         },
                         overflow: 'hidden',
                         minHeight: '32px',
-                        width: '270px',
+                        width: '100%',
                       }}
                     >
                       <ListItemIcon sx={{ minWidth: 32 }}>
@@ -284,7 +272,7 @@ export const ConnectionsSidebar: React.FC = () => {
                         primaryTypographyProps={{
                           variant: 'body2',
                           sx: {
-                            fontSize: '0.875rem',
+                            fontSize: 13,
                             fontWeight:
                               selectedCloudConnection?.id === cloudConnection.id
                                 ? 600
@@ -359,9 +347,9 @@ export const ConnectionsSidebar: React.FC = () => {
       <Box
         sx={{
           mt: 'auto',
-          pt: 2,
+          pt: 1,
           borderTop: `1px solid ${theme.palette.divider}`,
-          width: '270px',
+          width: '100%',
           boxSizing: 'border-box',
           display: 'flex',
           flexDirection: 'column',
@@ -372,9 +360,10 @@ export const ConnectionsSidebar: React.FC = () => {
           variant="contained"
           color="primary"
           fullWidth
+          size="small"
           startIcon={<Add />}
           onClick={() => navigate('/app/add-connection')}
-          sx={{ mb: 1, width: '100%', boxSizing: 'border-box' }}
+          sx={{ width: '100%', boxSizing: 'border-box' }}
         >
           New Connection
         </Button>
@@ -382,6 +371,7 @@ export const ConnectionsSidebar: React.FC = () => {
           variant="outlined"
           color="primary"
           fullWidth
+          size="small"
           startIcon={<CloudIcon />}
           onClick={() => navigate('/app/cloud-explorer/new-connection')}
           sx={{ width: '100%', boxSizing: 'border-box' }}

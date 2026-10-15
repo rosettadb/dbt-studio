@@ -1,3 +1,4 @@
+/** @jest-environment-options {"customExportConditions": ["node", "node-addons"]} */
 import { promises as nodeFs } from 'fs';
 import os from 'os';
 import path from 'path';
