@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -61,7 +62,6 @@ jest.mock('../../../src/renderer/services/flowfile.service', () => ({
 
 // Only the setup components; the full components index pulls in the whole app.
 jest.mock('../../../src/renderer/components', () => ({
-  ...jest.requireActual('../../../src/renderer/components/setupChoiceRow'),
   ...jest.requireActual('../../../src/renderer/components/dbtSetup'),
   ...jest.requireActual('../../../src/renderer/components/flowfileSetup'),
   ...jest.requireActual(
@@ -69,32 +69,31 @@ jest.mock('../../../src/renderer/components', () => ({
   ),
 }));
 
+const pickLine = (line: 'v1' | 'v2') =>
+  fireEvent.click(screen.getByTestId(`setup-dbt-${line}`));
+
+const pickVersion = async (version: string) =>
+  fireEvent.click(await screen.findByTestId(`setup-dbt-version-${version}`));
+
+const continueFrom = (choice: 'adapters' | 'tools') =>
+  fireEvent.click(screen.getByTestId(`setup-continue-${choice}`));
+
+// Walks the four choices with the given line and version, keeping defaults.
+const makeChoices = async (line: 'v1' | 'v2', version: string) => {
+  pickLine(line);
+  await pickVersion(version);
+  continueFrom('adapters');
+  continueFrom('tools');
+};
+
 const goToInstallStep = () => {
   fireEvent.click(screen.getByTestId('setup-install-btn'));
 };
 
-const waitForVersionsToLoad = () =>
-  waitFor(() =>
-    expect(screen.getByTestId('setup-dbt-v1-summary')).not.toHaveTextContent(
-      'Loading',
-    ),
-  );
-
-const openSection = (testId: string) =>
-  fireEvent.click(screen.getByTestId(`${testId}-header`));
-
-const versionLabels = (line: 'v1' | 'v2') =>
-  within(screen.getByTestId(`setup-dbt-versions-${line}`))
+const versionLabels = () =>
+  within(screen.getByTestId('setup-dbt-versions'))
     .getAllByRole('radio')
-    .map((radio) => radio.closest('label')?.textContent);
-
-const pickVersion = (line: 'v1' | 'v2', version: string) =>
-  fireEvent.click(
-    within(screen.getByTestId(`setup-dbt-versions-${line}`)).getByRole(
-      'radio',
-      { name: version },
-    ),
-  );
+    .map((option) => option.textContent);
 
 const waitForInstallsToFinish = () =>
   waitFor(() => expect(screen.getByTestId('setup-finish-btn')).toBeEnabled());
@@ -167,64 +166,96 @@ describe('Setup wizard', () => {
     });
   });
 
-  it('opens with everything collapsed and 1.x at its newest version', async () => {
+  it('opens on the dbt version step with Install off', async () => {
     render(<Setup />);
+    // Let the version list finish loading in the background.
+    await act(async () => {});
     expect(screen.getByText('Rosetta Studio - Setup')).toBeInTheDocument();
     expect(screen.getByText('Step 1 of 2')).toBeInTheDocument();
-    await waitForVersionsToLoad();
-
-    expect(screen.getByTestId('setup-dbt-v1-summary')).toHaveTextContent(
-      '1.11.12 (latest)',
-    );
-    expect(screen.getByTestId('setup-adapters-summary')).toHaveTextContent(
-      'All 7 selected',
-    );
-    expect(screen.getByTestId('setup-tools-summary')).toHaveTextContent('None');
     expect(
-      screen.queryByTestId('setup-dbt-versions-v1'),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId('setup-adapter-checkboxes'),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId('setup-flowfile-checkbox'),
-    ).not.toBeInTheDocument();
+      screen.getByText('Which dbt™ version would you like to install?'),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('setup-dbt-v1')).toBeInTheDocument();
+    expect(screen.queryByTestId('setup-dbt-versions')).not.toBeInTheDocument();
+    expect(screen.getByTestId('setup-install-btn')).toBeDisabled();
   });
 
-  it('keeps only one section open at a time', async () => {
+  it('opens each step after the previous one is made', async () => {
     render(<Setup />);
-    await waitForVersionsToLoad();
 
-    openSection('setup-adapters');
+    pickLine('v1');
+    expect(screen.getByTestId('setup-summary-line')).toHaveTextContent(
+      'dbt 1.x',
+    );
+    expect(await screen.findByText('Which version of dbt 1.x?')).toBeVisible();
+    // Nothing is pre-picked; the newest is only marked "latest".
+    expect(screen.getByTestId('setup-dbt-version-1.11.12')).toHaveAttribute(
+      'aria-checked',
+      'false',
+    );
+    expect(screen.getByTestId('setup-dbt-version-1.11.12')).toHaveTextContent(
+      'latest',
+    );
+
+    await pickVersion('1.10.4');
+    expect(screen.getByTestId('setup-summary-version')).toHaveTextContent(
+      '1.10.4',
+    );
     expect(screen.getByTestId('setup-adapter-checkboxes')).toBeInTheDocument();
+    expect(screen.getByTestId('setup-install-btn')).toBeDisabled();
 
-    openSection('setup-tools');
+    continueFrom('adapters');
+    expect(screen.getByTestId('setup-summary-adapters')).toHaveTextContent(
+      'All 7 adapters',
+    );
     expect(screen.getByTestId('setup-flowfile-checkbox')).toBeInTheDocument();
-    await waitFor(() =>
-      expect(
-        screen.queryByTestId('setup-adapter-checkboxes'),
-      ).not.toBeInTheDocument(),
-    );
 
-    openSection('setup-dbt-v2');
-    expect(screen.getByTestId('setup-dbt-versions-v2')).toBeInTheDocument();
-    await waitFor(() =>
-      expect(
-        screen.queryByTestId('setup-flowfile-checkbox'),
-      ).not.toBeInTheDocument(),
+    continueFrom('tools');
+    expect(screen.getByTestId('setup-summary-tools')).toHaveTextContent('None');
+    expect(screen.getByTestId('setup-install-btn')).toBeEnabled();
+  });
+
+  it('reopens a finished step with Change and keeps the rest done', async () => {
+    render(<Setup />);
+    await makeChoices('v1', '1.10.4');
+
+    fireEvent.click(screen.getByTestId('setup-change-version'));
+    await pickVersion('1.11.12');
+
+    expect(screen.getByTestId('setup-summary-version')).toHaveTextContent(
+      '1.11.12 (latest)',
     );
+    expect(screen.getByTestId('setup-summary-tools')).toBeInTheDocument();
+    expect(screen.getByTestId('setup-install-btn')).toBeEnabled();
+  });
+
+  it('starts over with no version picked when the dbt line changes', async () => {
+    render(<Setup />);
+    await makeChoices('v1', '1.10.4');
+
+    fireEvent.click(screen.getByTestId('setup-change-line'));
+    pickLine('v2');
+
+    expect(await screen.findByText('Which version of dbt 2.x?')).toBeVisible();
+    expect(
+      within(screen.getByTestId('setup-dbt-versions')).queryByRole('radio', {
+        checked: true,
+      }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId('setup-install-btn')).toBeDisabled();
   });
 
   it('installs dbt 1.x with the picked adapters and the runner, without a runner row', async () => {
     render(<Setup />);
-    await waitForVersionsToLoad();
-
+    pickLine('v1');
+    await pickVersion('1.11.12');
     // Untick one adapter so only the picked ones get installed.
-    openSection('setup-adapters');
     fireEvent.click(screen.getByLabelText('dbt-kinetica'));
-    expect(screen.getByTestId('setup-adapters-summary')).toHaveTextContent(
-      '6 of 7 selected',
+    continueFrom('adapters');
+    expect(screen.getByTestId('setup-summary-adapters')).toHaveTextContent(
+      '6 of 7 adapters',
     );
+    continueFrom('tools');
     goToInstallStep();
     expect(screen.getByText('Step 2 of 2')).toBeInTheDocument();
     await waitForInstallsToFinish();
@@ -251,6 +282,7 @@ describe('Setup wizard', () => {
 
   it('shows only the Python version, not its path', async () => {
     render(<Setup />);
+    await makeChoices('v1', '1.11.12');
     goToInstallStep();
     await waitForInstallsToFinish();
 
@@ -261,12 +293,14 @@ describe('Setup wizard', () => {
 
   it('installs Python 3.11 before dbt 2.x and skips adapter packages', async () => {
     render(<Setup />);
-    await waitForVersionsToLoad();
-    openSection('setup-dbt-v2');
-    expect(screen.getByTestId('setup-adapters-summary')).toHaveTextContent(
-      '5 included with 2.x',
+    pickLine('v2');
+    await pickVersion('2.0.3');
+    expect(screen.getByTestId('setup-adapter-included')).toBeInTheDocument();
+    continueFrom('adapters');
+    expect(screen.getByTestId('setup-summary-adapters')).toHaveTextContent(
+      '5 built-in adapters',
     );
-
+    continueFrom('tools');
     goToInstallStep();
     await waitForInstallsToFinish();
 
@@ -276,9 +310,12 @@ describe('Setup wizard', () => {
 
   it('installs Flowfile last when it was ticked', async () => {
     render(<Setup />);
-    openSection('setup-tools');
+    pickLine('v1');
+    await pickVersion('1.11.12');
+    continueFrom('adapters');
     fireEvent.click(screen.getByLabelText('Flowfile'));
-    expect(screen.getByTestId('setup-tools-summary')).toHaveTextContent(
+    continueFrom('tools');
+    expect(screen.getByTestId('setup-summary-tools')).toHaveTextContent(
       'Flowfile',
     );
     goToInstallStep();
@@ -301,6 +338,7 @@ describe('Setup wizard', () => {
     );
 
     render(<Setup />);
+    await makeChoices('v1', '1.11.12');
     goToInstallStep();
 
     await waitFor(() => expect(installPackageVersion).toHaveBeenCalled());
@@ -318,8 +356,11 @@ describe('Setup wizard', () => {
     });
 
     render(<Setup />);
-    openSection('setup-tools');
+    pickLine('v1');
+    await pickVersion('1.11.12');
+    continueFrom('adapters');
     fireEvent.click(screen.getByLabelText('Flowfile'));
+    continueFrom('tools');
     goToInstallStep();
     await waitForInstallsToFinish();
 
@@ -343,6 +384,7 @@ describe('Setup wizard', () => {
     });
 
     render(<Setup />);
+    await makeChoices('v1', '1.11.12');
     goToInstallStep();
     await waitForInstallsToFinish();
 
@@ -354,6 +396,7 @@ describe('Setup wizard', () => {
 
   it('saves setup as done with the settings the installs wrote', async () => {
     render(<Setup />);
+    await makeChoices('v1', '1.11.12');
     goToInstallStep();
     await waitForInstallsToFinish();
 
@@ -372,21 +415,9 @@ describe('Setup wizard', () => {
     );
   });
 
-  it('picks a version, folds the row, and installs that version', async () => {
+  it('installs the dbt version that was picked', async () => {
     render(<Setup />);
-    await waitForVersionsToLoad();
-    openSection('setup-dbt-v1');
-    pickVersion('v1', '1.10.4');
-
-    await waitFor(() =>
-      expect(
-        screen.queryByTestId('setup-dbt-versions-v1'),
-      ).not.toBeInTheDocument(),
-    );
-    expect(screen.getByTestId('setup-dbt-v1-summary')).toHaveTextContent(
-      '1.10.4',
-    );
-
+    await makeChoices('v1', '1.10.4');
     goToInstallStep();
     expect(screen.getByText('dbt 1.10.4 and 7 adapters')).toBeInTheDocument();
     await waitForInstallsToFinish();
@@ -395,22 +426,23 @@ describe('Setup wizard', () => {
     expect(saveSettings).not.toHaveBeenCalled();
   });
 
-  it('lists only the opened line, newest first and marked latest', async () => {
+  it('lists only the picked line, newest first and marked latest', async () => {
     render(<Setup />);
-    await waitForVersionsToLoad();
-    openSection('setup-dbt-v2');
+    pickLine('v2');
+    await screen.findByTestId('setup-dbt-versions');
 
-    expect(versionLabels('v2')).toEqual(['2.0.3latest', '2.0.2']);
+    expect(versionLabels()).toEqual(['2.0.3latest', '2.0.2']);
   });
 
   it('installs the latest when the version list cannot load', async () => {
     listDbtCoreVersions.mockRejectedValueOnce(new Error('offline'));
     render(<Setup />);
-
-    await waitFor(() =>
-      expect(screen.getByTestId('setup-dbt-v1-summary')).toHaveTextContent(
-        'Latest',
-      ),
+    pickLine('v1');
+    await pickVersion('latest');
+    continueFrom('adapters');
+    continueFrom('tools');
+    expect(screen.getByTestId('setup-summary-version')).toHaveTextContent(
+      'Latest',
     );
     goToInstallStep();
     await waitForInstallsToFinish();
@@ -421,10 +453,7 @@ describe('Setup wizard', () => {
   it('warns and corrects settings when an adapter changes the dbt version', async () => {
     getInstalledDbtCore.mockResolvedValue({ version: '1.11.12' });
     render(<Setup />);
-    await waitForVersionsToLoad();
-    openSection('setup-dbt-v1');
-    pickVersion('v1', '1.10.4');
-
+    await makeChoices('v1', '1.10.4');
     goToInstallStep();
     await waitForInstallsToFinish();
 
@@ -443,10 +472,10 @@ describe('Setup wizard', () => {
       })),
     });
     render(<Setup />);
-    await waitForVersionsToLoad();
-    openSection('setup-dbt-v1');
+    pickLine('v1');
+    await screen.findByTestId('setup-dbt-versions');
 
-    const labels = versionLabels('v1');
+    const labels = versionLabels();
     expect(labels).toHaveLength(15);
     expect(labels[0]).toBe('1.11.20latest');
     expect(labels[14]).toBe('1.11.6');

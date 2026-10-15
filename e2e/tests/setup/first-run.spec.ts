@@ -60,7 +60,7 @@ test.describe('First Run Experience', () => {
     await setupWizard.expectToBeVisible();
   });
 
-  test('should open with everything collapsed and 1.x picked', async ({
+  test('should start on the dbt version step with Install off', async ({
     electronApp,
   }) => {
     const setupWindow = await findSetupWindow(electronApp);
@@ -72,65 +72,69 @@ test.describe('First Run Experience', () => {
     await expect(setupWizard.stepLabel).toHaveText('Step 1 of 2');
     await setupWizard.expectCurrentStep('cli');
     await expect(
-      setupWindow.getByLabel('dbt 1.x', { exact: true }),
-    ).toBeChecked();
-    // The picked row shows its newest version, or "Latest" when offline.
-    await expect(setupWindow.getByTestId('setup-dbt-v1-summary')).toHaveText(
-      /latest/i,
-      { timeout: 30000 },
-    );
-    await expect(setupWindow.getByTestId('setup-adapters-summary')).toHaveText(
-      'All 7 selected',
-    );
-    await expect(setupWindow.getByTestId('setup-tools-summary')).toHaveText(
-      'None',
-    );
-    await expect(
-      setupWindow.getByTestId('setup-adapter-checkboxes'),
-    ).toBeHidden();
+      setupWindow.getByText('Which dbt™ version would you like to install?'),
+    ).toBeVisible();
+    await expect(setupWindow.getByTestId('setup-dbt-v1')).toBeVisible();
+    await expect(setupWindow.getByTestId('setup-dbt-v2')).toBeVisible();
 
-    // Install is one click away; nothing installs until it's clicked
-    await expect(setupWindow.getByTestId('setup-install-btn')).toBeEnabled();
+    // Install turns on only after every choice is made
+    await expect(setupWindow.getByTestId('setup-install-btn')).toBeDisabled();
     await expect(setupWizard.skipButton).toBeVisible();
   });
 
-  test('should open dbt 2.x with its versions and built-in adapters', async ({
+  test('should open the versions of dbt 2.x and its built-in adapters', async ({
     electronApp,
   }) => {
     const setupWindow = await findSetupWindow(electronApp);
     if (!setupWindow) throw new Error('Setup window not found');
     await setupWindow.waitForLoadState('domcontentloaded');
 
-    await setupWindow.getByTestId('setup-dbt-v2-header').click();
-
-    await expect(
-      setupWindow.getByLabel('dbt 2.x', { exact: true }),
-    ).toBeChecked();
-    await expect(setupWindow.getByTestId('setup-adapters-summary')).toHaveText(
-      '5 included with 2.x',
+    await setupWindow.getByTestId('setup-dbt-v2').click();
+    await expect(setupWindow.getByTestId('setup-summary-line')).toHaveText(
+      'dbt 2.x',
     );
 
-    await setupWindow.getByTestId('setup-adapters-header').click();
+    // The real version list, or the "Latest" fallback when offline
+    const versions = setupWindow.getByTestId('setup-dbt-versions');
+    const latestFallback = setupWindow.getByTestId('setup-dbt-version-latest');
+    await expect(versions.or(latestFallback)).toBeVisible({ timeout: 30000 });
+    await setupWindow
+      .locator(
+        '[data-testid="setup-dbt-versions"] [role="radio"], [data-testid="setup-dbt-version-latest"]',
+      )
+      .first()
+      .click();
+
     await expect(
       setupWindow.getByTestId('setup-adapter-included'),
     ).toBeVisible();
   });
 
-  test('should pick Flowfile under Optional tools on the same page', async ({
+  test('should turn Install on after all four steps, with Flowfile ticked', async ({
     electronApp,
   }) => {
     const setupWindow = await findSetupWindow(electronApp);
     if (!setupWindow) throw new Error('Setup window not found');
     await setupWindow.waitForLoadState('domcontentloaded');
 
-    await setupWindow.getByTestId('setup-tools-header').click();
+    await setupWindow.getByTestId('setup-dbt-v1').click();
+    await setupWindow
+      .locator(
+        '[data-testid="setup-dbt-versions"] [role="radio"], [data-testid="setup-dbt-version-latest"]',
+      )
+      .first()
+      .click({ timeout: 30000 });
+    await setupWindow.getByTestId('setup-continue-adapters').click();
+
     const flowfile = setupWindow.getByLabel('Flowfile');
     await expect(flowfile).not.toBeChecked();
     await flowfile.check();
+    await setupWindow.getByTestId('setup-continue-tools').click();
 
-    await expect(setupWindow.getByTestId('setup-tools-summary')).toHaveText(
+    await expect(setupWindow.getByTestId('setup-summary-tools')).toHaveText(
       'Flowfile',
     );
+    await expect(setupWindow.getByTestId('setup-install-btn')).toBeEnabled();
     // The test stops here instead of clicking Install, so nothing downloads.
   });
 });

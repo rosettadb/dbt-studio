@@ -23,7 +23,6 @@ export * from './errorMessage';
 export * from './settings';
 export * from './dbtSetup';
 export * from './flowfileSetup';
-export * from './setupChoiceRow';
 export * from './setupInstallProgress';
 export * from './GetStartedModal';
 export * from './sidebarConnections';
