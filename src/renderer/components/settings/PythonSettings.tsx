@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { Button, Box, Chip, CircularProgress, Backdrop } from '@mui/material';
 import {
   Delete,
-  CodeOutlined,
   ListAltOutlined,
   WarningAmberOutlined,
   Download,
@@ -22,6 +21,7 @@ import {
   SettingsStack,
   SettingsStatus,
 } from './SettingsLayout';
+import { PythonMonoIcon } from '../notebook/NotebookKindIcon';
 
 interface PythonSettingsProps {
   settings: SettingsType;
@@ -145,7 +145,7 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
 
       <SettingsSection
         title="Python Installation"
-        icon={<CodeOutlined />}
+        icon={<PythonMonoIcon />}
         description="Embedded interpreter, independent of any Python on your system. Runs dbt Core, Flowfile and sqlglot."
       >
         <SettingsRow
