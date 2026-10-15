@@ -7,6 +7,7 @@ import {
   Typography,
 } from '@mui/material';
 import { Refresh } from '@mui/icons-material';
+import { useColorScheme } from '@mui/material/styles';
 
 // Shared building blocks so every settings page has the same look:
 // compact cards with a header strip (icon, title, description) and the
@@ -23,6 +24,8 @@ export const SettingsStack: React.FC<{ children: React.ReactNode }> = ({
 interface SettingsSectionProps {
   title: string;
   icon?: React.ReactElement;
+  // Small pill shown right after the title (e.g. the installed version).
+  badge?: React.ReactNode;
   description?: React.ReactNode;
   action?: React.ReactNode;
   children: React.ReactNode;
@@ -31,6 +34,7 @@ interface SettingsSectionProps {
 export const SettingsSection: React.FC<SettingsSectionProps> = ({
   title,
   icon,
+  badge,
   description,
   action,
   children,
@@ -65,6 +69,7 @@ export const SettingsSection: React.FC<SettingsSectionProps> = ({
       <Typography sx={{ fontSize: 13, fontWeight: 600, flexShrink: 0 }}>
         {title}
       </Typography>
+      {badge}
       <Typography
         variant="caption"
         color="text.secondary"
@@ -230,3 +235,42 @@ export const SettingsRefreshButton: React.FC<{
     </span>
   </Tooltip>
 );
+
+// The theme's warning yellow is very bright. Inside settings (and their
+// dialogs) we use a softer orange so warning states don't jump out.
+const softWarningColors = {
+  dark: {
+    '--mui-palette-warning-main': '#d8a05a',
+    '--mui-palette-warning-mainChannel': '216 160 90',
+    '--mui-palette-warning-light': '#e3b47a',
+    '--mui-palette-warning-dark': '#b8742a',
+    '--mui-palette-warning-contrastText': 'rgba(0, 0, 0, 0.87)',
+    '--mui-palette-Alert-warningColor': '#f0d6b3',
+    '--mui-palette-Alert-warningStandardBg': '#2e2416',
+    '--mui-palette-Alert-warningIconColor': '#d8a05a',
+    '--mui-palette-Alert-warningFilledBg': '#b8742a',
+    '--mui-palette-Alert-warningFilledColor': '#fff',
+  },
+  light: {
+    '--mui-palette-warning-main': '#b8742a',
+    '--mui-palette-warning-mainChannel': '184 116 42',
+    '--mui-palette-warning-light': '#d8a05a',
+    '--mui-palette-warning-dark': '#9a5f1f',
+    '--mui-palette-warning-contrastText': '#fff',
+    '--mui-palette-Alert-warningColor': '#5c3a10',
+    '--mui-palette-Alert-warningStandardBg': '#fbf1e4',
+    '--mui-palette-Alert-warningIconColor': '#b8742a',
+    '--mui-palette-Alert-warningFilledBg': '#b8742a',
+    '--mui-palette-Alert-warningFilledColor': '#fff',
+  },
+} as const;
+
+// Style object that applies the softer warning colours to an element and
+// everything inside it, following the current light/dark mode.
+export const useSettingsWarningStyle = (): React.CSSProperties => {
+  const { mode, systemMode } = useColorScheme();
+  const isDarkMode = (mode === 'system' ? systemMode : mode) === 'dark';
+  return (
+    isDarkMode ? softWarningColors.dark : softWarningColors.light
+  ) as React.CSSProperties;
+};
