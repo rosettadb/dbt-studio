@@ -9,7 +9,7 @@ export const createSetupWindow = (): BrowserWindow => {
     minWidth: 800,
     minHeight: 700,
     maxWidth: 800,
-    maxHeight: 600,
+    maxHeight: 700,
     resizable: false,
     fullscreenable: false,
     title: 'Setup',
