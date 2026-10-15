@@ -903,7 +903,6 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
           <ToggleButtonGroup
             exclusive
             size="small"
-            color="info"
             value={shownRuntime}
             sx={{
               flexShrink: 0,
