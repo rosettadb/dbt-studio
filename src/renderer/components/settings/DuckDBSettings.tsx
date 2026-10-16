@@ -1,11 +1,11 @@
 import React from 'react';
-import { Box } from '@mui/material';
 import { DuckDBWorkspaceCard } from './DuckDBWorkspaceCard';
+import { SettingsStack } from './SettingsLayout';
 
 export const DuckDBSettings: React.FC = () => {
   return (
-    <Box mt={3}>
+    <SettingsStack>
       <DuckDBWorkspaceCard />
-    </Box>
+    </SettingsStack>
   );
 };

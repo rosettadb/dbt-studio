@@ -70,6 +70,22 @@ export const DBTProjects: React.FC = () => {
   );
 };
 
+// Main menu version: svg and its box are the same size so it centers like the other menu icons.
+// 20px because the dbt logo fills its whole viewBox, unlike the padded MUI icons.
+export const DBTStudioMenuIcon: React.FC = () => {
+  const theme = useTheme();
+
+  return (
+    <Icon
+      src={icons.dbtBlack}
+      width={20}
+      height={20}
+      style={{ ...style, width: 20, height: 20 }}
+      color={theme.palette.primary.main}
+    />
+  );
+};
+
 export const ElectricalServices: React.FC = () => (
   <ElectricalServicesIcon color="primary" />
 );
@@ -123,6 +139,24 @@ export const DataLakeSVG: React.FC<{ width?: number; height?: number }> = ({
   );
 };
 
+// Main menu version: no right margin so it centers like the other menu icons
+export const DataLakeMenuIcon: React.FC = () => {
+  const theme = useTheme();
+  return (
+    <Icon
+      src={icons.dataLakeSVG}
+      width={24}
+      height={24}
+      style={{
+        display: 'inline-block',
+        verticalAlign: 'middle',
+        overflow: 'hidden',
+      }}
+      color={theme.palette.primary.main}
+    />
+  );
+};
+
 export const DataLake: React.FC = () => {
   return (
     <img
@@ -153,4 +187,6 @@ export const FlowsIcon: React.FC = () => {
   );
 };
 
-export const HomeIcon: React.FC = () => <HomeMuiIcon color="primary" />;
+export const HomeIcon: React.FC = () => (
+  <HomeMuiIcon color="primary" sx={{ fontSize: 28 }} />
+);

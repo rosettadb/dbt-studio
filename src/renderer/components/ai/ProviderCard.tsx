@@ -1,10 +1,5 @@
 import React from 'react';
 import {
-  Card,
-  // CardHeader removed - using Box layout instead
-  CardContent,
-  CardActions,
-  Typography,
   Box,
   Button,
   Chip,
@@ -18,7 +13,7 @@ import {
   DialogActions,
   DialogContentText,
 } from '@mui/material';
-import { Edit, Delete, Cable, Logout, Login } from '@mui/icons-material';
+import { Edit, Delete, Logout, Login } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import {
   aiProviderImages,
@@ -35,6 +30,7 @@ import type {
   AIProvider,
   ProviderTestResult,
 } from '../../controllers/aiProviders.controller';
+import { SettingsRow } from '../settings/SettingsLayout';
 
 interface ProviderCardProps {
   provider: AIProvider;
@@ -190,22 +186,6 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
     }
   };
 
-  const getProviderTypeColor = (type: string) => {
-    switch (type) {
-      case 'openai':
-      case 'openai-codex':
-        return '#10A37F';
-      case 'ollama':
-        return '#FF6B35';
-      case 'gemini':
-        return '#4285F4';
-      case 'anthropic':
-        return '#CD7F32';
-      default:
-        return '#666';
-    }
-  };
-
   const getProviderIcon = (type: string) => {
     const iconSrc = aiProviderImages[type as keyof typeof aiProviderImages];
     if (iconSrc) {
@@ -244,59 +224,18 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
   const activeSwitchTooltip = getActiveSwitchTooltip();
 
   return (
-    <Card
-      sx={{
-        // Fill the grid row and keep the action buttons at the bottom, so
-        // cards in one row line up even when their content heights differ.
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-        transition: 'all 0.3s ease',
-        border: isActive ? 2 : 1,
-        borderColor: isActive ? 'primary.main' : 'divider',
-        '&:hover': {
-          boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
-          transform: 'translateY(-2px)',
-          borderColor: 'primary.main',
-        },
-      }}
-    >
-      {/* Header with title and icon */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          px: 2,
-          pt: 1.5,
-          pb: 1.5,
-        }}
-      >
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 2,
-          }}
-        >
-          <Box
-            sx={{
-              width: 48,
-              height: 48,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
+    <>
+      <SettingsRow
+        label={
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <img
               src={getProviderIcon(provider.type)}
               alt={`${provider.type} logo`}
               title={getProviderTypeLabel(provider.type)}
               aria-label={getProviderTypeLabel(provider.type)}
               style={{
-                width: 40,
-                height: 40,
+                width: 18,
+                height: 18,
                 objectFit: 'contain',
                 filter:
                   isDarkMode &&
@@ -306,188 +245,98 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                     : undefined,
               }}
             />
-          </Box>
-
-          <Box>
-            <Typography
-              variant="subtitle1"
-              sx={{
-                fontWeight: 'bold',
-              }}
-            >
-              {provider.name}
-            </Typography>
-            <Typography
-              variant="body2"
-              sx={{
-                bgcolor: getProviderTypeColor(provider.type),
-                padding: '2px 4px',
-                borderRadius: '4px',
-              }}
-            >
-              {getProviderTypeLabel(provider.type)}
-            </Typography>
-          </Box>
-        </Box>
-
-        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          {isActive && (
-            <Typography
-              variant="caption"
-              sx={{ color: 'success.main', fontWeight: 600 }}
-            >
-              Active
-            </Typography>
-          )}
-          <Tooltip title={activeSwitchTooltip}>
-            {/* span: a disabled Switch fires no events, so the tooltip needs a wrapper */}
-            <span>
-              <Switch
-                checked={isActive}
-                onChange={handleSetActive}
-                disabled={isActiveSwitchDisabled}
-                color="success"
-                inputProps={{ 'aria-label': activeSwitchTooltip }}
-              />
-            </span>
-          </Tooltip>
-        </Box>
-      </Box>
-
-      <CardContent sx={{ pt: 0, pb: 1, flexGrow: 1 }}>
-        {/* Model Information */}
-        <Box sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography variant="body2" color="text.secondary">
-            Model:
-          </Typography>
-          <Typography
-            variant="body1"
-            sx={{
-              fontWeight: 'medium',
-              color: getProviderModel() ? 'text.primary' : 'text.secondary',
-              fontStyle: getProviderModel() ? 'normal' : 'italic',
-            }}
-          >
-            {getProviderModel() || 'No model configured'}
-          </Typography>
-        </Box>
-
-        {isChatGpt && (
-          <Box sx={{ mb: 1, display: 'flex', flexDirection: 'column' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography variant="body2" color="text.secondary">
-                Account:
-              </Typography>
-              {isSignedOutChatGpt ? (
-                <>
-                  <Chip
-                    label="Signed out"
-                    size="small"
-                    color="warning"
-                    variant="outlined"
-                  />
-                  <Button
-                    size="small"
-                    startIcon={<Login />}
-                    onClick={handleEdit}
-                  >
-                    Sign in
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Typography variant="body2" noWrap>
-                    {chatGptConfig.accountEmail || 'ChatGPT account'}
-                  </Typography>
-                  <Button
-                    size="small"
-                    startIcon={<Logout />}
-                    onClick={() => provider.id && signOutChatGpt(provider.id)}
-                    disabled={isSigningOut}
-                  >
-                    Sign out
-                  </Button>
-                </>
-              )}
-            </Box>
-          </Box>
-        )}
-      </CardContent>
-
-      <CardActions sx={{ justifyContent: 'space-between', px: 2, pb: 1.5 }}>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={handleTest}
-            disabled={isTesting}
-            startIcon={
-              isTesting ? (
-                <CircularProgress size={16} color="inherit" sx={{ mr: 1 }} />
-              ) : (
-                <Cable color="primary" />
-              )
-            }
-            sx={{
-              position: 'relative',
-              paddingRight: '36px',
-              minWidth: '120px',
-            }}
-          >
-            {isTesting ? 'Testing...' : 'Test'}
-            <Box
-              sx={{
-                position: 'absolute',
-                right: 8,
-                top: '50%',
-                transform: 'translateY(-50%)',
-                width: 10,
-                height: 10,
-                borderRadius: '50%',
-                backgroundColor: getIndicatorColor(),
-                border: `1px solid ${theme.palette.primary.contrastText}`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
+            {provider.name}
+            <Chip
+              label={getProviderTypeLabel(provider.type)}
+              size="small"
+              variant="outlined"
             />
-          </Button>
-        </Box>
-
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<Edit />}
-            onClick={handleEdit}
-          >
-            Edit
-          </Button>
-          {/* Always shown so every card has the same action row. */}
-          <Tooltip title={isActive ? 'Deactivate before deleting' : ''}>
-            <span>
-              <Button
-                size="small"
-                variant="outlined"
-                color="error"
-                startIcon={<Delete />}
-                onClick={handleDelete}
-                disabled={isDeleting || isActive}
+          </Box>
+        }
+        description={[
+          `Model: ${getProviderModel() || 'No model configured'}`,
+          isChatGpt &&
+            (isSignedOutChatGpt
+              ? 'Signed out'
+              : chatGptConfig.accountEmail || 'ChatGPT account'),
+        ]
+          .filter(Boolean)
+          .join(' · ')}
+      >
+        {isChatGpt &&
+          (isSignedOutChatGpt ? (
+            <Button size="small" startIcon={<Login />} onClick={handleEdit}>
+              Sign in
+            </Button>
+          ) : (
+            <Button
+              size="small"
+              startIcon={<Logout />}
+              onClick={() => provider.id && signOutChatGpt(provider.id)}
+              disabled={isSigningOut}
+            >
+              Sign out
+            </Button>
+          ))}
+        <Button
+          size="small"
+          variant="outlined"
+          onClick={handleTest}
+          disabled={isTesting}
+          startIcon={
+            isTesting ? (
+              <CircularProgress size={14} color="inherit" />
+            ) : (
+              <Box
+                component="span"
                 sx={{
-                  borderRadius: '8px',
-                  '&:hover': {
-                    backgroundColor: 'error.light',
-                    color: 'error.contrastText',
-                    borderColor: 'error.light',
-                  },
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  backgroundColor: getIndicatorColor(),
                 }}
-              >
-                Delete
-              </Button>
-            </span>
-          </Tooltip>
-        </Box>
-      </CardActions>
+              />
+            )
+          }
+        >
+          {isTesting ? 'Testing...' : 'Test'}
+        </Button>
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={<Edit />}
+          onClick={handleEdit}
+        >
+          Edit
+        </Button>
+        <Tooltip title={isActive ? 'Deactivate before deleting' : ''}>
+          <span>
+            <Button
+              size="small"
+              variant="outlined"
+              color="error"
+              startIcon={<Delete />}
+              onClick={handleDelete}
+              disabled={isDeleting || isActive}
+            >
+              Delete
+            </Button>
+          </span>
+        </Tooltip>
+        <Tooltip title={activeSwitchTooltip}>
+          {/* span: a disabled Switch fires no events, so the tooltip needs a wrapper */}
+          <span>
+            <Switch
+              size="small"
+              checked={isActive}
+              onChange={handleSetActive}
+              disabled={isActiveSwitchDisabled}
+              color="success"
+              inputProps={{ 'aria-label': activeSwitchTooltip }}
+            />
+          </span>
+        </Tooltip>
+      </SettingsRow>
 
       {/* Delete Confirmation Dialog */}
       <Dialog
@@ -514,6 +363,6 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
           </Button>
         </DialogActions>
       </Dialog>
-    </Card>
+    </>
   );
 };

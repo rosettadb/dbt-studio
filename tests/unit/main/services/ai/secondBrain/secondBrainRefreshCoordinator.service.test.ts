@@ -1,3 +1,4 @@
+/** @jest-environment-options {"customExportConditions": ["node", "node-addons"]} */
 import SecondBrainRefreshCoordinator from '../../../../../../src/main/services/ai/secondBrain/secondBrainRefreshCoordinator.service';
 import SecondBrainRefreshService from '../../../../../../src/main/services/ai/secondBrain/secondBrainRefresh.service';
 

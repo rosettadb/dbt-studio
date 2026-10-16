@@ -7,6 +7,10 @@ emitter.setMaxListeners(0);
 
 const buffers = new Map(); // runId -> string[]
 
+// A full run is tens of thousands of lines. Only the tail is kept for replay
+// to late subscribers; the complete output is always on disk in output.log.
+const MAX_BUFFER_LINES = 5000;
+
 /**
  * Buffers one output line for a run and emits it to any live SSE subscribers.
  *
@@ -15,7 +19,11 @@ const buffers = new Map(); // runId -> string[]
  */
 function appendLog(runId, line) {
   if (!buffers.has(runId)) buffers.set(runId, []);
-  buffers.get(runId).push(line);
+  const buffer = buffers.get(runId);
+  buffer.push(line);
+  if (buffer.length > MAX_BUFFER_LINES) {
+    buffer.splice(0, buffer.length - MAX_BUFFER_LINES);
+  }
   emitter.emit(`log:${runId}`, line);
 }
 
@@ -51,4 +59,11 @@ function clearBuffer(runId) {
   buffers.delete(runId);
 }
 
-module.exports = { emitter, appendLog, getBuffer, emitStatus, clearBuffer };
+module.exports = {
+  emitter,
+  appendLog,
+  getBuffer,
+  emitStatus,
+  clearBuffer,
+  MAX_BUFFER_LINES,
+};

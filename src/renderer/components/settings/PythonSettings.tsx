@@ -1,24 +1,11 @@
 import React, { useEffect, useState } from 'react';
+import { Button, Box, Chip, CircularProgress, Backdrop } from '@mui/material';
 import {
-  Button,
-  Box,
-  Chip,
-  Typography,
-  Alert,
-  CircularProgress,
-  Backdrop,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction,
-  Divider,
-} from '@mui/material';
-import {
-  CheckCircle,
   Delete,
+  CodeOutlined,
+  ListAltOutlined,
+  WarningAmberOutlined,
   Download,
-  Refresh,
-  Warning,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { SettingsType, PythonVersionInfo } from '../../../types/backend';
@@ -28,6 +15,13 @@ import {
   useInstallPythonVersion,
   useUninstallPython,
 } from '../../controllers';
+import {
+  SettingsRefreshButton,
+  SettingsRow,
+  SettingsSection,
+  SettingsStack,
+  SettingsStatus,
+} from './SettingsLayout';
 
 interface PythonSettingsProps {
   settings: SettingsType;
@@ -141,7 +135,7 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
   };
 
   return (
-    <Box sx={{ maxWidth: 800 }}>
+    <SettingsStack>
       <Backdrop
         open={isBlocking}
         sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, color: '#fff' }}
@@ -149,161 +143,110 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
         <CircularProgress color="inherit" />
       </Backdrop>
 
-      <Typography variant="h6" gutterBottom>
-        Python Installation
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Rosetta DBT Studio manages its own embedded Python interpreter,
-        independent of any Python installed on your system. It is required to
-        run dbt Core (v1 and v2), Flowfile, and sqlglot (used for column
-        lineage).
-      </Typography>
-
-      {isInstalled ? (
-        <Alert severity="success" sx={{ mb: 3 }} icon={<CheckCircle />}>
-          <Typography variant="body1" sx={{ fontWeight: 500 }}>
-            Python is installed at: {settings.pythonPath}
-          </Typography>
-          <Typography variant="body2" sx={{ mt: 1 }}>
-            Version: {settings.pythonVersion || 'Unknown'}
-          </Typography>
-        </Alert>
-      ) : (
-        <Alert severity="warning" sx={{ mb: 3 }} icon={<Warning />}>
-          <Typography variant="body1">
-            Python is not installed. It will be installed automatically when
-            needed (for example, when installing dbt Core v1), or you can
-            install the recommended version below.
-          </Typography>
-        </Alert>
-      )}
-
-      <Box sx={{ mb: 2 }}>
-        <Button
-          variant="outlined"
-          onClick={() => checkVersions.mutate()}
-          disabled={checkVersions.isLoading}
-          startIcon={
-            checkVersions.isLoading ? (
-              <CircularProgress size={16} />
-            ) : (
-              <Refresh />
-            )
+      <SettingsSection
+        title="Python Installation"
+        icon={<CodeOutlined />}
+        description="Embedded interpreter, independent of any Python on your system. Runs dbt Core, Flowfile and sqlglot."
+      >
+        <SettingsRow
+          label="Status"
+          description={
+            isInstalled
+              ? settings.pythonPath
+              : 'Python is not installed. It will be installed automatically when needed, or you can install the recommended version below.'
           }
         >
-          {checkVersions.isLoading ? 'Refreshing...' : 'Refresh Versions'}
-        </Button>
-      </Box>
+          {isInstalled ? (
+            <SettingsStatus tone="success">
+              Installed · {settings.pythonVersion || 'Unknown'}
+            </SettingsStatus>
+          ) : (
+            <SettingsStatus tone="warning">Not installed</SettingsStatus>
+          )}
+        </SettingsRow>
+      </SettingsSection>
 
-      {versionInfo && (
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            Available Versions
-          </Typography>
-          <List
-            sx={{
-              border: 1,
-              borderColor: 'divider',
-              borderRadius: 1,
-            }}
-          >
-            {versionInfo.availableVersions.map((entry, index) => (
-              <React.Fragment key={entry.version}>
-                <ListItem>
-                  <ListItemText
-                    primary={
-                      <Box
-                        sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
-                      >
-                        <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                          {entry.version}
-                        </Typography>
-                        {entry.isRecommended && (
-                          <Chip
-                            label="Recommended"
-                            size="small"
-                            color="primary"
-                          />
-                        )}
-                        {entry.version === settings.pythonVersion && (
-                          <Box
-                            sx={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 0.5,
-                            }}
-                          >
-                            <CheckCircle color="success" fontSize="small" />
-                            <Chip
-                              label="Installed"
-                              size="small"
-                              color="success"
-                            />
-                          </Box>
-                        )}
-                      </Box>
-                    }
-                  />
-                  <ListItemSecondaryAction>
-                    <Button
-                      size="small"
-                      variant="contained"
-                      onClick={() => requestInstallVersion(entry.version)}
-                      disabled={
-                        entry.version === settings.pythonVersion ||
-                        installingVersion === entry.version ||
-                        installVersion.isLoading
-                      }
-                      startIcon={
-                        installingVersion === entry.version ? (
-                          <CircularProgress size={16} />
-                        ) : (
-                          <Download />
-                        )
-                      }
-                    >
-                      {getButtonLabel(entry.version)}
-                    </Button>
-                  </ListItemSecondaryAction>
-                </ListItem>
-                {index < versionInfo.availableVersions.length - 1 && (
-                  <Divider />
+      <SettingsSection
+        title="Available Versions"
+        icon={<ListAltOutlined />}
+        action={
+          <SettingsRefreshButton
+            title="Refresh versions"
+            onClick={() => checkVersions.mutate()}
+            loading={checkVersions.isLoading}
+          />
+        }
+      >
+        {!versionInfo && (
+          <SettingsRow
+            label={
+              checkVersions.isLoading
+                ? 'Checking available versions...'
+                : 'No version information yet.'
+            }
+          />
+        )}
+        {versionInfo?.availableVersions.map((entry) => (
+          <SettingsRow
+            key={entry.version}
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                {entry.version}
+                {entry.isRecommended && (
+                  <Chip label="Recommended" size="small" variant="outlined" />
                 )}
-              </React.Fragment>
-            ))}
-          </List>
-        </Box>
-      )}
-
-      {isInstalled && (
-        <Box sx={{ pt: 2, borderTop: 1, borderColor: 'divider' }}>
-          <Typography variant="h6" gutterBottom color="error">
-            Danger Zone
-          </Typography>
-          <Alert severity="warning" sx={{ mb: 2 }}>
-            <Typography variant="body2">
-              Uninstalling Python removes the embedded interpreter along with
-              everything installed inside it — dbt Core (v1 and v2), Flowfile,
-              and sqlglot. You will need to reinstall them afterward. This
-              action cannot be undone.
-            </Typography>
-          </Alert>
-          <Button
-            variant="outlined"
-            color="error"
-            onClick={handleUninstall}
-            disabled={uninstallPython.isLoading}
-            startIcon={
-              uninstallPython.isLoading ? (
-                <CircularProgress size={16} />
-              ) : (
-                <Delete />
-              )
+              </Box>
             }
           >
-            {uninstallPython.isLoading ? 'Uninstalling...' : 'Uninstall Python'}
-          </Button>
-        </Box>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => requestInstallVersion(entry.version)}
+              disabled={
+                entry.version === settings.pythonVersion ||
+                installingVersion === entry.version ||
+                installVersion.isLoading
+              }
+              startIcon={
+                installingVersion === entry.version ? (
+                  <CircularProgress size={14} />
+                ) : (
+                  <Download />
+                )
+              }
+            >
+              {getButtonLabel(entry.version)}
+            </Button>
+          </SettingsRow>
+        ))}
+      </SettingsSection>
+
+      {isInstalled && (
+        <SettingsSection title="Danger Zone" icon={<WarningAmberOutlined />}>
+          <SettingsRow
+            label="Uninstall Python"
+            description="Removes the embedded interpreter along with dbt Core (v1 and v2), Flowfile, and sqlglot. You will need to reinstall them. This cannot be undone."
+          >
+            <Button
+              size="small"
+              variant="outlined"
+              color="error"
+              onClick={handleUninstall}
+              disabled={uninstallPython.isLoading}
+              startIcon={
+                uninstallPython.isLoading ? (
+                  <CircularProgress size={14} />
+                ) : (
+                  <Delete />
+                )
+              }
+            >
+              {uninstallPython.isLoading
+                ? 'Uninstalling...'
+                : 'Uninstall Python'}
+            </Button>
+          </SettingsRow>
+        </SettingsSection>
       )}
 
       <ConfirmationModal
@@ -321,6 +264,6 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
         title="Uninstall Python"
         question="Are you sure you want to uninstall the embedded Python interpreter? This also removes dbt Core, Flowfile, and sqlglot, since they all live inside the same managed environment. You'll need to reinstall them."
       />
-    </Box>
+    </SettingsStack>
   );
 };

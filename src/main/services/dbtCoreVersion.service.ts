@@ -60,6 +60,7 @@ const PROCESS_TIMEOUT_MS = 5 * 60 * 1000;
 
 const ADAPTER_PACKAGES = DBT_ADAPTER_PACKAGES;
 
+// Keep in sync with DBT_V2_BUILT_IN_ADAPTERS in shared/dbtAdapterPackages.ts.
 const V2_ADAPTERS: Record<
   string,
   Omit<DbtAdapterCapability, 'adapter' | 'displayName' | 'source'>
@@ -126,8 +127,16 @@ const normalizeAdapter = (value: string | undefined | null): string | null => {
   return adapter === 'ducklake' ? 'duckdb' : adapter;
 };
 
+// dbt 1.x ships on PyPI as `dbt-core`. dbt 2.x ships as `dbt-oss` (Apache-2.0);
+// `dbt-core` 2.x only ever published pre-releases whose prebuilt binary reports
+// the matching dbt-oss version, so they can never pass executable verification.
+const DBT_V1_PACKAGE = 'dbt-core';
+const DBT_V2_PACKAGE = 'dbt-oss';
+const DBT_RUNTIME_PACKAGES = [DBT_V1_PACKAGE, DBT_V2_PACKAGE] as const;
+const MIN_PYTHON_MINOR_FOR_V2 = 11;
+
 const ALLOWED_PYTHON_PACKAGES = new Set([
-  'dbt-core',
+  ...DBT_RUNTIME_PACKAGES,
   ...ADAPTER_PACKAGES,
   'sqlglot',
 ]);
@@ -188,6 +197,26 @@ const isPrerelease = (version: string): boolean => {
   const v = parseVersionTriple(version);
   return v ? v.preRank < 3 : false;
 };
+
+const isV2Version = (version: string): boolean =>
+  (parseVersionTriple(version)?.major ?? 0) >= 2;
+
+const getDbtPackageForVersion = (version: string): string =>
+  isV2Version(version) ? DBT_V2_PACKAGE : DBT_V1_PACKAGE;
+
+const releaseVersions = (
+  releases: PypiProjectJson['releases'] | null,
+  keep: (version: VersionTriple) => boolean,
+): string[] =>
+  Object.entries(releases ?? {})
+    .filter(([, files]) =>
+      files.some((releaseFile) => releaseFile.yanked !== true),
+    )
+    .map(([version]) => version)
+    .filter((version) => {
+      const parsed = parseVersionTriple(version);
+      return parsed !== null && keep(parsed);
+    });
 
 const parsePipShowVersion = (output: string): string | null => {
   const versionMatch = output.match(/^Version:\s*(.+)$/m);
@@ -317,11 +346,15 @@ export class DbtCoreVersionService {
   static async listDbtCoreVersions(
     options?: DbtVersionListOptions,
   ): Promise<DbtVersionListResponse> {
-    let projectJson: PypiProjectJson;
+    const [coreReleases, ossReleases] = await Promise.all(
+      DBT_RUNTIME_PACKAGES.map((packageName) =>
+        this.fetchPypiProjectJson(packageName)
+          .then((projectJson) => projectJson.releases ?? {})
+          .catch(() => null),
+      ),
+    );
 
-    try {
-      projectJson = await this.fetchPypiProjectJson('dbt-core');
-    } catch {
+    if (!coreReleases && !ossReleases) {
       return {
         versions: [],
         latestStable: null,
@@ -333,13 +366,10 @@ export class DbtCoreVersionService {
     const includePrerelease = options?.includePrerelease ?? false;
     const limit = Math.min(Math.max(Math.floor(options?.limit ?? 5), 1), 100);
 
-    const allVersions = Object.entries(projectJson.releases ?? {})
-      .filter(([, files]) =>
-        files.some((releaseFile) => releaseFile.yanked !== true),
-      )
-      .map(([version]) => version)
-      .filter((v) => parseVersionTriple(v) !== null)
-      .sort((a, b) => compareVersions(b, a));
+    const allVersions = [
+      ...releaseVersions(coreReleases, (v) => v.major < 2),
+      ...releaseVersions(ossReleases, (v) => v.major >= 2),
+    ].sort((a, b) => compareVersions(b, a));
 
     const stableVersions = allVersions.filter((v) => !isPrerelease(v));
     const versions = (includePrerelease ? allVersions : stableVersions).slice(
@@ -347,13 +377,24 @@ export class DbtCoreVersionService {
       limit,
     );
 
+    // v1 and v2 are separate runtimes, so each major line gets its own
+    // "latest stable" marker.
+    const latestStableByMajor = new Map<number, string>();
+    stableVersions.forEach((v) => {
+      const { major } = parseVersionTriple(v) as VersionTriple;
+      if (!latestStableByMajor.has(major)) latestStableByMajor.set(major, v);
+    });
+
     const latestStable = stableVersions.length > 0 ? stableVersions[0] : null;
     const settings = await SettingsService.loadSettings();
 
     const out: DbtCoreVersionListItem[] = versions.map((v) => ({
       version: v,
       isPrerelease: isPrerelease(v),
-      isLatestStable: v === latestStable,
+      isLatestStable:
+        latestStableByMajor.get(
+          (parseVersionTriple(v) as VersionTriple).major,
+        ) === v,
       isInstalled: v === settings.dbtVersion,
       channel: isPrerelease(v) ? 'preview' : 'stable',
     }));
@@ -459,7 +500,7 @@ export class DbtCoreVersionService {
     const packageName = String(req.packageName ?? '').trim();
     if (
       !ALLOWED_PYTHON_PACKAGES.has(packageName) ||
-      packageName === 'dbt-core'
+      (DBT_RUNTIME_PACKAGES as readonly string[]).includes(packageName)
     ) {
       return { ok: false, error: `Package not allowed: ${packageName}` };
     }
@@ -524,7 +565,7 @@ export class DbtCoreVersionService {
         };
       }
 
-      if (packageName === 'dbt-core') {
+      if ((DBT_RUNTIME_PACKAGES as readonly string[]).includes(packageName)) {
         const settings = await SettingsService.loadSettings();
         await SettingsService.saveSettings({
           ...settings,
@@ -550,6 +591,19 @@ export class DbtCoreVersionService {
     }
 
     const settings = await SettingsService.loadSettings();
+    const managedPython = parseVersionTriple(settings.pythonVersion ?? '');
+    if (
+      isV2Version(targetVersion) &&
+      managedPython &&
+      (managedPython.major < 3 ||
+        (managedPython.major === 3 &&
+          managedPython.minor < MIN_PYTHON_MINOR_FOR_V2))
+    ) {
+      throw new Error(
+        `dbt Core ${targetVersion} requires Python 3.${MIN_PYTHON_MINOR_FOR_V2} or newer; the managed Python is ${settings.pythonVersion}. Install a newer Python from the Python settings first.`,
+      );
+    }
+
     const currentVersion = settings.dbtVersion || null;
     const preview = isPrerelease(targetVersion);
     const comparison = currentVersion
@@ -619,7 +673,7 @@ export class DbtCoreVersionService {
   ): Promise<PythonPackageInstallVersionResponse> {
     const safeName = String(req.packageName ?? '').trim();
 
-    if (safeName === 'dbt-core') {
+    if ((DBT_RUNTIME_PACKAGES as readonly string[]).includes(safeName)) {
       return this.installDbtCoreVersion(req);
     }
 
@@ -638,8 +692,21 @@ export class DbtCoreVersionService {
       return { ok: false, error: `Invalid dbt-core version: ${safeVersion}` };
     }
 
+    const packageName = getDbtPackageForVersion(safeVersion);
+    const otherRuntimePackage =
+      packageName === DBT_V1_PACKAGE ? DBT_V2_PACKAGE : DBT_V1_PACKAGE;
+
     try {
       const python = await getPythonExecutable(req.pythonPath);
+      // Both runtime packages own the `dbt` module and console script, so the
+      // other one has to go before this install or the files get interleaved.
+      await runProcess(python, [
+        '-m',
+        'pip',
+        'uninstall',
+        '--yes',
+        otherRuntimePackage,
+      ]);
       const installResult = await runProcess(python, [
         '-m',
         'pip',
@@ -647,7 +714,7 @@ export class DbtCoreVersionService {
         '--upgrade',
         '--force-reinstall',
         '--no-cache-dir',
-        `dbt-core==${safeVersion}`,
+        `${packageName}==${safeVersion}`,
       ]);
 
       if (installResult.exitCode !== 0) {
@@ -714,22 +781,40 @@ export class DbtCoreVersionService {
     pythonPath?: string,
   ): Promise<InstalledDbtCoreInfo> {
     const python = await getPythonExecutable(pythonPath);
-    const pipShow = await runProcess(python, ['-m', 'pip', 'show', 'dbt-core']);
+    const coreShow = await runProcess(python, [
+      '-m',
+      'pip',
+      'show',
+      DBT_V1_PACKAGE,
+    ]);
+    const ossShow = await runProcess(python, [
+      '-m',
+      'pip',
+      'show',
+      DBT_V2_PACKAGE,
+    ]);
+    const runtimeVersions = [coreShow, ossShow]
+      .map((pipShow) =>
+        pipShow.exitCode === 0 ? parsePipShowVersion(pipShow.stdout) : null,
+      )
+      .filter((shownVersion): shownVersion is string => !!shownVersion);
     const proprietaryDbt = await runProcess(python, [
       '-m',
       'pip',
       'show',
       'dbt',
     ]);
-    const version =
-      pipShow.exitCode === 0 ? parsePipShowVersion(pipShow.stdout) : null;
+    // Exactly one runtime package may own the `dbt` executable.
+    const version = runtimeVersions.length === 1 ? runtimeVersions[0] : null;
 
     const dbtExecutable = getDbtExecutableForPython(python);
     let dbtVersionOutput: string | undefined;
     let isExecutableVerified = false;
     let verificationError: string | undefined;
 
-    if (await fs.pathExists(dbtExecutable)) {
+    if (runtimeVersions.length > 1) {
+      verificationError = `Both ${DBT_RUNTIME_PACKAGES.join(' and ')} are installed in the managed environment. Reinstall the version you want from the list.`;
+    } else if (await fs.pathExists(dbtExecutable)) {
       try {
         const dbtVersion = await runProcess(dbtExecutable, ['--version']);
         dbtVersionOutput = [dbtVersion.stdout, dbtVersion.stderr]
@@ -759,7 +844,7 @@ export class DbtCoreVersionService {
       pythonPath: python,
       dbtPath: (await fs.pathExists(dbtExecutable)) ? dbtExecutable : null,
       dbtVersionOutput,
-      isDbtCorePackage: pipShow.exitCode === 0 && !!version,
+      isDbtCorePackage: !!version,
       isExecutableVerified,
       hasProprietaryDbtPackage: proprietaryDbt.exitCode === 0,
       error: verificationError,

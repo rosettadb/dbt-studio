@@ -5,13 +5,15 @@ import {
   Button,
   Alert,
   CircularProgress,
-  Chip,
-  Paper,
-  TextField,
   Tabs,
   Tab,
 } from '@mui/material';
-import { Add, Info, Refresh, Storage, DeleteSweep } from '@mui/icons-material';
+import {
+  Add,
+  StorageOutlined,
+  SmartToyOutlined,
+  DeleteSweep,
+} from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
@@ -26,6 +28,14 @@ import { AISettingsTab } from './AISettingsTab';
 import { MCPServersTab } from './MCPServersTab';
 import { SkillsTab } from './SkillsTab';
 import { SecondBrainTab } from './SecondBrainTab';
+import {
+  SettingsRefreshButton,
+  SettingsRow,
+  SettingsSection,
+  SettingsStack,
+  SettingsStatus,
+  settingsTabsSx,
+} from './SettingsLayout';
 
 const TABS = [
   'Providers',
@@ -126,7 +136,7 @@ export const AIProvidersSettings: React.FC = () => {
       case 'error':
         return 'error';
       default:
-        return 'default';
+        return 'neutral';
     }
   };
 
@@ -165,7 +175,7 @@ export const AIProvidersSettings: React.FC = () => {
       <Tabs
         value={activeTab}
         onChange={(_, v) => setActiveTab(v as TabLabel)}
-        sx={{ borderBottom: 1, borderColor: 'divider', mb: 2, mt: -1 }}
+        sx={{ ...settingsTabsSx, mb: 2.25 }}
       >
         {TABS.map((tab) => (
           <Tab key={tab} label={tab} value={tab} />
@@ -183,54 +193,23 @@ export const AIProvidersSettings: React.FC = () => {
 
       {/* General (was AI Settings) — includes DB info */}
       {activeTab === 'Settings' && (
-        <Box>
-          {/* AI Database Information */}
-          <Paper elevation={1} sx={{ p: 2, mb: 3 }}>
-            <Box
-              display="flex"
-              justifyContent="space-between"
-              alignItems="center"
-              mb={2}
+        <SettingsStack>
+          <SettingsSection title="Database" icon={<StorageOutlined />}>
+            <SettingsRow
+              label="AI database"
+              description={`SQLite ${settingsWithDbInfo?.sqliteVersion || 'Unknown'} · ${settingsWithDbInfo?.mainDatabaseSize || 'Unknown'}`}
             >
-              <Box display="flex" alignItems="center" gap={4}>
-                <Box display="flex" alignItems="center" gap={1}>
-                  <Storage />
-                  <Typography variant="h6">AI Database Information</Typography>
-                </Box>
-                <Box
-                  sx={{
-                    display: 'flex',
-                    gap: 2,
-                    flexWrap: 'wrap',
-                    alignItems: 'center',
-                  }}
-                >
-                  <Chip
-                    icon={<Info />}
-                    label={`SQLite ${settingsWithDbInfo?.sqliteVersion || 'Unknown'}`}
-                    variant="outlined"
-                  />
-                  <Chip
-                    label={settingsWithDbInfo?.mainDatabaseSize || 'Unknown'}
-                    variant="outlined"
-                  />
-                  <Chip
-                    label={settingsWithDbInfo?.mainDatabaseStatus || 'Unknown'}
-                    color={getStatusColor(
-                      settingsWithDbInfo?.mainDatabaseStatus,
-                    )}
-                    variant="filled"
-                  />
-                </Box>
-              </Box>
-
+              <SettingsStatus
+                tone={getStatusColor(settingsWithDbInfo?.mainDatabaseStatus)}
+              >
+                {settingsWithDbInfo?.mainDatabaseStatus || 'Unknown'}
+              </SettingsStatus>
               <Button
-                variant="outlined"
-                color="warning"
                 size="small"
+                variant="outlined"
                 startIcon={
                   isCleaningUp ? (
-                    <CircularProgress size={16} color="inherit" />
+                    <CircularProgress size={14} color="inherit" />
                   ) : (
                     <DeleteSweep />
                   )
@@ -240,73 +219,62 @@ export const AIProvidersSettings: React.FC = () => {
               >
                 Clean up old history
               </Button>
-            </Box>
-            <TextField
-              fullWidth
-              label="Database Location"
-              variant="outlined"
-              value={settingsWithDbInfo?.mainDatabasePath || 'Loading...'}
-              disabled
-              helperText="SQLite database file storing AI providers, conversations, and templates"
-            />
-          </Paper>
+            </SettingsRow>
+            <SettingsRow
+              label="Database location"
+              description="SQLite file storing AI providers, conversations, and templates"
+            >
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                title={settingsWithDbInfo?.mainDatabasePath}
+                sx={{
+                  maxWidth: 320,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {settingsWithDbInfo?.mainDatabasePath || 'Loading...'}
+              </Typography>
+            </SettingsRow>
+          </SettingsSection>
 
           <AISettingsTab />
-        </Box>
+        </SettingsStack>
       )}
 
       {/* Providers */}
       {activeTab === 'Providers' && (
-        <Box>
-          <Box display="flex" justifyContent="flex-end" mb={2}>
-            {' '}
-            <Box display="flex" gap={1}>
-              <Button
-                variant="outlined"
-                startIcon={<Refresh />}
-                onClick={handleRefreshAll}
-              >
-                Refresh
-              </Button>
-              <Button
-                variant="contained"
-                startIcon={<Add />}
-                onClick={handleCreateProvider}
-              >
-                Add Provider
-              </Button>
-            </Box>
-          </Box>
-
-          {/* No Providers */}
-          {providers.length === 0 && (
-            <Box sx={{ mt: 4, textAlign: 'center' }}>
-              <Typography variant="h6" gutterBottom>
-                No AI Providers Configured
-              </Typography>
-              <Typography variant="body2" color="text.secondary" mb={3}>
-                Add your first AI provider to enable enhanced dbt functionality.
-              </Typography>
-              <Button
-                variant="contained"
-                startIcon={<Add />}
-                onClick={handleCreateProvider}
-              >
-                Add Your First Provider
-              </Button>
-            </Box>
-          )}
-
-          {/* Providers Grid */}
-          {providers.length > 0 && (
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
-                gap: 3,
-              }}
-            >
-              {providers.map((provider) => (
+        <SettingsStack>
+          <SettingsSection
+            title="Providers"
+            icon={<SmartToyOutlined />}
+            description="Use the switch to choose which provider is active."
+            action={
+              <>
+                <SettingsRefreshButton
+                  title="Refresh providers"
+                  onClick={handleRefreshAll}
+                />
+                <Button
+                  size="small"
+                  variant="contained"
+                  startIcon={<Add />}
+                  onClick={handleCreateProvider}
+                >
+                  Add Provider
+                </Button>
+              </>
+            }
+          >
+            {providers.length === 0 ? (
+              <SettingsRow
+                label="No AI Providers Configured"
+                description="Add your first AI provider to enable enhanced dbt functionality."
+              />
+            ) : (
+              providers.map((provider) => (
                 <ProviderCard
                   key={provider.id}
                   provider={provider}
@@ -314,16 +282,16 @@ export const AIProvidersSettings: React.FC = () => {
                   onEdit={handleEditProvider}
                   onRefresh={handleRefreshAll}
                 />
-              ))}
-            </Box>
-          )}
+              ))
+            )}
+          </SettingsSection>
 
           <CreateProviderDialog
             open={createDialogOpen}
             onClose={handleDialogClose}
             provider={selectedProvider}
           />
-        </Box>
+        </SettingsStack>
       )}
     </Box>
   );

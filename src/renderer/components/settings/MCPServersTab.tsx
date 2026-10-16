@@ -2,9 +2,6 @@ import React, { useState } from 'react';
 import {
   Box,
   Typography,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
   Switch,
   IconButton,
   Chip,
@@ -23,11 +20,11 @@ import {
   InputLabel,
   Checkbox,
   FormControlLabel,
-  Divider,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import AddIcon from '@mui/icons-material/Add';
+import HubOutlined from '@mui/icons-material/HubOutlined';
 import {
   useMCPServers,
   useMCPServerTools,
@@ -36,6 +33,12 @@ import type {
   MCPServerFileEntry,
   MCPServerWithStatus,
 } from '../../../types/backend';
+import {
+  SettingsRow,
+  SettingsSection,
+  SettingsSectionBody,
+  SettingsStack,
+} from './SettingsLayout';
 
 const ServerAvatar: React.FC<{ name: string }> = ({ name }) => {
   const initials = name
@@ -47,15 +50,15 @@ const ServerAvatar: React.FC<{ name: string }> = ({ name }) => {
   return (
     <Box
       sx={{
-        width: 36,
-        height: 36,
+        width: 24,
+        height: 24,
         borderRadius: 1,
         bgcolor: 'primary.main',
         color: 'primary.contrastText',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontSize: '0.75rem',
+        fontSize: '0.6rem',
         fontWeight: 700,
         flexShrink: 0,
       }}
@@ -424,119 +427,78 @@ const ServerRow: React.FC<{
 }) => {
   const enabled = !server.disabled;
   const isThisConnecting = isConnecting && connectingId === server.id;
+  const [expanded, setExpanded] = useState(false);
 
   return (
-    <Accordion
-      disableGutters
-      elevation={0}
-      sx={{
-        border: '1px solid',
-        borderColor: 'divider',
-        borderRadius: '8px !important',
-        mb: 1,
-        '&:before': { display: 'none' },
-        '&.Mui-expanded': { borderColor: 'primary.main' },
-      }}
-    >
-      <AccordionSummary
-        expandIcon={
-          server.connected ? <ExpandMoreIcon fontSize="small" /> : null
-        }
-        sx={{
-          px: 2,
-          minHeight: 56,
-          '& .MuiAccordionSummary-content': {
-            alignItems: 'center',
-            gap: 1.5,
-            my: 1,
-          },
-          cursor: server.connected ? 'pointer' : 'default',
-          '& .MuiAccordionSummary-expandIconWrapper': {
-            display: server.connected ? 'flex' : 'none',
-          },
-        }}
-      >
-        <ServerAvatar name={server.name} />
-
-        <Box sx={{ flex: 1, minWidth: 0 }}>
+    <Box>
+      <SettingsRow
+        label={
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Typography variant="subtitle2" fontWeight={600} noWrap>
-              {server.name}
-            </Typography>
-            <Chip
-              label="Custom"
-              size="small"
-              sx={{
-                height: 18,
-                fontSize: '0.65rem',
-                bgcolor: 'warning.dark',
-                color: '#fff',
-              }}
-            />
+            <ServerAvatar name={server.name} />
+            {server.name}
+            <Chip label="Custom" size="small" variant="outlined" />
           </Box>
-          <Typography variant="caption" color="text.secondary" noWrap>
-            {server.description ?? 'Custom MCP server'}
-          </Typography>
-        </Box>
-
-        <Box
-          sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
-          onClick={(e) => e.stopPropagation()}
+        }
+        description={server.description ?? 'Custom MCP server'}
+      >
+        <Typography
+          variant="caption"
+          color={enabled ? 'success.main' : 'text.disabled'}
         >
-          <Typography
-            variant="caption"
-            color={enabled ? 'success.main' : 'text.disabled'}
-          >
-            {enabled ? 'Enabled' : 'Disabled'}
-          </Typography>
-          <Switch
+          {enabled ? 'Enabled' : 'Disabled'}
+        </Typography>
+        <Switch
+          size="small"
+          checked={enabled}
+          onChange={(e) => onToggle(server.id, !e.target.checked)}
+        />
+        {isThisConnecting && <CircularProgress size={16} />}
+        {!isThisConnecting && server.connected && (
+          <Button
             size="small"
-            checked={enabled}
-            onChange={(e) => onToggle(server.id, !e.target.checked)}
-          />
-        </Box>
-
-        <Box
-          sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {isThisConnecting && <CircularProgress size={16} />}
-          {!isThisConnecting && server.connected && (
-            <Button
+            variant="outlined"
+            color="error"
+            onClick={() => onDisconnect(server.id)}
+          >
+            Disconnect
+          </Button>
+        )}
+        {!isThisConnecting && !server.connected && (
+          <Tooltip title={!enabled ? 'Enable server first' : ''}>
+            <span>
+              <Button
+                size="small"
+                variant="outlined"
+                disabled={!enabled || isConnecting}
+                onClick={() => onConnect(server.id)}
+              >
+                Connect
+              </Button>
+            </span>
+          </Tooltip>
+        )}
+        {server.connected && (
+          <Tooltip title={expanded ? 'Hide tools' : 'Show tools'}>
+            <IconButton
               size="small"
-              variant="outlined"
-              color="error"
-              onClick={() => onDisconnect(server.id)}
-              sx={{ minWidth: 0, px: 1, fontSize: '0.7rem' }}
+              aria-expanded={expanded}
+              onClick={() => setExpanded((v) => !v)}
             >
-              Disconnect
-            </Button>
-          )}
-          {!isThisConnecting && !server.connected && (
-            <Tooltip title={!enabled ? 'Enable server first' : ''}>
-              <span>
-                <Button
-                  size="small"
-                  variant="contained"
-                  disabled={!enabled || isConnecting}
-                  onClick={() => onConnect(server.id)}
-                  sx={{ minWidth: 0, px: 1.5, fontSize: '0.7rem' }}
-                >
-                  Connect
-                </Button>
-              </span>
-            </Tooltip>
-          )}
-        </Box>
-
+              <ExpandMoreIcon
+                fontSize="small"
+                sx={{
+                  transform: expanded ? 'rotate(180deg)' : 'none',
+                  transition: 'transform 0.15s',
+                }}
+              />
+            </IconButton>
+          </Tooltip>
+        )}
         {!server.isBuiltIn && (
           <Tooltip title="Remove server">
             <IconButton
               size="small"
-              onClick={(e) => {
-                e.stopPropagation();
-                onRemove(server.id);
-              }}
+              onClick={() => onRemove(server.id)}
               sx={{
                 color: 'text.disabled',
                 '&:hover': { color: 'error.main' },
@@ -546,15 +508,13 @@ const ServerRow: React.FC<{
             </IconButton>
           </Tooltip>
         )}
-      </AccordionSummary>
-
-      {server.connected && (
-        <AccordionDetails sx={{ px: 2, pt: 0, pb: 2 }}>
-          <Divider sx={{ mb: 1.5 }} />
+      </SettingsRow>
+      {server.connected && expanded && (
+        <SettingsSectionBody>
           <ToolsList serverId={server.id} connected={server.connected} />
-        </AccordionDetails>
+        </SettingsSectionBody>
       )}
-    </Accordion>
+    </Box>
   );
 };
 
@@ -582,70 +542,58 @@ export const MCPServersTab: React.FC = () => {
   }
 
   return (
-    <Box sx={{ maxWidth: 720 }}>
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          mb: 1,
-        }}
-      >
-        <Typography variant="h6">MCP Servers</Typography>
-        <Button
-          size="small"
-          startIcon={<AddIcon />}
-          variant="outlined"
-          onClick={() => setAddOpen(true)}
-        >
-          Add Server
-        </Button>
-      </Box>
-
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Connect to Model Context Protocol (MCP) servers to give the AI agent
-        access to advanced data tools. Servers run locally as child processes
-        alongside dbt Studio.
-      </Typography>
-
+    <SettingsStack>
       {!!error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
+        <Alert severity="error">
           {error instanceof Error ? error.message : 'Operation failed'}
         </Alert>
       )}
 
-      {servers.length === 0 ? (
-        <Typography variant="body2" color="text.secondary">
-          No MCP servers configured.
-        </Typography>
-      ) : (
-        servers.map((server) => (
-          <ServerRow
-            key={server.id}
-            server={server}
-            onConnect={(id) => connect(id)}
-            onDisconnect={(id) => disconnect(id)}
-            onToggle={(id, disabled) => toggle({ serverId: id, disabled })}
-            onRemove={(id) => removeServer(id)}
-            isConnecting={isConnecting}
-            connectingId={connectingId}
-          />
-        ))
-      )}
-
-      <Box sx={{ mt: 2, p: 1.5, bgcolor: 'action.hover', borderRadius: 1 }}>
-        <Typography variant="caption" color="text.secondary">
-          <strong>Security:</strong> MCP servers are local CLI tools executed by
-          the app. When connected, the AI agent can call these tools on your
-          behalf. Always review destructive operations in the chat log.
-        </Typography>
-      </Box>
+      <SettingsSection
+        title="MCP Servers"
+        icon={<HubOutlined />}
+        description="Give the AI agent access to more data tools. Servers run locally alongside dbt Studio."
+        action={
+          <Button
+            size="small"
+            startIcon={<AddIcon />}
+            variant="outlined"
+            onClick={() => setAddOpen(true)}
+          >
+            Add Server
+          </Button>
+        }
+      >
+        {servers.length === 0 ? (
+          <SettingsRow label="No MCP servers configured." />
+        ) : (
+          servers.map((server) => (
+            <ServerRow
+              key={server.id}
+              server={server}
+              onConnect={(id) => connect(id)}
+              onDisconnect={(id) => disconnect(id)}
+              onToggle={(id, disabled) => toggle({ serverId: id, disabled })}
+              onRemove={(id) => removeServer(id)}
+              isConnecting={isConnecting}
+              connectingId={connectingId}
+            />
+          ))
+        )}
+        <SettingsSectionBody>
+          <Typography variant="caption" color="text.secondary">
+            <strong>Security:</strong> MCP servers are local CLI tools executed
+            by the app. When connected, the AI agent can call these tools on
+            your behalf. Always review destructive operations in the chat log.
+          </Typography>
+        </SettingsSectionBody>
+      </SettingsSection>
 
       <AddServerDialog
         open={addOpen}
         onClose={() => setAddOpen(false)}
         onAdd={(id, entry) => addServer({ id, entry })}
       />
-    </Box>
+    </SettingsStack>
   );
 };

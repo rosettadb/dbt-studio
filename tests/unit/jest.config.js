@@ -5,6 +5,13 @@ module.exports = {
   setupFilesAfterEnv: ['<rootDir>/tests/unit/__setup__/jest.setup.ts'],
   moduleDirectories: ['node_modules', 'release/app/node_modules', 'src'],
   moduleNameMapper: {
+    // `link-modules` symlinks src/node_modules -> release/app/node_modules, so
+    // src files resolve a second copy of fs-extra and `jest.mock('fs-extra')`
+    // in tests (which resolve the root copy) never reaches them. Pin both
+    // sides to the root copy.
+    '^fs-extra$': '<rootDir>/node_modules/fs-extra',
+    // monaco-editor only ships an ESM `module` entry; jest cannot resolve it.
+    '^monaco-editor$': '<rootDir>/tests/unit/__setup__/monacoEditor.mock.ts',
     'file-icons-js': '<rootDir>/.erb/mocks/file-icons-js.js',
     '^split-pane-react$': '<rootDir>/.erb/mocks/split-pane-react.js',
     '^electron$': '<rootDir>/tests/unit/__setup__/electron.mock.ts',

@@ -23,6 +23,7 @@ import {
 } from '../../controllers';
 import ConnectionHeader from './connection-header';
 import { useConnectionNameValidation } from '../../utils/connectionValidation';
+import { path } from '../../lib/path';
 
 type Props = {
   onCancel: () => void;
@@ -35,8 +36,7 @@ type Props = {
 function shortDuckdbPath(databasePath: string): string {
   // Get the base filename from the full path
   // Example /Users/nurilacka/sample_01.duckdb you would get sample_01 without the .duckdb extension
-  const baseName = databasePath.split('/').pop() || '';
-  return baseName.replace(/\.duckdb$/, '');
+  return path.basename(databasePath, '.duckdb');
 }
 
 export const DuckDB: React.FC<Props> = ({

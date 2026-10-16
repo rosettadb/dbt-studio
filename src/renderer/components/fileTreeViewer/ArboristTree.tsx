@@ -15,6 +15,7 @@ import { ExternalDropZone } from './ExternalDropZone';
 import { MoveConfirmDialog } from './MoveConfirmDialog';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';
 import { projectsServices } from '../../services';
+import { path as nodePath } from '../../lib/path';
 
 const TreeContainer = styled('div')({
   width: '100%',
@@ -134,7 +135,7 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
       const sourcePath = dragId;
 
       // Get the current parent of the source
-      const sourceParent = sourcePath.substring(0, sourcePath.lastIndexOf('/'));
+      const sourceParent = nodePath.dirname(sourcePath);
 
       // eslint-disable-next-line no-console
       console.log('[ArboristTree] move details', {
@@ -163,7 +164,7 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
       try {
         const oldPath = id;
 
-        const currentName = oldPath.split('/').pop();
+        const currentName = nodePath.basename(oldPath);
         if (currentName === name) {
           return;
         }
@@ -410,12 +411,12 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
 
       // Calculate the actual target path after copy
       // (copyPath may append basename if not already present)
-      const sourceBasename = pendingOperation.sourcePath.split('/').pop() || '';
-      const targetBasename = pendingOperation.targetPath.split('/').pop() || '';
+      const sourceBasename = nodePath.basename(pendingOperation.sourcePath);
+      const targetBasename = nodePath.basename(pendingOperation.targetPath);
       const actualTargetPath =
         sourceBasename === targetBasename
           ? pendingOperation.targetPath
-          : `${pendingOperation.targetPath}/${sourceBasename}`;
+          : nodePath.join(pendingOperation.targetPath, sourceBasename);
 
       // Try to delete the source item
       try {
