@@ -6,7 +6,7 @@ import {
   LinearProgress,
   Typography,
 } from '@mui/material';
-import { AccountTreeOutlined, DataObjectOutlined } from '@mui/icons-material';
+import { AccountTreeOutlined } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { settingsServices } from '../../services';
 import {
@@ -19,7 +19,8 @@ import { flowfileInstall } from '../../services/flowfile.service';
 import { InstallResult } from '../../../types/backend';
 import { SettingsStatus } from '../settings/SettingsLayout';
 import { DbtLine } from '../dbtSetup';
-import { PythonLogoIcon } from '../notebook/NotebookKindIcon';
+import { PythonMonoIcon } from '../notebook/NotebookKindIcon';
+import { DbtMonoIcon } from '../icon/DbtMonoIcon';
 
 type RowKey = 'python' | 'dbt' | 'runner' | 'flowfile';
 // The local runner is always installed but gets no row.
@@ -39,8 +40,8 @@ type RowState = {
 type InstalledItem = { version?: string; path?: string };
 
 const ROW_ICONS: Record<VisibleRowKey, React.ReactElement> = {
-  python: <PythonLogoIcon fontSize="small" />,
-  dbt: <DataObjectOutlined fontSize="small" />,
+  python: <PythonMonoIcon fontSize="small" />,
+  dbt: <DbtMonoIcon fontSize="small" />,
   flowfile: <AccountTreeOutlined fontSize="small" />,
 };
 

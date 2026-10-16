@@ -2,7 +2,6 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Box, Tooltip, Typography, Divider } from '@mui/material';
 import StorageIcon from '@mui/icons-material/Storage';
-import CodeIcon from '@mui/icons-material/Code';
 import TerminalIcon from '@mui/icons-material/Terminal';
 import PendingActionsIcon from '@mui/icons-material/PendingActions';
 import {
@@ -13,6 +12,7 @@ import { useGetRepoInfo } from '../../controllers/git.controller';
 import { useTaskManager } from '../../context';
 import { Icon } from '../icon';
 import { icons } from '../../../../assets';
+import { PythonMonoIcon } from '../notebook/NotebookKindIcon';
 
 const FS = 12; // base font size for all items
 
@@ -188,7 +188,7 @@ export const StatusBar: React.FC = () => {
 
       <Sep />
       <Item
-        icon={<CodeIcon sx={{ fontSize: FS }} />}
+        icon={<PythonMonoIcon sx={{ fontSize: FS }} />}
         label="Python"
         value={pythonVersion}
         tooltip="Python version"
