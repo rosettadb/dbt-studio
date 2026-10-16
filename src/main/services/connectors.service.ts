@@ -8,10 +8,10 @@ import { NotebooksService } from './notebooks.service';
 import {
   BigQueryConnection,
   BigQueryTestResponse,
-  canUseAsDbtConnection,
   ConnectionInput,
   ConnectionModel,
   DatabricksConnection,
+  Db2Connection,
   DBTConnection,
   DuckDBConnection,
   DuckLakeConnectionConfig,
@@ -25,6 +25,7 @@ import {
   RosettaConnection,
   SnowflakeConnection,
   SQLiteConnection,
+  canUseAsDbtConnection,
 } from '../../types/backend';
 import databaseStore from '../database';
 import { sanitizeBigQueryKeyfile } from '../utils/sanitizeBigQueryKeyfile';
@@ -63,6 +64,7 @@ import {
   buildKineticaProfileOutput,
   DEFAULT_KINETICA_SCHEMA,
 } from '../utils/kineticaProfile';
+import { executeDb2Query, testDb2Connection } from './db2/db2Query';
 
 export default class ConnectorsService {
   private static readonly bigQueryKeyFiles = new Map<string, string>();
@@ -304,6 +306,20 @@ export default class ConnectorsService {
           (conn1 as MySqlConnection).ssl === (conn2 as MySqlConnection).ssl
         );
 
+      case 'db2': {
+        const db2a = conn1 as Db2Connection;
+        const db2b = conn2 as Db2Connection;
+        return (
+          db2a.host === db2b.host &&
+          db2a.port === db2b.port &&
+          db2a.database === db2b.database &&
+          db2a.username === db2b.username &&
+          db2a.schema === db2b.schema &&
+          Boolean(db2a.ssl) === Boolean(db2b.ssl) &&
+          (db2a.sslCaPath ?? '') === (db2b.sslCaPath ?? '')
+        );
+      }
+
       default:
         return false;
     }
@@ -354,6 +370,9 @@ export default class ConnectorsService {
         break;
       case 'kinetica':
         baseName = connection.database || 'kinetica';
+        break;
+      case 'db2':
+        baseName = connection.database || 'db2';
         break;
     }
 
@@ -569,12 +588,16 @@ export default class ConnectorsService {
       throw new Error('Connection not found!');
     }
 
-    if (projectIndex !== -1 && connection.type === 'sqlite') {
-      throw new Error('SQLite connections cannot be used by dbt projects');
-    }
-
     if (projectIndex !== -1 && !canUseAsDbtConnection(connection.type)) {
-      throw new Error('MySQL connections cannot be used by dbt projects');
+      const connectionLabels: Record<string, string> = {
+        db2: 'Db2',
+        mysql: 'MySQL',
+        sqlite: 'SQLite',
+      };
+
+      throw new Error(
+        `${connectionLabels[connection.type] ?? connection.type} connections cannot be used by dbt projects`,
+      );
     }
 
     await this.validateConnection(connection);
@@ -666,7 +689,7 @@ export default class ConnectorsService {
       return updated;
     });
 
-    if (connection.connection.type === 'sqlite') return;
+    if (!canUseAsDbtConnection(connection.connection.type)) return;
 
     // Find all projects using this connection and update their config files
     const projects = await ProjectsService.loadProjects();
@@ -822,6 +845,8 @@ export default class ConnectorsService {
         return testKineticaConnection(connection);
       case 'mysql':
         return testMySqlConnection(connection);
+      case 'db2':
+        return testDb2Connection(connection);
       default:
         throw new Error(
           `Unsupported connection type: ${(connection as any).type}`,
@@ -1009,6 +1034,9 @@ export default class ConnectorsService {
         case 'mysql':
           response = await executeMySqlQuery(connection, query, registerCancel);
           break;
+        case 'db2':
+          response = await executeDb2Query(connection, query, registerCancel);
+          break;
         default:
           throw new Error(
             `Unsupported connection type: ${(connection as any).type}`,
@@ -1172,6 +1200,11 @@ export default class ConnectorsService {
       case 'kinetica':
         if (!conn.host) throw new Error('Host is required');
         if (!conn.port) throw new Error('Port is required');
+        break;
+      case 'db2':
+        if (!conn.host) throw new Error('Host is required');
+        if (!conn.port) throw new Error('Port is required');
+        if (!conn.database) throw new Error('Database is required');
         break;
       default:
         throw new Error('Unsupported connection type!');
@@ -2090,6 +2123,7 @@ export default class ConnectorsService {
       RedshiftExtractor,
       KineticaExtractor,
       MySqlExtractor,
+      Db2Extractor,
     } = await import('../extractor');
 
     switch (connection.type) {
@@ -2259,6 +2293,10 @@ export default class ConnectorsService {
         } finally {
           await extractor.disconnect();
         }
+      }
+      case 'db2': {
+        const extractor = new Db2Extractor(connection as Db2Connection);
+        return extractor.extractSchema();
       }
       default:
         throw new Error(

@@ -10,6 +10,7 @@
   },
   "main": "./dist/main/main.js",
   "scripts": {
+    "prerebuild": "node scripts/prepare-ibm-db-rebuild.js",
     "rebuild": "node -r ts-node/register ../../.erb/scripts/electron-rebuild.js",
     "postinstall": "npm run rebuild && npm run link-modules",
     "link-modules": "node -r ts-node/register ../../.erb/scripts/link-modules.ts"
@@ -20,6 +21,7 @@
     "better-sqlite3": "^12.2.0",
     "drizzle-orm": "^0.44.4",
     "fs-extra": "^11.4.0",
+    "ibm_db": "4.0.1",
     "keytar": "^7.9.0"
   }
 }
