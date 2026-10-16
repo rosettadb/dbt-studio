@@ -6,6 +6,7 @@ import { Databricks } from './databricks';
 import { DuckDB } from './duckdb';
 import { SQLite } from './sqlite';
 import { Kinetica } from './kinetica';
+import { Oracle } from './oracle';
 import { MySql } from './mysql';
 
 export const Connections = {
@@ -18,4 +19,5 @@ export const Connections = {
   SQLite,
   Kinetica,
   MySql,
+  Oracle,
 };

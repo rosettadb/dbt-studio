@@ -195,6 +195,7 @@
     "@types/jest": "^29.5.5",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "20.6.2",
+    "@types/oracledb": "7.0.1",
     "@types/pg": "^8.11.11",
     "@types/ps-tree": "^1.1.6",
     "@types/react": "^18.2.21",
@@ -280,6 +281,7 @@
     "files": [
       "dist",
       "node_modules",
+      "!**/node_modules/oracledb/build/**",
       "package.json"
     ],
     "afterSign": ".erb/scripts/notarize.js",

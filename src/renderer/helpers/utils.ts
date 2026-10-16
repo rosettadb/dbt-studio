@@ -283,6 +283,8 @@ export const getConnectionInput = (conn: ConnectionModel) => {
         database: kinetica.database || '',
         schema: kinetica.schema || '',
       };
+    case 'oracle':
+      return { ...connection, password: '' };
     case 'mysql':
       const mysql = connection as any;
       return {

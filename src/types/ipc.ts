@@ -109,6 +109,7 @@ export type ConnectorChannels =
   | 'connector:configure'
   | 'connector:remove'
   | 'connector:test'
+  | 'connector:oracleWalletAliases'
   | 'connector:generateProfiles'
   | 'connector:generateRosetta'
   | 'connector:validate'
