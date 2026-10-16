@@ -5,7 +5,10 @@ import Tooltip from '@mui/material/Tooltip';
 import CloseIcon from '@mui/icons-material/Close';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import { SqlTabId, SqlTabState } from '../../../types/editor';
-import connectionIcons from '../../../../assets/connectionIcons';
+import connectionIcons, {
+  icebergCatalogImages,
+} from '../../../../assets/connectionIcons';
+import icebergIcon from '../../../../assets/icons/apache-iceberg-lake.png';
 import {
   SqlTabBar,
   TabsContainer,
@@ -36,10 +39,20 @@ const SqlTab: React.FC<SqlTabProps> = ({
   };
 
   // Get connection type icon
-  const icon =
+  const icebergCatalogType = tab.connectionType.startsWith('iceberg-')
+    ? tab.connectionType.replace('iceberg-', '')
+    : undefined;
+  let icon =
     connectionIcons.images[
       tab.connectionType as keyof typeof connectionIcons.images
     ];
+  if (tab.connectionType === 'iceberg') icon = icebergIcon;
+  if (icebergCatalogType) {
+    icon =
+      icebergCatalogImages[
+        icebergCatalogType as keyof typeof icebergCatalogImages
+      ] || icebergIcon;
+  }
 
   const tooltipText = `${tab.connectionName} (${tab.connectionType})`;
 

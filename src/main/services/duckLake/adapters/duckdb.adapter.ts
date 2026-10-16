@@ -589,36 +589,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       }
 
       // First, find the DuckLake metadata database (attached database)
-      const databasesQuery = `
-        SELECT database_name
-        FROM duckdb_databases()
-        WHERE database_name LIKE '__ducklake_metadata_%'
-        LIMIT 1
-      `;
-
-      // eslint-disable-next-line no-console
-      console.log('[DuckDB Adapter] Searching for metadata database...');
-      const databasesResult =
-        await this.connectionInfo.connection.run(databasesQuery);
-      const databaseRows = await databasesResult.getRows();
-
-      if (databaseRows.length === 0) {
-        // eslint-disable-next-line no-console
-        console.log(
-          '[DuckDB Adapter] No metadata database found, listing all databases:',
-        );
-        const allDatabasesResult = await this.connectionInfo.connection.run(
-          'SELECT database_name FROM duckdb_databases()',
-        );
-        const allDatabases = await allDatabasesResult.getRows();
-        // eslint-disable-next-line no-console
-        console.log('[DuckDB Adapter] All databases:', allDatabases);
-        return [];
-      }
-
-      const metadataDatabase = Array.isArray(databaseRows[0])
-        ? databaseRows[0][0]
-        : (databaseRows[0] as any).database_name;
+      const metadataDatabase = await this.getMetadataDatabaseName();
 
       // eslint-disable-next-line no-console
       console.log(
@@ -627,7 +598,7 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       );
 
       // Quote the database name to handle special characters (hyphens, etc.)
-      const quotedMetadataDatabase = `"${metadataDatabase}"`;
+      const quotedMetadataDatabase = `"${metadataDatabase.replace(/"/g, '""')}"`;
 
       const query = `
         WITH current_snapshot AS (
@@ -726,27 +697,10 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         throw new Error('No active connection');
       }
 
-      const databasesQuery = `
-        SELECT database_name
-        FROM duckdb_databases()
-        WHERE database_name LIKE '__ducklake_metadata_%'
-        LIMIT 1
-      `;
-
-      const databasesResult =
-        await this.connectionInfo.connection.run(databasesQuery);
-      const databaseRows = await databasesResult.getRows();
-
-      if (databaseRows.length === 0) {
-        throw new Error('DuckLake metadata database not found');
-      }
-
-      const metadataDatabase = Array.isArray(databaseRows[0])
-        ? databaseRows[0][0]
-        : (databaseRows[0] as any).database_name;
+      const metadataDatabase = await this.getMetadataDatabaseName();
 
       // Quote the database name to handle special characters (hyphens, etc.)
-      const quotedMetadataDatabase = `"${metadataDatabase}"`;
+      const quotedMetadataDatabase = `"${metadataDatabase.replace(/"/g, '""')}"`;
 
       // Escape single quotes in table name for SQL safety
       const escapedTableName = tableName.replace(/'/g, "''");
@@ -857,26 +811,9 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
         return '';
       }
 
-      const databasesQuery = `
-        SELECT database_name
-        FROM duckdb_databases()
-        WHERE database_name LIKE '__ducklake_metadata_%'
-        LIMIT 1
-      `;
+      const metadataDatabase = await this.getMetadataDatabaseName();
 
-      const databasesResult =
-        await this.connectionInfo.connection.run(databasesQuery);
-      const databaseRows = await databasesResult.getRows();
-
-      if (databaseRows.length === 0) {
-        return '';
-      }
-
-      const metadataDatabase = Array.isArray(databaseRows[0])
-        ? databaseRows[0][0]
-        : (databaseRows[0] as any).database_name;
-
-      return `"${metadataDatabase}".main.`;
+      return `"${metadataDatabase.replace(/"/g, '""')}".main.`;
     } catch (error) {
       // eslint-disable-next-line no-console
       console.warn('Could not determine metadata prefix:', error);
@@ -1119,26 +1056,9 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       }
 
       // Find the DuckLake metadata database
-      const databasesQuery = `
-        SELECT database_name
-        FROM duckdb_databases()
-        WHERE database_name LIKE '__ducklake_metadata_%'
-        LIMIT 1
-      `;
+      const metadataDatabase = await this.getMetadataDatabaseName();
 
-      const databasesResult =
-        await this.connectionInfo.connection.run(databasesQuery);
-      const databaseRows = await databasesResult.getRows();
-
-      if (databaseRows.length === 0) {
-        throw new Error('DuckLake metadata database not found');
-      }
-
-      const metadataDatabase = Array.isArray(databaseRows[0])
-        ? databaseRows[0][0]
-        : (databaseRows[0] as any).database_name;
-
-      const quotedMetadataDatabase = `"${metadataDatabase}"`;
+      const quotedMetadataDatabase = `"${metadataDatabase.replace(/"/g, '""')}"`;
       const escapedTableName = tableName.replace(/'/g, "''");
 
       // 1. Get Table ID
@@ -1291,27 +1211,10 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       const offset = (page - 1) * pageSize;
 
       // Find the DuckLake metadata database
-      const databasesQuery = `
-        SELECT database_name
-        FROM duckdb_databases()
-        WHERE database_name LIKE '__ducklake_metadata_%'
-        LIMIT 1
-      `;
-
-      const databasesResult =
-        await this.connectionInfo.connection.run(databasesQuery);
-      const databaseRows = await databasesResult.getRows();
-
-      if (databaseRows.length === 0) {
-        throw new Error('DuckLake metadata database not found');
-      }
-
-      const metadataDatabase = Array.isArray(databaseRows[0])
-        ? databaseRows[0][0]
-        : (databaseRows[0] as any).database_name;
+      const metadataDatabase = await this.getMetadataDatabaseName();
 
       // Quote the database name to handle special characters (hyphens, etc.)
-      const quotedMetadataDatabase = `"${metadataDatabase}"`;
+      const quotedMetadataDatabase = `"${metadataDatabase.replace(/"/g, '""')}"`;
 
       // Build WHERE clause
       // Build WHERE clause
@@ -1433,27 +1336,10 @@ export class DuckDBCatalogAdapter extends CatalogAdapter {
       }
 
       // Find the DuckLake metadata database
-      const databasesQuery = `
-        SELECT database_name
-        FROM duckdb_databases()
-        WHERE database_name LIKE '__ducklake_metadata_%'
-        LIMIT 1
-      `;
-
-      const databasesResult =
-        await this.connectionInfo.connection.run(databasesQuery);
-      const databaseRows = await databasesResult.getRows();
-
-      if (databaseRows.length === 0) {
-        throw new Error('DuckLake metadata database not found');
-      }
-
-      const metadataDatabase = Array.isArray(databaseRows[0])
-        ? databaseRows[0][0]
-        : (databaseRows[0] as any).database_name;
+      const metadataDatabase = await this.getMetadataDatabaseName();
 
       // Quote the database name to handle special characters (hyphens, etc.)
-      const quotedMetadataDatabase = `"${metadataDatabase}"`;
+      const quotedMetadataDatabase = `"${metadataDatabase.replace(/"/g, '""')}"`;
 
       // Get current snapshot
       const currentSnapshotQuery = `

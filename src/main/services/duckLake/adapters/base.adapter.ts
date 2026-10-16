@@ -486,24 +486,11 @@ CREATE OR REPLACE SECRET ${secretName} (
       throw new Error('Not connected to catalog');
     }
 
-    const databasesQuery = `
-      SELECT database_name
-      FROM duckdb_databases()
-      WHERE database_name LIKE '__ducklake_metadata_%'
-      LIMIT 1
-    `;
-
-    const databasesResult =
-      await this.connectionInfo.connection.run(databasesQuery);
-    const databaseRows = await databasesResult.getRows();
-
-    if (databaseRows.length === 0) {
-      throw new Error('DuckLake metadata database not found');
-    }
-
-    return Array.isArray(databaseRows[0])
-      ? databaseRows[0][0]
-      : (databaseRows[0] as any).database_name;
+    // ATTACH uses DuckLake's default metadata catalog name. Newer runtimes
+    // hide this catalog from duckdb_databases(), but qualified queries still
+    // access it. Resolve it from our own alias instead of discovering another
+    // instance's metadata catalog with a prefix search.
+    return `__ducklake_metadata_${this.connectionInfo.instanceName}`;
   }
 
   /**
