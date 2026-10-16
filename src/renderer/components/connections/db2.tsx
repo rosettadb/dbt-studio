@@ -106,6 +106,9 @@ export const Db2: React.FC<Props> = ({
   const touch = (field: Db2FieldName) =>
     setTouched((prev) => new Set(prev).add(field));
 
+  // Fields the user has edited, so a pending secure-storage read does not overwrite them.
+  const editedCredentials = React.useRef({ username: false, password: false });
+
   // Load stored credentials when editing or duplicating.
   React.useEffect(() => {
     if (!source) return undefined;
@@ -119,8 +122,12 @@ export const Db2: React.FC<Props> = ({
         if (mounted) {
           setFormState((prev) => ({
             ...prev,
-            username: storedUsername || prev.username,
-            password: storedPassword || '',
+            username: editedCredentials.current.username
+              ? prev.username
+              : storedUsername || prev.username,
+            password: editedCredentials.current.password
+              ? prev.password
+              : storedPassword || '',
           }));
         }
       } catch {
@@ -180,6 +187,8 @@ export const Db2: React.FC<Props> = ({
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
+    if (name === 'username') editedCredentials.current.username = true;
+    if (name === 'password') editedCredentials.current.password = true;
     if (name === 'port') {
       setPortTouched(true);
       update({ port: Number(value) });

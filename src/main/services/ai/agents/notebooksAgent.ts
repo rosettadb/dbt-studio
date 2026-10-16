@@ -130,7 +130,7 @@ You are connected to a DuckLake lakehouse. DuckLake is a DuckDB extension (not a
       break;
     case 'db2':
       connectionHints =
-        '\n\n## Dialect Specifics\nYou are connected to IBM Db2 for LUW. Use Db2 SQL: limit rows with `FETCH FIRST n ROWS ONLY`, the dummy table is `SYSIBM.SYSDUMMY1`, unquoted identifiers fold to uppercase, and catalog metadata lives in `SYSCAT` views.';
+        '\n\n## Dialect Specifics\nYou are connected to IBM Db2 for LUW. Use Db2 SQL. Do not add row limits to queries; the UI handles pagination. The dummy table is `SYSIBM.SYSDUMMY1`, unquoted identifiers fold to uppercase, and catalog metadata lives in `SYSCAT` views.';
       break;
     default:
       connectionHints = `\n\n## Dialect Specifics\nYou are connected to a ${connectionMeta.type} database. Ensure all queries use the correct dialect for this database.`;
