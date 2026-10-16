@@ -7,8 +7,9 @@
  * (`createPythonNotebookToolDeps` builds the real ones) so tests pass fakes.
  *
  * Approval (classifyAgentRun): read-only SQL runs without asking; SQL that
- * changes data and Python with shell commands ask every time; other Python
- * asks once per chat ("Allow for this chat"). Package installs always ask.
+ * changes data and Python with detected shell commands ask every time; other
+ * Python asks once per chat ("Allow for this chat"), and that grant covers any
+ * Python. Package installs always ask.
  */
 
 import { tool } from 'ai';
@@ -39,6 +40,10 @@ const APPROVAL_PREVIEW_LINES = 40;
 const DEFAULT_MAX_OUTPUT_TOKENS = 4000;
 const RESULT_MAX_OUTPUT_TOKENS = 5000;
 const INSTALL_LOG_TAIL_CHARS = 1_500;
+/** How often a run waiting for the kernel queue checks it again. */
+const QUEUE_POLL_MS = 250;
+const QUEUE_TIMEOUT_MESSAGE =
+  "Other cells are still running, so this cell wasn't started. Try again later.";
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 export interface PythonNotebookToolDeps {
@@ -103,15 +108,27 @@ export function createPythonNotebookToolDeps(
 /* Run approval                                                         */
 /* ------------------------------------------------------------------ */
 
-const LINE_MAGIC = /^%(pip|conda|system|sx|sc|run)\b/;
-const CELL_MAGIC = /^%%(bash|sh|script|system|writefile)\b/;
+const LINE_MAGIC = /^%(pip|conda|system|sx|sc|run|rehashx|alias)\b/;
+// Ends with (?=\s|$), not \b: \b never matches after `!`.
+const CELL_MAGIC =
+  /^%%(!|bash|sh|script|system|writefile|file|perl|ruby|python[23]?|pypy)(?=\s|$)/;
 const ASSIGNED_SHELL = /=\s*(!(?!=)|%(sx|sc|system)\b)/;
 const IPYTHON_SYSTEM = /get_ipython\(\)\s*\.\s*(system|getoutput)\s*\(/;
+/**
+ * IPython's default shell aliases, run through automagic (`rm -rf data`).
+ * Not when the next character makes the line Python (`ls = []`, `cat(x)`).
+ */
+const SHELL_ALIAS =
+  /^%?(rm|rmdir|mv|cp|mkdir|cat|ls|ll|lf|lk|ldir|lx)(?:$|\s+(?![\s=([.,:]|[-+*/%&|^<>]=))/;
+/** Python calls that start other programs. */
+const PROCESS_CALL =
+  /\b(os\.(system|popen|exec\w*|spawn\w*|posix_spawn\w*)|pty\.spawn)\s*\(|\bsubprocess\b/;
 
 /**
- * Lines of a Python cell that run shell commands. Catches the obvious forms
- * (`!cmd`, `x = !cmd`, shell magics, get_ipython().system); the per-chat
- * approval is the real control.
+ * Lines of a Python cell that run shell commands or other programs: `!cmd`,
+ * `x = !cmd`, shell and script magics, IPython's shell aliases,
+ * get_ipython().system, os.system / subprocess. Detection is best effort;
+ * the per-chat approval is the real control.
  */
 export function findShellCommands(source: string): string[] {
   return source
@@ -124,7 +141,9 @@ export function findShellCommands(source: string): string[] {
         LINE_MAGIC.test(line) ||
         CELL_MAGIC.test(line) ||
         ASSIGNED_SHELL.test(line) ||
-        IPYTHON_SYSTEM.test(line)
+        IPYTHON_SYSTEM.test(line) ||
+        SHELL_ALIAS.test(line) ||
+        PROCESS_CALL.test(line)
       );
     });
 }
@@ -153,6 +172,10 @@ export function classifyAgentRun(cell: {
     : { ask: 'once-per-chat', reason: 'python', shellLines: [] };
 }
 
+/** Says what "Allow for this chat" covers. */
+export const PYTHON_GRANT_NOTE =
+  'Allow for this chat lets the agent run any Python in this chat without asking, including code that reads and writes files.';
+
 function sourcePreview(source: string): string {
   const lines = source.split('\n');
   const shown = lines.slice(0, APPROVAL_PREVIEW_LINES).join('\n');
@@ -170,9 +193,9 @@ function approvalCommand(
     return `⚠️ Run SQL ${where}. It modifies your database:\n\n${preview}`;
   }
   if (approval.reason === 'shell') {
-    return `Run Python ${where}. It runs shell commands:\n${approval.shellLines.join('\n')}\n\nCell source:\n${preview}`;
+    return `Run Python ${where}. It runs shell commands or other programs:\n${approval.shellLines.join('\n')}\n\nCell source:\n${preview}`;
   }
-  return `Run Python ${where}:\n\n${preview}`;
+  return `Run Python ${where}:\n\n${preview}\n\n${PYTHON_GRANT_NOTE}`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -180,6 +203,9 @@ function approvalCommand(
 /* ------------------------------------------------------------------ */
 
 type Meta = Record<string, unknown>;
+
+// `toolMs` (not `duration`): how long the tool call took. Models read a
+// plain `duration` as the cell's run time.
 
 function ok(
   data: unknown,
@@ -189,10 +215,10 @@ function ok(
 ) {
   const raw = JSON.stringify(data);
   const output = truncateToolResult(raw, maxTokens);
-  const duration = Date.now() - startedAt;
+  const toolMs = Date.now() - startedAt;
   return output === raw
-    ? { ok: true, data, meta: { duration, ...meta } }
-    : { ok: true, output, meta: { duration, truncated: true, ...meta } };
+    ? { ok: true, data, meta: { toolMs, ...meta } }
+    : { ok: true, output, meta: { toolMs, truncated: true, ...meta } };
 }
 
 function fail(
@@ -207,7 +233,7 @@ function fail(
   return {
     ok: false,
     error: message,
-    meta: { duration: Date.now() - startedAt, ...meta },
+    meta: { toolMs: Date.now() - startedAt, ...meta },
   };
 }
 
@@ -232,6 +258,47 @@ function raceAbort<T>(
         signal.removeEventListener('abort', onAbort);
         reject(error);
       });
+  });
+}
+
+/**
+ * Resolves 'empty' once `isEmpty()` holds, checking every QUEUE_POLL_MS;
+ * 'timeout' after `timeoutMs`; 'aborted' when `signal` fires.
+ */
+function waitForEmptyQueue(
+  isEmpty: () => boolean,
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<'empty' | 'timeout' | 'aborted'> {
+  const deadline = Date.now() + timeoutMs;
+  return new Promise((resolve) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onAbort = () => {
+      if (timer) clearTimeout(timer);
+      resolve('aborted');
+    };
+    const finish = (outcome: 'empty' | 'timeout' | 'aborted') => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve(outcome);
+    };
+    const check = () => {
+      if (signal?.aborted) {
+        finish('aborted');
+        return;
+      }
+      if (isEmpty()) {
+        finish('empty');
+        return;
+      }
+      const left = deadline - Date.now();
+      if (left <= 0) {
+        finish('timeout');
+        return;
+      }
+      timer = setTimeout(check, Math.min(QUEUE_POLL_MS, left));
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+    check();
   });
 }
 
@@ -425,7 +492,7 @@ export function createPythonNotebookTools(
 
     notebooks_cell_run: tool({
       description:
-        "Run a cell in the notebook's kernel and wait up to waitSeconds (default 120) for it to finish. Returns the status and outputs like notebooks_cell_result, with finished: false when the cell is still running. Read-only SQL runs right away; SQL that changes data, shell commands and the first Python run in this chat ask the user first.",
+        "Run a cell in the notebook's kernel and wait up to waitSeconds (default 120) for it to finish. Returns the status and outputs like notebooks_cell_result, with finished: false when the cell is still running. Waits for other running cells to finish before starting. Read-only SQL runs right away; SQL that changes data, shell commands and the first Python run in this chat ask the user first.",
       inputSchema: z.object({
         cellId: z.string().describe('Cell id from notebooks_get_state'),
         waitSeconds: z
@@ -456,6 +523,13 @@ export function createPythonNotebookTools(
               startedAt,
             );
           }
+          // Can't run now (env not ready, empty cell, Run all…): say so
+          // before asking the user.
+          if (cell.blocked) {
+            return fail(cell.blocked, startedAt, cell.blocked, {
+              blocked: true,
+            });
+          }
           if (approval.ask !== 'never') {
             const allowed = await deps.confirm({
               toolName: 'notebooks_cell_run',
@@ -477,10 +551,51 @@ export function createPythonNotebookTools(
           }
 
           const waitMs = (waitSeconds ?? DEFAULT_WAIT_SECONDS) * 1000;
+          // Start only when the kernel has nothing queued: a queued request
+          // can't be cancelled, so a cell started behind others would still
+          // run after Stop. Started on an empty queue, it runs first and the
+          // abort below can interrupt it.
+          let runWaitMs = waitMs;
+          if (notebookId) {
+            const queueEmpty = () =>
+              deps.kernel.getStatus(notebookId).queue.length === 0;
+            if (!queueEmpty()) {
+              const waitStartedAt = Date.now();
+              const queued = await waitForEmptyQueue(
+                queueEmpty,
+                waitMs,
+                options?.abortSignal,
+              );
+              if (queued === 'aborted') {
+                return fail(
+                  "Stopped. The cell didn't start.",
+                  startedAt,
+                  'Stopped.',
+                );
+              }
+              if (queued === 'timeout') {
+                return fail(
+                  QUEUE_TIMEOUT_MESSAGE,
+                  startedAt,
+                  QUEUE_TIMEOUT_MESSAGE,
+                  {
+                    started: false,
+                  },
+                );
+              }
+              runWaitMs = Math.max(1000, waitMs - (Date.now() - waitStartedAt));
+            }
+          }
+
           const run = deps.request(
             'cell-run',
-            { cellId, expectedSource: cell.source, waitMs },
-            waitMs + BRIDGE_GRACE_MS,
+            {
+              cellId,
+              expectedSource: cell.source,
+              expectedType: cell.type,
+              waitMs: runWaitMs,
+            },
+            runWaitMs + BRIDGE_GRACE_MS,
           );
           const outcome = await raceAbort(run, options?.abortSignal);
           if (outcome.aborted) {

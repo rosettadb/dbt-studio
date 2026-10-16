@@ -455,9 +455,14 @@ export const useAgentStream = (sessionId: number | undefined) => {
       if (!p) return;
       try {
         await agentService.resolveTerminalConfirm(p.requestId, allow, remember);
+        // "Allow for this chat" also answers queued requests of the same
+        // kind (main resolves them), so drop their banners.
+        const grantScope = allow && remember ? p.allowScope : undefined;
         setStreamState((prev) => {
           const remaining = prev.confirmQueue.filter(
-            (item) => item.requestId !== p.requestId,
+            (item) =>
+              item.requestId !== p.requestId &&
+              !(grantScope && item.allowScope === grantScope),
           );
           return {
             ...prev,

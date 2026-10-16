@@ -28,6 +28,7 @@ import { AgentStepBlock } from './AgentStepBlock';
 import { ToolCallRow } from './ToolCallRow';
 import { ImageLightbox } from './ImageLightbox';
 import { isVisibleUserContextItem } from './userContextVisibility';
+import { detectCodeBlockMeta } from './codeBlockMeta';
 import { previewChatImage } from '../../services/agent.service';
 import type {
   AgentStep,
@@ -328,19 +329,6 @@ type MarkdownCodeBlockProps = React.PropsWithChildren<{
   inline?: boolean;
   className?: string;
 }>;
-
-function detectCodeBlockMeta(
-  className?: string,
-  code?: string,
-): {
-  language: string;
-  filename?: string;
-} {
-  const language = (className?.replace('language-', '') ?? '').toLowerCase();
-  const firstLine = (code || '').split('\n')[0]?.trim() ?? '';
-  const filenameMatch = firstLine.match(/^(?:\/\/|--|#)\s*filename:\s*(.+)$/i);
-  return { language, filename: filenameMatch?.[1]?.trim() };
-}
 
 const MarkdownCodeBlock = ({
   inline,

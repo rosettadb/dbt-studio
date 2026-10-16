@@ -13,6 +13,7 @@ import PythonNotebooksService from '../../pythonNotebooks.service';
 import NotebookKernelService from '../../notebookKernel.service';
 
 import type { NotebookCell } from '../../../../types/notebooks';
+import type { PythonNotebook } from '../../../../types/pythonNotebooks';
 import { composeAgentRuntime } from './composeAgentRuntime';
 import { createDbtTools } from '../tools/dbt.tools';
 import { createFilesystemTools } from '../tools/filesystem.tools';
@@ -130,10 +131,21 @@ export async function createNotebooksAgent(
   const isAskMode = options.toolMode === 'chat';
 
   // Python notebooks are <id>.ipynb; legacy SQL notebooks are <id>.json.
-  const pythonNotebook =
-    connectionId && notebookId
-      ? await PythonNotebooksService.getNotebook(connectionId, notebookId)
-      : null;
+  // A Python notebook that fails to load must not get the legacy agent.
+  let pythonNotebook: PythonNotebook | null = null;
+  if (
+    connectionId &&
+    notebookId &&
+    (await PythonNotebooksService.notebookExists(connectionId, notebookId))
+  ) {
+    pythonNotebook = await PythonNotebooksService.getNotebook(
+      connectionId,
+      notebookId,
+    );
+    if (!pythonNotebook) {
+      throw new Error("Couldn't load this notebook. Reopen it and try again.");
+    }
+  }
   const isPython = pythonNotebook !== null;
 
   const linkedProjectBlock = connectionMeta.linkedDbtProject

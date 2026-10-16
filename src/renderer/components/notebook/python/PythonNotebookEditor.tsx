@@ -187,7 +187,20 @@ export const PythonNotebookEditor = forwardRef<
   const cellsRef = useRef<PythonNotebookCell[]>([]);
   const [runtime, setRuntime] = useState<NotebookRuntime | null>(null);
   const [envMessage, setEnvMessage] = useState('');
-  const [activeCells, setActiveCells] = useState<string[]>([]);
+  const [activeCells, setActiveCellsState] = useState<string[]>([]);
+  // The agent port reads the run state between renders, so it's kept in
+  // refs too; every update goes through setActiveCells / runningAllRef.
+  const activeCellsRef = useRef<string[]>([]);
+  const runningAllRef = useRef(false);
+  const setActiveCells = useCallback(
+    (update: string[] | ((prev: string[]) => string[])) => {
+      const next =
+        typeof update === 'function' ? update(activeCellsRef.current) : update;
+      activeCellsRef.current = next;
+      setActiveCellsState(next);
+    },
+    [],
+  );
   const [selectedCellId, setSelectedCellId] = useState<string | null>(null);
   const [focusRequests, setFocusRequests] = useState<Record<string, number>>(
     {},
@@ -696,20 +709,34 @@ export const PythonNotebookEditor = forwardRef<
       runtime: runtime ?? notebook?.runtime ?? null,
       kernelStatus: kernel?.status ?? 'stopped',
       cells: cellsRef.current,
-      activeCellIds: activeCells,
+      activeCellIds: activeCellsRef.current,
       selectedCellId,
-      runningAll: isRunningAll,
+      runningAll: runningAllRef.current,
     }),
     commit: async (update) => {
       cancelPendingSave();
       const next = update(cellsRef.current);
       cellsRef.current = next;
       setCells(next);
-      await updateNotebook.mutateAsync({
-        connectionId,
-        notebookId,
-        updates: { cells: next },
-      });
+      try {
+        await updateNotebook.mutateAsync({
+          connectionId,
+          notebookId,
+          updates: { cells: next },
+        });
+      } catch (err) {
+        // Keep the change and arm the debounced save: flushPendingSave
+        // retries it before the next run. Tell the agent not to repeat it.
+        if (saveTimer.current) clearTimeout(saveTimer.current);
+        saveTimer.current = setTimeout(() => {
+          saveTimer.current = null;
+          persist(cellsRef.current);
+        }, SAVE_DEBOUNCE_MS);
+        const reason = err instanceof Error ? err.message : String(err);
+        throw new Error(
+          `The change is in the notebook but saving failed: ${reason}. Don't repeat it.`,
+        );
+      }
     },
     run: async (cellId) => (await executeCellRun(cellId)).result ?? null,
     reveal: (cellId) => {
@@ -822,6 +849,7 @@ export const PythonNotebookEditor = forwardRef<
   );
 
   const handleRunAll = useCallback(async () => {
+    runningAllRef.current = true;
     setIsRunningAll(true);
     try {
       const codeCells = cellsRef.current.filter(
@@ -837,6 +865,7 @@ export const PythonNotebookEditor = forwardRef<
         }
       }
     } finally {
+      runningAllRef.current = false;
       setIsRunningAll(false);
     }
   }, [runCell]);

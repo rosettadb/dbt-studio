@@ -23,13 +23,16 @@ export const ThinkingRow: React.FC<ThinkingRowProps> = ({
   }
 
   const durationSec = durationMs ? Math.round(durationMs / 1000) : null;
+  // Some providers don't report how long they thought: say "Thought" only.
+  const doneTitle =
+    durationSec === null ? 'Thought' : `Thought for ${durationSec}s`;
   const title = inProgress ? (
     <>
       Thinking
       <AnimatedEllipsis />
     </>
   ) : (
-    `Thought for ${durationSec ?? '?'}s`
+    doneTitle
   );
 
   return (

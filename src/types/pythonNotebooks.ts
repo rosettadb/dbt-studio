@@ -285,6 +285,8 @@ export interface AgentCellSource {
   variable?: string;
   source: string;
   notebookName: string;
+  /** Why the agent can't run the cell now (env not ready, invalid variable, empty cell, Run all) */
+  blocked?: string;
 }
 
 export interface AgentCellRef {
@@ -356,7 +358,13 @@ export interface PythonNotebookAgentOps {
     result: AgentCellRef;
   };
   'cell-run': {
-    args: { cellId: string; expectedSource: string; waitMs: number };
+    /** The approved source and type: the editor refuses to run a changed cell */
+    args: {
+      cellId: string;
+      expectedSource: string;
+      expectedType: PythonCellType;
+      waitMs: number;
+    };
     result: AgentRunResult;
   };
   'cell-result': { args: { cellId: string }; result: AgentCellResult };

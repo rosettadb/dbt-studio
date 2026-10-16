@@ -59,6 +59,22 @@ export interface PythonNotebookEditorPort {
 
 const CELL_TYPES: PythonCellType[] = ['code', 'sql', 'markdown'];
 
+export const RUN_ALL_REASON =
+  'Run all is in progress. Try again when it finishes.';
+
+/**
+ * Why the agent can't run a code or SQL cell now, or null. Run all starts
+ * cells one by one, so the agent must not slip a run in between them.
+ */
+function agentRunBlock(
+  cell: PythonNotebookCell,
+  snapshot: EditorSnapshot,
+): string | null {
+  if (cell.cell_type === 'markdown') return null;
+  if (snapshot.runningAll) return RUN_ALL_REASON;
+  return checkRunnable(cell, snapshot.runtime);
+}
+
 function locate(snapshot: EditorSnapshot, cellId: string) {
   const index = snapshot.cells.findIndex((c) => c.id === cellId);
   if (index === -1) {
@@ -145,6 +161,7 @@ export function createAgentOps(
       const snapshot = getPort().snapshot();
       const { cell, index } = locate(snapshot, cellId);
       const variable = sqlVariable(cell);
+      const blocked = agentRunBlock(cell, snapshot);
       return {
         cellId,
         index: index + 1,
@@ -152,6 +169,7 @@ export function createAgentOps(
         ...(variable ? { variable } : {}),
         source: cell.source,
         notebookName: snapshot.name,
+        ...(blocked ? { blocked } : {}),
       };
     },
 
@@ -225,11 +243,11 @@ export function createAgentOps(
       return cellRef(updated.cell, updated.index);
     },
 
-    'cell-run': async ({ cellId, expectedSource, waitMs }) => {
+    'cell-run': async ({ cellId, expectedSource, expectedType, waitMs }) => {
       const port = getPort();
       const snapshot = port.snapshot();
       const { cell, index } = locate(snapshot, cellId);
-      if (cell.source !== expectedSource) {
+      if (cell.source !== expectedSource || cell.cell_type !== expectedType) {
         throw new Error(
           'The cell changed after it was approved. Read it and run it again.',
         );
@@ -240,7 +258,7 @@ export function createAgentOps(
       const blocked =
         cell.cell_type === 'markdown'
           ? 'Markdown cells have nothing to run.'
-          : checkRunnable(cell, snapshot.runtime);
+          : agentRunBlock(cell, snapshot);
       if (blocked) {
         return { ...summarizeCell(cell, index), finished: false, blocked };
       }

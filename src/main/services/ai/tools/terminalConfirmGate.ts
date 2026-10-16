@@ -60,13 +60,24 @@ export class TerminalConfirmGate {
 
   /**
    * Answer a pending request. `remember` records an "Allow for this chat"
-   * grant, only for requests that offered a scope.
+   * grant, only for requests that offered a scope; requests with the same
+   * scope already waiting in that conversation are allowed too.
    */
   static resolve(requestId: string, allow: boolean, remember = false): void {
     const entry = this.pending.get(requestId);
     if (entry) {
       if (allow && remember && entry.allowScope) {
         this.grants.add(grantKey(entry.conversationId, entry.allowScope));
+        Array.from(this.pending.entries()).forEach(([id, other]) => {
+          if (
+            id !== requestId &&
+            other.conversationId === entry.conversationId &&
+            other.allowScope === entry.allowScope
+          ) {
+            this.pending.delete(id);
+            other.resolve(true);
+          }
+        });
       }
       entry.resolve(allow);
       this.pending.delete(requestId);

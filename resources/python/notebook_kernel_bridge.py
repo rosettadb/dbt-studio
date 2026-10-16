@@ -190,6 +190,7 @@ KERNEL_INSPECT_CODE = r'''
 def _rosetta_inspect(name=None):
     import json
     import math
+    import reprlib
     import types
 
     ip = get_ipython()
@@ -209,6 +210,14 @@ def _rosetta_inspect(name=None):
     max_value = 200
     max_repr = 2000
     max_null_rows = 1000000
+
+    # Bounded repr for other values: a huge list or dict never builds its
+    # whole repr in the kernel. Unknown types still use their own __repr__.
+    limited = reprlib.Repr()
+    limited.maxlevel = 3
+    limited.maxlist = limited.maxtuple = limited.maxset = 20
+    limited.maxfrozenset = limited.maxdeque = limited.maxdict = 20
+    limited.maxstring = limited.maxother = limited.maxlong = max_repr
 
     def module_of(value):
         return (getattr(type(value), "__module__", "") or "").split(".")[0]
@@ -296,7 +305,7 @@ def _rosetta_inspect(name=None):
                 info["shape"] = [int(n) for n in value.shape]
                 info["repr"] = short(repr(value), max_repr)
             else:
-                info["repr"] = short(repr(value), max_repr)
+                info["repr"] = short(limited.repr(value), max_repr)
         except Exception as exc:
             info["error"] = "{}: {}".format(type(exc).__name__, exc)
         return info
