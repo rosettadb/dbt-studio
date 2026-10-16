@@ -27,6 +27,7 @@ import {
 import {
   ArrowDownward,
   ArrowUpward,
+  AutoAwesome,
   Clear,
   Code,
   ContentCopy,
@@ -51,6 +52,7 @@ import type { SqlSchemaCompletionEntry } from '../../../lib/monaco/completions/s
 import { PythonCodeCell, RunMode, EditorMountHandler } from './PythonCodeCell';
 import { PythonTextCell } from './PythonTextCell';
 import { PythonCellOutputs } from './PythonCellOutputs';
+import type { AskAgentRequest } from './pythonCells';
 import { PythonLogoIcon } from '../NotebookKindIcon';
 
 export type CellRunState = 'idle' | 'queued' | 'running';
@@ -157,6 +159,8 @@ interface PythonCellProps {
   onEditorMount?: EditorMountHandler;
   /** SQL cells: schema completions for the shared `sql` provider */
   sqlCompletions?: SqlSchemaCompletionEntry;
+  /** Ask the Notebooks agent about this cell. Unset when no AI provider is set. */
+  onAskAgent?: (request: AskAgentRequest) => void;
 }
 
 /** First non-empty line of the source, for the collapsed summary. */
@@ -195,6 +199,7 @@ const PythonCellComponent: React.FC<PythonCellProps> = ({
   onToggleCollapsed,
   onEditorMount,
   sqlCompletions,
+  onAskAgent,
 }) => {
   const theme = useTheme();
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
@@ -660,6 +665,7 @@ const PythonCellComponent: React.FC<PythonCellProps> = ({
               collapsed={outputsCollapsed}
               onExpand={() => setOutputsCollapsed(false)}
               onClearOutputs={onClearOutputs}
+              onAskAgent={onAskAgent}
             />
           </Box>
         </Box>
@@ -813,6 +819,17 @@ const PythonCellComponent: React.FC<PythonCellProps> = ({
               <PlayArrow sx={{ fontSize: 16, mr: 1 }} /> Run and insert below
             </MenuItem>
           )}
+          {onAskAgent && (
+            <MenuItem
+              onClick={() => {
+                closeMenu();
+                onAskAgent({ kind: 'explain-cell' });
+              }}
+              sx={{ fontSize: 13 }}
+            >
+              <AutoAwesome sx={{ fontSize: 16, mr: 1 }} /> Explain with AI
+            </MenuItem>
+          )}
         </Menu>
       </Box>
     </Box>
@@ -835,7 +852,9 @@ export const PythonCell = memo(
     prev.onChange === next.onChange &&
     prev.onChangeVariable === next.onChangeVariable &&
     prev.onEditorMount === next.onEditorMount &&
-    prev.sqlCompletions === next.sqlCompletions,
+    prev.sqlCompletions === next.sqlCompletions &&
+    // The callback reads live state; only its presence (AI provider) matters.
+    Boolean(prev.onAskAgent) === Boolean(next.onAskAgent),
 );
 
 PythonCell.displayName = 'PythonCell';

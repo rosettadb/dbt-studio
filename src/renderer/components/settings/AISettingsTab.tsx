@@ -175,32 +175,59 @@ const TOOLS: ToolItem[] = [
   {
     id: 'notebooks_get_state',
     label: 'notebooks_get_state',
-    description: 'List all cells in the current notebook and their types',
+    description:
+      'List the cells in the open notebook with their type, status and output',
     icon: <SearchIcon sx={{ fontSize: 16 }} />,
   },
   {
     id: 'notebooks_cell_read',
     label: 'notebooks_cell_read',
-    description: 'Read the source code/content of a specific cell',
+    description: 'Read the source of a Python, SQL or Markdown cell',
     icon: <ArticleIcon sx={{ fontSize: 16 }} />,
+  },
+  {
+    id: 'notebooks_cell_add',
+    label: 'notebooks_cell_add',
+    description: 'Add a Python, SQL or Markdown cell to the notebook',
+    icon: <CreateIcon sx={{ fontSize: 16 }} />,
   },
   {
     id: 'notebooks_cell_update',
     label: 'notebooks_cell_update',
-    description: 'Update the content of a notebook cell',
+    description: "Change a cell's source, type or SQL result variable",
     icon: <EditIcon sx={{ fontSize: 16 }} />,
   },
   {
     id: 'notebooks_cell_run',
     label: 'notebooks_cell_run',
-    description: 'Execute a specific notebook cell',
+    description:
+      'Run a cell. Python, shell commands and SQL that changes data ask first',
     icon: <TerminalIcon sx={{ fontSize: 16 }} />,
   },
   {
     id: 'notebooks_cell_result',
     label: 'notebooks_cell_result',
-    description: 'Inspect the last execution result of a cell',
+    description: "Read a cell's status and outputs",
     icon: <StorageIcon sx={{ fontSize: 16 }} />,
+  },
+  {
+    id: 'notebooks_variables',
+    label: 'notebooks_variables',
+    description: 'Inspect DataFrames and other variables in the Python kernel',
+    icon: <PsychologyIcon sx={{ fontSize: 16 }} />,
+  },
+  {
+    id: 'notebooks_packages_list',
+    label: 'notebooks_packages_list',
+    description: "List the packages in a Python notebook's environment",
+    icon: <BuildOutlined sx={{ fontSize: 16 }} />,
+  },
+  {
+    id: 'notebooks_packages_install',
+    label: 'notebooks_packages_install',
+    description:
+      "pip install packages into a Python notebook's environment (always asks first)",
+    icon: <BuildOutlined sx={{ fontSize: 16 }} />,
   },
 ];
 

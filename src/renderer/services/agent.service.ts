@@ -207,6 +207,7 @@ export interface TerminalConfirmPayload {
   toolName: string;
   command: string;
   cwd: string;
+  allowScope?: string;
 }
 
 export interface ContextUsagePayload {
@@ -239,11 +240,14 @@ export const onContextUsage = (
   };
 };
 
+/** `remember`: "Allow for this chat" (only for requests with an allowScope). */
 export const resolveTerminalConfirm = async (
   requestId: string,
   allow: boolean,
+  remember = false,
 ): Promise<void> =>
   window.electron.ipcRenderer.invoke('agent:terminal-resolve', {
     requestId,
     allow,
+    remember,
   });

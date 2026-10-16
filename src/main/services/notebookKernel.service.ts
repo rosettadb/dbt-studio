@@ -23,6 +23,7 @@ import { broadcastToRenderers } from '../utils/rendererBroadcast';
 import type {
   ExecuteCellResult,
   KernelEvent,
+  KernelInspectResult,
   KernelState,
   KernelStatus,
   PythonCellOutput,
@@ -30,6 +31,8 @@ import type {
 
 const START_TIMEOUT_MS = 120_000;
 const SHUTDOWN_GRACE_MS = 5_000;
+/** Inspect requests queue behind running cells; give up after this. */
+const INSPECT_TIMEOUT_MS = 10_000;
 
 interface PendingExecution {
   requestId: string;
@@ -49,6 +52,8 @@ interface Kernel {
   rejectReady: (error: Error) => void;
   pending: Map<string, PendingExecution>;
   order: string[];
+  /** Variable inspections waiting for their result, by request id */
+  inspects: Map<string, (result: KernelInspectResult) => void>;
   exited: Promise<void>;
 }
 
@@ -205,6 +210,7 @@ export default class NotebookKernelService {
       rejectReady,
       pending: new Map(),
       order: [],
+      inspects: new Map(),
       exited,
     };
     this.kernels.set(notebookId, kernel);
@@ -276,6 +282,8 @@ export default class NotebookKernelService {
     });
     kernel.pending.clear();
     kernel.order = [];
+    kernel.inspects.forEach((done) => done({ kernelRunning: false }));
+    kernel.inspects.clear();
   }
 
   private static handleLine(kernel: Kernel, line: string) {
@@ -344,6 +352,20 @@ export default class NotebookKernelService {
         });
         break;
       }
+      case 'inspect_result': {
+        const done = kernel.inspects.get(message.id);
+        if (!done) break;
+        kernel.inspects.delete(message.id);
+        done(
+          message.ok
+            ? { kernelRunning: true, data: message.data }
+            : {
+                kernelRunning: true,
+                error: `${message.ename ?? 'Error'}: ${message.evalue ?? ''}`,
+              },
+        );
+        break;
+      }
       case 'fatal': {
         const error = new Error(String(message.message ?? 'Kernel failed'));
         this.setStatus(kernel, 'error', error.message);
@@ -398,6 +420,48 @@ export default class NotebookKernelService {
         reject(error instanceof Error ? error : new Error(String(error)));
       }
     });
+  }
+
+  /**
+   * List the kernel's user variables, or describe one (`name`), for the
+   * Notebooks agent. Runs silently in the kernel: no execution count, no
+   * history, no outputs, no busy / idle in the UI. Never starts a kernel: with
+   * none running it reports `kernelRunning: false`.
+   */
+  static async inspect(
+    notebookId: string,
+    name?: string,
+  ): Promise<KernelInspectResult> {
+    const kernel = this.kernels.get(notebookId);
+    if (!kernel || (kernel.status !== 'idle' && kernel.status !== 'busy')) {
+      return { kernelRunning: false };
+    }
+    const requestId = uuidv4();
+    const result = new Promise<KernelInspectResult>((resolve) => {
+      const timer = setTimeout(() => {
+        kernel.inspects.delete(requestId);
+        resolve({
+          kernelRunning: true,
+          busy: true,
+          error:
+            'The kernel is busy running a cell. Try again when it finishes.',
+        });
+      }, INSPECT_TIMEOUT_MS);
+      kernel.inspects.set(requestId, (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      });
+    });
+    try {
+      this.send(kernel, { op: 'inspect', id: requestId, name: name ?? null });
+    } catch (error) {
+      kernel.inspects.get(requestId)?.({
+        kernelRunning: true,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      kernel.inspects.delete(requestId);
+    }
+    return result;
   }
 
   static async interrupt(notebookId: string): Promise<KernelState> {

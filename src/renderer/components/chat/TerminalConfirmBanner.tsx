@@ -1,18 +1,34 @@
 import React from 'react';
 import { Box, Button, Typography, Paper } from '@mui/material';
 import TerminalIcon from '@mui/icons-material/Terminal';
+import CloseIcon from '@mui/icons-material/Close';
+import CheckIcon from '@mui/icons-material/Check';
+import DoneAllIcon from '@mui/icons-material/DoneAll';
 import type { TerminalConfirmRequest } from '../../hooks/useAgentStream';
 
 interface TerminalConfirmBannerProps {
   request: TerminalConfirmRequest;
   onAllow: () => void;
   onDeny: () => void;
+  /** Shown when the request has an allowScope: allow it for the rest of the chat. */
+  onAllowForChat?: () => void;
 }
+
+const buttonSx = {
+  minWidth: 'unset',
+  px: 1,
+  py: 0.125,
+  fontSize: '11px',
+  '& .MuiButton-startIcon': { mr: 0.5 },
+} as const;
+
+const iconSx = { fontSize: '14px !important' } as const;
 
 export const TerminalConfirmBanner: React.FC<TerminalConfirmBannerProps> = ({
   request,
   onAllow,
   onDeny,
+  onAllowForChat,
 }) => {
   return (
     <Paper
@@ -87,7 +103,8 @@ export const TerminalConfirmBanner: React.FC<TerminalConfirmBannerProps> = ({
             size="small"
             color="inherit"
             onClick={onDeny}
-            sx={{ minWidth: 'unset', px: 1, py: 0.125, fontSize: '11px' }}
+            startIcon={<CloseIcon sx={iconSx} />}
+            sx={buttonSx}
           >
             Deny
           </Button>
@@ -96,10 +113,23 @@ export const TerminalConfirmBanner: React.FC<TerminalConfirmBannerProps> = ({
             variant="contained"
             color="warning"
             onClick={onAllow}
-            sx={{ minWidth: 'unset', px: 1, py: 0.125, fontSize: '11px' }}
+            startIcon={<CheckIcon sx={iconSx} />}
+            sx={buttonSx}
           >
             Allow
           </Button>
+          {request.allowScope && onAllowForChat && (
+            <Button
+              size="small"
+              variant="outlined"
+              color="warning"
+              onClick={onAllowForChat}
+              startIcon={<DoneAllIcon sx={iconSx} />}
+              sx={buttonSx}
+            >
+              Allow for this chat
+            </Button>
+          )}
         </Box>
       </Box>
     </Paper>
