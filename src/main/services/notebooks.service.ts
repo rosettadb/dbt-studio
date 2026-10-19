@@ -801,13 +801,27 @@ export class NotebooksService {
               cells: (Array.isArray(notebookData.cells)
                 ? notebookData.cells
                 : []
-              ).map((c: any) => ({
-                cell_type: c.cell_type ?? 'code',
-                source: typeof c.source === 'string' ? c.source : '',
-                outputs: [],
-                execution_count: null,
-                metadata: {},
-              })),
+              ).map((c: any) => {
+                const cellType: string = c.cell_type ?? 'code';
+                // Jupyter source can be a string or a string[]; normalise to string
+                let source = '';
+                if (Array.isArray(c.source)) {
+                  source = c.source.join('');
+                } else if (typeof c.source === 'string') {
+                  source = c.source;
+                }
+                const base = {
+                  id: uuidv4(),
+                  cell_type: cellType,
+                  source,
+                  metadata: {},
+                };
+                // nbformat 4: only code cells have outputs / execution_count
+                if (cellType === 'code' || cellType === 'sql') {
+                  return { ...base, outputs: [], execution_count: null };
+                }
+                return base;
+              }),
             };
             const ipynbPath = path.join(connectionDir, `${id}.ipynb`);
             await fs.writeFile(
