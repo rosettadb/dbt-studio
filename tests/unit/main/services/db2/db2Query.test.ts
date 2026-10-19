@@ -41,18 +41,35 @@ const makeResult = ({
   closeSync: jest.fn(() => true),
 });
 
+/** What the Db2 CLI driver reports for a statement stopped by SQLCancel. */
+const SQL_CANCEL_ERROR =
+  '[IBM][CLI Driver][DB2/LINUXX8664] SQL0952N  Processing was cancelled due to an interrupt.  SQLSTATE=57014';
+
 const makeDb = (
   options: {
     result?: ReturnType<typeof makeResult>;
     executeError?: Error;
     executeDelay?: Promise<void>;
+    prepareDelay?: Promise<void>;
+    /** `execute` keeps running until `db.cancel` interrupts it. */
+    interruptible?: boolean;
+    /** `db.cancel` returns only once this settles. */
+    cancelDelay?: Promise<void>;
     name?: string;
     version?: string;
   } = {},
 ) => {
+  let interrupt: (error: Error) => void = () => {};
+  // No `cancel` here on purpose: `statement.cancel()` queues behind a running
+  // `execute()` in ibm_db, so the code must not use it.
   const statement = {
     setAttr: jest.fn(async () => true),
     execute: jest.fn(async () => {
+      if (options.interruptible) {
+        await new Promise<void>((_resolve, reject) => {
+          interrupt = reject;
+        });
+      }
       await options.executeDelay;
       if (options.executeError) throw options.executeError;
       return options.result ?? makeResult({});
@@ -61,7 +78,16 @@ const makeDb = (
   };
   return {
     statement,
-    prepare: jest.fn(async () => statement),
+    prepare: jest.fn(async () => {
+      await options.prepareDelay;
+      return statement;
+    }),
+    // Like SQLCancel: the running execute fails, then the cancel returns.
+    cancel: jest.fn(async (target: unknown) => {
+      if (target === statement) interrupt(new Error(SQL_CANCEL_ERROR));
+      await options.cancelDelay;
+      return true;
+    }),
     query: jest.fn(async () => [{ 1: 1 }]),
     getInfo: jest.fn(async (type: number) =>
       type === 17
@@ -74,6 +100,22 @@ const makeDb = (
 
 const range = (count: number) =>
   Array.from({ length: count }, (_, index) => [index + 1, `row ${index + 1}`]);
+
+const deferred = () => {
+  let release: () => void = () => {};
+  const promise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { promise, resolve: release };
+};
+
+/** Lets every pending mock call and promise callback run. */
+const settle = () =>
+  new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
+
+const CANCELLED = { success: false, error: 'Query cancelled' };
 
 beforeEach(() => {
   openMock.mockReset();
@@ -248,6 +290,148 @@ describe('executeDb2Query', () => {
       error: 'Query cancelled',
     });
     release();
+  });
+});
+
+describe('executeDb2Query cancel of a running statement', () => {
+  const slowQuery = (index: number, cancels: Array<() => void>) =>
+    executeDb2Query(connection, `SELECT * FROM SLOW_${index}`, (cancel) => {
+      cancels.push(cancel);
+    });
+
+  const quickDb = () =>
+    makeDb({ result: makeResult({ columns: ['C'], rows: [[1]] }) });
+
+  it('interrupts the statement with db.cancel, then closes it', async () => {
+    const db = makeDb({ interruptible: true });
+    openMock.mockResolvedValue(db);
+
+    const cancels: Array<() => void> = [];
+    const running = slowQuery(0, cancels);
+    await settle();
+    expect(db.statement.execute).toHaveBeenCalled();
+
+    cancels[0]();
+    cancels[0]();
+    await expect(running).resolves.toEqual(CANCELLED);
+    await settle();
+
+    expect(db.cancel).toHaveBeenCalledTimes(1);
+    expect(db.cancel).toHaveBeenCalledWith(db.statement);
+    expect(db.statement.close).toHaveBeenCalledTimes(1);
+    expect(db.close).toHaveBeenCalledTimes(1);
+    expect(db.cancel.mock.invocationCallOrder[0]).toBeLessThan(
+      db.statement.close.mock.invocationCallOrder[0],
+    );
+    expect(db.statement.close.mock.invocationCallOrder[0]).toBeLessThan(
+      db.close.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('starts queued queries and connection tests once cancelled statements stop', async () => {
+    const slow = [
+      makeDb({ interruptible: true }),
+      makeDb({ interruptible: true }),
+    ];
+    openMock
+      .mockResolvedValueOnce(slow[0])
+      .mockResolvedValueOnce(slow[1])
+      .mockImplementation(async () => quickDb());
+
+    const cancels: Array<() => void> = [];
+    const running = [slowQuery(0, cancels), slowQuery(1, cancels)];
+    const queuedQuery = executeDb2Query(connection, 'SELECT C FROM QUEUED');
+    const queuedTest = testDb2Connection(connection);
+    await settle();
+    expect(openMock).toHaveBeenCalledTimes(2);
+
+    cancels.forEach((cancel) => cancel());
+    await expect(Promise.all(running)).resolves.toEqual([CANCELLED, CANCELLED]);
+    await expect(queuedQuery).resolves.toMatchObject({
+      success: true,
+      data: [{ C: 1 }],
+    });
+    await expect(queuedTest).resolves.toBe(true);
+    expect(openMock).toHaveBeenCalledTimes(4);
+    slow.forEach((db) => {
+      expect(db.cancel).toHaveBeenCalledWith(db.statement);
+      expect(db.close).toHaveBeenCalled();
+    });
+    await settle();
+  });
+
+  it('keeps the Db2 slot until SQLCancel returns', async () => {
+    const cancelReturned = deferred();
+    const slow = [
+      makeDb({ interruptible: true, cancelDelay: cancelReturned.promise }),
+      makeDb({ interruptible: true, cancelDelay: cancelReturned.promise }),
+    ];
+    openMock
+      .mockResolvedValueOnce(slow[0])
+      .mockResolvedValueOnce(slow[1])
+      .mockImplementation(async () => quickDb());
+
+    const cancels: Array<() => void> = [];
+    const running = [slowQuery(0, cancels), slowQuery(1, cancels)];
+    const queued = executeDb2Query(connection, 'SELECT C FROM QUEUED');
+    await settle();
+
+    cancels.forEach((cancel) => cancel());
+    await expect(Promise.all(running)).resolves.toEqual([CANCELLED, CANCELLED]);
+    await settle();
+    slow.forEach((db) => {
+      expect(db.cancel).toHaveBeenCalled();
+      expect(db.statement.close).not.toHaveBeenCalled();
+      expect(db.close).not.toHaveBeenCalled();
+    });
+    expect(openMock).toHaveBeenCalledTimes(2);
+
+    cancelReturned.resolve();
+    await expect(queued).resolves.toMatchObject({ success: true });
+    expect(openMock).toHaveBeenCalledTimes(3);
+    slow.forEach((db) => expect(db.statement.close).toHaveBeenCalled());
+    await settle();
+  });
+
+  it('skips execute when cancelled while the statement is prepared', async () => {
+    const prepared = deferred();
+    const db = makeDb({ prepareDelay: prepared.promise });
+    openMock.mockResolvedValue(db);
+
+    const cancels: Array<() => void> = [];
+    const running = slowQuery(0, cancels);
+    await settle();
+    expect(db.prepare).toHaveBeenCalled();
+
+    cancels[0]();
+    await expect(running).resolves.toEqual(CANCELLED);
+    prepared.resolve();
+    await settle();
+
+    expect(db.statement.execute).not.toHaveBeenCalled();
+    expect(db.cancel).not.toHaveBeenCalled();
+    expect(db.statement.close).toHaveBeenCalled();
+    expect(db.close).toHaveBeenCalled();
+  });
+
+  it('skips prepare when cancelled while connecting', async () => {
+    const opened = deferred();
+    const db = makeDb();
+    openMock.mockImplementation(async () => {
+      await opened.promise;
+      return db;
+    });
+
+    const cancels: Array<() => void> = [];
+    const running = slowQuery(0, cancels);
+    await settle();
+    cancels[0]();
+    await expect(running).resolves.toEqual(CANCELLED);
+    opened.resolve();
+    await settle();
+
+    expect(db.prepare).not.toHaveBeenCalled();
+    expect(db.close).toHaveBeenCalled();
   });
 });
 

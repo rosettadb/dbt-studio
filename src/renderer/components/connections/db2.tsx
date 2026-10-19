@@ -10,7 +10,6 @@ import {
   InputAdornment,
   TextField,
   Tooltip,
-  Typography,
 } from '@mui/material';
 import {
   Cable,
@@ -312,12 +311,6 @@ export const Db2: React.FC<Props> = ({
           gap: 2,
         }}
       >
-        <Typography variant="body2" color="text.secondary">
-          IBM Db2 for Linux, UNIX and Windows 11.1 or later, including Db2 on
-          Cloud. Available in the SQL Editor and Notebooks; not a dbt
-          connection.
-        </Typography>
-
         <TextField
           label="Connection Name"
           name="name"

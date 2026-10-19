@@ -281,23 +281,48 @@ const readRows = async (
   };
 };
 
+/**
+ * Prepares and runs one statement. While the statement can be interrupted,
+ * `setInterrupt` holds a function that sends it `SQLCancel`; the statement is
+ * closed only after that cancel has returned.
+ */
 const runStatement = async (
   db: Database,
   sql: string,
   isCancelled: () => boolean,
+  setInterrupt: (interrupt: (() => void) | undefined) => void,
 ): Promise<QueryResponseType> => {
+  // Cancelled while the connection was opening.
+  if (isCancelled()) throw new Db2CancelledError();
   const statement = await db.prepare(sql);
+  let cancelling: Promise<unknown> | undefined;
+  setInterrupt(() => {
+    // `db.cancel` goes through the connection queue and runs SQLCancel on a
+    // worker thread, so it reaches a statement whose `execute()` is still
+    // running. `statement.cancel()` would wait behind that `execute()` on the
+    // statement's own queue.
+    if (!cancelling) cancelling = db.cancel(statement).catch(() => undefined);
+  });
+  let result: ODBCResult | undefined;
   try {
+    // Cancelled while the statement was being prepared.
+    if (isCancelled()) throw new Db2CancelledError();
     await statement.setAttr(SQL_ATTR_QUERY_TIMEOUT, DB2_QUERY_TIMEOUT_SECONDS);
+    if (isCancelled()) throw new Db2CancelledError();
     const executed = await statement.execute();
-    const result = Array.isArray(executed) ? executed[0] : executed;
+    result = Array.isArray(executed) ? executed[0] : executed;
     if (!result) return commandResponse(sql, 0);
-    try {
-      return await readRows(result, sql, isCancelled);
-    } finally {
-      result.closeSync();
-    }
+    return await readRows(result, sql, isCancelled);
   } finally {
+    setInterrupt(undefined);
+    // SQLCancel works on the raw statement handle, so free the handles only
+    // after it has returned.
+    await cancelling;
+    try {
+      result?.closeSync();
+    } catch {
+      // Already closed.
+    }
     await statement.close().catch(() => undefined);
   }
 };
@@ -305,10 +330,12 @@ const runStatement = async (
 /**
  * Runs one statement for the SQL Editor or a Notebook.
  *
- * `ibm_db` has no statement cancel, so cancelling answers the UI at once and
- * stops reading rows; a statement already running on the server ends when it
- * finishes or reaches `DB2_QUERY_TIMEOUT_SECONDS`. A queued statement is
- * dropped without connecting.
+ * Cancelling answers the UI at once. A queued statement is dropped without
+ * connecting. A running one gets `SQLCancel` (`db.cancel`); its Db2 slot stays
+ * taken until the cancel returns and the statement and connection are closed.
+ * If the server ignores the cancel, or the cancel lands just before
+ * `SQLExecute` starts, the statement ends when it finishes or reaches
+ * `DB2_QUERY_TIMEOUT_SECONDS`.
  */
 export const executeDb2Query = (
   connection: Db2Connection,
@@ -317,6 +344,7 @@ export const executeDb2Query = (
 ): Promise<QueryResponseType> => {
   let cancelled = false;
   let abandonQueued: (() => void) | undefined;
+  let interruptRunning: (() => void) | undefined;
   let answerCancelled: (response: QueryResponseType) => void = () => {};
   const cancelledResponse = new Promise<QueryResponseType>((resolve) => {
     answerCancelled = resolve;
@@ -325,13 +353,21 @@ export const executeDb2Query = (
   registerCancel?.(() => {
     cancelled = true;
     abandonQueued?.();
+    interruptRunning?.();
     answerCancelled({ success: false, error: CANCELLED_MESSAGE });
   });
 
   const work = runInDb2Slot(
     () =>
       withDb2Connection(connection, (db) =>
-        runStatement(db, sql, () => cancelled),
+        runStatement(
+          db,
+          sql,
+          () => cancelled,
+          (interrupt) => {
+            interruptRunning = interrupt;
+          },
+        ),
       ),
     (abandon) => {
       abandonQueued = abandon;
