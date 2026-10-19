@@ -1309,6 +1309,14 @@ const ProjectDetails: React.FC = () => {
             setRunWithEnvPipelineFile(pipelineRelativePath);
             setRunWithEnvModalOpen(true);
           }}
+          onPipelineCreated={(filePath) => {
+            setSelectedFilePath(filePath);
+            openTab(toPipelineTabPath(filePath), {
+              title: filePath.split('/').pop() || 'pipeline.yml',
+              content: '',
+              isReadOnly: true,
+            });
+          }}
         />
       }
       panelTitle="DBT Studio"

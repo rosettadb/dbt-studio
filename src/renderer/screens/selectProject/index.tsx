@@ -696,7 +696,7 @@ const SelectProject: React.FC = () => {
                             );
                           }
 
-                          navigate('/app/loading');
+                          navigate('/app/dbt-project');
                         } else {
                           toast.error('Failed to import project.');
                         }

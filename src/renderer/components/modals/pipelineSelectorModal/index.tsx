@@ -34,6 +34,7 @@ interface PipelineSelectorModalProps {
   onClose: () => void;
   project: Project;
   onSelect: (pipeline: { name: string; path: string }) => void;
+  onCreated?: (filePath: string) => void;
   mode?: 'local' | 'cloud';
 }
 
@@ -57,6 +58,7 @@ export const PipelineSelectorModal: React.FC<PipelineSelectorModalProps> = ({
   onClose,
   project,
   onSelect,
+  onCreated,
   mode = 'local',
 }) => {
   const theme = useTheme();
@@ -157,6 +159,7 @@ export const PipelineSelectorModal: React.FC<PipelineSelectorModalProps> = ({
         toast.success('Pipeline created successfully.');
         await refetch();
         setSelected('pipeline');
+        onCreated?.(pipelinePath);
         return;
       }
 
@@ -178,12 +181,14 @@ export const PipelineSelectorModal: React.FC<PipelineSelectorModalProps> = ({
           'Pipeline created and committed, but push failed. Please push manually before running on cloud.',
         );
         await refetch();
+        onCreated?.(pipelinePath);
         return;
       }
 
       toast.success('Pipeline created, committed, and pushed.');
       await refetch();
       setSelected('pipeline');
+      onCreated?.(pipelinePath);
     } catch (error) {
       const msg =
         error instanceof Error ? error.message : 'Failed to create pipeline';
