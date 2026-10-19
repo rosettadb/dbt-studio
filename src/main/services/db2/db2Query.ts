@@ -1,5 +1,5 @@
 import fs from 'fs';
-import type { Database, ODBCResult } from 'ibm_db';
+import type { Column, Database, ODBCResult } from 'ibm_db';
 import { Db2Connection, QueryResponseType } from '../../../types/backend';
 import {
   DB2_MAX_ROWS,
@@ -252,7 +252,7 @@ const readRows = async (
   if (isCancelled()) throw new Db2CancelledError();
 
   const names = uniqueColumnNames(
-    columns.map((column) => String(column.SQL_DESC_NAME)),
+    columns.map((column: Column) => String(column.SQL_DESC_NAME)),
   );
   const fetchRows = result.fetchN as unknown as (
     count: number,
