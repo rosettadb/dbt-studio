@@ -1016,11 +1016,11 @@ const Notebooks = () => {
   ]);
 
   const handleExportAllNotebooksClick = useCallback(() => {
-    if (notebooks.length === 0) {
+    if (allNotebooks.length === 0) {
       return;
     }
     setExportDialogOpen(true);
-  }, [notebooks.length]);
+  }, [allNotebooks.length]);
 
   const isDuckLakeActiveConnection = activeConnectionId.startsWith('ducklake-');
 
@@ -1046,38 +1046,61 @@ const Notebooks = () => {
       // Fetch fresh from disk instead of the notebooks list cache, which is
       // never invalidated when cells are added/edited (only on
       // create/rename/delete), and can be stale by the time of export.
-      const freshNotebooks =
-        await notebooksService.listNotebooks(activeConnectionId);
+      const [freshSqlNotebooks, freshPythonNotebooks] = await Promise.all([
+        notebooksService.listNotebooks(activeConnectionId),
+        pythonNotebooksService.list(activeConnectionId),
+      ]);
 
       const exportData = {
         exportDate: new Date().toISOString(),
         connectionId: activeConnectionId,
         connectionName: activeConnection?.connection.name,
         connection: connectionDetails,
-        notebooks: freshNotebooks.map((notebook) => ({
-          id: notebook.id,
-          name: notebook.name,
-          description: notebook.description,
-          cells: notebook.cells.map((cell) => ({
-            id: cell.id,
-            type: cell.type,
-            content: cell.content,
-            order: cell.order,
-            // Exclude output data to keep file size small
-            output: cell.output
-              ? {
-                  type: cell.output.type,
-                  columns: cell.output.columns,
-                  rowCount: cell.output.rowCount,
-                  totalRows: cell.output.totalRows,
-                  executionTime: cell.output.executionTime,
-                  // Explicitly exclude data array
-                }
-              : undefined,
+        notebooks: [
+          ...freshSqlNotebooks.map((notebook) => ({
+            id: notebook.id,
+            kind: notebook.kind ?? 'sql',
+            name: notebook.name,
+            description: notebook.description,
+            cells: notebook.cells.map((cell) => ({
+              id: cell.id,
+              type: cell.type,
+              content: cell.content,
+              order: cell.order,
+              // Exclude output data to keep file size small
+              output: cell.output
+                ? {
+                    type: cell.output.type,
+                    columns: cell.output.columns,
+                    rowCount: cell.output.rowCount,
+                    totalRows: cell.output.totalRows,
+                    executionTime: cell.output.executionTime,
+                    // Explicitly exclude data array
+                  }
+                : undefined,
+            })),
+            createdAt: notebook.createdAt,
+            updatedAt: notebook.updatedAt,
           })),
-          createdAt: notebook.createdAt,
-          updatedAt: notebook.updatedAt,
-        })),
+          ...freshPythonNotebooks.map((notebook) => ({
+            id: notebook.id,
+            kind: 'python' as const,
+            name: notebook.name,
+            description: notebook.description,
+            runtime: {
+              pythonVersion: notebook.runtime.pythonVersion,
+            },
+            cells: notebook.cells.map((cell) => ({
+              id: cell.id,
+              cell_type: cell.cell_type,
+              source: cell.source,
+              execution_count: cell.execution_count,
+              // Exclude outputs to keep file size small
+            })),
+            createdAt: notebook.createdAt,
+            updatedAt: notebook.updatedAt,
+          })),
+        ],
       };
 
       // Download as JSON file
@@ -2112,7 +2135,7 @@ const Notebooks = () => {
         open={exportDialogOpen}
         onClose={() => setExportDialogOpen(false)}
         onConfirm={handleExportAllNotebooksConfirm}
-        subject={`${notebooks.length} notebook${notebooks.length > 1 ? 's' : ''}`}
+        subject={`${allNotebooks.length} notebook${allNotebooks.length > 1 ? 's' : ''}`}
         connectionName={activeConnection?.connection.name}
         connectionExportDisabled={
           isDuckLakeActiveConnection || !activeConnection

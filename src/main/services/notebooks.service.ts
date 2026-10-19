@@ -16,6 +16,7 @@ import {
 } from '../../types/notebooks';
 import ConnectorsService from './connectors.service';
 import DuckLakeService from './duckLake.service';
+import { RECOMMENDED_PYTHON_VERSION } from './settings.service';
 
 const NOTEBOOKS_DIR = path.join(app.getPath('userData'), 'notebooks');
 const ORPHANED_DIR = path.join(NOTEBOOKS_DIR, '_orphaned');
@@ -767,7 +768,71 @@ export class NotebooksService {
 
       const importedNotebooks = await Promise.all(
         validNotebooks.map(async (notebookData: any) => {
-          // Generate new IDs and clear outputs
+          // Python notebooks exported by the bulk-export flow have
+          // `kind === 'python'` and use the ipynb cell schema
+          // (cell_type / source). Write them as .ipynb files so they are
+          // picked up by PythonNotebooksService, not as deprecated SQL JSON.
+          if (notebookData.kind === 'python') {
+            const id = uuidv4();
+            const ipynb = {
+              nbformat: 4,
+              nbformat_minor: 5,
+              metadata: {
+                kernelspec: {
+                  display_name: `Python ${notebookData.runtime?.pythonVersion ?? RECOMMENDED_PYTHON_VERSION}`,
+                  language: 'python',
+                  name: 'python3',
+                },
+                language_info: { name: 'python' },
+                rosetta: {
+                  id,
+                  kind: 'python',
+                  name: notebookData.name.trim(),
+                  description: notebookData.description || undefined,
+                  createdAt: now,
+                  updatedAt: now,
+                  runtime: {
+                    pythonVersion:
+                      notebookData.runtime?.pythonVersion ??
+                      RECOMMENDED_PYTHON_VERSION,
+                  },
+                },
+              },
+              cells: (Array.isArray(notebookData.cells)
+                ? notebookData.cells
+                : []
+              ).map((c: any) => ({
+                cell_type: c.cell_type ?? 'code',
+                source: typeof c.source === 'string' ? c.source : '',
+                outputs: [],
+                execution_count: null,
+                metadata: {},
+              })),
+            };
+            const ipynbPath = path.join(connectionDir, `${id}.ipynb`);
+            await fs.writeFile(
+              ipynbPath,
+              JSON.stringify(ipynb, null, 2),
+              'utf-8',
+            );
+            // Return a minimal shape compatible with the Notebook union so the
+            // caller can open the tab; PythonNotebooksService will read back
+            // the full object from disk.
+            return {
+              id,
+              kind: 'python' as const,
+              name: notebookData.name.trim(),
+              description: notebookData.description || undefined,
+              cells: [],
+              cellCount: Array.isArray(notebookData.cells)
+                ? notebookData.cells.length
+                : 0,
+              createdAt: now,
+              updatedAt: now,
+            } as any;
+          }
+
+          // SQL notebook — generate new IDs and clear outputs
           const newNotebook: Notebook = {
             id: uuidv4(), // New notebook ID
             name: notebookData.name.trim(),

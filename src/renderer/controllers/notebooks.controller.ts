@@ -9,6 +9,7 @@ import { Notebook, NotebookCell, SchemaInfo } from '../../types/notebooks';
 import { notebooksService } from '../services/notebooks.service';
 import { connectorsServices } from '../services';
 import { DuckLakeService } from '../services/duckLake.service';
+import { pythonNotebooksKeys } from './pythonNotebooks.controller';
 
 // Query keys
 export const notebooksKeys = {
@@ -236,6 +237,8 @@ export function useImportAllNotebooksFromPath() {
     }) => notebooksService.importAllNotebooks(connectionId, filePath),
     onSuccess: (notebooks, { connectionId }) => {
       queryClient.invalidateQueries(notebooksKeys.list(connectionId));
+      // Python notebooks may have been imported — refresh that list too
+      queryClient.invalidateQueries(pythonNotebooksKeys.list(connectionId));
       toast.success(
         `Successfully imported ${notebooks.length} notebook${notebooks.length > 1 ? 's' : ''}`,
       );
