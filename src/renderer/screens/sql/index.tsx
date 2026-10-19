@@ -65,6 +65,7 @@ import {
   AnalyticsEditor,
 } from '../../components/analytics';
 import useSqlTabManager from '../../hooks/useSqlTabManager';
+import { useSqlDialect } from '../../hooks/useSqlDialect';
 import {
   useGetConnectionById,
   useGetConnections,
@@ -786,9 +787,13 @@ const Sql = () => {
     ],
   );
 
+  const schemaSqlDialect = useSqlDialect(
+    activeConnectionId,
+    connectionInput?.type,
+  );
   const { onContextMenu: handleSchemaContextMenu, menu: schemaContextMenu } =
     useSchemaTreeContextMenu({
-      connectionType: connectionInput?.type,
+      connectionType: schemaSqlDialect,
       onInsertText: handleSchemaInsertText,
       onPreviewSql: handleSchemaPreview,
       onRename: handleSchemaRename,

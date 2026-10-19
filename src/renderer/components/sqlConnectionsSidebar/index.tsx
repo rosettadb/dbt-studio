@@ -84,6 +84,7 @@ const formatConnectionType = (type: string): string => {
     postgres: 'PostgreSQL',
     snowflake: 'Snowflake',
     bigquery: 'BigQuery',
+    spanner: 'Spanner',
     redshift: 'Redshift',
     databricks: 'Databricks',
     duckdb: 'DuckDB',

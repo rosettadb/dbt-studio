@@ -12,6 +12,7 @@ import {
   ListItemIcon,
   ListItemText,
   Tooltip,
+  Alert,
 } from '@mui/material';
 import {
   CheckCircleOutline,
@@ -594,6 +595,14 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
       results.rowCount !== undefined &&
       results.rowCount > 0);
 
+  if (!results.success) {
+    return (
+      <Box data-testid="sql-results-pane" sx={{ p: 2 }}>
+        <Alert severity="error">{results.error || 'Query failed.'}</Alert>
+      </Box>
+    );
+  }
+
   if (isCommand) {
     return (
       <SuccessContainer data-testid="sql-results-pane">
@@ -862,6 +871,12 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
         overflow: 'hidden',
       }}
     >
+      {results.truncated && (
+        <Alert severity="info" sx={{ m: 1 }}>
+          Showing the first 10,000 rows. Add filters or aggregate in SQL to work
+          with more results.
+        </Alert>
+      )}
       {viewMode === 'chart' ? (
         <Box
           ref={chartContainerRef}

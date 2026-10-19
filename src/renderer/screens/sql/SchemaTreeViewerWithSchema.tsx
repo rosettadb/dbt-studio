@@ -25,6 +25,7 @@ import { TreeItems } from '../../components/schemaTreeViewer/TreeItems';
 import connectionIcons, {
   defaultIcon,
 } from '../../../../assets/connectionIcons';
+import { useSqlDialect } from '../../hooks/useSqlDialect';
 
 type Props = {
   databaseName: string;
@@ -122,9 +123,10 @@ export const SchemaTreeViewerWithSchema: React.FC<Props> = React.memo(
       setExpandedItems([databaseName]);
     }, [databaseName]);
 
+    const sqlDialect = useSqlDialect(connectionId, type);
     const dragContext = React.useMemo<SchemaTreeDragContext>(
-      () => ({ connectionId, connectionType: type }),
-      [connectionId, type],
+      () => ({ connectionId, connectionType: sqlDialect }),
+      [connectionId, sqlDialect],
     );
 
     const rowProps = useTreeRowProps(draggable, dragContext, onContextMenu);

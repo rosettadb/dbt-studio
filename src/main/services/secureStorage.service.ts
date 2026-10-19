@@ -206,6 +206,7 @@ class SecureStorageService {
       `db-password-${connectionId}`,
       `db-token-${connectionId}`,
       `db-bigquery-${connectionId}`,
+      `db-spanner-${connectionId}`,
       `db-host-${connectionId}`,
       `db-port-${connectionId}`,
       `db-dbname-${connectionId}`,
