@@ -3,7 +3,6 @@ import { projectsServices } from '../services';
 import {
   MD_PREVIEW_PREFIX,
   isVirtualPreviewPath,
-  isPipelineTabPath,
 } from '../components/editor/previewConstants';
 import { getLanguageFromExtension } from '../components/editor/helpers';
 import { getNonEditableFileMessage, isEditableFile } from '../helpers/utils';
@@ -77,9 +76,7 @@ const persistState = (
   }
 
   // Never persist virtual tabs — they are ephemeral
-  const persistableTabs = tabs.filter(
-    (t) => !isVirtualPreviewPath(t.path) && !isPipelineTabPath(t.path),
-  );
+  const persistableTabs = tabs.filter((t) => !isVirtualPreviewPath(t.path));
 
   if (persistableTabs.length === 0) {
     window.localStorage.removeItem(key);
@@ -568,8 +565,8 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
       let isEditable = false;
       let hasInitialContent = false;
 
-      // Virtual tabs (preview, pipeline) are never loaded from disk
-      const isVirtual = isVirtualPreviewPath(path) || isPipelineTabPath(path);
+      // Virtual tabs (preview) are never loaded from disk
+      const isVirtual = isVirtualPreviewPath(path);
       isEditable = !isVirtual && isEditableFile(path);
       hasInitialContent = typeof options?.content === 'string';
 
@@ -673,12 +670,7 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
   const refreshTabContentByPath = React.useCallback(
     async (path: string): Promise<void> => {
       const targetTab = tabsRef.current.find((tab) => tab.path === path);
-      if (
-        !targetTab ||
-        !isEditableFile(path) ||
-        isVirtualPreviewPath(path) ||
-        isPipelineTabPath(path)
-      ) {
+      if (!targetTab || !isEditableFile(path) || isVirtualPreviewPath(path)) {
         return;
       }
 

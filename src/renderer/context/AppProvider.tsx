@@ -15,8 +15,6 @@ type Props = {
   children: React.ReactNode;
 };
 
-type SyncEditorContentHandler = (path: string, content: string) => void;
-
 export const AppContext = React.createContext<AppContextType>({
   projects: [],
   selectedProject: {} as Project,
@@ -32,9 +30,6 @@ export const AppContext = React.createContext<AppContextType>({
   pendingMessage: null,
   setPendingMessage: () => {},
   openChatWithMessage: () => {},
-  setEditingFilePath: () => {},
-  syncEditorContent: () => {},
-  registerSyncEditorContent: () => {},
   env: 'local',
 });
 
@@ -49,7 +44,6 @@ const AppProvider: React.FC<Props> = ({ children }) => {
   const [isChatOpen, setIsChatOpen] = React.useState(false);
   const [isLoadingSchema, setIsLoadingSchema] = React.useState(false);
   const [schema, setSchema] = React.useState<Table[]>();
-  const [editingFilePath, setEditingFilePath] = React.useState<string>();
   const [lastFetchedProjectId, setLastFetchedProjectId] = React.useState<
     string | null
   >(null);
@@ -61,64 +55,12 @@ const AppProvider: React.FC<Props> = ({ children }) => {
     null,
   );
 
-  const syncEditorContentHandlerRef = React.useRef<SyncEditorContentHandler>();
-  const openFileHandlerRef = React.useRef<(filePath: string) => void>();
-  const closeFileHandlerRef = React.useRef<(filePath: string) => void>();
-  const refreshFileTreeHandlerRef = React.useRef<() => Promise<void>>();
-
   const isAiProviderSet = !!activeAIProvider;
 
   const openChatWithMessage = React.useCallback((message: string) => {
     setPendingMessage(message);
     setIsChatOpen(true);
   }, []);
-
-  const registerSyncEditorContent = React.useCallback(
-    (handler?: SyncEditorContentHandler) => {
-      syncEditorContentHandlerRef.current = handler;
-    },
-    [],
-  );
-
-  const syncEditorContent = React.useCallback(
-    (path: string, content: string) => {
-      syncEditorContentHandlerRef.current?.(path, content);
-    },
-    [],
-  );
-
-  const openFile = React.useCallback((filePath: string) => {
-    openFileHandlerRef.current?.(filePath);
-  }, []);
-
-  const registerOpenFile = React.useCallback(
-    (handler?: (filePath: string) => void) => {
-      openFileHandlerRef.current = handler;
-    },
-    [],
-  );
-
-  const closeFile = React.useCallback((filePath: string) => {
-    closeFileHandlerRef.current?.(filePath);
-  }, []);
-
-  const registerCloseFile = React.useCallback(
-    (handler?: (filePath: string) => void) => {
-      closeFileHandlerRef.current = handler;
-    },
-    [],
-  );
-
-  const refreshFileTree = React.useCallback(async () => {
-    await refreshFileTreeHandlerRef.current?.();
-  }, []);
-
-  const registerRefreshFileTree = React.useCallback(
-    (handler?: () => Promise<void>) => {
-      refreshFileTreeHandlerRef.current = handler;
-    },
-    [],
-  );
 
   const fetchSchema = React.useCallback(
     async (forceRefresh = false) => {
@@ -198,16 +140,6 @@ const AppProvider: React.FC<Props> = ({ children }) => {
       pendingMessage,
       setPendingMessage,
       openChatWithMessage,
-      editingFilePath,
-      setEditingFilePath,
-      syncEditorContent,
-      registerSyncEditorContent,
-      openFile,
-      registerOpenFile,
-      closeFile,
-      registerCloseFile,
-      refreshFileTree,
-      registerRefreshFileTree,
       authenticatedUser: profile,
       env: profile ? (settings?.env ?? 'local') : 'local',
     };
@@ -223,9 +155,6 @@ const AppProvider: React.FC<Props> = ({ children }) => {
     manualFetchSchema,
     pendingMessage,
     openChatWithMessage,
-    editingFilePath,
-    syncEditorContent,
-    registerSyncEditorContent,
     profile,
     settings,
   ]);

@@ -1232,7 +1232,9 @@ export default class GitService {
         const currentBranch = branchSummary.current;
 
         if (currentBranch) {
-          await git.fetch();
+          // Local refs only — never touch the network from a read that a
+          // dialog is waiting on. `origin/<branch>` reflects the last fetch,
+          // which is what the user sees everywhere else in the app too.
           const remoteBranches = await git.branch(['-r']);
           const hasRemoteBranch = remoteBranches.all.includes(
             `origin/${currentBranch}`,
@@ -1286,10 +1288,11 @@ export default class GitService {
       const branchSummary = await git.branch();
       const currentBranch = branchSummary.current;
 
+      // Answered from local remote-tracking refs: no fetch, no ssh/credential
+      // prompt, no hang. Callers treat a stale "false" as a warning only.
       let branchExistsOnRemote = false;
       if (currentBranch) {
         try {
-          await git.fetch();
           const remoteBranches = await git.branch(['-r']);
           branchExistsOnRemote = remoteBranches.all.includes(
             `origin/${currentBranch}`,

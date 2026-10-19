@@ -1,6 +1,6 @@
 import { useQuery } from 'react-query';
 import { useMemo } from 'react';
-import useAppContext from './useAppContext';
+import { useTabs } from '../context/TabsProvider';
 import { useGetSelectedProject } from '../controllers';
 import { chatService } from '../services/chat.service';
 import { QUERY_KEYS } from '../config/constants';
@@ -14,7 +14,7 @@ type ResolvedContextItem = any;
  * This provides GitHub Copilot-like automatic context inclusion
  */
 export const useSelectedFileContext = () => {
-  const { editingFilePath } = useAppContext();
+  const { activeFilePath: editingFilePath } = useTabs();
   const { data: project } = useGetSelectedProject();
 
   // Query for selected file context with caching and stale time

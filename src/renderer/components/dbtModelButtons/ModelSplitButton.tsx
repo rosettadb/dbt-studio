@@ -11,43 +11,37 @@ import { CompileModal } from '../modals/CompileModal';
 import { MiniSqlEditorModal } from '../modals/MiniSqlEditorModal';
 import { PushToCloudModal } from '../modals';
 import useDbt from '../../hooks/useDbt';
+import { useAppContext } from '../../hooks';
 import { useGetSettings } from '../../controllers';
+import { useQueryResults } from '../../context/QueryResultsProvider';
 import {
   queryData,
   getConnectionById,
 } from '../../services/connectors.service';
 import type { PreviewResult } from '../../../types/frontend';
 import type { DbtCommandType } from '../../../types/backend';
-import type { ProjectQueryPreviewPayload } from '../projectQueryResults';
 
 interface ModelSplitButtonProps {
   modelPath: string;
   project: Project;
-  isDbtConfigured: boolean;
   fileContent?: string;
-  isRunningDbt: boolean;
-  isRunningRosettaDbt: boolean;
-  environment?: 'local' | 'cloud';
-  onBeforeExecute?: () => void;
-  onQueryPreviewStart?: (payload: Partial<ProjectQueryPreviewPayload>) => void;
-  onQueryPreviewSuccess?: (payload: ProjectQueryPreviewPayload) => void;
-  onQueryPreviewError?: (payload: ProjectQueryPreviewPayload) => void;
 }
 
+// Per-model dbt actions. Preview publishes its lifecycle straight into the
+// query-results store; the bottom panel subscribes to it on its own.
 export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
   modelPath,
   project,
-  isDbtConfigured,
   fileContent,
-  isRunningDbt,
-  isRunningRosettaDbt,
-  environment = 'local',
-  onBeforeExecute,
-  onQueryPreviewStart,
-  onQueryPreviewSuccess,
-  onQueryPreviewError,
 }) => {
   const { data: settings } = useGetSettings();
+  const { env: environment } = useAppContext();
+  const {
+    startPreview: onQueryPreviewStart,
+    completePreview: onQueryPreviewSuccess,
+    failPreview: onQueryPreviewError,
+  } = useQueryResults();
+  const isDbtConfigured = Boolean(settings?.dbtPath);
   const isDbtV2 = !!settings?.dbtVersion?.startsWith('2.');
   const cloudV2Blocked = environment === 'cloud' && isDbtV2;
 
@@ -85,7 +79,6 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
     localHandler: () => Promise<void>,
     dbtArgs?: string,
   ) => {
-    onBeforeExecute?.();
     if (environment === 'cloud') {
       setCloudDbtArguments(dbtArgs || '');
       setRunInCloudModal(command);
@@ -167,7 +160,7 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
     setPreviewError(undefined);
     setPreviewResult(null);
     const startedAt = Date.now();
-    onQueryPreviewStart?.({
+    onQueryPreviewStart({
       projectId: project.id,
       projectName: project.name,
       filePath: modelPath,
@@ -180,7 +173,7 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
       if (!modelName) {
         const errorMessage = 'Could not extract model name from path';
         toast.error(errorMessage);
-        onQueryPreviewError?.({
+        onQueryPreviewError({
           projectId: project.id,
           projectName: project.name,
           filePath: modelPath,
@@ -198,7 +191,7 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
         const errorMessage =
           'No compiled SQL returned. The model might not exist or be disabled.';
         toast.error(errorMessage);
-        onQueryPreviewError?.({
+        onQueryPreviewError({
           projectId: project.id,
           projectName: project.name,
           filePath: modelPath,
@@ -216,7 +209,7 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
         const errorMessage =
           'No database connection configured for this project';
         toast.error(errorMessage);
-        onQueryPreviewError?.({
+        onQueryPreviewError({
           projectId: project.id,
           projectName: project.name,
           filePath: modelPath,
@@ -234,7 +227,7 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
       if (!connection) {
         const errorMessage = 'Database connection not found';
         toast.error(errorMessage);
-        onQueryPreviewError?.({
+        onQueryPreviewError({
           projectId: project.id,
           projectName: project.name,
           filePath: modelPath,
@@ -259,7 +252,7 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
         toast.error(`Preview failed: ${errorMessage}`);
         setPreviewError(errorMessage);
         setIsPreviewing(false);
-        onQueryPreviewError?.({
+        onQueryPreviewError({
           projectId: project.id,
           projectName: project.name,
           filePath: modelPath,
@@ -289,7 +282,7 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
 
       setPreviewResult(modelPreviewResult);
       setShowPreviewModal(true);
-      onQueryPreviewSuccess?.({
+      onQueryPreviewSuccess({
         projectId: project.id,
         projectName: project.name,
         filePath: modelPath,
@@ -307,7 +300,7 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
         error instanceof Error ? error.message : 'Unknown error';
       setPreviewError(errorMessage);
       toast.error(`Preview failed: ${errorMessage}`);
-      onQueryPreviewError?.({
+      onQueryPreviewError({
         projectId: project.id,
         projectName: project.name,
         filePath: modelPath,
@@ -812,20 +805,9 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
         title="Model"
         tooltipTitle={modelTooltipTitle}
         disabled={
-          isRunningDbt ||
-          isRunningRosettaDbt ||
-          isCompiling ||
-          isRunningDbtModel ||
-          isPreviewing ||
-          cloudV2Blocked
+          isCompiling || isRunningDbtModel || isPreviewing || cloudV2Blocked
         }
-        isLoading={
-          isRunningDbt ||
-          isRunningRosettaDbt ||
-          isCompiling ||
-          isRunningDbtModel ||
-          isPreviewing
-        }
+        isLoading={isCompiling || isRunningDbtModel || isPreviewing}
         leftIcon={<DirectionsRun />}
         menuItems={filteredMenuItems.map((item) => {
           // eslint-disable-next-line @typescript-eslint/no-unused-vars

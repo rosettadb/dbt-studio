@@ -1,12 +1,5 @@
 import React from 'react';
-import {
-  Box,
-  Typography,
-  IconButton,
-  Tooltip,
-  useTheme,
-  useColorScheme,
-} from '@mui/material';
+import { Box, Typography, IconButton, Tooltip, useTheme } from '@mui/material';
 import {
   ClearAll,
   ContentCopy,
@@ -51,7 +44,6 @@ export const RunnerLogViewer: React.FC<Props> = ({
   onMinimize,
 }) => {
   const theme = useTheme();
-  const { mode } = useColorScheme();
   const { logs: lines, isRunning, status } = useRunner();
   const outputRef = React.useRef<HTMLDivElement>(null);
 
@@ -60,7 +52,9 @@ export const RunnerLogViewer: React.FC<Props> = ({
   const [fullscreen, setFullscreen] = React.useState(false);
   const [wrap, setWrap] = React.useState(true);
 
-  const isDark = mode === 'dark';
+  // Resolved scheme (handles the 'system' preference), same source the
+  // terminal header uses for its own background.
+  const isDark = theme.palette.mode === 'dark';
   const fg = isDark ? theme.palette.common.white : theme.palette.common.black;
   const bg = isDark ? theme.palette.grey[900] : theme.palette.grey[50];
 
