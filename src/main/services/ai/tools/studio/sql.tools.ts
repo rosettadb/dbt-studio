@@ -133,13 +133,17 @@ const READ_ONLY_VERBS = new Set([
 const WRITE_WORDS =
   /\b(INSERT|UPDATE|DELETE|MERGE|TRUNCATE|CREATE|ALTER|DROP|GRANT|REVOKE|COPY|CALL|VACUUM|ATTACH|DETACH|INSTALL|LOAD|EXPORT|IMPORT|RENAME|INTO|PRAGMA|SET|REFRESH|REINDEX|ANALYZE|CHECKPOINT)\b|\bREPLACE\b(?!\s*\()/i;
 
+// One left-to-right pass, so whichever token starts first wins: a quote inside
+// a comment, or comment markers inside a literal, cannot confuse the masking.
+const SQL_NOISE =
+  /\/\*[\s\S]*?(?:\*\/|$)|--[^\n]*|\$([A-Za-z_]*)\$[\s\S]*?\$\1\$|'(?:[^']|'')*(?:'|$)|"(?:[^"]|"")*(?:"|$)/g;
+
 function stripSqlNoise(sql: string): string {
-  return sql
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .replace(/--.*$/gm, ' ')
-    .replace(/\$([A-Za-z_]*)\$[\s\S]*?\$\1\$/g, "''")
-    .replace(/'(?:[^']|'')*'/g, "''")
-    .replace(/"(?:[^"]|"")*"/g, '""');
+  return sql.replace(SQL_NOISE, (m) => {
+    if (m.startsWith('/*') || m.startsWith('--')) return ' ';
+    if (m.startsWith('"')) return '""';
+    return "''";
+  });
 }
 
 /**
