@@ -28,7 +28,6 @@ import {
   CloudDownload,
   Download,
   ExpandMore,
-  DataObjectOutlined,
   ExtensionOutlined,
   Inventory2Outlined,
 } from '@mui/icons-material';
@@ -71,6 +70,7 @@ import {
   SettingsStatus,
   useSettingsWarningStyle,
 } from './SettingsLayout';
+import { DbtMonoIcon } from '../icon/DbtMonoIcon';
 
 interface DbtSettingsProps {
   settings: SettingsType;
@@ -870,7 +870,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     <SettingsStack>
       <SettingsSection
         title="dbt™ Core"
-        icon={<DataObjectOutlined />}
+        icon={<DbtMonoIcon />}
         badge={
           hasDbt ? (
             <Chip
