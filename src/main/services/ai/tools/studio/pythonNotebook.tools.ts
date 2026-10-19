@@ -19,7 +19,7 @@ import NotebookEnvService from '../../../notebookEnv.service';
 import NotebookKernelService from '../../../notebookKernel.service';
 import { truncateToolResult } from '../../tokenEstimator';
 import { TerminalConfirmGate } from '../terminalConfirmGate';
-import { isMutationSql } from './sql.tools';
+import { isReadOnlySql } from './sql.tools';
 import type {
   AgentCellSource,
   PythonCellType,
@@ -162,9 +162,9 @@ export function classifyAgentRun(cell: {
     return { ask: 'never', reason: 'markdown', shellLines: [] };
   }
   if (cell.type === 'sql') {
-    return isMutationSql(cell.source)
-      ? { ask: 'always', reason: 'mutation-sql', shellLines: [] }
-      : { ask: 'never', reason: 'read-only-sql', shellLines: [] };
+    return isReadOnlySql(cell.source)
+      ? { ask: 'never', reason: 'read-only-sql', shellLines: [] }
+      : { ask: 'always', reason: 'mutation-sql', shellLines: [] };
   }
   const shellLines = findShellCommands(cell.source);
   return shellLines.length > 0

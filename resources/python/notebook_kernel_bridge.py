@@ -432,15 +432,18 @@ class Bridge:
         """
         if not isinstance(name, str):
             name = None
-        msg_id = self.kc.execute(
-            KERNEL_INSPECT_CODE,
-            silent=True,
-            store_history=False,
-            allow_stdin=False,
-            stop_on_error=False,
-            user_expressions={"r": "_rosetta_inspect(%r)" % (name,)},
-        )
+        # Hold the lock across send + registration: the iopub and shell
+        # threads must not see this request's busy status or reply before
+        # the msg_id is known to be an inspect.
         with self.lock:
+            msg_id = self.kc.execute(
+                KERNEL_INSPECT_CODE,
+                silent=True,
+                store_history=False,
+                allow_stdin=False,
+                stop_on_error=False,
+                user_expressions={"r": "_rosetta_inspect(%r)" % (name,)},
+            )
             self.inspects[msg_id] = request_id
             self.inspect_msgs.add(msg_id)
 
@@ -529,11 +532,12 @@ class Bridge:
         if msg_type == "status":
             state = content.get("execution_state")
             parent_id = (msg.get("parent_header") or {}).get("msg_id")
-            if parent_id in self.inspect_msgs:
+            with self.lock:
+                is_inspect = parent_id in self.inspect_msgs
+                if is_inspect and state == "idle":
+                    self.inspect_msgs.discard(parent_id)
+            if is_inspect:
                 # Variable inspection is invisible to the app: no busy / idle.
-                if state == "idle":
-                    with self.lock:
-                        self.inspect_msgs.discard(parent_id)
                 return
             if state in ("busy", "idle"):
                 emit({"type": "status", "status": state})

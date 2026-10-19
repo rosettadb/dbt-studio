@@ -92,7 +92,9 @@ function decodeEntity(match: string, body: string): string {
   if (body.startsWith('#')) {
     const hex = body[1] === 'x' || body[1] === 'X';
     const code = parseInt(body.slice(hex ? 2 : 1), hex ? 16 : 10);
-    return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+    return Number.isInteger(code) && code >= 0 && code <= 0x10ffff
+      ? String.fromCodePoint(code)
+      : match;
   }
   return NAMED_ENTITIES[body.toLowerCase()] ?? match;
 }

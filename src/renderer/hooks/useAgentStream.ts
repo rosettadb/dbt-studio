@@ -160,6 +160,11 @@ export const useAgentStream = (sessionId: number | undefined) => {
     stateRef.current = streamState;
   }, [streamState]);
 
+  const sessionIdRef = useRef(sessionId);
+  useEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
+
   // Reset state when the session changes
   useEffect(() => {
     setStreamState(EMPTY_STATE);
@@ -453,8 +458,12 @@ export const useAgentStream = (sessionId: number | undefined) => {
     async (allow: boolean, remember = false) => {
       const p = stateRef.current.pendingConfirm;
       if (!p) return;
+      const startedIn = sessionIdRef.current;
       try {
         await agentService.resolveTerminalConfirm(p.requestId, allow, remember);
+        // The user switched chats while this was pending: the queue now
+        // belongs to another chat, so leave it alone.
+        if (sessionIdRef.current !== startedIn) return;
         // "Allow for this chat" also answers queued requests of the same
         // kind (main resolves them), so drop their banners.
         const grantScope = allow && remember ? p.allowScope : undefined;
