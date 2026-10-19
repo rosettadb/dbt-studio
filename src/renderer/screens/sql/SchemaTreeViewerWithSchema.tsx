@@ -49,6 +49,7 @@ type Props = {
     event: React.MouseEvent<HTMLDivElement>,
     node: SchemaTreeNodeRef,
   ) => void;
+  databaseIcon?: string;
 };
 
 /**
@@ -68,6 +69,7 @@ export const SchemaTreeViewerWithSchema: React.FC<Props> = React.memo(
     connectionId,
     draggable = false,
     onContextMenu,
+    databaseIcon,
   }) => {
     const [expandedItems, setExpandedItems] = React.useState<string[]>([
       databaseName,
@@ -158,7 +160,9 @@ export const SchemaTreeViewerWithSchema: React.FC<Props> = React.memo(
               label={
                 <TreeItems.Database
                   label={databaseName || 'Database'}
-                  icon={connectionIcons.images[type] || defaultIcon}
+                  icon={
+                    databaseIcon || connectionIcons.images[type] || defaultIcon
+                  }
                   rootProps={rowProps({ kind: 'database', databaseName })}
                 />
               }
