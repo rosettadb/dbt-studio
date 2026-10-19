@@ -75,7 +75,7 @@ export const CloneRepoModal: React.FC<Props> = ({
             await projectsServices.selectProject({ projectId: project.id });
             toast.success('Project cloned successfully!');
             onClose();
-            navigate('/app/loading');
+            navigate('/app/dbt-project');
             successCallback?.(project);
           } catch (err: any) {
             toast.error(err.message);

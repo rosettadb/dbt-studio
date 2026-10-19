@@ -41,6 +41,9 @@ interface ProjectDbtSplitButtonProps {
   // terminal panel can expand to the runner logs tab instead.
   onLocalRunStarted?: () => void;
   onLocalPipelineSelected?: (pipelineRelativePath: string) => void;
+  // Called when a pipeline is created from the "Run Pipeline" selector modal
+  // so the parent can open the newly created file in the editor.
+  onPipelineCreated?: (filePath: string) => void;
   // Function handlers that are used elsewhere in ProjectDetails
   rosettaDbt: (project: Project, command: Command) => Promise<void>;
 }
@@ -57,6 +60,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
   onBeforeExecute,
   onLocalRunStarted,
   onLocalPipelineSelected,
+  onPipelineCreated,
   rosettaDbt,
 }) => {
   // Functions that are only used in this component - moved inside
@@ -525,6 +529,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           onClose={() => setPipelineModal(false)}
           mode="cloud"
           project={project}
+          onCreated={onPipelineCreated}
           onSelect={(pipeline) => {
             setPipelineModal(false);
             setPipelineArgs(`--pipeline_name ${pipeline.name}`);
@@ -538,6 +543,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           onClose={() => setLocalPipelineModal(false)}
           mode="local"
           project={project}
+          onCreated={onPipelineCreated}
           onSelect={(pipeline) => {
             setLocalPipelineModal(false);
             if (!settings?.runnerPath) {
