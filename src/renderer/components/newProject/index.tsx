@@ -22,6 +22,10 @@ import DatabaseIcon from '@mui/icons-material/Storage';
 
 import { styled } from '@mui/material/styles';
 import { path } from '../../lib/path';
+import {
+  SupportedConnectionTypes,
+  canUseAsDbtConnection,
+} from '../../../types/backend';
 
 const AddProjectForm = styled(Box)(({ theme }) => ({
   width: '100%',
@@ -295,8 +299,10 @@ export const NewProject: React.FC<NewProjectProps> = ({
                   </Box>
                 </MenuItem>
                 {connections
-                  .filter(
-                    (connection) => connection.connection.type !== 'sqlite',
+                  .filter((connection) =>
+                    canUseAsDbtConnection(
+                      connection.connection.type as SupportedConnectionTypes,
+                    ),
                   )
                   .map((connection) => (
                     <MenuItem key={connection.id} value={connection.id}>

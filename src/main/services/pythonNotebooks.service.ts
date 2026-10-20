@@ -381,7 +381,7 @@ const SQL_DML_KEYWORD = /\b(?:insert|update|delete|merge)\b/i;
 
 /**
  * Wrap a row-returning statement so the database sends back at most
- * `maxRows` rows: `SELECT * FROM (<query>) AS _rs LIMIT <maxRows>`.
+ * `maxRows` rows: `SELECT * FROM (<query>) AS rs_result LIMIT <maxRows>`.
  *
  * Only single SELECT / WITH statements are wrapped. Anything else (DDL, DML,
  * SHOW, DESCRIBE, PRAGMA, several statements) is returned unchanged. The
@@ -389,7 +389,7 @@ const SQL_DML_KEYWORD = /\b(?:insert|update|delete|merge)\b/i;
  * reference keep working.
  */
 /**
- * Errors an engine raises because of the `SELECT * FROM (…) AS _rs LIMIT n`
+ * Errors an engine raises because of the `SELECT * FROM (…) AS rs_result LIMIT n`
  * wrapper itself (duplicate or ambiguous column names in the derived table,
  * a statement that cannot be nested). Only these retry the query unbounded.
  */
@@ -420,7 +420,7 @@ export function boundSqlQuery(query: string, maxRows: number): string {
   }
   const limit = Math.max(1, Math.floor(maxRows));
   // Newlines keep a trailing `-- comment` from swallowing the closing paren.
-  return `SELECT * FROM (\n${body}\n) AS _rs LIMIT ${limit}`;
+  return `SELECT * FROM (\n${body}\n) AS rs_result LIMIT ${limit}`;
 }
 
 /** A Python string literal holding `value` (JSON escapes are valid in Python). */
