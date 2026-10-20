@@ -3,7 +3,6 @@ import {
   getSuccessfulPipelineMutation,
   isSuccessfulGenericFileWrite,
   partitionDiscardResults,
-  refreshCleanPipelineDraft,
   resolveProjectFileMutationPath,
   resolveProjectMutationPath,
 } from '../../../../src/renderer/components/chat/pipelineToolResults';
@@ -158,36 +157,6 @@ describe('pipeline tool result presentation policy', () => {
         },
       },
     ]);
-  });
-
-  it('refreshes only a matching clean pipeline draft', () => {
-    const cleanDraft = {
-      path: '/projects/demo/rosetta/pipelines/nightly.yml',
-      content: 'old',
-      savedContent: 'old',
-      isModified: false,
-    };
-    expect(
-      refreshCleanPipelineDraft(cleanDraft, cleanDraft.path, 'agent update'),
-    ).toEqual({
-      ...cleanDraft,
-      content: 'agent update',
-      savedContent: 'agent update',
-    });
-    expect(
-      refreshCleanPipelineDraft(
-        { ...cleanDraft, content: 'draft', isModified: true },
-        cleanDraft.path,
-        'agent update',
-      ),
-    ).toEqual({ ...cleanDraft, content: 'draft', isModified: true });
-    expect(
-      refreshCleanPipelineDraft(
-        cleanDraft,
-        '/projects/demo/rosetta/pipelines/other.yml',
-        'agent update',
-      ),
-    ).toBe(cleanDraft);
   });
 
   it('does not treat rejected generic writes as discardable files', () => {

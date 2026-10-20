@@ -1,7 +1,11 @@
 import { client } from '../config/client';
 import { CloudDeploymentPayload, Secret } from '../../types/backend';
 import { AuthSuccessPayload, AuthErrorPayload } from '../../types/apiKey';
-import { CloudLogEntry, CloudPipelineData } from '../../types/cloudAction';
+import {
+  CloudLogEntry,
+  CloudPipelineData,
+  CloudRunStarted,
+} from '../../types/cloudAction';
 
 export const openLogin = async (): Promise<string> => {
   const { data } = await client.post<undefined, string>(
@@ -69,8 +73,12 @@ export const subscribeToApiKeyUpdate = (callback: () => void) => {
 
 export const pushProjectToCloud = async (
   body: CloudDeploymentPayload,
-): Promise<void> => {
-  await client.post<CloudDeploymentPayload, void>('rosettaCloud:push', body);
+): Promise<CloudRunStarted> => {
+  const { data } = await client.post<CloudDeploymentPayload, CloudRunStarted>(
+    'rosettaCloud:push',
+    body,
+  );
+  return data;
 };
 
 export const getSecrets = async (projectId: string): Promise<Secret[]> => {

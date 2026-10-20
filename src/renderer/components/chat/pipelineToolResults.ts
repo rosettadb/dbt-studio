@@ -194,19 +194,3 @@ export const collectSuccessfulPipelineMutations = (
   });
   return Array.from(latestByPath.values());
 };
-
-export const refreshCleanPipelineDraft = <
-  T extends {
-    path: string;
-    content: string;
-    savedContent?: string;
-    isModified: boolean;
-  },
->(
-  previous: T | null,
-  filePath: string,
-  content: string,
-): T | null =>
-  previous && previous.path === filePath && !previous.isModified
-    ? { ...previous, content, savedContent: content }
-    : previous;

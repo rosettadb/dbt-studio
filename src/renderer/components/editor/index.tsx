@@ -11,9 +11,6 @@ import {
 import { MonacoCodeEditor } from '../monaco/MonacoCodeEditor';
 import { DiffView } from './diffView';
 import { EditorHeader } from './editorHeader';
-import { UnsavedChangesDialog } from './unsavedChangesDialog';
-import { MarkdownPreview } from './markdownPreview';
-import { HtmlPreview } from './htmlPreview';
 import {
   getDecorations,
   getLanguageFromExtension,
@@ -23,11 +20,7 @@ import { extractModelNameFromPath } from '../../helpers/utils';
 import { Container, EditorViewport } from './styles';
 import { getOrCreateModel } from '../../lib/monaco/modelStore';
 import { buildCteQuery, detectCtes } from '../../utils/sql/cteDetection';
-import type {
-  EditorTabId,
-  EditorTabState,
-  PendingCloseState,
-} from '../../../types/editor';
+import type { EditorTabId, EditorTabState } from '../../../types/editor';
 import useCli from '../../hooks/useCli';
 import {
   MD_PREVIEW_PREFIX,
@@ -51,10 +44,6 @@ type EditorProps = {
   onTabContentChange: (tabId: EditorTabId, content: string) => void;
   onTabSaved?: (tabId: EditorTabId) => void;
   onTabError?: (tabId: EditorTabId, error?: string) => void;
-  pendingClose: PendingCloseState | null;
-  onSaveAndClose: (tabId: EditorTabId) => Promise<void>;
-  onDiscardAndClose: (tabId: EditorTabId) => void;
-  onCancelClose: () => void;
   onGitStatusRefresh?: () => void;
   onOpenFile?: (filePath: string) => void;
   /** Called when the user clicks the Preview button: toggles a preview tab. */
@@ -94,11 +83,12 @@ const computeLanguage = (path: string): string => {
 };
 
 /**
- * Top-level file editor. Wires the tab manager state into a single
- * MonacoCodeEditor instance: one model per open tab, view state preserved
- * across switches, git diff markers in the gutter, save and unsaved-close
- * flows. Tab lifecycle (open/close/dispose) is owned by useTabManager —
- * this component is purely presentational over that state.
+ * Monaco file editor. Wires tab state into a single MonacoCodeEditor
+ * instance: one model per open tab, view state preserved across switches,
+ * git diff markers in the gutter, save flow. Tab lifecycle (open/close/
+ * dispose, unsaved-close dialog) is owned by the tabs store — this component
+ * is purely presentational over that state. Virtual preview tabs are
+ * rendered by PreviewFileView, not here.
  */
 export const Editor: React.FC<EditorProps> = ({
   projectId,
@@ -108,10 +98,6 @@ export const Editor: React.FC<EditorProps> = ({
   onTabContentChange,
   onTabSaved,
   onTabError,
-  pendingClose,
-  onSaveAndClose,
-  onDiscardAndClose,
-  onCancelClose,
   onGitStatusRefresh,
   onOpenFile,
   onTogglePreviewTab,
@@ -133,27 +119,13 @@ export const Editor: React.FC<EditorProps> = ({
   const language = computeLanguage(activeFilePath);
   const isFileEditable = !activeTab?.isReadOnly;
 
-  // Detect if the active tab is a markdown preview virtual tab
-  const previewSourcePath = getPreviewSourcePath(activeFilePath);
-  const isPreviewTab = previewSourcePath !== null;
-  const isHtmlPreview = /\.html?$/i.test(previewSourcePath ?? '');
-
-  // The content to render in the preview: from the live source tab if available
-  const previewContent = React.useMemo(() => {
-    if (!isPreviewTab) return '';
-    const sourceTab = tabs.find((t) => t.path === previewSourcePath);
-    return sourceTab?.content ?? activeContent;
-  }, [isPreviewTab, previewSourcePath, tabs, activeContent]);
-
   // Whether the current source file has a preview tab open
   const showPreview = React.useMemo(() => {
     if (!activeFilePath) return false;
-    const realSourcePath = isPreviewTab ? previewSourcePath! : activeFilePath;
-    const previewPath = toPreviewPath(realSourcePath);
-    return tabs.some((t) => t.path === previewPath);
-  }, [activeFilePath, isPreviewTab, previewSourcePath, tabs]);
+    return tabs.some((t) => t.path === toPreviewPath(activeFilePath));
+  }, [activeFilePath, tabs]);
 
-  // Handle Preview button click: delegate up to projectDetails which owns openTab
+  // Handle Preview button click: delegate up to the owner of the tabs store
   const handleTogglePreview = React.useCallback(() => {
     if (!onTogglePreviewTab || !activeFilePath) return;
     onTogglePreviewTab(activeFilePath, activeContent);
@@ -562,41 +534,6 @@ export const Editor: React.FC<EditorProps> = ({
 
   if (!activeTab) return null;
 
-  // --- Markdown preview tab: render MarkdownPreview instead of Monaco ---
-  if (isPreviewTab) {
-    return (
-      <Container
-        onDragEnter={handleEditorDragEnter}
-        onDragOver={handleEditorDragOver}
-        onDragLeave={handleEditorDragLeave}
-        onDrop={handleEditorDrop}
-      >
-        <EditorHeader
-          filePath={previewSourcePath ?? ''}
-          projectPath={projectPath}
-          isModified={false}
-          isSaving={false}
-          hasError={false}
-          showDiffButton={false}
-          showDiffView={false}
-          showPreview
-          onSave={() => {}}
-          onToggleDiff={() => {}}
-          onTogglePreview={handleTogglePreview}
-          onNavigate={onOpenFile}
-        />
-        <EditorViewport>
-          {isHtmlPreview ? (
-            <HtmlPreview filePath={previewSourcePath ?? ''} />
-          ) : (
-            <MarkdownPreview content={previewContent} />
-          )}
-        </EditorViewport>
-        {dragOverlay}
-      </Container>
-    );
-  }
-
   return (
     <Container
       onDragEnter={handleEditorDragEnter}
@@ -678,16 +615,6 @@ export const Editor: React.FC<EditorProps> = ({
         )}
       </EditorViewport>
       {dragOverlay}
-
-      {pendingClose && (
-        <UnsavedChangesDialog
-          open={Boolean(pendingClose)}
-          fileName={pendingClose.tab.title}
-          onSave={() => onSaveAndClose(pendingClose.tabId)}
-          onDiscard={() => onDiscardAndClose(pendingClose.tabId)}
-          onCancel={onCancelClose}
-        />
-      )}
     </Container>
   );
 };
