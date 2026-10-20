@@ -117,6 +117,52 @@ export function isMutationSql(sql: string): boolean {
   ].includes(verb);
 }
 
+const READ_ONLY_VERBS = new Set([
+  'SELECT',
+  'WITH',
+  'VALUES',
+  'TABLE',
+  'SHOW',
+  'DESCRIBE',
+  'DESC',
+  'SUMMARIZE',
+  'EXPLAIN',
+]);
+
+// Words that change data, schema or session state. REPLACE( is a function.
+const WRITE_WORDS =
+  /\b(INSERT|UPDATE|DELETE|MERGE|TRUNCATE|CREATE|ALTER|DROP|GRANT|REVOKE|COPY|CALL|VACUUM|ATTACH|DETACH|INSTALL|LOAD|EXPORT|IMPORT|RENAME|INTO|PRAGMA|SET|REFRESH|REINDEX|ANALYZE|CHECKPOINT)\b|\bREPLACE\b(?!\s*\()/i;
+
+// One left-to-right pass, so whichever token starts first wins: a quote inside
+// a comment, or comment markers inside a literal, cannot confuse the masking.
+const SQL_NOISE =
+  /\/\*[\s\S]*?(?:\*\/|$)|--[^\n]*|\$([A-Za-z_][A-Za-z0-9_]*|)\$[\s\S]*?\$\1\$|'(?:[^']|'')*(?:'|$)|"(?:[^"]|"")*(?:"|$)/g;
+
+function stripSqlNoise(sql: string): string {
+  return sql.replace(SQL_NOISE, (m) => {
+    if (m.startsWith('/*') || m.startsWith('--')) return ' ';
+    if (m.startsWith('"')) return '""';
+    return "''";
+  });
+}
+
+/**
+ * Allowlist check: true only for statements that are clearly read-only.
+ * Anything else (CALL, VACUUM, RENAME, writes inside a WITH, …) is false.
+ * Prefers asking too often over running a write without asking.
+ */
+export function isReadOnlySql(sql: string): boolean {
+  const statements = stripSqlNoise(sql)
+    .split(';')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (statements.length === 0) return false;
+  return statements.every((stmt) => {
+    const verb = stmt.match(/^([A-Za-z]+)/)?.[1]?.toUpperCase() ?? '';
+    return READ_ONLY_VERBS.has(verb) && !WRITE_WORDS.test(stmt);
+  });
+}
+
 /**
  * Formats a QueryResultSnapshot into a compact, human-readable summary for the LLM.
  * Enforces token safety: rows are already capped by maxRows in the IPC service;

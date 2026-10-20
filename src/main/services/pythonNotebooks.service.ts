@@ -712,6 +712,22 @@ export default class PythonNotebooksService {
       );
   }
 
+  /**
+   * Whether this id has a Python notebook file (`<id>.ipynb`). Lets callers
+   * tell a missing notebook from one that failed to load (`getNotebook`
+   * returns null for both).
+   */
+  static async notebookExists(
+    connectionId: string,
+    notebookId: string,
+  ): Promise<boolean> {
+    try {
+      return await fs.pathExists(getNotebookPath(connectionId, notebookId));
+    } catch {
+      return false;
+    }
+  }
+
   static async getNotebook(
     connectionId: string,
     notebookId: string,
