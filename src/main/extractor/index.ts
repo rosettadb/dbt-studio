@@ -5,6 +5,7 @@ import BigQueryExtractor from './bigquery.extractor';
 import DuckDBExtractor from './duckdb.extractor';
 import RedshiftExtractor from './redshift.extractor';
 import KineticaExtractor from './kinetica.extractor';
+import OracleExtractor from './oracle.extractor';
 import MySqlExtractor from './mysql.extractor';
 import Db2Extractor from './db2.extractor';
 
@@ -18,4 +19,5 @@ export {
   KineticaExtractor,
   MySqlExtractor,
   Db2Extractor,
+  OracleExtractor,
 };

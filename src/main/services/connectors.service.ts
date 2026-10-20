@@ -18,6 +18,7 @@ import {
   ExecuteStatementType,
   KineticaConnection,
   MySqlConnection,
+  OracleConnection,
   PostgresConnection,
   Project,
   QueryResponseType,
@@ -66,7 +67,37 @@ import {
 } from '../utils/kineticaProfile';
 import { executeDb2Query, testDb2Connection } from './db2/db2Query';
 
+import {
+  prepareOracleConnection,
+  validateOracleConnection,
+} from '../../shared/oracle';
+import {
+  listOracleWalletAliases,
+  executeOracleQuery,
+  testOracleConnection,
+} from '../utils/oracleHelper';
+import OracleExtractor from '../extractor/oracle.extractor';
+
 export default class ConnectorsService {
+  static oracleWalletAliases = listOracleWalletAliases;
+
+  private static async oracleSecrets(conn: OracleConnection, test = false) {
+    return {
+      password:
+        (test ? conn.password : '') ||
+        (await SecureStorageService.getCredential(
+          `db-password-${conn.name}`,
+        )) ||
+        '',
+      walletPassword:
+        (test ? conn.walletPassword : '') ||
+        (await SecureStorageService.getCredential(
+          `db-walletpassword-${conn.name}`,
+        )) ||
+        undefined,
+    };
+  }
+
   private static readonly bigQueryKeyFiles = new Map<string, string>();
 
   private static isBigQueryCleanupRegistered = false;
@@ -293,6 +324,22 @@ export default class ConnectorsService {
             (conn2 as KineticaConnection).bypassSslCertCheck
         );
 
+      case 'oracle': {
+        const other = conn2 as OracleConnection;
+        return (
+          conn1.username === other.username &&
+          conn1.schema === other.schema &&
+          conn1.connectMode === other.connectMode &&
+          (conn1.connectMode === 'basic'
+            ? conn1.host === other.host &&
+              conn1.port === other.port &&
+              conn1.serviceName === other.serviceName &&
+              !!conn1.tls === !!other.tls
+            : conn1.connectString === other.connectString &&
+              (conn1.connectMode !== 'wallet' ||
+                conn1.walletDir === other.walletDir))
+        );
+      }
       case 'mysql':
         return (
           (conn1 as MySqlConnection).host === (conn2 as MySqlConnection).host &&
@@ -338,6 +385,14 @@ export default class ConnectorsService {
     // Try to use database name or path as part of the unique name
     // eslint-disable-next-line default-case
     switch (connection.type) {
+      case 'oracle':
+        baseName =
+          connection.serviceName ||
+          (connection.connectMode === 'wallet'
+            ? connection.connectString
+            : '') ||
+          'oracle';
+        break;
       case 'duckdb': {
         const duckConn = connection as DuckDBConnection;
         // Extract filename from path if available
@@ -385,10 +440,17 @@ export default class ConnectorsService {
   static async saveNewConnectionForTemplate(
     connection: ConnectionInput,
   ): Promise<string> {
+    if (connection.type === 'oracle') {
+      await this.validateConnection(connection);
+    }
+    const persistedConnection =
+      connection.type === 'oracle'
+        ? prepareOracleConnection(connection)
+        : connection;
     const connectionId = uuidV4();
     const newConnection: ConnectionModel = {
       id: connectionId,
-      connection,
+      connection: persistedConnection,
     };
 
     await databaseStore.updateField('connections', (current) => {
@@ -409,6 +471,13 @@ export default class ConnectorsService {
   }
 
   static async saveNewConnection(connection: ConnectionInput): Promise<string> {
+    if (connection.type === 'oracle') {
+      await this.validateConnection(connection);
+    }
+    const persistedConnection =
+      connection.type === 'oracle'
+        ? prepareOracleConnection(connection)
+        : connection;
     const connectionId = uuidV4();
 
     // For ducklake connections, store S3 credentials securely
@@ -445,7 +514,7 @@ export default class ConnectorsService {
 
     const newConnection: ConnectionModel = {
       id: connectionId,
-      connection,
+      connection: persistedConnection,
     };
 
     await databaseStore.updateField('connections', (current) => {
@@ -592,6 +661,7 @@ export default class ConnectorsService {
       const connectionLabels: Record<string, string> = {
         db2: 'Db2',
         mysql: 'MySQL',
+        oracle: 'Oracle',
         sqlite: 'SQLite',
       };
 
@@ -664,6 +734,18 @@ export default class ConnectorsService {
   }: UpdateConnectionBody): Promise<void> {
     await this.validateConnection(connection.connection);
 
+    const previous = (await this.loadConnections(true)).find(
+      (c) => c.id === connection.id,
+    );
+
+    const persistedModel =
+      connection.connection.type === 'oracle'
+        ? {
+            ...connection,
+            connection: prepareOracleConnection(connection.connection),
+          }
+        : connection;
+
     await databaseStore.updateField('connections', (current) => {
       const connections = current ?? [];
       // Validate connection name (exclude current connection from uniqueness check)
@@ -684,10 +766,29 @@ export default class ConnectorsService {
       }
 
       const updated = [...connections];
-      updated[connectionIndex] = connection;
+      updated[connectionIndex] = persistedModel;
       updated.forEach((conn) => sanitizeBigQueryKeyfile(conn));
       return updated;
     });
+
+    if (
+      connection.connection.type === 'oracle' &&
+      previous?.connection.type === 'oracle' &&
+      previous.connection.name !== connection.connection.name
+    ) {
+      // Credentials are keyed by name; drop the ones left under the old name.
+      try {
+        await SecureStorageService.cleanupConnectionCredentials(
+          previous.connection.name,
+        );
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error(
+          `Failed to cleanup credentials for renamed connection ${previous.connection.name}:`,
+          error,
+        );
+      }
+    }
 
     if (!canUseAsDbtConnection(connection.connection.type)) return;
 
@@ -843,6 +944,11 @@ export default class ConnectorsService {
         return testRedshiftConnection(connection);
       case 'kinetica':
         return testKineticaConnection(connection);
+      case 'oracle':
+        return testOracleConnection(
+          connection,
+          await this.oracleSecrets(connection, true),
+        );
       case 'mysql':
         return testMySqlConnection(connection);
       case 'db2':
@@ -935,6 +1041,20 @@ export default class ConnectorsService {
     projectName,
     queryId,
   }: ExecuteStatementType): Promise<QueryResponseType> {
+    if (connection.type === 'oracle') {
+      const start = Date.now();
+      try {
+        const result = await executeOracleQuery(
+          connection,
+          query,
+          await this.oracleSecrets(connection),
+          queryId ? (fn) => this.runningQueries.set(queryId, fn) : undefined,
+        );
+        return { ...result, duration: Date.now() - start };
+      } finally {
+        if (queryId) this.runningQueries.delete(queryId);
+      }
+    }
     const storeUser = await SecureStorageService.getCredential(
       `db-user-${projectName}`,
     );
@@ -1167,6 +1287,13 @@ export default class ConnectorsService {
     }
 
     switch (conn.type) {
+      case 'oracle': {
+        const error = validateOracleConnection(conn);
+        if (error) throw new Error(error);
+        if (conn.connectMode === 'wallet')
+          await this.oracleWalletAliases(conn.walletDir!);
+        break;
+      }
       case 'postgres':
       case 'redshift':
       case 'mysql':
@@ -2084,6 +2211,19 @@ export default class ConnectorsService {
       );
     }
 
+    if (connection.type === 'oracle') {
+      const extractor = new OracleExtractor(
+        connection,
+        await this.oracleSecrets(connection),
+      );
+      try {
+        await extractor.connect();
+        return await extractor.extractSchema();
+      } finally {
+        await extractor.disconnect();
+      }
+    }
+
     // Get credentials from secure storage
     const storeUser = await SecureStorageService.getCredential(
       `db-user-${connection.name}`,
@@ -2346,6 +2486,14 @@ export default class ConnectorsService {
     }
 
     const { connection } = conn;
+
+    if (connection.type === 'oracle')
+      return this.executeSelectStatement({
+        connection,
+        query,
+        queryId,
+        projectName: connection.name,
+      });
 
     // Get credentials from secure storage
     const storeUser = await SecureStorageService.getCredential(
