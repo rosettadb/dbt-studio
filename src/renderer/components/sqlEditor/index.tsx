@@ -455,6 +455,7 @@ export const SqlEditor = React.forwardRef<SqlEditorHandle, Props>(
         <RelativeContainer>
           <Box sx={{ flex: 1, height: '100%', position: 'relative' }}>
             <SqlEditorComponent
+              connectionType={connectionInput?.type}
               content={queryContent}
               setContent={handleQueryContentChange}
               completions={completions}

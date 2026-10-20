@@ -299,10 +299,11 @@ export const NewProject: React.FC<NewProjectProps> = ({
                   </Box>
                 </MenuItem>
                 {connections
-                  .filter((connection) =>
-                    canUseAsDbtConnection(
-                      connection.connection.type as SupportedConnectionTypes,
-                    ),
+                  .filter(
+                    (connection) =>
+                      canUseAsDbtConnection(
+                        connection.connection.type as SupportedConnectionTypes,
+                      ) && connection.connection.type !== 'oracle',
                   )
                   .map((connection) => (
                     <MenuItem key={connection.id} value={connection.id}>

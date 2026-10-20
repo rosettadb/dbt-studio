@@ -22,6 +22,7 @@
     "drizzle-orm": "^0.44.4",
     "fs-extra": "^11.4.0",
     "ibm_db": "4.1.0",
-    "keytar": "^7.9.0"
+    "keytar": "^7.9.0",
+    "oracledb": "7.0.1"
   }
 }

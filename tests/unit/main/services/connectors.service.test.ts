@@ -523,3 +523,100 @@ describe('ConnectorsService (main)', () => {
     });
   });
 });
+
+describe('Oracle connector integration', () => {
+  const oracle = {
+    type: 'oracle',
+    name: 'oracle-test',
+    connectMode: 'basic',
+    host: 'localhost',
+    port: 1521,
+    serviceName: 'FREEPDB1',
+    username: 'STUDIO',
+    password: '',
+    database: '',
+    schema: 'STUDIO',
+  } as const;
+  beforeEach(() => {
+    jest.clearAllMocks();
+    getCredential.mockResolvedValue('keytar-secret');
+  });
+  it('sanitizes persistence even when a caller supplies a raw password', async () => {
+    const store = (await import('../../../../src/main/database')).default;
+    await ConnectorsService.saveNewConnection({
+      ...oracle,
+      password: 'raw-secret',
+      schema: '"MixedCase"',
+    });
+    const updater = (store.updateField as jest.Mock).mock.calls.at(-1)![1];
+    const result = updater([]);
+    expect(result[0].connection).toMatchObject({
+      password: '',
+      schema: 'MixedCase',
+    });
+    expect(JSON.stringify(result)).not.toContain('raw-secret');
+  });
+  it('compares Oracle mode, endpoint, TLS, schema and user for reuse', () => {
+    const equal = (ConnectorsService as any).areConnectionConfigsEqual.bind(
+      ConnectorsService,
+    );
+    expect(equal(oracle, { ...oracle, name: 'other' })).toBe(true);
+    expect(equal(oracle, { ...oracle, tls: true })).toBe(false);
+    expect(equal(oracle, { ...oracle, serviceName: 'other' })).toBe(false);
+    expect(
+      equal(
+        {
+          ...oracle,
+          connectMode: 'wallet',
+          walletDir: '/one',
+          connectString: 'db_low',
+        },
+        {
+          ...oracle,
+          connectMode: 'wallet',
+          walletDir: '/two',
+          connectString: 'db_low',
+        },
+      ),
+    ).toBe(false);
+  });
+  it('routes stored secrets without mutating the saved connection', async () => {
+    const { default: driver, connection } = await import(
+      '../../__setup__/oracledb.mock'
+    );
+    driver.getConnection.mockResolvedValue(connection);
+    connection.thin = true;
+    connection.execute.mockResolvedValue({ rowsAffected: 1 } as any);
+    const saved = { ...oracle };
+    const response = await ConnectorsService.executeSelectStatement({
+      connection: saved,
+      query: 'UPDATE T SET ID = 1',
+      projectName: saved.name,
+    });
+    expect(response).toMatchObject({
+      success: true,
+      isCommand: true,
+      commandType: 'DML',
+      rowCount: 1,
+    });
+    expect(driver.getConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ password: 'keytar-secret' }),
+    );
+    expect(saved.password).toBe('');
+  });
+  it('blocks attaching Oracle to a dbt project', async () => {
+    const projects = jest
+      .spyOn(ProjectsService, 'loadProjects')
+      .mockResolvedValue([{ id: 'project' }] as any);
+    try {
+      await expect(
+        ConnectorsService.configureConnection({
+          projectId: 'project',
+          connection: { ...oracle },
+        }),
+      ).rejects.toThrow('Oracle connections cannot be used by dbt projects');
+    } finally {
+      projects.mockRestore();
+    }
+  });
+});

@@ -696,6 +696,8 @@ class LineageService {
       case 'postgres':
       case 'postgresql':
         return 'postgres';
+      case 'oracle':
+        return 'oracle';
       case 'kinetica':
         // sqlglot has no Kinetica dialect; Kinetica SQL is closest to Postgres.
         return 'postgres';

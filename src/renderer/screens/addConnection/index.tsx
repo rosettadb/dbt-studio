@@ -100,6 +100,7 @@ const baseItems: ItemType[] = [
     img: 'kinetica',
     disabled: false,
   },
+  { id: 'oracle', name: 'Oracle', img: 'oracle', disabled: false },
   {
     id: 'mysql',
     name: 'MySQL',
@@ -223,6 +224,15 @@ const AddConnection: React.FC = () => {
           <Connections.Kinetica
             onCancel={() => setSelectedItem(undefined)}
             projectId={projectId}
+            duplicateFrom={duplicateData}
+            suggestedName={suggestedName}
+          />
+        );
+      }
+      case 'oracle': {
+        return (
+          <Connections.Oracle
+            onCancel={() => setSelectedItem(undefined)}
             duplicateFrom={duplicateData}
             suggestedName={suggestedName}
           />

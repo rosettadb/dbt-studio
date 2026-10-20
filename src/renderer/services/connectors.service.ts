@@ -233,3 +233,13 @@ export const materializeSnowflakeToken = async (
   );
   return data;
 };
+
+export const oracleWalletAliases = async (
+  walletDir: string,
+): Promise<string[]> => {
+  const { data } = await client.post<string, string[]>(
+    'connector:oracleWalletAliases',
+    walletDir,
+  );
+  return data;
+};
