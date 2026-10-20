@@ -15,7 +15,7 @@ import { getClassWithColor } from 'file-icons-js';
 import { toast } from 'react-toastify';
 import { isFileUnpushed } from '../../services/git.service';
 import { path, splitSegments, toPosix } from '../../lib/path';
-import { FileTypeBadge } from '../../utils/fileTypeIcon';
+import { YamlFileIcon } from '../fileIcon';
 import { FileNode, FileStatuses } from './types';
 import { GitStatusBadge } from './GitStatusBadge';
 import { PipelineThumbnailPreview } from './PipelineThumbnailPreview';
@@ -212,7 +212,7 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
     if (lowerCaseName.endsWith('.yml') || lowerCaseName.endsWith('.yaml')) {
       return (
         <FileIconWrapper>
-          <FileTypeBadge filename={node.data.name} />
+          <YamlFileIcon />
         </FileIconWrapper>
       );
     }
