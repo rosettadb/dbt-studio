@@ -15,6 +15,7 @@ import { getClassWithColor } from 'file-icons-js';
 import { toast } from 'react-toastify';
 import { isFileUnpushed } from '../../services/git.service';
 import { path, splitSegments, toPosix } from '../../lib/path';
+import { YamlFileIcon } from '../fileIcon';
 import { FileNode, FileStatuses } from './types';
 import { GitStatusBadge } from './GitStatusBadge';
 import { PipelineThumbnailPreview } from './PipelineThumbnailPreview';
@@ -204,6 +205,15 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
             <FolderIcon fontSize="inherit" />
           )}
         </FolderIconWrapper>
+      );
+    }
+    // file-icons-js shows a database icon for YAML, so use the YML badge instead
+    const lowerCaseName = node.data.name.toLowerCase();
+    if (lowerCaseName.endsWith('.yml') || lowerCaseName.endsWith('.yaml')) {
+      return (
+        <FileIconWrapper>
+          <YamlFileIcon />
+        </FileIconWrapper>
       );
     }
     const iconClass = getClassWithColor(node.data.name);

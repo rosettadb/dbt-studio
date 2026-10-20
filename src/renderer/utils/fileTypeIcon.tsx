@@ -20,7 +20,7 @@ export function getFileTypeBadge(filename: string): {
       return { label: 'SQL', color: '#e8a838' };
     case 'yml':
     case 'yaml':
-      return { label: 'YML', color: '#cb171e' };
+      return { label: 'YML', color: '#4caf50' };
     case 'md':
       return { label: 'MD', color: '#519aba' };
     case 'json':
