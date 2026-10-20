@@ -32,6 +32,7 @@ import {
   Bucket,
   StorageObject,
   CloudListResult,
+  CloudFolderMetadata,
   S3Config,
   AzureConfig,
   GCSConfig,
@@ -66,60 +67,136 @@ import { TaskManagerService } from './taskManager.service';
 
 // Cloud storage service class
 class CloudExplorerService {
-  private static async withS3FolderMetadata(
-    client: S3Client,
+  private static activeFolderScans = 0;
+
+  private static readonly folderScanQueue: Array<() => void> = [];
+
+  private static async withFolderScanSlot<T>(
+    scan: () => Promise<T>,
+  ): Promise<T> {
+    await new Promise<void>((resolve) => {
+      if (CloudExplorerService.activeFolderScans < 2) {
+        CloudExplorerService.activeFolderScans += 1;
+        resolve();
+      } else {
+        CloudExplorerService.folderScanQueue.push(resolve);
+      }
+    });
+    try {
+      return await scan();
+    } finally {
+      const next = CloudExplorerService.folderScanQueue.shift();
+      if (next) next();
+      else CloudExplorerService.activeFolderScans -= 1;
+    }
+  }
+
+  static async getFolderMetadata(
+    provider: CloudProvider,
+    config: CloudStorageConfig,
     bucketName: string,
-    folders: StorageObject[],
-  ): Promise<StorageObject[]> {
-    return Promise.all(
-      folders.map(async (folder) => {
-        try {
-          let continuationToken: string | undefined;
-          let latestModified: Date | undefined;
-          let totalSize = 0;
-
-          do {
-            // eslint-disable-next-line no-await-in-loop
-            const result = await client.send(
-              new ListObjectsV2Command({
-                Bucket: bucketName,
-                Prefix: folder.name,
-                ContinuationToken: continuationToken,
-                MaxKeys: 1000,
-              }),
-            );
-
-            // eslint-disable-next-line no-restricted-syntax
-            for (const object of result.Contents || []) {
-              totalSize += object.Size || 0;
-
-              if (
-                object.LastModified &&
-                (!latestModified || object.LastModified > latestModified)
-              ) {
-                latestModified = object.LastModified;
-              }
+    prefix: string,
+  ): Promise<CloudFolderMetadata> {
+    if (!prefix || !prefix.endsWith('/')) {
+      throw new Error('A folder prefix ending in / is required.');
+    }
+    return CloudExplorerService.withFolderScanSlot(async () => {
+      let client: S3Client;
+      switch (provider) {
+        case 'aws':
+          client = CloudExplorerService.createS3Client(config as S3Config);
+          break;
+        case 'minio':
+          client = CloudExplorerService.createMinIOClient(
+            config as MinIOConfig,
+          );
+          break;
+        case 'cloudflare-r2':
+          client = CloudExplorerService.createR2Client(
+            config as CloudflareR2Config,
+          );
+          break;
+        case 'backblaze-b2':
+          client = CloudExplorerService.createB2Client(
+            config as BackblazeB2Config,
+          );
+          break;
+        case 'rustfs':
+          client = CloudExplorerService.createRustfsClient(
+            config as RustfsConfig,
+          );
+          break;
+        case 'garage':
+          client = CloudExplorerService.createGarageClient(
+            config as GarageConfig,
+          );
+          break;
+        default:
+          throw new Error('Folder totals are not supported for this provider.');
+      }
+      try {
+        let continuationToken: string | undefined;
+        let latestModified: Date | undefined;
+        let totalSize = 0;
+        do {
+          // eslint-disable-next-line no-await-in-loop
+          const result = await client.send(
+            new ListObjectsV2Command({
+              Bucket: bucketName,
+              Prefix: prefix,
+              ContinuationToken: continuationToken,
+              MaxKeys: 1000,
+            }),
+          );
+          // eslint-disable-next-line no-restricted-syntax
+          for (const object of result.Contents || []) {
+            totalSize += object.Size || 0;
+            if (
+              object.LastModified &&
+              (!latestModified || object.LastModified > latestModified)
+            ) {
+              latestModified = object.LastModified;
             }
-
-            continuationToken = result.IsTruncated
-              ? result.NextContinuationToken
-              : undefined;
-          } while (continuationToken);
-
-          return {
-            ...folder,
-            size: totalSize,
-            updated: latestModified,
-          };
-        } catch {
-          return folder;
-        }
-      }),
-    );
+          }
+          continuationToken = result.IsTruncated
+            ? result.NextContinuationToken
+            : undefined;
+        } while (continuationToken);
+        return { size: totalSize, updated: latestModified };
+      } finally {
+        client.destroy();
+      }
+    });
   }
 
   // AWS S3 Methods
+  private static validatePublicS3Config(config: S3Config): string {
+    const bucket = config.bucket?.trim();
+    if (!bucket || !/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket)) {
+      throw new Error('A valid public S3 bucket name is required.');
+    }
+    if (!/^[a-z]{2}(?:-[a-z]+)+-\d+$/.test(config.region)) {
+      throw new Error('A valid AWS region is required.');
+    }
+    return bucket;
+  }
+
   private static createS3Client(config: S3Config): S3Client {
+    if (config.authMode === 'public') {
+      CloudExplorerService.validatePublicS3Config(config);
+      // Explicit anonymous auth avoids signing and the default credential chain.
+      return new S3Client({
+        region: config.region,
+        httpAuthSchemeProvider: () => [{ schemeId: 'smithy.api#noAuth' }],
+        httpAuthSchemes: [
+          {
+            schemeId: 'smithy.api#noAuth',
+            identityProvider: () => async () => ({}),
+            signer: { sign: async (request) => request },
+          },
+        ],
+      });
+    }
     // Validate credentials are provided
     if (!config.accessKeyId || !config.secretAccessKey) {
       throw new Error(
@@ -147,6 +224,14 @@ class CloudExplorerService {
   }
 
   static async listS3Buckets(config: S3Config): Promise<Bucket[]> {
+    if (config.authMode === 'public') {
+      return [
+        {
+          name: CloudExplorerService.validatePublicS3Config(config),
+          location: config.region,
+        },
+      ];
+    }
     const client = CloudExplorerService.createS3Client(config);
     try {
       const data = await client.send(new ListBucketsCommand({}));
@@ -178,14 +263,13 @@ class CloudExplorerService {
         }),
       );
 
-      const folders = await CloudExplorerService.withS3FolderMetadata(
-        client,
-        bucketName,
-        (result.CommonPrefixes || []).map((folderPrefix) => ({
+      const folders: StorageObject[] = (result.CommonPrefixes || []).map(
+        (folderPrefix) => ({
           name: folderPrefix.Prefix!,
           size: 0,
           isDirectory: true,
-        })),
+          folderMetadataStatus: 'pending',
+        }),
       );
 
       const files = (result.Contents || [])
@@ -214,6 +298,14 @@ class CloudExplorerService {
     bucketName: string,
     objectKey: string,
   ): Promise<string> {
+    if (config.authMode === 'public') {
+      CloudExplorerService.validatePublicS3Config(config);
+      const key = objectKey.split('/').map(encodeURIComponent).join('/');
+      const domain = config.region.startsWith('cn-')
+        ? 'amazonaws.com.cn'
+        : 'amazonaws.com';
+      return `https://s3.${config.region}.${domain}/${encodeURIComponent(bucketName)}/${key}`;
+    }
     const client = CloudExplorerService.createS3Client(config);
     try {
       const command = new GetObjectCommand({
@@ -229,7 +321,16 @@ class CloudExplorerService {
   static async testS3Connection(config: S3Config): Promise<boolean> {
     const client = CloudExplorerService.createS3Client(config);
     try {
-      await client.send(new ListBucketsCommand({}));
+      if (config.authMode === 'public') {
+        await client.send(
+          new ListObjectsV2Command({
+            Bucket: config.bucket?.trim(),
+            MaxKeys: 1,
+          }),
+        );
+      } else {
+        await client.send(new ListBucketsCommand({}));
+      }
       return true;
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -237,6 +338,12 @@ class CloudExplorerService {
       // Re-throw with user-friendly message
       const errorMessage = (error as Error).message;
       const errorName = (error as any).name;
+
+      if (config.authMode === 'public') {
+        throw new Error(
+          `Cannot browse public S3 bucket "${config.bucket}": ${errorMessage}. Check the bucket name, region, and anonymous listing permission.`,
+        );
+      }
 
       if (
         errorName === 'InvalidAccessKeyId' ||
@@ -671,14 +778,13 @@ class CloudExplorerService {
         }),
       );
 
-      const folders = await CloudExplorerService.withS3FolderMetadata(
-        client,
-        bucketName,
-        (result.CommonPrefixes || []).map((folderPrefix) => ({
+      const folders: StorageObject[] = (result.CommonPrefixes || []).map(
+        (folderPrefix) => ({
           name: folderPrefix.Prefix!,
           size: 0,
           isDirectory: true,
-        })),
+          folderMetadataStatus: 'pending',
+        }),
       );
 
       const files = (result.Contents || [])
@@ -856,14 +962,13 @@ class CloudExplorerService {
         }),
       );
 
-      const folders = await CloudExplorerService.withS3FolderMetadata(
-        client,
-        bucketName,
-        (result.CommonPrefixes || []).map((folderPrefix) => ({
+      const folders: StorageObject[] = (result.CommonPrefixes || []).map(
+        (folderPrefix) => ({
           name: folderPrefix.Prefix!,
           size: 0,
           isDirectory: true,
-        })),
+          folderMetadataStatus: 'pending',
+        }),
       );
 
       const files = (result.Contents || [])
@@ -1055,6 +1160,7 @@ class CloudExplorerService {
               name: cp.Prefix,
               size: 0,
               isDirectory: true,
+              folderMetadataStatus: 'pending',
             });
           }
         });
@@ -1075,18 +1181,8 @@ class CloudExplorerService {
         });
       }
 
-      const folders = objects.filter((object) => object.isDirectory);
-      const files = objects.filter((object) => !object.isDirectory);
-
       return {
-        objects: [
-          ...(await CloudExplorerService.withS3FolderMetadata(
-            client,
-            bucketName,
-            folders,
-          )),
-          ...files,
-        ],
+        objects,
         nextPageToken: response.NextContinuationToken,
       };
     } catch (error) {
@@ -1250,14 +1346,13 @@ class CloudExplorerService {
         }),
       );
 
-      const folders = await CloudExplorerService.withS3FolderMetadata(
-        client,
-        bucketName,
-        (result.CommonPrefixes || []).map((folderPrefix) => ({
+      const folders: StorageObject[] = (result.CommonPrefixes || []).map(
+        (folderPrefix) => ({
           name: folderPrefix.Prefix!,
           size: 0,
           isDirectory: true,
-        })),
+          folderMetadataStatus: 'pending',
+        }),
       );
 
       const files = (result.Contents || [])
@@ -1439,14 +1534,13 @@ class CloudExplorerService {
         }),
       );
 
-      const folders = await CloudExplorerService.withS3FolderMetadata(
-        client,
-        bucketName,
-        (result.CommonPrefixes || []).map((folderPrefix) => ({
+      const folders: StorageObject[] = (result.CommonPrefixes || []).map(
+        (folderPrefix) => ({
           name: folderPrefix.Prefix!,
           size: 0,
           isDirectory: true,
-        })),
+          folderMetadataStatus: 'pending',
+        }),
       );
 
       const files = (result.Contents || [])

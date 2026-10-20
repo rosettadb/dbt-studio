@@ -5,6 +5,11 @@ import type {
   ProviderTestResult,
   AIModel,
 } from '../controllers/aiProviders.controller';
+import type {
+  ChatGptAuthEventPayload,
+  StartChatGptAuthRequest,
+  StartChatGptAuthResult,
+} from '../../types/ipc';
 import {
   CompletionResponse,
   SchemaConfig,
@@ -122,6 +127,40 @@ class AIProvidersService {
     return data;
   }
 
+  // ChatGPT subscription sign-in (Plan 71). Tokens never reach the
+  // renderer: start returns only the login ID and account summary.
+  static async startChatGptAuth(
+    request: StartChatGptAuthRequest,
+  ): Promise<StartChatGptAuthResult> {
+    const { data } = await client.post<
+      StartChatGptAuthRequest,
+      StartChatGptAuthResult
+    >('ai:chatgpt-auth:start', request);
+    return data;
+  }
+
+  static async cancelChatGptAuth(correlationId: string): Promise<void> {
+    await client.post<string>('ai:chatgpt-auth:cancel', correlationId);
+  }
+
+  static async discardChatGptPendingLogin(loginId: string): Promise<void> {
+    await client.post<string>('ai:chatgpt-auth:discard-pending', loginId);
+  }
+
+  static async signOutChatGpt(providerId: number): Promise<void> {
+    await client.post<number>('ai:chatgpt-auth:sign-out', providerId);
+  }
+
+  /** Returns the unsubscribe function (FE-03). */
+  static onChatGptAuthEvent(
+    listener: (payload: ChatGptAuthEventPayload) => void,
+  ): () => void {
+    return window.electron.ipcRenderer.on(
+      'ai:chatgpt-auth:event',
+      (...args: unknown[]) => listener(args[0] as ChatGptAuthEventPayload),
+    );
+  }
+
   static async generateCompletion<T>(
     prompt: string,
     schemaConfig: SchemaConfig<T>,
@@ -154,4 +193,9 @@ export const aiProvidersService = {
   getAllProviderModels: AIProvidersService.getAllProviderModels,
   getProviderCredential: AIProvidersService.getProviderCredential,
   generateCompletion: AIProvidersService.generateCompletion,
+  startChatGptAuth: AIProvidersService.startChatGptAuth,
+  cancelChatGptAuth: AIProvidersService.cancelChatGptAuth,
+  discardChatGptPendingLogin: AIProvidersService.discardChatGptPendingLogin,
+  signOutChatGpt: AIProvidersService.signOutChatGpt,
+  onChatGptAuthEvent: AIProvidersService.onChatGptAuthEvent,
 };

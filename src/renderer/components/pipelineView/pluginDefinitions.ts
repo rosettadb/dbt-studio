@@ -75,6 +75,7 @@ export const PLUGIN_DEFS: PluginDef[] = [
         key: 'working_dir',
         label: 'Working Dir',
         required: false,
+        defaultValue: 'rosetta',
         placeholder: 'rosetta',
       },
     ],

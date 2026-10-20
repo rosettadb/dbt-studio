@@ -129,6 +129,32 @@ export interface SqlFallbackInfo {
   rowCount: number;
 }
 
+/**
+ * Mime type the kernel bridge's DataFrame formatter adds (next to pandas'
+ * `text/html`) to every displayed pandas DataFrame. The app renders it as an
+ * interactive table. See KERNEL_SETUP_CODE in
+ * resources/python/notebook_kernel_bridge.py.
+ */
+export const DATAFRAME_MIME = 'application/vnd.rosetta.dataframe+json';
+
+/** A JSON-safe cell value: numbers and booleans stay typed, the rest is text. */
+export type DataFrameCellValue = string | number | boolean | null;
+
+export interface DataFrameTableInfo {
+  version: 1;
+  columns: string[];
+  dtypes: string[];
+  indexName: string;
+  index: DataFrameCellValue[];
+  /** Row-major cell values, in `columns` order. */
+  data: DataFrameCellValue[][];
+  /** Rows included in `data`. */
+  rowCount: number;
+  /** Rows in the DataFrame. */
+  totalRows: number;
+  totalColumns: number;
+}
+
 export interface PythonNotebook {
   id: string;
   kind: 'python';

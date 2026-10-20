@@ -11,6 +11,7 @@ import {
 import { SimpleTreeView as TreeView, TreeItem } from '@mui/x-tree-view';
 import { projectsServices } from '../../../services';
 import { FileNode, Project } from '../../../../types/backend';
+import { path, toPosix, isInside } from '../../../lib/path';
 
 const PIPELINES_RELATIVE = 'rosetta/pipelines';
 
@@ -30,7 +31,7 @@ export const PipelineFolderTree: React.FC<Props> = ({
   reloadToken,
 }) => {
   const theme = useTheme();
-  const rootPath = `${project.path}/${PIPELINES_RELATIVE}`;
+  const rootPath = path.join(project.path, PIPELINES_RELATIVE);
 
   const [root, setRoot] = React.useState<FileNode | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -72,12 +73,11 @@ export const PipelineFolderTree: React.FC<Props> = ({
     return undefined;
   }, [creatingIn]);
 
+  // Relative subdir under rosetta/pipelines/ ('' for the root), `/`-separated
+  // because it feeds the POSIX pipeline name and the createFolderAsync name.
   const toRelative = (absolutePath: string): string => {
-    if (absolutePath === rootPath) return '';
-    const prefix = `${rootPath}/`;
-    return absolutePath.startsWith(prefix)
-      ? absolutePath.slice(prefix.length)
-      : absolutePath;
+    if (!isInside(rootPath, absolutePath)) return absolutePath;
+    return toPosix(path.relative(rootPath, absolutePath));
   };
 
   const cancelCreate = () => {

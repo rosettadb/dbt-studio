@@ -1,4 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from 'react-query';
+import {
+  useMutation,
+  useQuery,
+  useQueries,
+  useQueryClient,
+  QueryClient,
+} from 'react-query';
 import { cloudExplorerService, connectionStorage } from '../services';
 import type {
   CloudProvider,
@@ -7,6 +13,7 @@ import type {
   CloudConnection,
   RecentItem,
   FilterCondition,
+  StorageObject,
 } from '../../types/frontend';
 import type {
   UploadFileRequest,
@@ -47,6 +54,33 @@ export const cloudExplorerKeys = {
     ] as const,
   testConnection: (provider: CloudProvider, config: CloudStorageConfig) =>
     [...cloudExplorerKeys.all, 'testConnection', provider, config] as const,
+  folderMetadata: (
+    provider: CloudProvider,
+    config: CloudStorageConfig,
+    bucketName: string,
+    prefix?: string,
+  ) =>
+    [
+      ...cloudExplorerKeys.all,
+      'folderMetadata',
+      provider,
+      config,
+      bucketName,
+      ...(prefix === undefined ? [] : [prefix]),
+    ] as const,
+};
+
+// Cancel older calculations before refreshing totals so in-flight scans cannot
+// repopulate the cache with values from before a storage mutation.
+const invalidateBucketFolderMetadata = async (
+  queryClient: QueryClient,
+  provider: CloudProvider,
+  config: CloudStorageConfig,
+  bucketName: string,
+) => {
+  const key = cloudExplorerKeys.folderMetadata(provider, config, bucketName);
+  await queryClient.cancelQueries(key);
+  return queryClient.invalidateQueries(key);
 };
 
 export const useListBuckets = (
@@ -92,6 +126,58 @@ export const useTestCloudConnection = () => {
       config: CloudStorageConfig;
     }) => cloudExplorerService.testConnection(provider, config),
   );
+};
+
+export const useFolderMetadata = (
+  provider: CloudProvider,
+  config: CloudStorageConfig,
+  bucketName: string,
+  objects: StorageObject[],
+  enabled = true,
+): StorageObject[] => {
+  const folders = objects.filter(
+    (object) => object.isDirectory && object.folderMetadataStatus === 'pending',
+  );
+  const queries = useQueries(
+    folders.map((folder) => ({
+      queryKey: cloudExplorerKeys.folderMetadata(
+        provider,
+        config,
+        bucketName,
+        folder.name,
+      ),
+      queryFn: () =>
+        cloudExplorerService.getFolderMetadata(
+          provider,
+          config,
+          bucketName,
+          folder.name,
+        ),
+      enabled,
+      staleTime: 5 * 60 * 1000,
+    })),
+  );
+  const metadataByName = new Map(
+    folders.map((folder, index) => [folder.name, queries[index]]),
+  );
+  return objects.map((object) => {
+    const query = metadataByName.get(object.name);
+    if (query?.data) {
+      return { ...object, ...query.data, folderMetadataStatus: 'ready' };
+    }
+    if (query?.isError) return { ...object, folderMetadataStatus: 'error' };
+    return object;
+  });
+};
+
+export const useInvalidateFolderMetadata = () => {
+  const queryClient = useQueryClient();
+  return (
+    provider: CloudProvider,
+    config: CloudStorageConfig,
+    bucketName: string,
+  ) =>
+    invalidateBucketFolderMetadata(queryClient, provider, config, bucketName);
 };
 
 // Mutation for getting download URL
@@ -317,6 +403,12 @@ export const useUploadFile = (customOptions?: {
     (params: UploadFileRequest) => cloudExplorerService.uploadFile(params),
     {
       onSuccess: (data, vars) => {
+        invalidateBucketFolderMetadata(
+          queryClient,
+          vars.provider,
+          vars.config,
+          vars.bucketName,
+        );
         queryClient.invalidateQueries(
           cloudExplorerKeys.objects(
             vars.provider,
@@ -342,6 +434,12 @@ export const useUploadFolder = (customOptions?: {
     (params: UploadFolderRequest) => cloudExplorerService.uploadFolder(params),
     {
       onSuccess: (data, vars) => {
+        invalidateBucketFolderMetadata(
+          queryClient,
+          vars.provider,
+          vars.config,
+          vars.bucketName,
+        );
         queryClient.invalidateQueries(
           cloudExplorerKeys.objects(
             vars.provider,
@@ -387,6 +485,12 @@ export const useDeleteObject = (customOptions?: {
     (params: DeleteObjectRequest) => cloudExplorerService.deleteObject(params),
     {
       onSuccess: (data, vars) => {
+        invalidateBucketFolderMetadata(
+          queryClient,
+          vars.provider,
+          vars.config,
+          vars.bucketName,
+        );
         queryClient.invalidateQueries(
           cloudExplorerKeys.objects(
             vars.provider,
@@ -411,6 +515,12 @@ export const useCreateFolder = (customOptions?: {
     (params: CreateFolderRequest) => cloudExplorerService.createFolder(params),
     {
       onSuccess: (data, vars) => {
+        invalidateBucketFolderMetadata(
+          queryClient,
+          vars.provider,
+          vars.config,
+          vars.bucketName,
+        );
         queryClient.invalidateQueries(
           cloudExplorerKeys.objects(
             vars.provider,
@@ -436,6 +546,12 @@ export const useDeleteBucket = (customOptions?: {
     (params: DeleteBucketRequest) => cloudExplorerService.deleteBucket(params),
     {
       onSuccess: (data, vars) => {
+        invalidateBucketFolderMetadata(
+          queryClient,
+          vars.provider,
+          vars.config,
+          vars.bucketName,
+        );
         queryClient.invalidateQueries(
           cloudExplorerKeys.buckets(vars.provider, vars.config),
         );

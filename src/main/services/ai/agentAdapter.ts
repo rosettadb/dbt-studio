@@ -18,6 +18,9 @@ import {
   normalizeOllamaBaseUrl,
   shouldAttachOllamaAuth,
 } from './utils/ollamaProvider.utils';
+import ChatGptAuthService from './chatgpt/chatgptAuth.service';
+import { createChatGptModel } from './chatgpt/chatgptModel';
+import { CHATGPT_DEFAULT_MODEL } from './chatgpt/chatgptModels';
 
 const LMSTUDIO_DEFAULT_BASE_URL = 'http://localhost:1234/v1';
 
@@ -232,6 +235,18 @@ export async function getVercelModel(requestedModel?: string) {
     typeof activeProvider.config === 'string'
       ? JSON.parse(activeProvider.config)
       : activeProvider.config || {};
+
+  // ChatGPT sign-in (Plan 71): OAuth tokens, no API key. The fetch reads a
+  // fresh token on every request, so nothing credential-related is built in.
+  if (activeProvider.type === 'openai-codex') {
+    const providerId = activeProvider.id!;
+    return maybeWrapWithDevtools(
+      createChatGptModel(
+        (options) => ChatGptAuthService.getValidCredential(providerId, options),
+        requestedModel || config.model || CHATGPT_DEFAULT_MODEL,
+      ),
+    );
+  }
 
   // Get API key first (needed for dynamic model fetching)
   let apiKey: string | null | undefined;

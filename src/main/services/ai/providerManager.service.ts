@@ -5,6 +5,9 @@ import { AIProvider, NewAIProvider } from '../../schemas/mainDatabase.schema';
 import { getVercelModel } from './agentAdapter';
 import { HealthStatus } from './types/provider.types';
 import { fetchAndCacheContextWindows } from './tokenEstimator';
+import ChatGptAuthService from './chatgpt/chatgptAuth.service';
+import { createChatGptModel } from './chatgpt/chatgptModel';
+import { CHATGPT_DEFAULT_MODEL, CHATGPT_MODELS } from './chatgpt/chatgptModels';
 import {
   buildOllamaHeaders,
   buildOllamaTagsUrl,
@@ -93,6 +96,9 @@ export class AIProviderManager {
   static async createProvider(
     providerData: NewAIProvider,
   ): Promise<AIProvider> {
+    if (providerData.type === 'openai-codex') {
+      return this.createChatGptProvider(providerData);
+    }
     try {
       // Extract API key before saving to database
       let apiKey: string | null = null;
@@ -151,10 +157,65 @@ export class AIProviderManager {
     }
   }
 
+  /**
+   * ChatGPT sign-in (Plan 71): the config carries a `pendingLoginId`, never
+   * a key. The row is saved first, then the pending OAuth credential moves
+   * to the new provider's keytar entry. If that fails, the row is removed so
+   * no provider exists without a credential.
+   */
+  private static async createChatGptProvider(
+    providerData: NewAIProvider,
+  ): Promise<AIProvider> {
+    const config =
+      typeof providerData.config === 'string'
+        ? JSON.parse(providerData.config)
+        : (providerData.config as any) || {};
+    // An API key never belongs to a ChatGPT sign-in; drop it if present.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { pendingLoginId, apiKey, ...configToSave } = config;
+    if (typeof pendingLoginId !== 'string' || !pendingLoginId) {
+      throw new Error('Sign in with ChatGPT before creating the provider.');
+    }
+
+    const newProvider = await MainDatabaseService.saveProvider({
+      ...providerData,
+      config: JSON.stringify({ ...configToSave, authKind: 'oauth' }),
+    });
+    try {
+      await ChatGptAuthService.adoptPendingLogin(
+        pendingLoginId,
+        newProvider.id,
+      );
+    } catch (error) {
+      await MainDatabaseService.deleteProvider(newProvider.id);
+      throw error;
+    }
+    return newProvider;
+  }
+
   static async updateProvider(
     id: number,
     updates: Partial<NewAIProvider>,
   ): Promise<AIProvider> {
+    if (updates.type === 'openai-codex' && updates.config) {
+      const config =
+        typeof updates.config === 'string'
+          ? JSON.parse(updates.config)
+          : (updates.config as any);
+      // An API key never belongs to a ChatGPT sign-in; drop it if present.
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { pendingLoginId, apiKey, ...configToSave } = config;
+      if (typeof pendingLoginId === 'string' && pendingLoginId) {
+        // "Sign in again" on an existing provider.
+        await ChatGptAuthService.adoptPendingLogin(pendingLoginId, id);
+        configToSave.signedOut = false;
+      }
+      updates.config = JSON.stringify({ ...configToSave, authKind: 'oauth' });
+      await MainDatabaseService.updateProvider(id, updates);
+      const updated = await MainDatabaseService.getProvider(id);
+      if (!updated) throw new Error(`Provider ${id} not found after update`);
+      return updated;
+    }
     try {
       // Handle API key updates if present
       if (updates.type && updates.config) {
@@ -287,6 +348,8 @@ export class AIProviderManager {
           'gemini',
           'ollama',
         ];
+        // openai-codex has no models API; its caps come from the model's
+        // provider tag in getContextWindow().
         if (supportedForCacheWarmup.includes(provider.type)) {
           fetchAndCacheContextWindows({
             providerType: provider.type as
@@ -326,7 +389,20 @@ export class AIProviderManager {
       let model: any;
       let discoveredModels: any[] = [];
 
-      if (config.type === 'ollama') {
+      if (config.type === 'openai-codex') {
+        // Test Connection before the provider is saved: use the pending
+        // sign-in from the dialog. Only the login ID crosses IPC.
+        const pendingLoginId =
+          credentials.pendingLoginId || parsedConfig.pendingLoginId;
+        if (!pendingLoginId) {
+          return { success: false, error: 'Sign in with ChatGPT first.' };
+        }
+        discoveredModels = CHATGPT_MODELS;
+        model = createChatGptModel(
+          () => ChatGptAuthService.getPendingCredential(pendingLoginId),
+          parsedConfig.model || CHATGPT_DEFAULT_MODEL,
+        );
+      } else if (config.type === 'ollama') {
         if (isHostedOllamaCloudUrl(parsedConfig.baseUrl) && !apiKey) {
           return {
             success: false,
@@ -601,6 +677,8 @@ export class AIProviderManager {
           return await this.fetchAnthropicModels();
         case 'gemini':
           return await this.fetchGeminiModels(apiKey || undefined);
+        case 'openai-codex':
+          return CHATGPT_MODELS;
         case 'ollama':
           return await this.fetchOllamaModels(config.baseUrl, apiKey);
         case 'openai-compatible':
@@ -1099,6 +1177,7 @@ export class AIProviderManager {
     // Second priority: Use system default models only as fallback
     const defaultModels: Record<string, string> = {
       openai: 'gpt-4.1',
+      'openai-codex': CHATGPT_DEFAULT_MODEL,
       anthropic: 'claude-4.1-sonnet-20250815',
       gemini: 'gemini-2.5-flash',
       ollama: 'llama2', // Default fallback for Ollama

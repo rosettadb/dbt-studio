@@ -1,4 +1,5 @@
 import React from 'react';
+import { toast } from 'react-toastify';
 import {
   Box,
   IconButton,
@@ -334,13 +335,14 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   };
 
   const handleSelectImages = async () => {
-    if (
-      !sessionId ||
-      isSelectingImages ||
-      images.length >= MAX_CHAT_IMAGES_PER_MESSAGE
-    )
-      return;
+    if (!sessionId || isSelectingImages) return;
     setAddMenuAnchor(null);
+    if (images.length >= MAX_CHAT_IMAGES_PER_MESSAGE) {
+      toast.error(
+        `Attach at most ${MAX_CHAT_IMAGES_PER_MESSAGE} images per message.`,
+      );
+      return;
+    }
     setIsSelectingImages(true);
     try {
       const selected = await selectChatImages(
@@ -348,6 +350,12 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
         MAX_CHAT_IMAGES_PER_MESSAGE - images.length,
       );
       setImages((existing) => [...existing, ...selected]);
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : 'Unable to attach images. Please try again.',
+      );
     } finally {
       setIsSelectingImages(false);
     }

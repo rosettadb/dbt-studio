@@ -18,20 +18,44 @@ import {
   SwapHoriz,
 } from '@mui/icons-material';
 import { useTheme } from '@mui/material/styles';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import { ReactComponent as RouteIcon } from '../../assets/icons/lucide/route.svg';
 import { FileTreeViewer, SearchInFilesPanel } from '../index';
 import type { SearchResultSelection } from '../searchInFiles';
 import { FileTreeContainer } from '../../screens/projectDetails/styles';
 import {
-  FileStatus,
   FileNode,
   Project,
   SupportedConnectionTypes,
 } from '../../../types/backend';
 import { SourceControlView } from '../sourceControl';
 import connectionIcons from '../../../../assets/connectionIcons';
-import { useListPipelines } from '../../controllers';
-import { CreatePipelineModal } from '../modals';
+import {
+  useGetConnectionById,
+  useGetConnections,
+  useGetFileStatuses,
+  useGetProjectFiles,
+  useGetSelectedProject,
+  useGetSettings,
+  useGitIsInitialized,
+  useListPipelines,
+  useUpdateProject,
+} from '../../controllers';
+import {
+  AddConnectionModal,
+  CreatePipelineModal,
+  PushToCloudModal,
+  RemoveConnectionModal,
+  RunWithEnvModal,
+} from '../modals';
+import { useTabs } from '../../context/TabsProvider';
+import { useRefreshProjectFiles } from '../../hooks/useRefreshProjectFiles';
+import { projectsServices } from '../../services';
+import {
+  getPipelineRelativeName,
+  getPipelineRelativePath,
+} from '../pipelineView';
 
 export type SidebarTab = 'explorer' | 'search' | 'scm' | 'connections';
 
@@ -87,21 +111,44 @@ const getConnectionTypeColor = (connectionType: string) => {
   }
 };
 
-// Connections Tab Component
-interface ConnectionsTabProps {
-  connection?: any;
-  onAddConnection?: () => void;
-  onEditConnection?: () => void;
-  onRemoveConnection?: () => void;
-}
-
-const ConnectionsTab: React.FC<ConnectionsTabProps> = ({
-  connection,
-  onAddConnection,
-  onEditConnection,
-  onRemoveConnection,
-}) => {
+// Connections Tab Component — owns the add/edit/remove flows for the
+// project's database connection.
+const ConnectionsTab: React.FC<{ project: Project }> = ({ project }) => {
   const theme = useTheme();
+  const navigate = useNavigate();
+  const { data: connection } = useGetConnectionById(project.connectionId);
+  const { data: connections = [] } = useGetConnections();
+  const { refetch: refetchProject } = useGetSelectedProject();
+  const { mutate: updateProject } = useUpdateProject();
+  const [isAddOpen, setIsAddOpen] = React.useState(false);
+  const [isRemoveOpen, setIsRemoveOpen] = React.useState(false);
+
+  const modals = (
+    <>
+      <AddConnectionModal
+        isOpen={isAddOpen}
+        onClose={() => setIsAddOpen(false)}
+        project={project}
+        connections={connections}
+        onSuccess={() => {
+          refetchProject();
+        }}
+        onUpdateProject={updateProject}
+      />
+      <RemoveConnectionModal
+        isOpen={isRemoveOpen}
+        onClose={() => setIsRemoveOpen(false)}
+        onConfirm={() => {
+          updateProject({ ...project, connectionId: undefined });
+          toast.success('Connection removed from project successfully!');
+          setIsRemoveOpen(false);
+        }}
+        connectionName={
+          connection?.connection?.name || (connection as any)?.name
+        }
+      />
+    </>
+  );
 
   if (!connection) {
     return (
@@ -130,17 +177,18 @@ const ConnectionsTab: React.FC<ConnectionsTabProps> = ({
         <Button
           variant="contained"
           startIcon={<Add />}
-          onClick={onAddConnection}
+          onClick={() => setIsAddOpen(true)}
           size="small"
         >
           Add Connection
         </Button>
+        {modals}
       </Box>
     );
   }
 
-  const connType = connection.connection?.type || connection.type;
-  const connName = connection.connection?.name || connection.name;
+  const connType = connection.connection?.type || (connection as any).type;
+  const connName = connection.connection?.name || (connection as any).name;
   const iconSrc = connectionIcons.images[connType as SupportedConnectionTypes];
   const chipBgColor = getConnectionTypeColor(connType);
   const chipTextColor = theme.palette.getContrastText(chipBgColor);
@@ -220,7 +268,7 @@ const ConnectionsTab: React.FC<ConnectionsTabProps> = ({
               size="small"
               variant="outlined"
               startIcon={<Edit sx={{ fontSize: 14 }} />}
-              onClick={onEditConnection}
+              onClick={() => navigate(`/app/edit-connection/${connection.id}`)}
               sx={{ flex: 1, fontSize: '0.7rem', py: 0.5 }}
             >
               Edit
@@ -230,7 +278,7 @@ const ConnectionsTab: React.FC<ConnectionsTabProps> = ({
               variant="outlined"
               color="error"
               startIcon={<DeleteOutline sx={{ fontSize: 14 }} />}
-              onClick={onRemoveConnection}
+              onClick={() => setIsRemoveOpen(true)}
               sx={{ flex: 1, fontSize: '0.7rem', py: 0.5 }}
             >
               Remove
@@ -244,7 +292,7 @@ const ConnectionsTab: React.FC<ConnectionsTabProps> = ({
       <Button
         variant="text"
         startIcon={<SwapHoriz sx={{ fontSize: 18 }} />}
-        onClick={onAddConnection}
+        onClick={() => setIsAddOpen(true)}
         size="small"
         sx={{
           alignSelf: 'flex-start',
@@ -255,46 +303,34 @@ const ConnectionsTab: React.FC<ConnectionsTabProps> = ({
       >
         Change Connection
       </Button>
+      {modals}
     </Box>
   );
 };
 
-// Explorer Tab Component - Wraps existing FileTreeViewer
-interface ExplorerTabProps {
-  directories?: FileNode;
-  statuses: FileStatus[];
-  isLoadingDirectories: boolean;
-  selectedFilePath?: string;
-  project?: Project;
-  onDeleteFile: (deletedFile: string) => void;
-  onFileSelect: (fileNode: any) => Promise<void>;
-  onRefreshFiles: () => Promise<void>;
-  onCopyPath: (source: string, target: string) => Promise<void>;
-  onNewFile: (filePath?: string) => void;
-  onRenameFile?: (oldPath: string, newPath: string) => void;
-  onRunPipeline?: (filePath: string) => void;
-  onRunPipelineLocal?: (filePath: string) => void;
+// Explorer Tab Component — file tree plus the per-pipeline run buttons.
+const ExplorerTab: React.FC<{
+  project: Project;
   openCreatePipeline?: boolean;
-}
-
-const ExplorerTab: React.FC<ExplorerTabProps> = ({
-  directories,
-  statuses,
-  isLoadingDirectories,
-  selectedFilePath,
-  project,
-  onDeleteFile,
-  onFileSelect,
-  onRefreshFiles,
-  onCopyPath,
-  onNewFile,
-  onRenameFile,
-  onRunPipeline,
-  onRunPipelineLocal,
-  openCreatePipeline,
-}) => {
+}> = ({ project, openCreatePipeline }) => {
   const theme = useTheme();
+  const { activeFilePath, openFile, closeTabByPath, renameTab } = useTabs();
+  const { data: settings } = useGetSettings();
+  const { data: connection } = useGetConnectionById(project.connectionId);
+  const refreshProjectFiles = useRefreshProjectFiles();
+  const { data: directories, isLoading: isLoadingDirectories } =
+    useGetProjectFiles(project, { enabled: !!project.id });
+  const { data: isInitialized } = useGitIsInitialized(project.path, {
+    enabled: !!project.path,
+  });
+  const { data: statuses = [] } = useGetFileStatuses(project.path, {
+    enabled: !!project.path && !!isInitialized,
+  });
+  const { refetch: refetchPipelines } = useListPipelines(project.id);
+
   const [createPipelineOpen, setCreatePipelineOpen] = React.useState(false);
+  const [cloudRunArgs, setCloudRunArgs] = React.useState<string | null>(null);
+  const [localRunFile, setLocalRunFile] = React.useState<string | null>(null);
 
   // Open the modal when triggered externally (e.g. from the home screen pipeline card)
   React.useEffect(() => {
@@ -303,22 +339,20 @@ const ExplorerTab: React.FC<ExplorerTabProps> = ({
     }
   }, [openCreatePipeline]);
 
-  const { refetch: refetchPipelines } = useListPipelines(project?.id);
+  const handleFileSelect = React.useCallback(
+    (fileNode: FileNode) => {
+      openFile(fileNode.path);
+    },
+    [openFile],
+  );
 
   const handlePipelineCreated = React.useCallback(
     async (filePath: string) => {
       await refetchPipelines();
-      await onRefreshFiles();
-      // Open the newly created pipeline file in the editor
-      const fileName = filePath.split('/').pop() ?? 'pipeline.yml';
-      onFileSelect({
-        id: filePath,
-        name: fileName,
-        path: filePath,
-        type: 'file' as const,
-      });
+      await refreshProjectFiles();
+      openFile(filePath);
     },
-    [refetchPipelines, onRefreshFiles, onFileSelect],
+    [refetchPipelines, refreshProjectFiles, openFile],
   );
 
   return (
@@ -329,63 +363,89 @@ const ExplorerTab: React.FC<ExplorerTabProps> = ({
           <FileTreeViewer
             statuses={statuses}
             node={directories}
-            onDeleteFileCallback={onDeleteFile}
-            onFileSelect={onFileSelect}
+            onDeleteFileCallback={closeTabByPath}
+            onFileSelect={handleFileSelect}
             isLoadingFiles={isLoadingDirectories}
-            refreshFiles={onRefreshFiles}
-            copyPath={onCopyPath}
-            onNewFileCallback={onNewFile}
-            selectedPath={selectedFilePath}
-            onRenameCallback={onRenameFile}
-            onRunPipeline={onRunPipeline}
-            onRunPipelineLocal={onRunPipelineLocal}
+            refreshFiles={refreshProjectFiles}
+            copyPath={async (source, target) => {
+              await projectsServices.copyPath({ source, target });
+              await refreshProjectFiles();
+            }}
+            onNewFileCallback={(filePath) => {
+              if (filePath) openFile(filePath);
+            }}
+            selectedPath={activeFilePath}
+            onRenameCallback={renameTab}
+            onRunPipeline={(filePath) =>
+              setCloudRunArgs(
+                `--pipeline_name ${getPipelineRelativeName(filePath, project.path)}`,
+              )
+            }
+            onRunPipelineLocal={(filePath) => {
+              if (!settings?.runnerPath) return;
+              setLocalRunFile(getPipelineRelativePath(filePath, project.path));
+            }}
           />
         )}
       </Box>
 
       {/* Create Pipeline button — always visible */}
-      {project && (
-        <Box
-          sx={{
-            px: 1,
-            pb: 1,
-            pt: 0.75,
-            flexShrink: 0,
-            borderTop: `1px solid ${theme.palette.divider}`,
-          }}
+      <Box
+        sx={{
+          px: 1,
+          pb: 1,
+          pt: 0.75,
+          flexShrink: 0,
+          borderTop: `1px solid ${theme.palette.divider}`,
+        }}
+      >
+        <Tooltip
+          title="Create a pipeline to run jobs on the cloud"
+          placement="top"
+          arrow
         >
-          <Tooltip
-            title="Create a pipeline to run jobs on the cloud"
-            placement="top"
-            arrow
+          <Button
+            fullWidth
+            variant="contained"
+            size="small"
+            startIcon={<RouteIcon width={16} height={16} />}
+            onClick={() => setCreatePipelineOpen(true)}
+            sx={{
+              fontSize: '0.72rem',
+              py: 0.75,
+            }}
           >
-            <Button
-              fullWidth
-              variant="contained"
-              size="small"
-              startIcon={<RouteIcon width={16} height={16} />}
-              onClick={() => setCreatePipelineOpen(true)}
-              sx={{
-                fontSize: '0.72rem',
-                py: 0.75,
-              }}
-            >
-              Create Pipeline
-            </Button>
-          </Tooltip>
-        </Box>
-      )}
+            Create Pipeline
+          </Button>
+        </Tooltip>
+      </Box>
 
-      {project && (
-        <CreatePipelineModal
-          isOpen={createPipelineOpen}
-          onClose={() => setCreatePipelineOpen(false)}
+      <CreatePipelineModal
+        isOpen={createPipelineOpen}
+        onClose={() => setCreatePipelineOpen(false)}
+        project={project}
+        onCreated={(filePath) => handlePipelineCreated(filePath)}
+        onApplied={async () => {
+          await refetchPipelines();
+          await refreshProjectFiles();
+        }}
+      />
+      {cloudRunArgs !== null && (
+        <PushToCloudModal
+          isOpen
+          onClose={() => setCloudRunArgs(null)}
           project={project}
-          onCreated={(filePath) => handlePipelineCreated(filePath)}
-          onApplied={async () => {
-            await refetchPipelines();
-            await onRefreshFiles();
-          }}
+          command="pipeline"
+          initialDbtArguments={cloudRunArgs}
+        />
+      )}
+      {localRunFile && (
+        <RunWithEnvModal
+          isOpen
+          onClose={() => setLocalRunFile(null)}
+          project={project}
+          pipelineRelativePath={localRunFile}
+          connectionName={connection?.connection?.name}
         />
       )}
     </FileTreeContainer>
@@ -393,122 +453,95 @@ const ExplorerTab: React.FC<ExplorerTabProps> = ({
 };
 
 // Search Tab Component - Global "find in files" panel
-interface SearchTabProps {
-  projectPath?: string;
-  onSearchResultSelect: (selection: SearchResultSelection) => void;
-}
-
-const SearchTab: React.FC<SearchTabProps> = ({
-  projectPath,
-  onSearchResultSelect,
-}) => {
-  if (!projectPath) return null;
+const SearchTab: React.FC<{ project: Project }> = ({ project }) => {
+  const { openFileAt } = useTabs();
+  const handleSelect = React.useCallback(
+    (selection: SearchResultSelection) => openFileAt(selection),
+    [openFileAt],
+  );
   return (
     <SearchInFilesPanel
-      projectPath={projectPath}
-      onResultSelect={onSearchResultSelect}
+      projectPath={project.path}
+      onResultSelect={handleSelect}
     />
   );
 };
 
-// Source Control Tab Component - Monaco Editor Integration
-interface SourceControlTabProps {
-  projectPath?: string;
-  onOpenFile?: (filePath: string) => void;
-  onFileSelect?: (filePath: string) => void;
-  onRefreshFileContent?: (filePath: string) => void;
-  onSynchronize?: () => Promise<void>;
-  isSynchronizing?: boolean;
-}
+// Source Control Tab Component — git view with a "synchronize" action that
+// reconciles the git status, the open tabs and the file tree.
+const SourceControlTab: React.FC<{ project: Project }> = ({ project }) => {
+  const {
+    tabs,
+    closeTabByPath,
+    markTabSavedByPath,
+    refreshTabContentByPath,
+    openFile,
+  } = useTabs();
+  const refreshProjectFiles = useRefreshProjectFiles();
+  const { data: isInitialized } = useGitIsInitialized(project.path, {
+    enabled: !!project.path,
+  });
+  const { data: statuses = [], refetch: updateStatuses } = useGetFileStatuses(
+    project.path,
+    { enabled: !!project.path && !!isInitialized },
+  );
+  const [isSynchronizing, setIsSynchronizing] = React.useState(false);
 
-const SourceControlTab: React.FC<SourceControlTabProps> = ({
-  projectPath,
-  onOpenFile,
-  onFileSelect,
-  onRefreshFileContent,
-  onSynchronize,
-  isSynchronizing,
-}) => {
+  const handleSynchronizeAll = React.useCallback(async () => {
+    setIsSynchronizing(true);
+    try {
+      const [statusesResult] = await Promise.all([
+        updateStatuses(),
+        refreshProjectFiles(),
+      ]);
+      const currentStatuses = statusesResult?.data ?? statuses ?? [];
+
+      tabs.forEach((tab) => {
+        const fileStatus = currentStatuses.find((s) => s.path === tab.path);
+        if (!fileStatus) {
+          closeTabByPath(tab.path);
+          markTabSavedByPath(tab.path);
+        } else if (fileStatus.status === 'modified' && !tab.isModified) {
+          refreshTabContentByPath(tab.path);
+        }
+      });
+    } catch (error: any) {
+      toast.error(`Sync failed: ${error?.message || 'Unknown error'}`);
+      // eslint-disable-next-line no-console
+      console.error('Synchronization error:', error);
+    } finally {
+      setIsSynchronizing(false);
+    }
+  }, [
+    tabs,
+    statuses,
+    updateStatuses,
+    refreshProjectFiles,
+    closeTabByPath,
+    markTabSavedByPath,
+    refreshTabContentByPath,
+  ]);
+
   return (
     <SourceControlView
-      projectPath={projectPath}
-      onOpenFile={onOpenFile}
-      onFileSelect={onFileSelect}
-      onRefreshFileContent={onRefreshFileContent}
-      onSynchronize={onSynchronize}
+      projectPath={project.path}
+      onOpenFile={openFile}
+      onRefreshFileContent={refreshTabContentByPath}
+      onSynchronize={handleSynchronizeAll}
       isSynchronizing={isSynchronizing}
     />
   );
 };
 
 interface ProjectSidebarProps {
-  // Tab control (lifted to parent)
   activeTab: SidebarTab;
-
-  // File Explorer props (preserve all existing functionality)
-  directories?: FileNode;
-  statuses: FileStatus[];
-  isLoadingDirectories: boolean;
-  selectedFilePath?: string;
-  project?: Project;
-
-  // File Explorer callbacks (preserve all existing functionality)
-  onDeleteFile: (deletedFile: string) => void;
-  onFileSelect: (fileNode: any) => Promise<void>;
-  onRefreshFiles: () => Promise<void>;
-  onCopyPath: (source: string, target: string) => Promise<void>;
-  onNewFile: (filePath?: string) => void;
-  onRenameFile?: (oldPath: string, newPath: string) => void;
-
-  // Source Control tab integration with Monaco editor
-  onSourceControlOpenFile?: (filePath: string) => void;
-  onSourceControlFileSelect?: (filePath: string) => void;
-  onSourceControlRefreshFileContent?: (filePath: string) => void;
-
-  // Synchronization
-  onSourceControlSynchronize?: () => Promise<void>;
-  isSourceControlSynchronizing?: boolean;
-
-  // Connections
-  connection?: any;
-  onAddConnection?: () => void;
-  onEditConnection?: () => void;
-  onRemoveConnection?: () => void;
-
-  // Pipeline
-  onRunPipeline?: (filePath: string) => void;
+  project: Project;
   openCreatePipeline?: boolean;
-
-  // Search (find in files)
-  onSearchResultSelect: (selection: SearchResultSelection) => void;
-  onRunPipelineLocal?: (filePath: string) => void;
 }
 
 export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   activeTab,
-  directories,
-  statuses,
-  isLoadingDirectories,
-  selectedFilePath,
   project,
-  onDeleteFile,
-  onFileSelect,
-  onRefreshFiles,
-  onCopyPath,
-  onNewFile,
-  onRenameFile,
-  onSourceControlOpenFile,
-  onSourceControlFileSelect,
-  onSourceControlRefreshFileContent,
-  onSourceControlSynchronize,
-  isSourceControlSynchronizing,
-  connection,
-  onAddConnection,
-  onEditConnection,
-  onRemoveConnection,
-  onRunPipeline,
-  onSearchResultSelect,
-  onRunPipelineLocal,
   openCreatePipeline,
 }) => {
   return (
@@ -520,57 +553,16 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
         flexDirection: 'column',
       }}
     >
-      {/* Tab Content */}
       <Box sx={{ flex: 1, overflow: 'hidden' }}>
-        {/* File Explorer Tab - Preserve Existing Functionality Exactly */}
         {activeTab === 'explorer' && (
           <ExplorerTab
-            directories={directories}
-            statuses={statuses}
-            isLoadingDirectories={isLoadingDirectories}
-            selectedFilePath={selectedFilePath}
             project={project}
-            onDeleteFile={onDeleteFile}
-            onFileSelect={onFileSelect}
-            onRefreshFiles={onRefreshFiles}
-            onCopyPath={onCopyPath}
-            onNewFile={onNewFile}
-            onRenameFile={onRenameFile}
-            onRunPipeline={onRunPipeline}
-            onRunPipelineLocal={onRunPipelineLocal}
             openCreatePipeline={openCreatePipeline}
           />
         )}
-
-        {/* Search Tab - Find in Files */}
-        {activeTab === 'search' && (
-          <SearchTab
-            projectPath={project?.path}
-            onSearchResultSelect={onSearchResultSelect}
-          />
-        )}
-
-        {/* Source Control Tab - New Git Interface */}
-        {activeTab === 'scm' && (
-          <SourceControlTab
-            projectPath={project?.path}
-            onOpenFile={onSourceControlOpenFile}
-            onFileSelect={onSourceControlFileSelect}
-            onRefreshFileContent={onSourceControlRefreshFileContent}
-            onSynchronize={onSourceControlSynchronize}
-            isSynchronizing={isSourceControlSynchronizing}
-          />
-        )}
-
-        {/* Connections Tab */}
-        {activeTab === 'connections' && (
-          <ConnectionsTab
-            connection={connection}
-            onAddConnection={onAddConnection}
-            onEditConnection={onEditConnection}
-            onRemoveConnection={onRemoveConnection}
-          />
-        )}
+        {activeTab === 'search' && <SearchTab project={project} />}
+        {activeTab === 'scm' && <SourceControlTab project={project} />}
+        {activeTab === 'connections' && <ConnectionsTab project={project} />}
       </Box>
     </Box>
   );

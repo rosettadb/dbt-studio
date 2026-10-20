@@ -77,21 +77,34 @@ const GROUPS: ToolbarItem[][] = [
 
 interface MarkdownToolbarProps {
   onFormat: (action: MarkdownFormatAction) => void;
+  /** Sits inside the cell header row: no own padding or bottom border. */
+  inline?: boolean;
 }
 
 export const MarkdownToolbar: React.FC<MarkdownToolbarProps> = ({
   onFormat,
+  inline = false,
 }) => (
   <Box
-    sx={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: 0.25,
-      px: 1,
-      py: 0.25,
-      borderBottom: '1px solid',
-      borderColor: 'divider',
-    }}
+    sx={
+      inline
+        ? {
+            display: 'flex',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 0.25,
+            minWidth: 0,
+          }
+        : {
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.25,
+            px: 1,
+            py: 0.25,
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+          }
+    }
     role="toolbar"
     aria-label="Markdown formatting"
     data-testid="markdown-toolbar"

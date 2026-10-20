@@ -30,8 +30,11 @@ import {
 import { SelectProjectLayout, AppShell } from './layouts';
 import {
   AppProvider,
+  CloudRunProvider,
   ProcessProvider,
+  QueryResultsProvider,
   RunnerProvider,
+  TabsProvider,
   TaskManagerProvider,
 } from './context';
 import { QueryClientContextProvider } from './context/QueryClientContext';
@@ -151,27 +154,33 @@ const AppWithProjectProvider: React.FC = () => {
           <ProcessProvider>
             <RunnerProvider>
               <TaskManagerProvider>
-                <CssVarsProvider
-                  theme={theme}
-                  defaultMode={initialMode}
-                  storageManager={themeStorageManager}
-                >
-                  <CssBaseline />
-                  <App />
-                  <UpdateDialog />
-                  <ToastContainer
-                    position="bottom-right"
-                    autoClose={3000}
-                    hideProgressBar={false}
-                    newestOnTop
-                    closeOnClick
-                    rtl={false}
-                    pauseOnFocusLoss
-                    pauseOnHover
-                    theme={initialMode === 'dark' ? 'dark' : 'light'}
-                    limit={3}
-                  />
-                </CssVarsProvider>
+                <CloudRunProvider>
+                  <TabsProvider>
+                    <QueryResultsProvider>
+                      <CssVarsProvider
+                        theme={theme}
+                        defaultMode={initialMode}
+                        storageManager={themeStorageManager}
+                      >
+                        <CssBaseline />
+                        <App />
+                        <UpdateDialog />
+                        <ToastContainer
+                          position="bottom-right"
+                          autoClose={3000}
+                          hideProgressBar={false}
+                          newestOnTop
+                          closeOnClick
+                          rtl={false}
+                          pauseOnFocusLoss
+                          pauseOnHover
+                          theme={initialMode === 'dark' ? 'dark' : 'light'}
+                          limit={3}
+                        />
+                      </CssVarsProvider>
+                    </QueryResultsProvider>
+                  </TabsProvider>
+                </CloudRunProvider>
               </TaskManagerProvider>
             </RunnerProvider>
           </ProcessProvider>

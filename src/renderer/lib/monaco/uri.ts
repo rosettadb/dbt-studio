@@ -1,4 +1,5 @@
 import * as monaco from 'monaco-editor';
+import { toPosix } from '../path';
 
 const SCHEME = 'dbt-file';
 const DEFAULT_AUTHORITY = 'default';
@@ -13,9 +14,9 @@ export const buildModelUri = (
   filePath: string,
 ): monaco.Uri => {
   const authority = projectId || DEFAULT_AUTHORITY;
-  const normalized = filePath.replace(/\\/g, '/');
-  const path = normalized.startsWith('/') ? normalized : `/${normalized}`;
-  return monaco.Uri.from({ scheme: SCHEME, authority, path });
+  const normalized = toPosix(filePath);
+  const uriPath = normalized.startsWith('/') ? normalized : `/${normalized}`;
+  return monaco.Uri.from({ scheme: SCHEME, authority, path: uriPath });
 };
 
 /**

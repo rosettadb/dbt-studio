@@ -5,6 +5,8 @@ export interface ParsedAgentError {
     | 'network'
     | 'toolUnsupported'
     | 'toolError'
+    | 'chatgptUsageLimit'
+    | 'chatgptSignedOut'
     | 'generic';
   title: string;
   body: string;
@@ -58,6 +60,34 @@ export function parseAgentError(error: unknown): ParsedAgentError {
 
   // Common patterns
   const lowerRaw = raw.toLowerCase();
+
+  // ChatGPT sign-in (Plan 71). Checked first: these also contain words the
+  // generic auth and rate-limit checks below match.
+  if (
+    raw.includes('ChatGptUsageLimitError') ||
+    lowerRaw.includes('chatgpt plan limit is reached')
+  ) {
+    const message = raw.match(
+      /Your ChatGPT plan limit is reached\.(?: It resets at [^".\\]+\.)?/,
+    );
+    return {
+      type: 'chatgptUsageLimit',
+      title: 'ChatGPT Plan Limit Reached',
+      body: `${message?.[0] ?? 'Your ChatGPT plan limit is reached.'} Switch to an API key provider to keep working now.`,
+      raw,
+      statusCode: 429,
+    };
+  }
+
+  if (lowerRaw.includes('sign in to chatgpt again')) {
+    return {
+      type: 'chatgptSignedOut',
+      title: 'Signed Out of ChatGPT',
+      body: 'Sign in to ChatGPT again in Settings → AI Settings → Providers, or switch to another provider.',
+      raw,
+      statusCode: 401,
+    };
+  }
 
   // Authentication
   if (

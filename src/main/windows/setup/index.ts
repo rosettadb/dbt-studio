@@ -9,7 +9,7 @@ export const createSetupWindow = (): BrowserWindow => {
     minWidth: 800,
     minHeight: 700,
     maxWidth: 800,
-    maxHeight: 600,
+    maxHeight: 700,
     resizable: false,
     fullscreenable: false,
     title: 'Setup',
@@ -19,6 +19,9 @@ export const createSetupWindow = (): BrowserWindow => {
         : path.join(__dirname, '../../.erb/dll/preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      // Same preload as the main window; it requires Node's `path`, which a
+      // sandboxed preload cannot load. contextIsolation keeps Node off-page.
+      sandbox: false,
     },
   });
   projectWindow.loadURL(resolveHtmlPath('index.html', '/setup'));

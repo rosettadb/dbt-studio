@@ -3,7 +3,11 @@ import { shell } from 'electron';
 import { v4 as uuidv4 } from 'uuid';
 import { CloudDeploymentPayload, Secret } from '../../types/backend';
 import { UserProfile } from '../../types/profile';
-import { CloudLogEntry, CloudPipelineData } from '../../types/cloudAction';
+import {
+  CloudLogEntry,
+  CloudPipelineData,
+  CloudRunStarted,
+} from '../../types/cloudAction';
 
 import { ROSETTA_CLOUD_BASE_URL } from '../utils/constants';
 import SecureStorageService from './secureStorage.service';
@@ -14,7 +18,9 @@ export default class RosettaCloudService {
 
   private static readonly API_KEY_STORAGE_KEY = 'cloud-api-key';
 
-  static async pushProjectToCloud(body: CloudDeploymentPayload): Promise<void> {
+  static async pushProjectToCloud(
+    body: CloudDeploymentPayload,
+  ): Promise<CloudRunStarted> {
     const { id, secrets } = body;
     const project = await ProjectsService.getProject(id);
     const hasSecrets = Object.keys(secrets ?? {}).length > 0;
@@ -125,6 +131,13 @@ export default class RosettaCloudService {
         ...(actionId ? { lastCloudActionId: actionId } : {}),
       });
     }
+
+    return {
+      actionId,
+      projectId: id,
+      pipelineFile:
+        body.EXECUTION_MODE === 'pipeline' ? body.PIPELINE_FILE : undefined,
+    };
   }
 
   static async getSecrets(projectId: string): Promise<Secret[]> {

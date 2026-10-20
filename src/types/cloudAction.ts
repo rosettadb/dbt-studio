@@ -65,6 +65,17 @@ export interface CloudActionSummary {
   createdAt: string;
 }
 
+/**
+ * What a cloud run trigger hands back to the renderer. `pipelineFile` is the
+ * same relative name sent as PIPELINE_FILE (undefined for plain dbt command
+ * runs), so the renderer can key the run against the pipeline that started it.
+ */
+export interface CloudRunStarted {
+  actionId: string | null;
+  projectId: string;
+  pipelineFile?: string;
+}
+
 export interface CloudLogEntry {
   timestamp: string;
   message: string;

@@ -51,6 +51,7 @@ export const cloudStorageImages = {
 // AI provider specific images
 export const aiProviderImages = {
   openai,
+  'openai-codex': openai,
   ollama,
   gemini: google,
   anthropic,

@@ -4,7 +4,8 @@ export type AIProviderType =
   | 'gemini'
   | 'anthropic'
   | 'openai-compatible'
-  | 'lmstudio';
+  | 'lmstudio'
+  | 'openai-codex';
 
 export interface ProviderCapabilities {
   streaming: boolean;

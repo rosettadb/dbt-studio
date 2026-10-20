@@ -44,3 +44,7 @@ playwright-report/
 
 # Generated analytics static runtime bundle (rebuild with: npm run build:analytics-runtime)
 resources/analytics-runtime.umd.js
+
+# Python cache
+__pycache__/
+*.pyc

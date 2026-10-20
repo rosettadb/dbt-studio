@@ -15,7 +15,6 @@ export type SettingsChannels =
   | 'settings:checkCliUpdates'
   | 'settings:updateCli'
   | 'settings:getDbtPath'
-  | 'settings:usePathJoin'
   | 'version:rosetta:check'
   | 'version:rosetta:install'
   | 'version:rosetta:uninstall'
@@ -30,9 +29,6 @@ export type SettingsChannels =
   | 'runner:plugins:check'
   | 'settings:reset-factory'
   | 'settings:restart'
-  | 'settings:getFileName'
-  | 'settings:getBasename'
-  | 'settings:getDirname'
   | 'settings:duckdb:metadata'
   | 'settings:duckdb:refresh'
   | 'settings:duckdb:reinitialize'
@@ -169,6 +165,13 @@ export type AIChannels =
   | 'ai:provider:get-credential'
   | 'ai:provider:cleanup-api-keys'
 
+  // ChatGPT subscription sign-in (Plan 71)
+  | 'ai:chatgpt-auth:start'
+  | 'ai:chatgpt-auth:cancel'
+  | 'ai:chatgpt-auth:discard-pending'
+  | 'ai:chatgpt-auth:sign-out'
+  | 'ai:chatgpt-auth:event'
+
   // AI completion
   | 'ai:completion:generate'
 
@@ -295,6 +298,7 @@ export type TaskManagerChannels =
 export type CloudExplorerChannels =
   | 'cloudExplorer:listBuckets'
   | 'cloudExplorer:listObjects'
+  | 'cloudExplorer:getFolderMetadata'
   | 'cloudExplorer:getDownloadUrl'
   | 'cloudExplorer:testConnection'
   | 'cloudExplorer:previewData'
@@ -792,6 +796,34 @@ export interface DeleteBucketRequest {
 export interface DeleteBucketResponse {
   success: boolean;
 }
+
+// ChatGPT subscription sign-in (Plan 71). Tokens never cross IPC; the
+// renderer only sees lifecycle events and the signed-in account summary.
+export type ChatGptAuthStatus =
+  | 'started'
+  | 'waiting_for_browser'
+  | 'completed'
+  | 'cancelled'
+  | 'failed';
+
+export type ChatGptAuthEventPayload = {
+  correlationId: string;
+  status: ChatGptAuthStatus;
+  error?: string;
+};
+
+export type StartChatGptAuthRequest = {
+  correlationId: string;
+};
+
+export type StartChatGptAuthResult =
+  | {
+      ok: true;
+      loginId: string;
+      email: string | null;
+      planType: string | null;
+    }
+  | { ok: false; message: string };
 
 export type SnowflakeAuthLifecycleEvent =
   | 'started'

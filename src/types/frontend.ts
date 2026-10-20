@@ -20,18 +20,6 @@ export type AppContextType = {
   pendingMessage: string | null;
   setPendingMessage: (message: string | null) => void;
   openChatWithMessage: (message: string) => void;
-  editingFilePath?: string;
-  setEditingFilePath: (filePath: string | undefined) => void;
-  syncEditorContent?: (path: string, content: string) => void;
-  registerSyncEditorContent?: (
-    handler?: (path: string, content: string) => void,
-  ) => void;
-  openFile?: (filePath: string) => void;
-  registerOpenFile?: (handler?: (filePath: string) => void) => void;
-  closeFile?: (filePath: string) => void;
-  registerCloseFile?: (handler?: (filePath: string) => void) => void;
-  refreshFileTree?: () => Promise<void>;
-  registerRefreshFileTree?: (handler?: () => Promise<void>) => void;
   authenticatedUser?: UserProfile | null;
   env: 'local' | 'cloud';
 };
@@ -106,6 +94,12 @@ export interface StorageObject {
   updated?: Date;
   contentType?: string;
   isDirectory: boolean;
+  folderMetadataStatus?: 'pending' | 'ready' | 'error';
+}
+
+export interface CloudFolderMetadata {
+  size: number;
+  updated?: Date;
 }
 
 export interface CloudListResult {
@@ -115,7 +109,9 @@ export interface CloudListResult {
 
 export interface S3Config {
   region: string;
-  accessKeyId: string;
+  authMode?: 'credentials' | 'public';
+  bucket?: string;
+  accessKeyId?: string;
   secretAccessKey?: string;
   sessionToken?: string;
 }

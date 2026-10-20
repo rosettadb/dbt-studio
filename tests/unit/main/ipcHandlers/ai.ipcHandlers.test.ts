@@ -119,6 +119,22 @@ describe('ai.ipcHandlers', () => {
     );
   });
 
+  it('registers the ChatGPT sign-in channels (Plan 71)', async () => {
+    const ipcMain = await setupMocksAndRegister();
+    [
+      'ai:chatgpt-auth:start',
+      'ai:chatgpt-auth:cancel',
+      'ai:chatgpt-auth:discard-pending',
+      'ai:chatgpt-auth:sign-out',
+    ].forEach((channel) => {
+      expect(ipcMain.removeHandler).toHaveBeenCalledWith(channel);
+      expect(ipcMain.handle).toHaveBeenCalledWith(
+        channel,
+        expect.any(Function),
+      );
+    });
+  });
+
   it('delegates ai:provider:list to MainDatabaseService.getProviders', async () => {
     const getProviders = jest.fn().mockResolvedValue([{ id: 1 }]);
     const ipcMain = await setupMocksAndRegister({ getProviders });
