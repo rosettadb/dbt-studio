@@ -7,26 +7,14 @@ import InfoIcon from '@mui/icons-material/Info';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import ChecklistIcon from '@mui/icons-material/Checklist';
 import TerminalIcon from '@mui/icons-material/Terminal';
-import CodeIcon from '@mui/icons-material/Code';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import BackupOutlinedIcon from '@mui/icons-material/BackupOutlined';
 import { SvgIconComponent } from '@mui/icons-material';
 import React from 'react';
 import { Icon } from '../../components/icon';
+import { PythonMonoIcon } from '../../components/notebook/NotebookKindIcon';
+import { DbtMonoIcon } from '../../components/icon/DbtMonoIcon';
 import { icons } from '../../../../assets';
-
-// Custom icon wrapper to make custom SVG icons compatible with Material-UI icon interface
-const DbtBlackIcon: React.FC<{ fontSize?: string; color?: string }> = ({
-  fontSize = 'small',
-  color = 'inherit',
-}) => (
-  <Icon
-    src={icons.dbtBlack}
-    width={fontSize === 'small' ? 16 : 20}
-    height={fontSize === 'small' ? 16 : 20}
-    color={color === 'primary' ? 'currentColor' : color}
-  />
-);
 
 // DuckDB icon wrapper
 const DuckDBIcon: React.FC<{ fontSize?: string; color?: string }> = ({
@@ -93,12 +81,12 @@ export const settingsSidebarCategories: SettingsSidebarCategory[] = [
     label: 'Plugins',
     items: [
       {
-        icon: DbtBlackIcon as any,
+        icon: DbtMonoIcon as any,
         text: 'dbt™ Core',
         path: '/app/settings/dbt',
       },
       {
-        icon: CodeIcon,
+        icon: PythonMonoIcon as any,
         text: 'Python',
         path: '/app/settings/python',
       },

@@ -1,12 +1,5 @@
 import React from 'react';
-import {
-  Box,
-  Typography,
-  IconButton,
-  Tooltip,
-  useTheme,
-  useColorScheme,
-} from '@mui/material';
+import { Box, Typography, IconButton, Tooltip, useTheme } from '@mui/material';
 import {
   ClearAll,
   CloudDone,
@@ -68,7 +61,6 @@ export const CloudLogViewer: React.FC<Props> = ({
   onMinimize,
 }) => {
   const theme = useTheme();
-  const { mode } = useColorScheme();
   const { logs, error, mode: logMode } = useCloudActionLogs(actionId);
   const outputRef = React.useRef<HTMLDivElement>(null);
 
@@ -78,7 +70,9 @@ export const CloudLogViewer: React.FC<Props> = ({
   const [wrap, setWrap] = React.useState(true);
   const [showTimestamps, setShowTimestamps] = React.useState(false);
 
-  const isDark = mode === 'dark';
+  // Resolved scheme (handles the 'system' preference), same source the
+  // terminal header uses for its own background.
+  const isDark = theme.palette.mode === 'dark';
   const fg = isDark ? theme.palette.common.white : theme.palette.common.black;
   const bg = isDark ? theme.palette.grey[900] : theme.palette.grey[50];
 

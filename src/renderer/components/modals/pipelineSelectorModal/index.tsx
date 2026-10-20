@@ -27,12 +27,14 @@ import { useListPipelines } from '../../../controllers';
 import { Project } from '../../../../types/backend';
 import { projectsServices } from '../../../services';
 import { getFileStatus, isFileUnpushed } from '../../../services/git.service';
+import { path, toPosix } from '../../../lib/path';
 
 interface PipelineSelectorModalProps {
   isOpen: boolean;
   onClose: () => void;
   project: Project;
   onSelect: (pipeline: { name: string; path: string }) => void;
+  onCreated?: (filePath: string) => void;
   mode?: 'local' | 'cloud';
 }
 
@@ -56,6 +58,7 @@ export const PipelineSelectorModal: React.FC<PipelineSelectorModalProps> = ({
   onClose,
   project,
   onSelect,
+  onCreated,
   mode = 'local',
 }) => {
   const theme = useTheme();
@@ -97,9 +100,8 @@ export const PipelineSelectorModal: React.FC<PipelineSelectorModalProps> = ({
     setFileStatus(null);
     setIsUnpushed(false);
 
-    const relativePath = pipeline.path
-      .replace(project.path, '')
-      .replace(/^[/\\]/, '');
+    // git wants a `/`-separated path relative to the repo root
+    const relativePath = toPosix(path.relative(project.path, pipeline.path));
 
     Promise.all([
       getFileStatus(project.path, relativePath),
@@ -157,6 +159,7 @@ export const PipelineSelectorModal: React.FC<PipelineSelectorModalProps> = ({
         toast.success('Pipeline created successfully.');
         await refetch();
         setSelected('pipeline');
+        onCreated?.(pipelinePath);
         return;
       }
 
@@ -178,12 +181,14 @@ export const PipelineSelectorModal: React.FC<PipelineSelectorModalProps> = ({
           'Pipeline created and committed, but push failed. Please push manually before running on cloud.',
         );
         await refetch();
+        onCreated?.(pipelinePath);
         return;
       }
 
       toast.success('Pipeline created, committed, and pushed.');
       await refetch();
       setSelected('pipeline');
+      onCreated?.(pipelinePath);
     } catch (error) {
       const msg =
         error instanceof Error ? error.message : 'Failed to create pipeline';

@@ -22,27 +22,40 @@ import {
 import {
   CloudLogEntry,
   CloudPipelineData,
+  CloudRunStarted,
   isTerminalActionStatus,
 } from '../../types/cloudAction';
 import { rosettaCloudServices } from '../services';
 import { QUERY_KEYS } from '../config/constants';
+import { useCloudRuns } from '../context/CloudRunProvider';
 
 export const usePushProjectToCloud = (
   customOptions?: UseMutationOptions<
-    unknown,
+    CloudRunStarted,
     CustomError,
     CloudDeploymentPayload
   >,
-): UseMutationResult<unknown, CustomError, CloudDeploymentPayload> => {
+): UseMutationResult<CloudRunStarted, CustomError, CloudDeploymentPayload> => {
   const { onSuccess: onCustomSuccess, onError: onCustomError } =
     customOptions || {};
   const queryClient = useQueryClient();
+  const { publishStarted } = useCloudRuns();
   return useMutation({
     mutationFn: async (data) => {
       return rosettaCloudServices.pushProjectToCloud(data);
     },
     onSuccess: async (...args) => {
+      const [started] = args;
       toast.success('Cloud run started successfully');
+      // Publishing is what surfaces the run: the cloud-logs panel and the
+      // pipeline graph subscribe by key / active run, no caller wires them.
+      if (started?.actionId) {
+        publishStarted({
+          actionId: started.actionId,
+          projectId: started.projectId,
+          pipelineFile: started.pipelineFile,
+        });
+      }
       // GET_SELECTED_PROJECT invalidation refreshes the project row from
       // database.json — that's where pipelineRuns now lives, so the
       // CI/CD view picks up the freshly-recorded actionId.
@@ -241,33 +254,66 @@ const isActionFinishedFromStatus = (
   );
 };
 
+const LOG_POLL_MS = 3000;
+// How long to keep polling logs after the action reports terminal. The
+// status flips before the last lines are ingested into the log store, so
+// stopping on the flip itself drops the tail of every run.
+const LOG_DRAIN_MS = 15000;
+
 /**
  * Public log hook for the CI/CD view. Polls the same `/logs` endpoint the
  * cloud dashboard itself uses to display logs (rather than the SSE stream
  * endpoint, which nothing else in the product exercises) every 3s while the
- * action is still running, and stops once every step has settled into a
- * terminal state.
+ * action is running, then keeps draining for LOG_DRAIN_MS after it finishes
+ * so the final lines land before polling stops.
  */
 export const useCloudActionLogs = (actionId?: string | null) => {
   const { data: status } = useCloudActionStatus(actionId ?? null);
   const isFinished = isActionFinishedFromStatus(status);
 
-  const { data, error } = useQuery({
+  const [finishedAt, setFinishedAt] = React.useState<number | null>(null);
+  const [drainExpired, setDrainExpired] = React.useState(false);
+
+  // Reset the drain window per action.
+  React.useEffect(() => {
+    setFinishedAt(null);
+    setDrainExpired(false);
+  }, [actionId]);
+
+  const { data, error, refetch } = useQuery({
     queryKey: ['cloudActionLogs', actionId],
     queryFn: () =>
       actionId
         ? rosettaCloudServices.getActionLogs(actionId)
         : Promise.resolve([] as CloudLogEntry[]),
     enabled: !!actionId,
-    refetchInterval: isFinished ? false : 3000,
+    refetchInterval: !isFinished || !drainExpired ? LOG_POLL_MS : false,
   });
+
+  // On the running → finished transition fetch immediately (don't wait for
+  // the next tick) and mark when the drain window started.
+  React.useEffect(() => {
+    if (!isFinished || finishedAt !== null) return;
+    setFinishedAt(Date.now());
+    refetch();
+  }, [isFinished, finishedAt, refetch]);
+
+  // The drain timer lives in its own effect so the state update above
+  // doesn't tear it down before it fires.
+  React.useEffect(() => {
+    if (finishedAt === null) return undefined;
+    const handle = setTimeout(() => setDrainExpired(true), LOG_DRAIN_MS);
+    return () => clearTimeout(handle);
+  }, [finishedAt]);
+
+  const isSettled = isFinished && drainExpired;
 
   return {
     logs: data ?? [],
     error: error
       ? ((error as CustomError)?.message ?? 'Failed to fetch logs')
       : null,
-    mode: isFinished ? ('static' as const) : ('stream' as const),
+    mode: isSettled ? ('static' as const) : ('stream' as const),
   };
 };
 

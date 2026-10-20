@@ -41,8 +41,9 @@ test.describe('Connections', () => {
 
     const card = connectionCard(window, 'test_db');
     await expect(card).toBeVisible();
-    await expect(card.getByText('DuckDB')).toBeVisible();
-    await expect(card.getByText('Path: :memory:')).toBeVisible();
+    // exact: the path line "Path: test_db.duckdb" would otherwise match too
+    await expect(card.getByText('DuckDB', { exact: true })).toBeVisible();
+    await expect(card.getByText('Path: test_db.duckdb')).toBeVisible();
     await expect(card.getByText('Used by projects:')).toBeVisible();
     await expect(card.getByText(PROJECT)).toBeVisible();
   });
@@ -95,6 +96,7 @@ test.describe('Connections', () => {
       'DuckDB',
       'SQLite',
       'Kinetica',
+      'IBM Db2',
     ]) {
       // eslint-disable-next-line no-await-in-loop
       await expect(

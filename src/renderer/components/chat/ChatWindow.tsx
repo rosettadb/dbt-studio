@@ -23,6 +23,8 @@ import { ReactComponent as MCPServersIcon } from '../../assets/icons/lucide/netw
 import { ReactComponent as SkillsIcon } from '../../assets/icons/lucide/blocks.svg';
 import { ReactComponent as MemoriesIcon } from '../../assets/icons/lucide/brain-circuit.svg';
 import { useAppContext } from '../../hooks';
+import { useRefreshProjectFiles } from '../../hooks/useRefreshProjectFiles';
+import { useTabs } from '../../context/TabsProvider';
 import { useGetSelectedProject } from '../../controllers';
 import {
   useCreateChatSession,
@@ -55,6 +57,7 @@ import {
 } from '../../controllers/agent.controller';
 import { useGetFileContent } from '../../controllers/projects.controller';
 import { projectsServices } from '../../services';
+import { path as nodePath } from '../../lib/path';
 import {
   releaseFileMutations,
   restoreFileMutation,
@@ -138,8 +141,9 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   projectId: propProjectId,
   onClose,
 }) => {
-  const { setIsChatOpen, openFile, closeFile, refreshFileTree } =
-    useAppContext();
+  const { setIsChatOpen } = useAppContext();
+  const { openFile, closeTabByPath: closeFile } = useTabs();
+  const refreshFileTree = useRefreshProjectFiles();
   const { data: project } = useGetSelectedProject();
   const projectId =
     propProjectId !== undefined
@@ -177,7 +181,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   // Load canonical project-specific AI context on the project screen only.
   const projectAgentContextPath =
     screenKey === 'project' && project?.path
-      ? `${project.path}/${PROJECT_AGENT_CONTEXT_FILE}`
+      ? nodePath.join(project.path, PROJECT_AGENT_CONTEXT_FILE)
       : undefined;
   const projectMemoryEnabled =
     screenKey === 'project' && projectId !== undefined && projectId !== null
@@ -658,7 +662,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
 
         if (!filePath) return;
 
-        const name = filePath.split('/').pop() ?? filePath;
+        const name = nodePath.basename(filePath) || filePath;
         const alreadyAdded = contextManager.additionalFiles.some(
           (f) => f.path === filePath,
         );
@@ -756,7 +760,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   ]);
 
   const handleOpenFile = (path: string) => {
-    openFile?.(path);
+    openFile(path);
   };
 
   const renderMessages = () => {
@@ -929,9 +933,9 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
 
                   successfulFiles
                     .filter((file) => file.discard.action === 'delete')
-                    .forEach((file) => closeFile?.(file.path));
+                    .forEach((file) => closeFile(file.path));
                   try {
-                    await refreshFileTree?.();
+                    await refreshFileTree();
                   } catch {
                     toast.warning(
                       'File changes were discarded, but the project tree could not be refreshed.',
@@ -949,7 +953,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
                       ]),
                     ),
                   );
-                  restoredFiles.forEach((file) => openFile?.(file.path));
+                  restoredFiles.forEach((file) => openFile(file.path));
                 }
 
                 if (failureCount > 0) {

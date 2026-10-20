@@ -1,9 +1,10 @@
 import { useQuery } from 'react-query';
 import { useMemo } from 'react';
-import useAppContext from './useAppContext';
+import { useTabs } from '../context/TabsProvider';
 import { useGetSelectedProject } from '../controllers';
 import { chatService } from '../services/chat.service';
 import { QUERY_KEYS } from '../config/constants';
+import { path } from '../lib/path';
 import type { CustomError } from '../../types/backend';
 // Using any for now since we have a type mismatch between resolved context and database context
 type ResolvedContextItem = any;
@@ -13,7 +14,7 @@ type ResolvedContextItem = any;
  * This provides GitHub Copilot-like automatic context inclusion
  */
 export const useSelectedFileContext = () => {
-  const { editingFilePath } = useAppContext();
+  const { activeFilePath: editingFilePath } = useTabs();
   const { data: project } = useGetSelectedProject();
 
   // Query for selected file context with caching and stale time
@@ -64,9 +65,7 @@ export const useSelectedFileContext = () => {
 
       // File information
       selectedFilePath: editingFilePath,
-      selectedFileName: editingFilePath
-        ? editingFilePath.split('/').pop() || ''
-        : '',
+      selectedFileName: editingFilePath ? path.basename(editingFilePath) : '',
 
       // Project information
       projectPath: project?.path,

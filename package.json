@@ -1,5 +1,5 @@
 {
-  "version": "1.7.2",
+  "version": "1.7.3",
   "name": "rosetta-dbt-studio",
   "description": "Turn Raw Data into Business Insights—Faster with RosettaDB",
   "keywords": [
@@ -276,7 +276,11 @@
       }
     ],
     "asar": true,
-    "asarUnpack": "**\\*.{node,dll}",
+    "asarUnpack": [
+      "**\\*.{node,dll}",
+      "**/node_modules/ibm_db/build/Release/**",
+      "**/node_modules/ibm_db/installer/clidriver/**"
+    ],
     "files": [
       "dist",
       "node_modules",
@@ -320,7 +324,9 @@
     "linux": {
       "target": [
         "deb",
-        "flatpak"
+        "rpm",
+        "flatpak",
+        "tar.gz"
       ],
       "category": "Development",
       "maintainer": "RosettaDB",
@@ -335,13 +341,17 @@
       "baseVersion": "24.08",
       "finishArgs": [
         "--socket=wayland",
-        "--socket=x11",
+        "--socket=fallback-x11",
         "--share=ipc",
         "--device=dri",
         "--socket=pulseaudio",
-        "--filesystem=host",
+        "--filesystem=home",
         "--share=network",
-        "--talk-name=org.freedesktop.Notifications"
+        "--talk-name=org.freedesktop.Notifications",
+        "--talk-name=org.freedesktop.Flatpak",
+        "--talk-name=org.freedesktop.secrets",
+        "--socket=ssh-auth",
+        "--socket=gpg-agent"
       ]
     },
     "directories": {

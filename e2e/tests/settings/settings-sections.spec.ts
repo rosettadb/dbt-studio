@@ -18,7 +18,8 @@ const openSettings = async (electronApp: Parameters<typeof openProject>[0]) => {
   const window = await openProject(electronApp, PROJECT);
   const nav = new NavigationSidebarComponent(window);
   await nav.goToSettings();
-  await expect(window.getByLabel('Projects Directory')).toBeVisible();
+  // The field has no <label>; the row title is plain text, so target the input
+  await expect(window.locator('input#projectsDirectory')).toBeVisible();
   return window;
 };
 
@@ -34,11 +35,12 @@ test.describe('Settings', () => {
     const window = await openSettings(electronApp);
 
     await expect.poll(() => window.url()).toContain('/app/settings/general');
-    await expect(window.getByLabel('Projects Directory')).toHaveValue(
+    await expect(window.getByText('Projects directory')).toBeVisible();
+    await expect(window.locator('input#projectsDirectory')).toHaveValue(
       /projects$/,
     );
     expect(userData.length).toBeGreaterThan(0);
-    await expect(window.getByText('Current Installation')).toBeVisible();
+    await expect(window.getByText('Current version')).toBeVisible();
     await expect(
       window.getByRole('button', { name: 'Check for Updates' }),
     ).toBeVisible();
@@ -118,7 +120,7 @@ test.describe('Settings', () => {
 
     await expect(window.getByText('No AI Providers Configured')).toBeVisible();
     await expect(
-      window.getByRole('button', { name: 'Add Your First Provider' }),
+      window.getByRole('button', { name: 'Add Provider' }),
     ).toBeVisible();
     await expect(window.getByRole('tab', { name: 'Providers' })).toBeVisible();
     await expect(

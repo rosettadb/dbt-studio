@@ -23,6 +23,7 @@ import {
 } from '../../controllers';
 import { UpdateSettingsInfo } from '../../../types/backend';
 import { sanitizeHtml } from '../../utils/sanitizeHtml';
+import { getPlatform } from '../../lib/path';
 import { SettingsRow, SettingsSection } from './SettingsLayout';
 
 // Error types for better error handling
@@ -214,7 +215,7 @@ const InstallationSettings: React.FC = () => {
       const appInfo = window.electron?.app;
 
       const detectOS = () => {
-        const osFromMain = appInfo?.os?.toLowerCase();
+        const osFromMain = getPlatform();
         if (osFromMain === 'darwin') return 'macOS';
         if (osFromMain === 'win32') return 'Windows';
         if (osFromMain === 'linux') return 'Linux';

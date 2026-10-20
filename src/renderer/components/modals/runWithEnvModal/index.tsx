@@ -288,7 +288,7 @@ export const RunWithEnvModal: React.FC<RunWithEnvModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Run with env"
+      title="Run"
       actions={
         <>
           <Button onClick={onClose} disabled={isRunning}>

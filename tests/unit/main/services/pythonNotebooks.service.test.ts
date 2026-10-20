@@ -388,7 +388,7 @@ describe('PythonNotebooksService', () => {
     // The query is wrapped so the database returns at most cap + 1 rows
     expect(executeQueryForConnection).toHaveBeenCalledWith({
       connectionId,
-      query: 'SELECT * FROM (\nselect * from t\n) AS _rs LIMIT 100001',
+      query: 'SELECT * FROM (\nselect * from t\n) AS rs_result LIMIT 100001',
     });
 
     const [, cellId, code] = (kernelService.execute as jest.Mock).mock.calls[0];
@@ -419,7 +419,7 @@ describe('PythonNotebooksService', () => {
       .catch(() => undefined);
     expect(duckLakeExecuteQuery).toHaveBeenCalledWith({
       instanceId: 'inst',
-      query: 'SELECT * FROM (\nselect 1 as n\n) AS _rs LIMIT 100001',
+      query: 'SELECT * FROM (\nselect 1 as n\n) AS rs_result LIMIT 100001',
     });
   });
 
@@ -463,7 +463,7 @@ describe('PythonNotebooksService', () => {
     expect(executeQueryForConnection).toHaveBeenCalledTimes(1);
     expect(executeQueryForConnection).toHaveBeenLastCalledWith({
       connectionId,
-      query: 'SELECT * FROM (\nselect * from nope\n) AS _rs LIMIT 100001',
+      query: 'SELECT * FROM (\nselect * from nope\n) AS rs_result LIMIT 100001',
     });
 
     executeQueryForConnection.mockResolvedValueOnce({
@@ -615,7 +615,8 @@ describe('PythonNotebooksService', () => {
       ));
     });
 
-    const wrap = (sql: string) => `SELECT * FROM (\n${sql}\n) AS _rs LIMIT 11`;
+    const wrap = (sql: string) =>
+      `SELECT * FROM (\n${sql}\n) AS rs_result LIMIT 11`;
 
     it('wraps single SELECT and WITH statements', () => {
       expect(boundSqlQuery('select * from t', 11)).toBe(
