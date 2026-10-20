@@ -136,7 +136,7 @@ const WRITE_WORDS =
 // One left-to-right pass, so whichever token starts first wins: a quote inside
 // a comment, or comment markers inside a literal, cannot confuse the masking.
 const SQL_NOISE =
-  /\/\*[\s\S]*?(?:\*\/|$)|--[^\n]*|\$([A-Za-z_]*)\$[\s\S]*?\$\1\$|'(?:[^']|'')*(?:'|$)|"(?:[^"]|"")*(?:"|$)/g;
+  /\/\*[\s\S]*?(?:\*\/|$)|--[^\n]*|\$([A-Za-z_][A-Za-z0-9_]*|)\$[\s\S]*?\$\1\$|'(?:[^']|'')*(?:'|$)|"(?:[^"]|"")*(?:"|$)/g;
 
 function stripSqlNoise(sql: string): string {
   return sql.replace(SQL_NOISE, (m) => {
