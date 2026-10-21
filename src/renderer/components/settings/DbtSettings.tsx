@@ -714,11 +714,17 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
       const isInstalled = item.isInstalled || installed === item.version;
       const isLatest = item.isLatestStable;
 
+      const isOtherRuntime =
+        !!installed &&
+        item.version.startsWith('2.') !== installed.startsWith('2.');
+
       let actionLabel = installed ? 'Downgrade' : 'Install';
       if (isInstalled) {
-        actionLabel = 'Installed';
+        actionLabel = 'Active';
       } else if (item.isPrerelease) {
         actionLabel = 'Install Preview';
+      } else if (isOtherRuntime) {
+        actionLabel = 'Switch to this version';
       } else if (
         installed &&
         compareSimpleVersions(item.version, installed) > 0

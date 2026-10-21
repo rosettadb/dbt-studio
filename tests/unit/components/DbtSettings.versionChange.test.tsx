@@ -148,7 +148,7 @@ describe('DbtSettings runtime switch', () => {
   const clickNewestV2Version = async () => {
     fireEvent.click(runtimeToggle('v2'));
     const [newestV2Action] = await screen.findAllByRole('button', {
-      name: 'Upgrade',
+      name: 'Switch to this version',
     });
     fireEvent.click(newestV2Action);
   };
@@ -208,7 +208,7 @@ describe('DbtSettings runtime switch', () => {
       expect(screen.getByText(version)).toBeInTheDocument();
     });
     expect(screen.queryByText('1.12.0rc2')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Installed' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Active' })).toBeDisabled();
   });
 
   it('explains a v1 to v2 switch before installing', async () => {
