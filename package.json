@@ -288,6 +288,7 @@
       "!**/node_modules/oracledb/build/**",
       "package.json"
     ],
+    "afterPack": ".erb/scripts/after-pack.js",
     "afterSign": ".erb/scripts/notarize.js",
     "mac": {
       "notarize": false,
