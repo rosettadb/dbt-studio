@@ -132,10 +132,11 @@ export const useGetLocalChanges = (
   >,
 ) => {
   return useQuery({
-    queryKey: [QUERY_KEYS.GIT_LOCAL_CHANGES],
+    queryKey: [QUERY_KEYS.GIT_LOCAL_CHANGES, path],
     queryFn: async () => {
       return gitServices.getLocalChanges(path);
     },
+    enabled: !!path,
     ...customOptions,
   });
 };
@@ -149,10 +150,11 @@ export const useGetRepoInfo = (
   >,
 ) => {
   return useQuery({
-    queryKey: [QUERY_KEYS.GIT_REPO_INFO],
+    queryKey: [QUERY_KEYS.GIT_REPO_INFO, path],
     queryFn: async () => {
       return gitServices.getRepoInfo(path);
     },
+    enabled: !!path,
     ...customOptions,
   });
 };

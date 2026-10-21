@@ -118,9 +118,17 @@ You are connected to a DuckLake lakehouse. DuckLake is a DuckDB extension (not a
       connectionHints =
         '\n\n## Dialect Specifics\nYou are connected to Databricks. Ensure all queries use Databricks/Spark SQL syntax and functions.';
       break;
+    case 'oracle':
+      connectionHints =
+        '\n\n## Oracle SQL\nUse FETCH FIRST n ROWS ONLY (no LIMIT); no AS before table aliases; unquoted identifiers are uppercase; dummy table is DUAL; do not end SQL with a semicolon; use DATE literals or TO_DATE; strings are VARCHAR2.';
+      break;
     case 'kinetica':
       connectionHints =
         '\n\n## Dialect Specifics\nYou are connected to Kinetica. Ensure all queries use Kinetica SQL syntax and functions.';
+      break;
+    case 'db2':
+      connectionHints =
+        '\n\n## Dialect Specifics\nYou are connected to IBM Db2 for LUW. Use Db2 SQL: limit rows with `FETCH FIRST n ROWS ONLY`, the dummy table is `SYSIBM.SYSDUMMY1`, unquoted identifiers fold to uppercase, and catalog metadata lives in `SYSCAT` views.';
       break;
     default:
       connectionHints = `\n\n## Dialect Specifics\nYou are connected to a ${connectionMeta.type} database. Ensure all queries use the correct dialect for this database.`;

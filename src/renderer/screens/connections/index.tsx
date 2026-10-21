@@ -268,6 +268,8 @@ const Connections: React.FC = () => {
         return 'Databricks';
       case 'duckdb':
         return 'DuckDB';
+      case 'oracle':
+        return 'Oracle';
       case 'mysql':
         return 'MySQL';
       default:
@@ -362,6 +364,7 @@ const Connections: React.FC = () => {
     switch (connection.type) {
       case 'postgres':
       case 'redshift':
+      case 'db2':
         return (
           <Typography variant="body2" color="text.secondary">
             Host: {connection.host}:{connection.port}
@@ -385,6 +388,18 @@ const Connections: React.FC = () => {
             Host: {connection.host}
           </Typography>
         );
+      case 'oracle': {
+        let description = 'Connect string';
+        if (connection.connectMode === 'basic')
+          description = `Service: ${connection.serviceName} · ${connection.host}:${connection.port}`;
+        if (connection.connectMode === 'wallet')
+          description = `Wallet alias: ${connection.connectString}`;
+        return (
+          <Typography variant="body2" color="text.secondary">
+            {description}
+          </Typography>
+        );
+      }
       case 'duckdb':
       case 'sqlite':
         return (

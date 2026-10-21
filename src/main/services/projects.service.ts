@@ -1269,6 +1269,9 @@ export default class ProjectsService {
     }
 
     switch (connection.type) {
+      case 'oracle':
+        return (await ConnectorsService.extractSchemaFromConnection(conn.id))
+          .tables;
       case 'postgres':
         return this.extractPgSchema(connection as PostgresConnection);
       case 'redshift':

@@ -23,6 +23,8 @@ import { ReactComponent as MCPServersIcon } from '../../assets/icons/lucide/netw
 import { ReactComponent as SkillsIcon } from '../../assets/icons/lucide/blocks.svg';
 import { ReactComponent as MemoriesIcon } from '../../assets/icons/lucide/brain-circuit.svg';
 import { useAppContext } from '../../hooks';
+import { useRefreshProjectFiles } from '../../hooks/useRefreshProjectFiles';
+import { useTabs } from '../../context/TabsProvider';
 import { useGetSelectedProject } from '../../controllers';
 import {
   useCreateChatSession,
@@ -139,8 +141,9 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   projectId: propProjectId,
   onClose,
 }) => {
-  const { setIsChatOpen, openFile, closeFile, refreshFileTree } =
-    useAppContext();
+  const { setIsChatOpen } = useAppContext();
+  const { openFile, closeTabByPath: closeFile } = useTabs();
+  const refreshFileTree = useRefreshProjectFiles();
   const { data: project } = useGetSelectedProject();
   const projectId =
     propProjectId !== undefined
@@ -757,7 +760,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   ]);
 
   const handleOpenFile = (path: string) => {
-    openFile?.(path);
+    openFile(path);
   };
 
   const renderMessages = () => {
@@ -930,9 +933,9 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
 
                   successfulFiles
                     .filter((file) => file.discard.action === 'delete')
-                    .forEach((file) => closeFile?.(file.path));
+                    .forEach((file) => closeFile(file.path));
                   try {
-                    await refreshFileTree?.();
+                    await refreshFileTree();
                   } catch {
                     toast.warning(
                       'File changes were discarded, but the project tree could not be refreshed.',
@@ -950,7 +953,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
                       ]),
                     ),
                   );
-                  restoredFiles.forEach((file) => openFile?.(file.path));
+                  restoredFiles.forEach((file) => openFile(file.path));
                 }
 
                 if (failureCount > 0) {

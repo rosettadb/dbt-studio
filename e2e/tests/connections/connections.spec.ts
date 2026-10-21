@@ -90,12 +90,14 @@ test.describe('Connections', () => {
     for (const type of [
       'PostgreSQL',
       'Snowflake',
+      'Oracle',
       'BigQuery',
       'Redshift',
       'Databricks',
       'DuckDB',
       'SQLite',
       'Kinetica',
+      'IBM Db2',
     ]) {
       // eslint-disable-next-line no-await-in-loop
       await expect(

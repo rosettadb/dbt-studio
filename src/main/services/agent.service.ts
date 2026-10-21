@@ -33,6 +33,11 @@ import type {
 } from '../schemas/mainDatabase.schema';
 import type { AISettingsConfig } from '../../types/backend';
 import type {
+  PythonNotebookAgentArgs,
+  PythonNotebookAgentOp,
+  PythonNotebookAgentResult,
+} from '../../types/pythonNotebooks';
+import type {
   ChatStreamChunkPayload,
   AgentContextUsagePayload,
   AgentContextCompactedPayload,
@@ -210,6 +215,8 @@ const pendingEditorBridgeRequests = new Map<
     type: 'read' | 'update';
   }
 >();
+
+const NOTEBOOK_BRIDGE_TIMEOUT_MS = 15_000;
 
 const pendingNotebookBridgeRequests = new Map<
   string,
@@ -651,6 +658,7 @@ class AgentService {
     requestChannel: string,
     responseChannel: string,
     payload: object = {},
+    options: { timeoutMs?: number; timeoutMessage?: string } = {},
   ): Promise<any> {
     const context = this.getAgentContext(conversationId);
     if (!context) {
@@ -665,9 +673,12 @@ class AgentService {
       const timeout = setTimeout(() => {
         pendingNotebookBridgeRequests.delete(requestId);
         reject(
-          new Error(`Timed out waiting for ${type} response from renderer`),
+          new Error(
+            options.timeoutMessage ??
+              `Timed out waiting for ${type} response from renderer`,
+          ),
         );
-      }, 15000);
+      }, options.timeoutMs ?? NOTEBOOK_BRIDGE_TIMEOUT_MS);
 
       pendingNotebookBridgeRequests.set(requestId, {
         resolve,
@@ -700,6 +711,36 @@ class AgentService {
     } else {
       request.reject(new Error(payload.error || 'Renderer request failed'));
     }
+  }
+
+  /**
+   * Python notebook agent bridge: runs one typed op in the open
+   * PythonNotebookEditor. The notebook id comes from the agent context, never
+   * from tool input, and the editor answers only for its own notebook.
+   */
+  public static async requestPythonNotebook<K extends PythonNotebookAgentOp>(
+    conversationId: number,
+    op: K,
+    args: PythonNotebookAgentArgs<K>,
+    timeoutMs: number = NOTEBOOK_BRIDGE_TIMEOUT_MS,
+  ): Promise<PythonNotebookAgentResult<K>> {
+    const context = this.getAgentContext(conversationId);
+    if (!context?.notebookId) {
+      throw new Error('No notebook is open in this chat.');
+    }
+    const response = await this.requestNotebookBridge(
+      conversationId,
+      op,
+      'agent:python-notebook:request',
+      'agent:python-notebook:response',
+      { notebookId: context.notebookId, op, args },
+      {
+        timeoutMs,
+        timeoutMessage:
+          "The notebook didn't answer. Make sure it's open in the Notebooks screen.",
+      },
+    );
+    return response.data as PythonNotebookAgentResult<K>;
   }
 
   public static async requestNotebookState(conversationId: number) {
@@ -1563,6 +1604,9 @@ COMBINED SUMMARY:`,
             notebookId: request.notebookId,
             connectionId: request.connectionId,
             enabledTools: agentEnabledTools,
+            disabledTools: Object.entries(aiSettings.tools ?? {})
+              .filter(([, enabled]) => enabled === false)
+              .map(([name]) => name),
             skills: base.skillsPrompt,
             conversationId,
             toolMode: request.toolMode || 'agent',
@@ -1888,14 +1932,23 @@ COMBINED SUMMARY:`,
                   ...notebookCells
                     .slice(0, 3)
                     .map((cell: any, index: number) => {
+                      // Python notebooks: preview / output label; legacy SQL: contentPreview / hasOutput
                       const preview =
-                        cell.contentPreview || cell.content || '(empty cell)';
-                      const outputText = cell.hasOutput
-                        ? ` Output is available${typeof cell.outputRowCount === 'number' ? ` (${cell.outputRowCount} rows loaded)` : ''}.`
-                        : ' No output is currently available.';
+                        cell.preview ||
+                        cell.contentPreview ||
+                        cell.content ||
+                        '(empty cell)';
+                      let outputText = ' No output is currently available.';
+                      if (typeof cell.output === 'string' && cell.output) {
+                        outputText = ` Output: ${cell.output}.`;
+                      } else if (cell.hasOutput) {
+                        outputText = ` Output is available${typeof cell.outputRowCount === 'number' ? ` (${cell.outputRowCount} rows loaded)` : ''}.`;
+                      }
                       return `Cell ${index + 1} is ${cell.type || 'unknown'}: \`${String(preview).trim()}\`.${outputText}`;
                     }),
-                  'I do not see a notebook execution error in the state returned by the tool.',
+                  notebookCells.some((cell: any) => cell.status === 'error')
+                    ? 'At least one cell has an error output.'
+                    : 'I do not see a notebook execution error in the state returned by the tool.',
                 ].join(' ')
               : null;
           const fallback =

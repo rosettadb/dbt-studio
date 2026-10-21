@@ -88,6 +88,8 @@ export interface AgentTerminalConfirmPayload {
   toolName: string;
   command: string;
   cwd: string;
+  /** Set when the user may allow this kind of request for the rest of the chat */
+  allowScope?: string;
 }
 
 export interface AgentContextUsagePayload {

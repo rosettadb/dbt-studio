@@ -16,6 +16,7 @@ import { SnowflakeAuthManager } from '../utils/snowflakeAuth';
 const handlerChannels = [
   'connector:configure',
   'connector:test',
+  'connector:oracleWalletAliases',
   'connector:validate',
   'connector:getJdbcUrl',
   'connector:query',
@@ -40,6 +41,9 @@ const removeConnectorsIpcHandlers = () => {
 
 const registerConnectorsHandlers = () => {
   removeConnectorsIpcHandlers();
+  ipcMain.handle('connector:oracleWalletAliases', (_event, walletDir: string) =>
+    ConnectorsService.oracleWalletAliases(walletDir),
+  );
   ipcMain.handle(
     'connector:configure',
     async (_event, body: ConfigureConnectionBody) => {

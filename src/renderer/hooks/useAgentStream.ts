@@ -64,6 +64,8 @@ export interface TerminalConfirmRequest {
   toolName: string;
   command: string;
   cwd: string;
+  /** Set when the banner may offer "Allow for this chat" */
+  allowScope?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -157,6 +159,11 @@ export const useAgentStream = (sessionId: number | undefined) => {
   useEffect(() => {
     stateRef.current = streamState;
   }, [streamState]);
+
+  const sessionIdRef = useRef(sessionId);
+  useEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
 
   // Reset state when the session changes
   useEffect(() => {
@@ -321,6 +328,7 @@ export const useAgentStream = (sessionId: number | undefined) => {
           toolName: data.toolName,
           command: data.command,
           cwd: data.cwd,
+          ...(data.allowScope ? { allowScope: data.allowScope } : {}),
         };
         const newQueue = [...prev.confirmQueue, newItem];
         return {
@@ -446,26 +454,38 @@ export const useAgentStream = (sessionId: number | undefined) => {
     }
   }, [sessionId]);
 
-  const confirmTerminal = useCallback(async (allow: boolean) => {
-    const p = stateRef.current.pendingConfirm;
-    if (!p) return;
-    try {
-      await agentService.resolveTerminalConfirm(p.requestId, allow);
-      setStreamState((prev) => {
-        const remaining = prev.confirmQueue.filter(
-          (item) => item.requestId !== p.requestId,
-        );
-        return {
-          ...prev,
-          confirmQueue: remaining,
-          pendingConfirm: remaining.length > 0 ? remaining[0] : null,
-        };
-      });
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error(e);
-    }
-  }, []);
+  const confirmTerminal = useCallback(
+    async (allow: boolean, remember = false) => {
+      const p = stateRef.current.pendingConfirm;
+      if (!p) return;
+      const startedIn = sessionIdRef.current;
+      try {
+        await agentService.resolveTerminalConfirm(p.requestId, allow, remember);
+        // The user switched chats while this was pending: the queue now
+        // belongs to another chat, so leave it alone.
+        if (sessionIdRef.current !== startedIn) return;
+        // "Allow for this chat" also answers queued requests of the same
+        // kind (main resolves them), so drop their banners.
+        const grantScope = allow && remember ? p.allowScope : undefined;
+        setStreamState((prev) => {
+          const remaining = prev.confirmQueue.filter(
+            (item) =>
+              item.requestId !== p.requestId &&
+              !(grantScope && item.allowScope === grantScope),
+          );
+          return {
+            ...prev,
+            confirmQueue: remaining,
+            pendingConfirm: remaining.length > 0 ? remaining[0] : null,
+          };
+        });
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error(e);
+      }
+    },
+    [],
+  );
 
   const clearError = useCallback(() => {
     setStreamState((prev) => ({ ...prev, error: null }));

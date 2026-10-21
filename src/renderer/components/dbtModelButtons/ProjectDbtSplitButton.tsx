@@ -14,8 +14,14 @@ import {
   DbtCommandType,
   Project,
 } from '../../../types/backend';
-import { useDbt, useProcess, useRunner } from '../../hooks';
-import { useCloudActionStatus, useGetSettings } from '../../controllers';
+import { useAppContext, useDbt, useProcess, useRosettaDBT } from '../../hooks';
+import { useRefreshProjectFiles } from '../../hooks/useRefreshProjectFiles';
+import { useTabs } from '../../context/TabsProvider';
+import {
+  useCloudActionStatus,
+  useGetConnectionById,
+  useGetSettings,
+} from '../../controllers';
 import { isTerminalActionStatus } from '../../../types/cloudAction';
 import {
   StagingModal,
@@ -23,43 +29,32 @@ import {
   RawLayerModal,
   PushToCloudModal,
   PipelineSelectorModal,
+  RunWithEnvModal,
 } from '../modals';
 import { path } from '../../lib/path';
 
 interface ProjectDbtSplitButtonProps {
-  rosettaPath?: string;
-  dbtPath?: string;
   project: Project;
-  isDbtConfigured: boolean;
-  isRunningDbt: boolean;
-  isRunningRosettaDbt: boolean;
-  connection?: any;
-  environment?: 'local' | 'cloud';
-  onBeforeExecute?: () => void;
-  // Called once a local pipeline run has successfully started (distinct
-  // from onBeforeExecute, which switches to the plain terminal tab) so the
-  // terminal panel can expand to the runner logs tab instead.
-  onLocalRunStarted?: () => void;
-  onLocalPipelineSelected?: (pipelineRelativePath: string) => void;
-  // Function handlers that are used elsewhere in ProjectDetails
-  rosettaDbt: (project: Project, command: Command) => Promise<void>;
 }
 
+// Project-level dbt / Rosetta / pipeline actions. Self-contained: it reads
+// settings, environment and the project's connection itself, refreshes the
+// file tree through the shared query cache, and opens files through the tabs
+// store. Which bottom panel surfaces a run is decided by the panels
+// subscribing to the CLI / cloud-run / runner stores, not here.
 export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
-  rosettaPath,
-  dbtPath,
   project,
-  isDbtConfigured,
-  isRunningDbt,
-  isRunningRosettaDbt,
-  connection,
-  environment = 'local',
-  onBeforeExecute,
-  onLocalRunStarted,
-  onLocalPipelineSelected,
-  rosettaDbt,
 }) => {
-  // Functions that are only used in this component - moved inside
+  const { data: settings } = useGetSettings();
+  const { env: environment } = useAppContext();
+  const { data: connection } = useGetConnectionById(project.connectionId);
+  const refreshProjectFiles = useRefreshProjectFiles();
+  const { openFile } = useTabs();
+
+  const rosettaPath = settings?.rosettaPath;
+  const dbtPath = settings?.dbtPath;
+  const isDbtConfigured = Boolean(dbtPath);
+
   const [runInCloudModal, setRunInCloudModal] =
     React.useState<DbtCommandType>();
 
@@ -73,12 +68,20 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
     docsGenerate: dbtDocsGenerate,
     deps: dbtDeps,
     seed: dbtSeed,
-  } = useDbt(undefined, (command) => {
+    isRunning: isRunningDbt,
+  } = useDbt(refreshProjectFiles, (command) => {
     setRunInCloudModal(command);
   });
+  const { fn: rosettaDbt, isRunning: isRunningRosettaDbt } = useRosettaDBT(
+    async () => {
+      // Rosetta writes the generated layer a moment after the CLI returns.
+      await new Promise((resolve) => {
+        setTimeout(resolve, 2000);
+      });
+      await refreshProjectFiles();
+    },
+  );
   const { start, stop, isRunning } = useProcess();
-  const { run: runPipelineLocally } = useRunner();
-  const { data: settings } = useGetSettings();
   const isDbtV2 = !!settings?.dbtVersion?.startsWith('2.');
   const cloudV2Blocked = environment === 'cloud' && isDbtV2;
 
@@ -98,6 +101,9 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
   const [pipelineModal, setPipelineModal] = React.useState(false);
   const [pipelineArgs, setPipelineArgs] = React.useState('');
   const [localPipelineModal, setLocalPipelineModal] = React.useState(false);
+  const [localPipelineFile, setLocalPipelineFile] = React.useState<
+    string | null
+  >(null);
 
   React.useEffect(() => {
     setRawPath(project.rawLayerDir || path.join(project.path, 'models', 'raw'));
@@ -201,7 +207,6 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           toast.info('Please configure dbt path in settings');
           return;
         }
-        onBeforeExecute?.();
         dbtRun(project);
       },
       leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
@@ -215,7 +220,6 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           toast.info('Please configure dbt path in settings');
           return;
         }
-        onBeforeExecute?.();
         dbtTest(project);
       },
       leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
@@ -229,7 +233,6 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           toast.info('Please configure dbt path in settings');
           return;
         }
-        onBeforeExecute?.();
         dbtBuild(project);
       },
       leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
@@ -243,7 +246,6 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           toast.info('Please configure dbt path in settings');
           return;
         }
-        onBeforeExecute?.();
         dbtCompileProject(project);
       },
       leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
@@ -257,7 +259,6 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           toast.info('Please configure dbt path in settings');
           return;
         }
-        onBeforeExecute?.();
         dbtDebug(project);
       },
       leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
@@ -271,7 +272,6 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           toast.info('Please configure dbt path in settings');
           return;
         }
-        onBeforeExecute?.();
         dbtDocsGenerate(project);
       },
       leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
@@ -297,7 +297,6 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           stop();
           return;
         }
-        onBeforeExecute?.();
         start(
           `cd "${project.path}" && "${dbtPath}" docs serve`,
           connection?.connection?.name ?? '',
@@ -315,7 +314,6 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           toast.info('Please configure dbt path in settings');
           return;
         }
-        onBeforeExecute?.();
         dbtClean(project);
       },
       leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
@@ -329,7 +327,6 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           toast.info('Please configure dbt path in settings');
           return;
         }
-        onBeforeExecute?.();
         dbtDeps(project);
       },
       leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
@@ -343,7 +340,6 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           toast.info('Please configure dbt path in settings');
           return;
         }
-        onBeforeExecute?.();
         dbtSeed(project);
       },
       leftIcon: <Icon src={icons.dbtTm} width={16} height={16} />,
@@ -437,7 +433,6 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           project={project}
           processCallback={async (updatedPath) => {
             try {
-              onBeforeExecute?.();
               await rosettaDbt(project, {
                 command: 'extract',
                 commandType: CommandType.DBTNext,
@@ -465,7 +460,6 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
               args.set(' ', command);
             }
             try {
-              onBeforeExecute?.();
               await rosettaDbt(project, {
                 command: 'staging',
                 commandType: CommandType.DBTNext,
@@ -493,7 +487,6 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
               args.set(' ', command);
             }
             try {
-              onBeforeExecute?.();
               await rosettaDbt(project, {
                 commandType: CommandType.DBTNext,
                 command: 'incremental',
@@ -525,6 +518,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           onClose={() => setPipelineModal(false)}
           mode="cloud"
           project={project}
+          onCreated={openFile}
           onSelect={(pipeline) => {
             setPipelineModal(false);
             setPipelineArgs(`--pipeline_name ${pipeline.name}`);
@@ -538,6 +532,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           onClose={() => setLocalPipelineModal(false)}
           mode="local"
           project={project}
+          onCreated={openFile}
           onSelect={(pipeline) => {
             setLocalPipelineModal(false);
             if (!settings?.runnerPath) {
@@ -545,29 +540,17 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
               return;
             }
             const ext = pipeline.path.slice(pipeline.path.lastIndexOf('.'));
-            const pipelineRelativePath = `${pipeline.name}${ext}`;
-            if (onLocalPipelineSelected) {
-              onLocalPipelineSelected(pipelineRelativePath);
-            } else {
-              runPipelineLocally({
-                workspaceDir: project.path,
-                pipelineFile: pipelineRelativePath,
-                connectionName: connection?.connection?.name,
-              })
-                .then((result) => {
-                  if (result.success) {
-                    onLocalRunStarted?.();
-                    return toast.success(
-                      'Pipeline run started. Track progress in Task Manager.',
-                    );
-                  }
-                  return toast.error(
-                    result.error || 'Failed to start the pipeline run',
-                  );
-                })
-                .catch(() => {});
-            }
+            setLocalPipelineFile(`${pipeline.name}${ext}`);
           }}
+        />
+      )}
+      {localPipelineFile && (
+        <RunWithEnvModal
+          isOpen={!!localPipelineFile}
+          onClose={() => setLocalPipelineFile(null)}
+          project={project}
+          pipelineRelativePath={localPipelineFile}
+          connectionName={connection?.connection?.name}
         />
       )}
     </>

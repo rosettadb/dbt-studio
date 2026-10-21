@@ -100,10 +100,17 @@ const baseItems: ItemType[] = [
     img: 'kinetica',
     disabled: false,
   },
+  { id: 'oracle', name: 'Oracle', img: 'oracle', disabled: false },
   {
     id: 'mysql',
     name: 'MySQL',
     img: 'mysql',
+    disabled: false,
+  },
+  {
+    id: 'db2',
+    name: 'IBM Db2',
+    img: 'db2',
     disabled: false,
   },
 ];
@@ -222,11 +229,29 @@ const AddConnection: React.FC = () => {
           />
         );
       }
+      case 'oracle': {
+        return (
+          <Connections.Oracle
+            onCancel={() => setSelectedItem(undefined)}
+            duplicateFrom={duplicateData}
+            suggestedName={suggestedName}
+          />
+        );
+      }
       case 'mysql': {
         return (
           <Connections.MySql
             onCancel={() => setSelectedItem(undefined)}
             projectId={projectId}
+            duplicateFrom={duplicateData}
+            suggestedName={suggestedName}
+          />
+        );
+      }
+      case 'db2': {
+        return (
+          <Connections.Db2
+            onCancel={() => setSelectedItem(undefined)}
             duplicateFrom={duplicateData}
             suggestedName={suggestedName}
           />

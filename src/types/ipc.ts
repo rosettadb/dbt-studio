@@ -109,6 +109,7 @@ export type ConnectorChannels =
   | 'connector:configure'
   | 'connector:remove'
   | 'connector:test'
+  | 'connector:oracleWalletAliases'
   | 'connector:generateProfiles'
   | 'connector:generateRosetta'
   | 'connector:validate'
@@ -521,6 +522,8 @@ export type AgentChannels =
   | 'agent:notebook:cell-run-response' // renderer → main
   | 'agent:notebook:cell-result-request' // main → renderer
   | 'agent:notebook:cell-result-response' // renderer → main
+  | 'agent:python-notebook:request' // main → renderer: Python notebook agent op
+  | 'agent:python-notebook:response' // renderer → main
   | 'agent:context-usage'
   | 'agent:context-compacted'
   | 'agent:tools:list'

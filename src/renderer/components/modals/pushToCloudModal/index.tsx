@@ -17,7 +17,6 @@ import {
   Stack,
   useTheme,
   alpha,
-  Skeleton,
   Switch,
   FormControlLabel,
   Popover,
@@ -78,11 +77,14 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
   initialDbtArguments = '',
 }) => {
   const theme = useTheme();
-  const { data: localChanges, isLoading: isLoadingChanges } =
-    useGetLocalChanges(project.path);
-  const { data: repoInfo, isLoading: isLoadingRepo } = useGetRepoInfo(
-    project.path,
-  );
+  // Both are local git reads used for prefill + warnings. They never gate
+  // rendering or submission; the form is usable the instant it opens.
+  const { data: localChanges } = useGetLocalChanges(project.path);
+  const {
+    data: repoInfo,
+    isLoading: isLoadingRepo,
+    isFetched: repoInfoFetched,
+  } = useGetRepoInfo(project.path);
   const { mutateAsync: pushProject, isLoading: isPushing } =
     usePushProjectToCloud();
   const { mutateAsync: deleteSecretFromCloud } = useDeleteSecret();
@@ -156,8 +158,6 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
     );
   }, [localChanges]);
 
-  const isLoading = isLoadingRepo || isLoadingChanges;
-
   React.useEffect(() => {
     if (repoInfo) {
       if (repoInfo.remoteUrl) {
@@ -217,7 +217,17 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
       }),
     );
 
-    setEnvironmentVariables([...profileVars, ...extraVars]);
+    // Keep anything the user already typed while these were loading.
+    setEnvironmentVariables((prev) => {
+      const known = new Set(
+        [...profileVars, ...extraVars].map((env) => env.key),
+      );
+      return [
+        ...profileVars,
+        ...extraVars,
+        ...prev.filter((env) => !known.has(env.key)),
+      ];
+    });
 
     // Load git credentials
     const gitUser = secrets.find((s) => s.name === 'ROSETTA_GIT_USER');
@@ -239,8 +249,10 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
     secretsFetching,
   ]);
 
+  // The only thing that genuinely prevents the API call is not knowing the
+  // repository URL to send. Everything else is advisory.
   const blockingError = React.useMemo(() => {
-    if (isLoading) return null;
+    if (!repoInfoFetched) return null;
 
     if (!repoInfo) {
       return {
@@ -258,15 +270,13 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
       };
     }
 
-    if (!repoInfo.branchExistsOnRemote) {
-      return {
-        title: 'Current Branch Not Found on Remote',
-        message: `The current branch "${repoInfo.currentBranch}" does not exist on the remote repository. Please push your branch to the remote before deploying to the cloud.`,
-      };
-    }
-
     return null;
-  }, [repoInfo, isLoading]);
+  }, [repoInfo, repoInfoFetched]);
+
+  const branchWarning = React.useMemo(() => {
+    if (!repoInfo?.currentBranch || repoInfo.branchExistsOnRemote) return null;
+    return `The current branch "${repoInfo.currentBranch}" was not found on the remote. The cloud pulls from the remote, so push the branch first or the run will fail.`;
+  }, [repoInfo]);
 
   const validateForm = React.useCallback(() => {
     let isValid = true;
@@ -302,12 +312,7 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
   }, [title, gitUrl, gitBranch]);
 
   const canSubmit = React.useMemo(() => {
-    if (!project?.id || isPushing || isLoading || !!blockingError) {
-      return false;
-    }
-
-    // Wait for environment variables to finish loading
-    if (!profileLoaded || (isDeployed && !secretsSettled)) {
+    if (!project?.id || isPushing || !!blockingError) {
       return false;
     }
 
@@ -319,15 +324,11 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
   }, [
     project?.id,
     isPushing,
-    isLoading,
     blockingError,
     title,
     gitUrl,
     urlError,
     titleError,
-    profileLoaded,
-    secretsSettled,
-    isDeployed,
   ]);
 
   const handleGitUrlChange = React.useCallback(
@@ -660,14 +661,6 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
     return 'Run on Cloud';
   }, [isPushing, isPipelineMode]);
 
-  const renderLoadingSkeleton = () => (
-    <Stack spacing={2.5}>
-      <Skeleton variant="rectangular" height={56} sx={{ borderRadius: 2 }} />
-      <Skeleton variant="rectangular" height={56} sx={{ borderRadius: 2 }} />
-      <Skeleton variant="rectangular" height={56} sx={{ borderRadius: 2 }} />
-    </Stack>
-  );
-
   const renderBlockingError = () => {
     if (!blockingError) return null;
 
@@ -684,6 +677,29 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
           {blockingError.title}
         </Typography>
         <Typography variant="body2">{blockingError.message}</Typography>
+      </Alert>
+    );
+  };
+
+  const renderBranchWarning = () => {
+    if (!branchWarning || !!blockingError) return null;
+
+    return (
+      <Alert
+        severity="warning"
+        sx={{
+          borderRadius: 2,
+          bgcolor: alpha(theme.palette.warning.main, 0.05),
+          border: `1px solid ${alpha(theme.palette.warning.main, 0.2)}`,
+          '& .MuiAlert-icon': {
+            color: 'warning.main',
+          },
+        }}
+      >
+        <Typography variant="body2" fontWeight="600" gutterBottom>
+          Current Branch Not Found on Remote
+        </Typography>
+        <Typography variant="body2">{branchWarning}</Typography>
       </Alert>
     );
   };
@@ -730,8 +746,6 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
   };
 
   const renderDeploymentFields = () => {
-    if (!!blockingError || isLoading) return null;
-
     return (
       <Stack spacing={2.5}>
         <TextField
@@ -758,7 +772,10 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
           onChange={handleGitUrlChange}
           error={!!urlError}
           helperText={
-            urlError || 'Auto-filled from your repository configuration.'
+            urlError ||
+            (isLoadingRepo
+              ? 'Resolving from your repository configuration…'
+              : 'Auto-filled from your repository configuration.')
           }
           fullWidth
           required
@@ -777,7 +794,11 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
           label="Branch"
           value={gitBranch}
           onChange={(event) => setGitBranch(event.target.value)}
-          helperText="Auto-filled from your current branch."
+          helperText={
+            isLoadingRepo
+              ? 'Resolving your current branch…'
+              : 'Auto-filled from your current branch.'
+          }
           fullWidth
           disabled
           sx={{
@@ -974,8 +995,6 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
   };
 
   const renderEnvironmentVariables = () => {
-    if (!!blockingError || isLoading) return null;
-
     const profileVars = environmentVariables.filter((e) => e.isFromProfile);
     const customVars = environmentVariables.filter((e) => !e.isFromProfile);
 
@@ -1641,11 +1660,11 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
               : 'Run your deployed project on the cloud.'}
           </Typography>
 
-          {isLoading && renderLoadingSkeleton()}
+          {renderBlockingError()}
 
-          {!isLoading && renderBlockingError()}
+          {renderBranchWarning()}
 
-          {!isLoading && renderLocalChangesWarning()}
+          {renderLocalChangesWarning()}
 
           {formError && !blockingError && (
             <Alert
@@ -1660,9 +1679,9 @@ export const PushToCloudModal: React.FC<PushToCloudModalProps> = ({
             </Alert>
           )}
 
-          {!isLoading && renderDeploymentFields()}
+          {renderDeploymentFields()}
 
-          {!isLoading && renderEnvironmentVariables()}
+          {renderEnvironmentVariables()}
 
           <Box
             display="flex"

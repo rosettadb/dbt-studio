@@ -22,6 +22,7 @@ import {
   InsertDriveFile as ParquetIcon,
   BarChart as BarChartIcon,
   Image as ImageIcon,
+  WarningAmber as WarningAmberIcon,
 } from '@mui/icons-material';
 import {
   QueryResponseType,
@@ -683,6 +684,25 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
         >
           {showingInfo}
         </Typography>
+      )}
+      {results.truncated && (
+        <Tooltip title="The connection stopped reading rows at its limit. Add a WHERE clause or FETCH FIRST to narrow the result.">
+          <Box
+            data-testid="sql-results-truncated"
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.5,
+              flex: '0 0 auto',
+              color: 'warning.main',
+            }}
+          >
+            <WarningAmberIcon fontSize="small" />
+            <Typography variant="body2">
+              {`Showing the first ${(results.rowCount ?? 0).toLocaleString()} rows`}
+            </Typography>
+          </Box>
+        </Tooltip>
       )}
       <Button
         variant="outlined"

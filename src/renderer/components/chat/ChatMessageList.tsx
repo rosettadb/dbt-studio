@@ -12,7 +12,6 @@ import CodeIcon from '@mui/icons-material/Code';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import BugReportIcon from '@mui/icons-material/BugReport';
-import PsychologyIcon from '@mui/icons-material/Psychology';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import TipsAndUpdatesIcon from '@mui/icons-material/TipsAndUpdates';
 import HistoryEduIcon from '@mui/icons-material/HistoryEdu';
@@ -41,7 +40,7 @@ interface ChatMessageListProps {
   streamState?: AgentStreamState;
   isAgentRunning?: boolean;
   screenKey?: 'project' | 'sql' | 'notebooks' | 'analytics';
-  onConfirmTerminal?: (allow: boolean) => void;
+  onConfirmTerminal?: (allow: boolean, remember?: boolean) => void;
   onClearError?: () => void;
   onOpenFile?: (path: string) => void;
   projectMemoryPrompt?: {
@@ -198,19 +197,19 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
       return {
         title: 'Notebook Agent Ready',
         subtitle:
-          'Build analysis workflows cell by cell with context from your notebook and connection.',
+          'Write and run Python and SQL cells with context from your notebook and connection.',
         bullets: [
           {
-            text: 'Draft SQL cells from analysis goals',
+            text: 'Write Python and SQL cells from a goal',
             icon: <HistoryEduIcon sx={{ fontSize: '0.9rem' }} />,
           },
           {
-            text: 'Help debug failing cells and outputs',
+            text: 'Explain and fix failing cells',
             icon: <BugReportIcon sx={{ fontSize: '0.9rem' }} />,
           },
           {
-            text: 'Propose next steps for data investigation',
-            icon: <PsychologyIcon sx={{ fontSize: '0.9rem' }} />,
+            text: 'Explore DataFrames and variables in memory',
+            icon: <ExploreIcon sx={{ fontSize: '0.9rem' }} />,
           },
         ],
       };
@@ -539,6 +538,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
               request={streamState.pendingConfirm}
               onAllow={() => onConfirmTerminal(true)}
               onDeny={() => onConfirmTerminal(false)}
+              onAllowForChat={() => onConfirmTerminal(true, true)}
             />
           )}
 

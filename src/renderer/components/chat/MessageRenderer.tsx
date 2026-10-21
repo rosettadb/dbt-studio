@@ -17,8 +17,8 @@ import {
   ImageOutlined,
 } from '@mui/icons-material';
 import Collapse from '@mui/material/Collapse';
-import { useAppContext } from '../../hooks';
 import { useSaveFileContent } from '../../controllers';
+import { useTabs } from '../../context/TabsProvider';
 
 import { ToggleSection } from './ToggleSection';
 import { ContextItemRow } from './ContextItemRow';
@@ -28,6 +28,7 @@ import { AgentStepBlock } from './AgentStepBlock';
 import { ToolCallRow } from './ToolCallRow';
 import { ImageLightbox } from './ImageLightbox';
 import { isVisibleUserContextItem } from './userContextVisibility';
+import { detectCodeBlockMeta } from './codeBlockMeta';
 import { previewChatImage } from '../../services/agent.service';
 import type {
   AgentStep,
@@ -329,19 +330,6 @@ type MarkdownCodeBlockProps = React.PropsWithChildren<{
   className?: string;
 }>;
 
-function detectCodeBlockMeta(
-  className?: string,
-  code?: string,
-): {
-  language: string;
-  filename?: string;
-} {
-  const language = (className?.replace('language-', '') ?? '').toLowerCase();
-  const firstLine = (code || '').split('\n')[0]?.trim() ?? '';
-  const filenameMatch = firstLine.match(/^(?:\/\/|--|#)\s*filename:\s*(.+)$/i);
-  return { language, filename: filenameMatch?.[1]?.trim() };
-}
-
 const MarkdownCodeBlock = ({
   inline,
   className,
@@ -349,7 +337,7 @@ const MarkdownCodeBlock = ({
 }: MarkdownCodeBlockProps) => {
   const muiTheme = useTheme();
   const { mutate: updateFileContent } = useSaveFileContent();
-  const { editingFilePath, syncEditorContent } = useAppContext();
+  const { activeFilePath: editingFilePath, updateTabContentByPath } = useTabs();
   const [copied, setCopied] = React.useState(false);
   const [applied, setApplied] = React.useState(false);
   const [expanded, setExpanded] = React.useState(true);
@@ -388,10 +376,13 @@ const MarkdownCodeBlock = ({
       path: editingFilePath,
       content: text,
     });
-    syncEditorContent?.(editingFilePath, text);
+    updateTabContentByPath(editingFilePath, text, {
+      markModified: false,
+      error: undefined,
+    });
     setApplied(true);
     setTimeout(() => setApplied(false), 1000);
-  }, [editingFilePath, updateFileContent, syncEditorContent]);
+  }, [editingFilePath, updateFileContent, updateTabContentByPath]);
 
   const runInTerminal = React.useCallback(() => {
     const text =
@@ -758,7 +749,7 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
   imageAttachments,
 }) => {
   const Container = role === 'user' ? UserMessage : AssistantMessage;
-  const { setEditingFilePath } = useAppContext();
+  const { openFile } = useTabs();
   const visibleContextItems = React.useMemo(
     () => contextItems?.filter(isVisibleUserContextItem) ?? [],
     [contextItems],
@@ -816,7 +807,7 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
                   description={item.description ?? ''}
                   filePath={item.metadata?.path}
                   onOpen={(filePath) => {
-                    if (filePath) setEditingFilePath?.(filePath);
+                    if (filePath) openFile(filePath);
                   }}
                 />
               ))}

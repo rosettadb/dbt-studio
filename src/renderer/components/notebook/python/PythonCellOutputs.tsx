@@ -18,6 +18,7 @@ import {
   useTheme,
 } from '@mui/material';
 import {
+  AutoAwesome,
   Clear,
   Close,
   ContentCopy,
@@ -42,6 +43,7 @@ import type {
   PythonCellOutput,
   SqlFallbackInfo,
 } from '../../../../types/pythonNotebooks';
+import type { AskAgentErrorRequest } from './pythonCells';
 
 const MIME_PRIORITY = [
   'image/png',
@@ -313,6 +315,8 @@ interface OutputListProps {
   installingPandas?: boolean;
   /** Fullscreen: stretch a single DataFrame output to the full height. */
   fillHeight?: boolean;
+  /** Adds "Explain error" and "Fix with AI" under error outputs. */
+  onAskAgent?: (request: AskAgentErrorRequest) => void;
 }
 
 /** The outputs themselves, one under the other. */
@@ -321,6 +325,7 @@ const OutputList: React.FC<OutputListProps> = ({
   onInstallPandas,
   installingPandas,
   fillHeight = false,
+  onAskAgent,
 }) => {
   // Fullscreen: a single DataFrame output takes all the available height.
   const fill = fillHeight && outputs.length === 1;
@@ -389,6 +394,42 @@ const OutputList: React.FC<OutputListProps> = ({
                     __html: ansi.toHtml(output.traceback.join('\n')),
                   }}
                 />
+                {onAskAgent && (
+                  <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5 }}>
+                    <Button
+                      size="small"
+                      startIcon={<AutoAwesome sx={{ fontSize: 16 }} />}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAskAgent({
+                          kind: 'explain-error',
+                          ename: output.ename,
+                          evalue: output.evalue,
+                        });
+                      }}
+                      data-testid="python-cell-error-explain"
+                      sx={{ fontSize: 12, py: 0.125 }}
+                    >
+                      Explain error
+                    </Button>
+                    <Button
+                      size="small"
+                      startIcon={<AutoAwesome sx={{ fontSize: 16 }} />}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAskAgent({
+                          kind: 'fix-error',
+                          ename: output.ename,
+                          evalue: output.evalue,
+                        });
+                      }}
+                      data-testid="python-cell-error-fix"
+                      sx={{ fontSize: 12, py: 0.125 }}
+                    >
+                      Fix with AI
+                    </Button>
+                  </Box>
+                )}
               </Box>
             );
           case 'display_data':
@@ -469,6 +510,7 @@ export const PythonCellOutputs: React.FC<PythonCellOutputsProps> = ({
   collapsed = false,
   onExpand,
   onClearOutputs,
+  onAskAgent,
 }) => {
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
@@ -538,6 +580,7 @@ export const PythonCellOutputs: React.FC<PythonCellOutputsProps> = ({
             outputs={outputs}
             onInstallPandas={onInstallPandas}
             installingPandas={installingPandas}
+            onAskAgent={onAskAgent}
           />
         )}
       </Box>
