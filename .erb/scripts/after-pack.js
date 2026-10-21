@@ -26,7 +26,8 @@ async function makeOwnerWritable(dir) {
 }
 
 exports.default = async function afterPack(context) {
-  if (context.electronPlatformName !== 'darwin') {
+  // `mas` is a Mac App Store build; it is signed the same way as `darwin`.
+  if (!['darwin', 'mas'].includes(context.electronPlatformName)) {
     return;
   }
 
