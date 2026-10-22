@@ -158,9 +158,32 @@ export type ConnectionInput =
   | OracleConnection
   | DuckLakeConnectionConfig;
 
-export const canUseAsDbtConnection = (
-  type: SupportedConnectionTypes,
-): boolean => type !== 'sqlite' && type !== 'mysql' && type !== 'oracle'; // removed in 82b
+/**
+ * Which connection types can back a dbt project. Every supported type must be
+ * listed, so adding a type forces a decision here.
+ */
+const DBT_CONNECTION_SUPPORT: Record<SupportedConnectionTypes, boolean> = {
+  postgres: true,
+  snowflake: true,
+  bigquery: true,
+  redshift: true,
+  databricks: true,
+  mssql: true,
+  kinetica: true,
+  googlecloud: true,
+  duckdb: true,
+  ducklake: true,
+  sqlite: false,
+  mysql: false,
+  oracle: false, // exclusion removed in 82b
+};
+
+/**
+ * True only for types listed above as dbt-capable. A saved connection whose
+ * type the app no longer supports is never selectable for a dbt project.
+ */
+export const canUseAsDbtConnection = (type: string): boolean =>
+  DBT_CONNECTION_SUPPORT[type as SupportedConnectionTypes] === true;
 
 export type ConnectionModel = {
   id: string;
