@@ -8,7 +8,6 @@ import { SQLite } from './sqlite';
 import { Kinetica } from './kinetica';
 import { Oracle } from './oracle';
 import { MySql } from './mysql';
-import { Db2 } from './db2';
 
 export const Connections = {
   Postgres,
@@ -20,6 +19,5 @@ export const Connections = {
   SQLite,
   Kinetica,
   MySql,
-  Db2,
   Oracle,
 };

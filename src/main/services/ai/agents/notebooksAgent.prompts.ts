@@ -60,8 +60,6 @@ You are connected to a DuckLake lakehouse. DuckLake is a DuckDB extension (not a
       return '\n\n## Dialect Specifics\nYou are connected to Databricks. Ensure all queries use Databricks/Spark SQL syntax and functions.';
     case 'kinetica':
       return '\n\n## Dialect Specifics\nYou are connected to Kinetica. Ensure all queries use Kinetica SQL syntax and functions.';
-    case 'db2':
-      return '\n\n## Dialect Specifics\nYou are connected to IBM Db2 for LUW. Use Db2 SQL. Do not add row limits to queries; the UI handles pagination. The dummy table is `SYSIBM.SYSDUMMY1`, unquoted identifiers fold to uppercase, and catalog metadata lives in `SYSCAT` views.';
     case 'oracle':
       return '\n\n## Dialect Specifics\nYou are connected to Oracle Database. Use Oracle SQL. Do not add row limits to queries; the UI handles pagination with `OFFSET ... FETCH NEXT`. The dummy table is `DUAL`, unquoted identifiers fold to uppercase, table aliases cannot use `AS`, catalog metadata lives in `ALL_*` views (`ALL_TABLES`, `ALL_USERS`, `ALL_TAB_COLUMNS`), and statements must not end with `;`.';
     default:

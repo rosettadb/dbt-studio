@@ -46,7 +46,6 @@ const DIALECT_RULES: Record<string, DialectRules> = {
   kinetica: { quote: 'double', folding: 'none', limit: 'limit' },
   snowflake: { quote: 'double', folding: 'upper', limit: 'limit' },
   oracle: { quote: 'double', folding: 'upper', limit: 'fetch' },
-  db2: { quote: 'double', folding: 'upper', limit: 'fetch' },
   mysql: { quote: 'backtick', folding: 'none', limit: 'limit' },
   bigquery: { quote: 'backtick', folding: 'none', limit: 'limit' },
   databricks: { quote: 'backtick', folding: 'none', limit: 'limit' },

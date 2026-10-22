@@ -8,7 +8,6 @@ import ducklake from './ducklake.png';
 import sqlite from './sqlite.png';
 import mysql from './mysql.png';
 import oracle from './oracle.png';
-import db2 from './db2.png';
 import mssql from './mssql.png';
 import kinetica from './kinetica.png';
 import googlecloud from './googlecloud.png';
@@ -93,7 +92,6 @@ const obj: { images: Image } = {
     sqlite,
     mysql,
     oracle,
-    db2,
     mssql,
     kinetica,
     googlecloud,
