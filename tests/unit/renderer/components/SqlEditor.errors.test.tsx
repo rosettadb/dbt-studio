@@ -46,7 +46,7 @@ async function runQuery(error: string) {
     <SqlEditor
       ref={editorRef}
       completions={[]}
-      connectionId="db2-test"
+      connectionId="pg-test"
       queryHistory={[]}
       setQueryHistory={jest.fn()}
       setQueryResults={jest.fn()}
@@ -60,8 +60,8 @@ async function runQuery(error: string) {
   return { setError, setLoadingQuery };
 }
 
-it('preserves the Db2 error without replacing it with a frontend exception', async () => {
-  const error = 'SQL0204N "DB2INST1.CUSTOMERS" is an undefined name.';
+it('preserves the database error without replacing it with a frontend exception', async () => {
+  const error = 'relation "customers" does not exist';
   const { setError, setLoadingQuery } = await runQuery(error);
   expect(setError.mock.calls).toEqual([[undefined], [error]]);
   expect(setLoadingQuery).toHaveBeenLastCalledWith(false);

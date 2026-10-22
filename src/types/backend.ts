@@ -10,7 +10,6 @@ export type SupportedConnectionTypes =
   | 'databricks'
   | 'mysql'
   | 'oracle'
-  | 'db2'
   | 'mssql'
   | 'kinetica'
   | 'googlecloud'
@@ -120,16 +119,6 @@ export type MySqlConnection = ConnectionBase & {
   ssl?: boolean;
 };
 
-/** Db2 for LUW. Query-only: never a dbt connection. */
-export type Db2Connection = ConnectionBase & {
-  type: 'db2';
-  host: string;
-  port: number;
-  ssl?: boolean;
-  /** Optional CA certificate file used to verify the server (SSL only). */
-  sslCaPath?: string;
-};
-
 export type OracleConnectMode = 'basic' | 'connectString' | 'wallet';
 export type OracleConnection = ConnectionBase & {
   type: 'oracle';
@@ -166,14 +155,12 @@ export type ConnectionInput =
   | SQLiteConnection
   | KineticaConnection
   | MySqlConnection
-  | Db2Connection
   | OracleConnection
   | DuckLakeConnectionConfig;
 
 export const canUseAsDbtConnection = (
   type: SupportedConnectionTypes,
-): boolean =>
-  type !== 'sqlite' && type !== 'mysql' && type !== 'db2' && type !== 'oracle'; // removed in 82b
+): boolean => type !== 'sqlite' && type !== 'mysql' && type !== 'oracle'; // removed in 82b
 
 export type ConnectionModel = {
   id: string;
@@ -762,8 +749,6 @@ export type QueryResponseType = {
   duration?: number;
   isCommand?: boolean;
   commandType?: string;
-  /** Set when the connector stopped reading rows at its limit (Db2 only today). */
-  truncated?: boolean;
 };
 
 export type CliUpdateItem = {

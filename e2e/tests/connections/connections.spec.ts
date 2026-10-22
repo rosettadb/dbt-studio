@@ -97,7 +97,6 @@ test.describe('Connections', () => {
       'DuckDB',
       'SQLite',
       'Kinetica',
-      'IBM Db2',
     ]) {
       // eslint-disable-next-line no-await-in-loop
       await expect(
