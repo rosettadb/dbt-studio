@@ -135,13 +135,10 @@ describe('buildSelectStatement', () => {
     ).toBe('SELECT TOP 5\n  id\nFROM sales.orders;');
   });
 
-  it('uses FETCH FIRST for Oracle and DB2', () => {
+  it('uses FETCH FIRST for Oracle', () => {
     // Oracle folds bare identifiers to upper case, so lower-case names are quoted
     expect(buildSelectStatement(orders, 'oracle', { limit: 10 })).toBe(
       'SELECT *\nFROM "sales"."orders"\nFETCH FIRST 10 ROWS ONLY;',
-    );
-    expect(buildSelectStatement({ schema: 'S', name: 'T' }, 'db2')).toBe(
-      'SELECT *\nFROM S.T\nFETCH FIRST 100 ROWS ONLY;',
     );
   });
 

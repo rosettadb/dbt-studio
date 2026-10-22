@@ -91,7 +91,6 @@ const formatConnectionType = (type: string): string => {
     mysql: 'MySQL',
     mssql: 'SQL Server',
     oracle: 'Oracle',
-    db2: 'DB2',
   };
   return typeMap[type] || type.charAt(0).toUpperCase() + type.slice(1);
 };
