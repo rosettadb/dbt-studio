@@ -438,22 +438,71 @@ describe('DbtSettings runtime switch', () => {
       ]);
     });
 
-    it('keeps a v1 to v2 switch waiting until no dbt installs are queued', async () => {
-      mockTasks = [dbtTask('dbt-bigquery')];
+    it('lets a v1 to v2 switch cancel the queued dbt installs', async () => {
+      installVersionChange.mockResolvedValue({
+        ok: true,
+        installedVersion: '2.0.5',
+        dbtPath: '/managed/venv/bin/dbt',
+        previousVersion: '1.11.12',
+        adapterWarnings: [],
+      });
+      mockTasks = [
+        dbtTask('dbt-redshift', 'running'),
+        dbtTask('dbt-bigquery'),
+        dbtTask('dbt-snowflake@1.12.4'),
+      ];
       renderSettings();
 
-      fireEvent.click(runtimeToggle('v2'));
-      const v2Actions = await screen.findAllByRole('button', {
-        name: 'Upgrade',
-      });
-      v2Actions.forEach((button) => expect(button).toBeDisabled());
+      await openV2InstallDialog();
+      expect(
+        screen.getByText(
+          '2 queued dbt installs will be cancelled: dbt-bigquery, dbt-snowflake@1.12.4.',
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          'Installing dbt-redshift is running now and finishes first.',
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/dbt Core v2 comes with its own adapters/),
+      ).toBeInTheDocument();
+      expect(mockCancelTask).not.toHaveBeenCalled();
 
-      // A switch within v1 can still queue behind the adapter install.
+      fireEvent.click(screen.getByRole('button', { name: 'Switch to v2' }));
+
+      await waitFor(() =>
+        expect(installVersionChange).toHaveBeenCalledWith(
+          expect.objectContaining({ targetVersion: '2.0.5' }),
+        ),
+      );
+      expect(mockCancelTask).toHaveBeenCalledTimes(2);
+      expect(mockCancelTask).toHaveBeenCalledWith('task-dbt-bigquery');
+      expect(mockCancelTask).toHaveBeenCalledWith('task-dbt-snowflake@1.12.4');
+    });
+
+    it('cancels a queued dbt Core version from its ✕', async () => {
+      mockTasks = [dbtTask('dbt-core@1.11.11')];
+      renderSettings();
+
       fireEvent.click(runtimeToggle('v1'));
-      const [v1Downgrade] = await screen.findAllByRole('button', {
-        name: 'Downgrade',
+      expect(
+        await screen.findByRole('button', { name: 'Queued' }),
+      ).toBeDisabled();
+      // One switch within v1 waits at a time.
+      screen
+        .getAllByRole('button', { name: 'Downgrade' })
+        .forEach((button) => expect(button).toBeDisabled());
+
+      const cancelButton = screen.getByRole('button', {
+        name: 'Remove from the queue',
       });
-      expect(v1Downgrade).toBeEnabled();
+      fireEvent.mouseOver(cancelButton);
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(
+        'Remove from the queue. Nothing has been installed yet, so nothing needs cleaning up.',
+      );
+      fireEvent.click(cancelButton);
+      expect(mockCancelTask).toHaveBeenCalledWith('task-dbt-core@1.11.11');
     });
 
     it('greys adapters while a switch to v2 is queued', async () => {

@@ -4,6 +4,7 @@ import { TaskManagerService } from '../services/taskManager.service';
 import {
   INSTALL_CANCELLED_MESSAGE,
   isDbtRuntimeChangeTask,
+  isDbtV2SwitchSubject,
   isInstallTaskType,
 } from '../../shared/installTasks';
 import type { TaskRecord } from '../../types/ipc';
@@ -113,6 +114,13 @@ const getActiveInstallTasks = () =>
 
 export const isDbtRuntimeChanging = (): boolean =>
   getActiveInstallTasks().some(isDbtRuntimeChangeTask);
+
+// v1 adapters require dbt-core < 2.0: one queued behind a switch to v2 would
+// bring dbt-core back next to dbt-oss, so it is refused instead.
+export const isDbtV2SwitchQueued = (): boolean =>
+  getActiveInstallTasks().some(
+    (task) => task.type === 'install:dbt' && isDbtV2SwitchSubject(task.subject),
+  );
 
 let isQuitConfirmed = false;
 

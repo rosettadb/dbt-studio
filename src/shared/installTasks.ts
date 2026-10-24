@@ -30,6 +30,14 @@ export const isDbtRuntimeSubject = (subject: string | undefined): boolean =>
     isSubjectForPackage(subject, packageName),
   );
 
+// `dbt-core@2.0.5` is a switch to dbt Core v2.
+export const isDbtV2SwitchSubject = (subject: string | undefined): boolean =>
+  isDbtRuntimeSubject(subject) &&
+  Number.parseInt(subject?.split('@')[1] ?? '', 10) >= 2;
+
+export const DBT_V2_SWITCH_BLOCKS_ADAPTERS_MESSAGE =
+  "dbt Core v2 is being installed, so v1 adapters can't be installed now.";
+
 // dbt commands can't run while dbt Core itself, or the Python it lives in, is
 // being replaced.
 export const isDbtRuntimeChangeTask = (task: InstallTaskLike): boolean =>

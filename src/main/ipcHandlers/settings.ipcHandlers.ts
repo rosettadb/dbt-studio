@@ -4,8 +4,12 @@ import { FileDialogProperties, SettingsType } from '../../types/backend';
 import { SettingsService, RunnerService } from '../services';
 import { SettingsChannels } from '../../types/ipc';
 import { DbtCoreVersionService } from '../services/dbtCoreVersion.service';
-import { runInstallTask } from '../utils/installTask';
-import { isDbtRuntimeSubject } from '../../shared/installTasks';
+import { isDbtV2SwitchQueued, runInstallTask } from '../utils/installTask';
+import {
+  DBT_V2_SWITCH_BLOCKS_ADAPTERS_MESSAGE,
+  isDbtRuntimeSubject,
+} from '../../shared/installTasks';
+import { DBT_ADAPTER_PACKAGES } from '../../shared/dbtAdapterPackages';
 
 const handlerChannels: SettingsChannels[] = [
   'settings:load',
@@ -44,6 +48,10 @@ const handlerChannels: SettingsChannels[] = [
   'kisql:uninstall',
   'kisql:check',
 ];
+
+const isAdapterBlockedByV2Switch = (packageName: string) =>
+  (DBT_ADAPTER_PACKAGES as readonly string[]).includes(packageName) &&
+  isDbtV2SwitchQueued();
 
 const removeSettingsIpcHandlers = () => {
   handlerChannels.forEach((channel) => {
@@ -246,6 +254,9 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
   });
 
   ipcMain.handle('dbt:package:installLatest', async (_event, request) => {
+    if (isAdapterBlockedByV2Switch(request.packageName)) {
+      return { ok: false, error: DBT_V2_SWITCH_BLOCKS_ADAPTERS_MESSAGE };
+    }
     return runInstallTask(
       'install:dbt',
       `Installing ${request.packageName}`,
@@ -268,6 +279,9 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
   });
 
   ipcMain.handle('dbt:packageVersion:install', async (_event, req) => {
+    if (isAdapterBlockedByV2Switch(req.packageName)) {
+      return { ok: false, error: DBT_V2_SWITCH_BLOCKS_ADAPTERS_MESSAGE };
+    }
     return runInstallTask(
       'install:dbt',
       `Installing ${req.packageName} ${req.version}`,

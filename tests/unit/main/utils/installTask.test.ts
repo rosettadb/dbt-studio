@@ -1,6 +1,7 @@
 import { TaskManagerService } from '../../../../src/main/services/taskManager.service';
 import {
   InstallTaskControl,
+  isDbtV2SwitchQueued,
   runInstallTask,
 } from '../../../../src/main/utils/installTask';
 import { INSTALL_CANCELLED_MESSAGE } from '../../../../src/shared/installTasks';
@@ -188,5 +189,34 @@ describe('runInstallTask', () => {
       Promise.resolve({ ok: true }),
     );
     expect(findTask('After stop')?.status).toBe('completed');
+  });
+
+  it('reports a queued switch to dbt Core v2, so adapter installs are refused', async () => {
+    let finish: () => void = () => {};
+    const run = runInstallTask(
+      'install:dbt',
+      'Switch to v2',
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+      { subject: 'dbt-core@2.0.5' },
+    );
+    expect(isDbtV2SwitchQueued()).toBe(true);
+
+    await waitForQueue();
+    finish();
+    await run;
+    expect(isDbtV2SwitchQueued()).toBe(false);
+
+    // A switch within v1 does not block adapters.
+    const v1Run = runInstallTask(
+      'install:dbt',
+      'Switch within v1',
+      () => Promise.resolve({ ok: true }),
+      { subject: 'dbt-core@1.11.11' },
+    );
+    expect(isDbtV2SwitchQueued()).toBe(false);
+    await v1Run;
   });
 });

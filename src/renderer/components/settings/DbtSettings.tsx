@@ -31,6 +31,7 @@ import {
   ExpandMore,
   ExtensionOutlined,
   Inventory2Outlined,
+  Close,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import {
@@ -76,9 +77,28 @@ import { useActiveInstallTasks } from '../../hooks';
 import { useTaskManager } from '../../context';
 import {
   isDbtRuntimeSubject,
+  isDbtV2SwitchSubject,
   isInstallCancelledError,
   isSubjectForPackage,
 } from '../../../shared/installTasks';
+
+const CANCEL_QUEUED_TOOLTIP =
+  'Remove from the queue. Nothing has been installed yet, so nothing needs cleaning up.';
+
+// Next to an install that is still waiting in the queue.
+const CancelQueuedButton: React.FC<{ onCancel: () => void }> = ({
+  onCancel,
+}) => (
+  <Tooltip title={CANCEL_QUEUED_TOOLTIP}>
+    <IconButton
+      size="small"
+      aria-label="Remove from the queue"
+      onClick={onCancel}
+    >
+      <Close fontSize="small" />
+    </IconButton>
+  </Tooltip>
+);
 
 interface DbtSettingsProps {
   settings: SettingsType;
@@ -132,13 +152,16 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
   const hasQueuedAdapterInstalls = activeDbtTasks.some(
     (task) => !isDbtRuntimeSubject(task.subject),
   );
+  const queuedDbtTasks = activeDbtTasks.filter(
+    (task) => task.status === 'pending',
+  );
+  const runningDbtTask = activeDbtTasks.find(
+    (task) => task.status === 'running',
+  );
   // v1 adapters require dbt-core < 2.0, so one installed after a switch to v2
   // would bring dbt-core back next to dbt-oss. Adapters wait while a v2
   // switch is queued or running.
-  const isV2SwitchActive = Boolean(
-    dbtRuntimeTask?.subject &&
-      Number.parseInt(dbtRuntimeTask.subject.split('@')[1] ?? '', 10) >= 2,
-  );
+  const isV2SwitchActive = isDbtV2SwitchSubject(dbtRuntimeTask?.subject);
   const isAdapterInstallBlocked = isPythonInstalling || isV2SwitchActive;
 
   // Installs keep running after this page closes, and the background process
@@ -480,6 +503,17 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
   const confirmDbtVersionChange = async () => {
     if (!versionChangePlan) return;
     setIsVersionChangeDialogOpen(false);
+    // A switch between v1 and v2 drops the dbt installs still waiting: v2
+    // brings its own adapters, and a v1 adapter installed after the switch
+    // would bring dbt-core back next to dbt-oss. They have not started, so
+    // nothing is left half-done; one already running finishes first.
+    const { currentVersion, targetVersion } = versionChangePlan;
+    const isLineSwitch =
+      Boolean(currentVersion) &&
+      currentVersion?.startsWith('2.') !== targetVersion.startsWith('2.');
+    if (isLineSwitch) {
+      await Promise.all(queuedDbtTasks.map((task) => cancelTask(task.id)));
+    }
     try {
       const result = await installDbtVersionChange({
         targetVersion: versionChangePlan.targetVersion,
@@ -739,12 +773,11 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
       if (switchTask) {
         actionLabel = switchTask.status === 'pending' ? 'Queued' : 'Switching…';
       }
-      // A switch between v1 and v2 never queues behind or ahead of other dbt
-      // installs (see isV2SwitchActive).
+      // A switch between v1 and v2 can always be chosen: confirming it
+      // cancels the dbt installs still in the queue (see
+      // confirmDbtVersionChange). Within one line, one switch waits at a time.
       const isRuntimeLineSwitch =
         hasDbt && Number.parseInt(item.version, 10) >= 2 !== isV2Active;
-      const mustWaitForDbtInstalls =
-        isRuntimeLineSwitch && activeDbtTasks.length > 0;
 
       return (
         <SettingsRow
@@ -773,39 +806,38 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
             </Box>
           }
         >
-          <Tooltip
-            title={
-              mustWaitForDbtInstalls && !dbtRuntimeTask
-                ? 'Finish the other dbt installs first'
-                : ''
-            }
-          >
-            <span>
-              <Button
-                size="small"
-                variant="outlined"
-                onClick={() => {
-                  prepareDbtVersionChange(item.version).catch(() => undefined);
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => {
+                prepareDbtVersionChange(item.version).catch(() => undefined);
+              }}
+              disabled={
+                isInstalled ||
+                isLoadingDialog ||
+                isPythonInstalling ||
+                Boolean(switchTask) ||
+                (Boolean(dbtRuntimeTask) && !isRuntimeLineSwitch)
+              }
+              startIcon={
+                switchTask?.status === 'running' ? (
+                  <CircularProgress size={14} />
+                ) : (
+                  <Download />
+                )
+              }
+            >
+              {actionLabel}
+            </Button>
+            {switchTask?.status === 'pending' && (
+              <CancelQueuedButton
+                onCancel={() => {
+                  cancelTask(switchTask.id).catch(() => undefined);
                 }}
-                disabled={
-                  isInstalled ||
-                  isLoadingDialog ||
-                  isPythonInstalling ||
-                  Boolean(dbtRuntimeTask) ||
-                  mustWaitForDbtInstalls
-                }
-                startIcon={
-                  switchTask?.status === 'running' ? (
-                    <CircularProgress size={14} />
-                  ) : (
-                    <Download />
-                  )
-                }
-              >
-                {actionLabel}
-              </Button>
-            </span>
-          </Tooltip>
+              />
+            )}
+          </Box>
         </SettingsRow>
       );
     });
@@ -849,6 +881,25 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
       `${getRuntimeLabel(planTargetVersion)} ${planTargetVersion} will be installed.`,
       'Your adapter packages stay installed.',
     );
+    if (planTargetVersion.startsWith('2.')) {
+      versionChangeSteps.push(
+        'dbt Core v2 comes with its own adapters (Snowflake, BigQuery, Redshift, Databricks, DuckDB); Postgres and Kinetica are not supported on v2.',
+      );
+    }
+    if (queuedDbtTasks.length > 0) {
+      versionChangeSteps.push(
+        `${queuedDbtTasks.length} queued dbt install${
+          queuedDbtTasks.length === 1 ? '' : 's'
+        } will be cancelled: ${queuedDbtTasks
+          .map((task) => task.subject ?? task.label)
+          .join(', ')}.`,
+      );
+    }
+    if (runningDbtTask) {
+      versionChangeSteps.push(
+        `${runningDbtTask.label} is running now and finishes first.`,
+      );
+    }
   } else {
     versionChangeSteps.push(
       `${getRuntimeLabel(planTargetVersion)} ${planCurrentVersion} will be replaced by ${planTargetVersion} (${versionChangePlan?.direction}).`,
@@ -1192,6 +1243,11 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                           label="Queued"
                           size="small"
                           color="info"
+                          deleteIcon={
+                            <Tooltip title={CANCEL_QUEUED_TOOLTIP}>
+                              <Close aria-label="Remove from the queue" />
+                            </Tooltip>
+                          }
                           onDelete={() => {
                             cancelTask(packageTask.id).catch(() => undefined);
                           }}
@@ -1328,26 +1384,43 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                                 </Box>
                               }
                             >
-                              <Button
-                                size="small"
-                                variant="outlined"
-                                onClick={() => {
-                                  installSinglePackageVersion(
-                                    pkg,
-                                    v.version,
-                                  ).catch(() => undefined);
+                              <Box
+                                sx={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 0.5,
                                 }}
-                                disabled={isInstalled || isPackageBusy}
-                                startIcon={
-                                  versionTask?.status === 'running' ? (
-                                    <CircularProgress size={14} />
-                                  ) : (
-                                    <Download />
-                                  )
-                                }
                               >
-                                {actionLabel}
-                              </Button>
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  onClick={() => {
+                                    installSinglePackageVersion(
+                                      pkg,
+                                      v.version,
+                                    ).catch(() => undefined);
+                                  }}
+                                  disabled={isInstalled || isPackageBusy}
+                                  startIcon={
+                                    versionTask?.status === 'running' ? (
+                                      <CircularProgress size={14} />
+                                    ) : (
+                                      <Download />
+                                    )
+                                  }
+                                >
+                                  {actionLabel}
+                                </Button>
+                                {versionTask?.status === 'pending' && (
+                                  <CancelQueuedButton
+                                    onCancel={() => {
+                                      cancelTask(versionTask.id).catch(
+                                        () => undefined,
+                                      );
+                                    }}
+                                  />
+                                )}
+                              </Box>
                             </SettingsRow>
                           );
                         })}

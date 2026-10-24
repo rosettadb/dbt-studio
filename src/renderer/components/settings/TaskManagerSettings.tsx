@@ -39,10 +39,17 @@ const STATUS_TONE: Record<
 const isActive = (task: TaskRecord) =>
   task.status === 'running' || task.status === 'pending';
 
+// Running tasks first, then waiting ones in the order they will run (a
+// pending task's startedAt is when it joined the queue).
+const byRunOrder = (a: TaskRecord, b: TaskRecord) => {
+  if (a.status !== b.status) return a.status === 'running' ? -1 : 1;
+  return a.startedAt - b.startedAt;
+};
+
 export const TaskManagerSettings: React.FC = () => {
   const { tasks, cancel, remove, stuckTaskIds } = useTaskManager();
 
-  const activeTasks = tasks.filter(isActive);
+  const activeTasks = tasks.filter(isActive).sort(byRunOrder);
   const historyTasks = tasks.filter((task) => !isActive(task));
 
   const renderTask = (task: TaskRecord) => {
