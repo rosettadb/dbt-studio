@@ -32,6 +32,8 @@ import {
   getPipInstallRequirement,
   isSourceInstalledPackage,
 } from '../../shared/dbtAdapterPackages';
+import { INSTALL_CANCELLED_MESSAGE } from '../../shared/installTasks';
+import type { InstallTaskControl } from '../utils/installTask';
 
 type VersionTriple = {
   major: number;
@@ -54,7 +56,13 @@ type ProcessResult = {
 type ProcessOptions = {
   cwd?: string;
   env?: Record<string, string | undefined>;
+  // Passed by installs running in the task manager queue.
+  control?: InstallTaskControl;
 };
+
+// pip prints this before it starts replacing files; stopping after it would
+// leave a half-installed package.
+const PIP_INSTALL_PHASE_MARKER = 'Installing collected packages';
 
 const PROCESS_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -271,14 +279,29 @@ const runProcess = (
   options?: ProcessOptions,
 ): Promise<ProcessResult> => {
   return new Promise((resolve, reject) => {
+    const control = options?.control;
     const child = spawn(command, args, {
       shell: false,
       ...(options?.cwd ? { cwd: options.cwd } : {}),
       ...(options?.env ? { env: options.env } : {}),
+      // Installs never wait for typed input (pip would otherwise hang on a
+      // prompt nobody sees) and print unbuffered, so the install-phase marker
+      // arrives as soon as pip writes it.
+      ...(control
+        ? {
+            stdio: ['ignore', 'pipe', 'pipe'] as ['ignore', 'pipe', 'pipe'],
+            env: {
+              ...(options?.env ?? process.env),
+              PIP_NO_INPUT: '1',
+              PYTHONUNBUFFERED: '1',
+            },
+          }
+        : {}),
     });
     let stdout = '';
     let stderr = '';
     let settled = false;
+    let reachedInstallPhase = false;
 
     const timeout = setTimeout(() => {
       if (settled) return;
@@ -302,11 +325,34 @@ const runProcess = (
       callback();
     };
 
-    child.stdout.on('data', (data) => {
+    if (control) {
+      const stopProcess = () =>
+        finish(() => {
+          try {
+            child.kill('SIGTERM');
+          } catch {
+            // The process may already have exited.
+          }
+          reject(new Error(INSTALL_CANCELLED_MESSAGE));
+        });
+      if (control.signal.aborted) stopProcess();
+      else
+        control.signal.addEventListener('abort', stopProcess, { once: true });
+    }
+
+    child.stdout?.on('data', (data) => {
       stdout += String(data);
+      if (
+        control &&
+        !reachedInstallPhase &&
+        stdout.includes(PIP_INSTALL_PHASE_MARKER)
+      ) {
+        reachedInstallPhase = true;
+        control.markUnsafeToStop();
+      }
     });
 
-    child.stderr.on('data', (data) => {
+    child.stderr?.on('data', (data) => {
       stderr += String(data);
     });
 
@@ -496,6 +542,7 @@ export class DbtCoreVersionService {
 
   static async installLatestPackage(
     req: PythonPackageActionRequest,
+    control?: InstallTaskControl,
   ): Promise<PythonPackageInstallVersionResponse> {
     const packageName = String(req.packageName ?? '').trim();
     if (
@@ -507,14 +554,18 @@ export class DbtCoreVersionService {
 
     try {
       const python = await getPythonExecutable(req.pythonPath);
-      const install = await runProcess(python, [
-        '-m',
-        'pip',
-        'install',
-        '--upgrade',
-        '--no-cache-dir',
-        getPipInstallRequirement(packageName),
-      ]);
+      const install = await runProcess(
+        python,
+        [
+          '-m',
+          'pip',
+          'install',
+          '--upgrade',
+          '--no-cache-dir',
+          getPipInstallRequirement(packageName),
+        ],
+        { control },
+      );
       if (install.exitCode !== 0) {
         return {
           ok: false,
@@ -542,6 +593,7 @@ export class DbtCoreVersionService {
 
   static async uninstallPackage(
     req: PythonPackageActionRequest,
+    control?: InstallTaskControl,
   ): Promise<PythonPackageInstallVersionResponse> {
     const packageName = String(req.packageName ?? '').trim();
     if (!ALLOWED_PYTHON_PACKAGES.has(packageName)) {
@@ -550,13 +602,11 @@ export class DbtCoreVersionService {
 
     try {
       const python = await getPythonExecutable(req.pythonPath);
-      const uninstall = await runProcess(python, [
-        '-m',
-        'pip',
-        'uninstall',
-        '--yes',
-        packageName,
-      ]);
+      const uninstall = await runProcess(
+        python,
+        ['-m', 'pip', 'uninstall', '--yes', packageName],
+        { control },
+      );
       if (uninstall.exitCode !== 0) {
         return {
           ok: false,
@@ -652,14 +702,18 @@ export class DbtCoreVersionService {
 
   static async installVersionChange(
     request: DbtVersionChangeRequest,
+    control?: InstallTaskControl,
   ): Promise<PythonPackageInstallVersionResponse> {
     const previousSettings = await SettingsService.loadSettings();
     const plan = await this.planVersionChange(request);
-    const result = await this.installDbtCoreVersion({
-      pythonPath: request.pythonPath,
-      packageName: 'dbt-core',
-      version: request.targetVersion,
-    });
+    const result = await this.installDbtCoreVersion(
+      {
+        pythonPath: request.pythonPath,
+        packageName: 'dbt-core',
+        version: request.targetVersion,
+      },
+      control,
+    );
     return {
       ...result,
       previousVersion: plan.currentVersion,
@@ -670,18 +724,20 @@ export class DbtCoreVersionService {
 
   static async installPackageVersion(
     req: PythonPackageInstallVersionRequest,
+    control?: InstallTaskControl,
   ): Promise<PythonPackageInstallVersionResponse> {
     const safeName = String(req.packageName ?? '').trim();
 
     if ((DBT_RUNTIME_PACKAGES as readonly string[]).includes(safeName)) {
-      return this.installDbtCoreVersion(req);
+      return this.installDbtCoreVersion(req, control);
     }
 
-    return this.installGenericPythonPackageVersion(req);
+    return this.installGenericPythonPackageVersion(req, control);
   }
 
   static async installDbtCoreVersion(
     req: PythonPackageInstallVersionRequest,
+    control?: InstallTaskControl,
   ): Promise<PythonPackageInstallVersionResponse> {
     const safeVersion = String(req.version ?? '').trim();
 
@@ -700,22 +756,24 @@ export class DbtCoreVersionService {
       const python = await getPythonExecutable(req.pythonPath);
       // Both runtime packages own the `dbt` module and console script, so the
       // other one has to go before this install or the files get interleaved.
-      await runProcess(python, [
-        '-m',
-        'pip',
-        'uninstall',
-        '--yes',
-        otherRuntimePackage,
-      ]);
-      const installResult = await runProcess(python, [
-        '-m',
-        'pip',
-        'install',
-        '--upgrade',
-        '--force-reinstall',
-        '--no-cache-dir',
-        `${packageName}==${safeVersion}`,
-      ]);
+      await runProcess(
+        python,
+        ['-m', 'pip', 'uninstall', '--yes', otherRuntimePackage],
+        { control },
+      );
+      const installResult = await runProcess(
+        python,
+        [
+          '-m',
+          'pip',
+          'install',
+          '--upgrade',
+          '--force-reinstall',
+          '--no-cache-dir',
+          `${packageName}==${safeVersion}`,
+        ],
+        { control },
+      );
 
       if (installResult.exitCode !== 0) {
         return {
@@ -979,6 +1037,7 @@ export class DbtCoreVersionService {
 
   private static async installGenericPythonPackageVersion(
     req: PythonPackageInstallVersionRequest,
+    control?: InstallTaskControl,
   ): Promise<PythonPackageInstallVersionResponse> {
     const safeName = String(req.packageName ?? '').trim();
     const safeVersion = String(req.version ?? '').trim();
@@ -1009,15 +1068,19 @@ export class DbtCoreVersionService {
 
     try {
       const python = await getPythonExecutable(req.pythonPath);
-      const result = await runProcess(python, [
-        '-m',
-        'pip',
-        'install',
-        '--upgrade',
-        '--force-reinstall',
-        '--no-cache-dir',
-        `${safeName}==${safeVersion}`,
-      ]);
+      const result = await runProcess(
+        python,
+        [
+          '-m',
+          'pip',
+          'install',
+          '--upgrade',
+          '--force-reinstall',
+          '--no-cache-dir',
+          `${safeName}==${safeVersion}`,
+        ],
+        { control },
+      );
 
       if (result.exitCode !== 0) {
         return {

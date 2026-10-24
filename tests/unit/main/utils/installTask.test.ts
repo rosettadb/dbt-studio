@@ -1,5 +1,9 @@
 import { TaskManagerService } from '../../../../src/main/services/taskManager.service';
-import { runInstallTask } from '../../../../src/main/utils/installTask';
+import {
+  InstallTaskControl,
+  runInstallTask,
+} from '../../../../src/main/utils/installTask';
+import { INSTALL_CANCELLED_MESSAGE } from '../../../../src/shared/installTasks';
 
 jest.mock('electron', () => ({
   BrowserWindow: jest.fn(),
@@ -7,6 +11,12 @@ jest.mock('electron', () => ({
 
 const findTask = (label: string) =>
   TaskManagerService.list().find((task) => task.label === label);
+
+// Lets queued work start: the queue hands over on a later tick.
+const waitForQueue = () =>
+  new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
 
 describe('runInstallTask', () => {
   afterEach(() => {
@@ -68,5 +78,115 @@ describe('runInstallTask', () => {
       Promise.resolve({ success: true }),
     );
     expect(findTask('Next install')?.status).toBe('completed');
+  });
+
+  it('stores what the install is about on the task', async () => {
+    await runInstallTask(
+      'install:dbt',
+      'Tagged install',
+      () => Promise.resolve({ ok: true }),
+      { subject: 'dbt-postgres@1.9.0' },
+    );
+    expect(findTask('Tagged install')?.subject).toBe('dbt-postgres@1.9.0');
+  });
+
+  it('skips an install cancelled while queued, so nothing runs', async () => {
+    let finishFirst: () => void = () => {};
+    const first = runInstallTask(
+      'install:dbt',
+      'Blocking install',
+      () =>
+        new Promise<void>((resolve) => {
+          finishFirst = resolve;
+        }),
+    );
+    const queuedWork = jest.fn().mockResolvedValue({ ok: true });
+    const queued = runInstallTask('install:dbt', 'Queued install', queuedWork);
+
+    await waitForQueue();
+    const queuedTask = findTask('Queued install');
+    expect(queuedTask?.cancellable).toBe(true);
+    expect(TaskManagerService.cancel(queuedTask!.id)).toBe(true);
+
+    finishFirst();
+    await first;
+    await expect(queued).rejects.toThrow(INSTALL_CANCELLED_MESSAGE);
+    expect(queuedWork).not.toHaveBeenCalled();
+    expect(findTask('Queued install')?.status).toBe('cancelled');
+  });
+
+  it('cannot be cancelled once a non-stoppable install starts', async () => {
+    let finish: () => void = () => {};
+    const run = runInstallTask(
+      'install:python',
+      'Python install',
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await waitForQueue();
+
+    const task = findTask('Python install');
+    expect(task?.status).toBe('running');
+    expect(task?.cancellable).toBe(false);
+    expect(TaskManagerService.cancel(task!.id)).toBe(false);
+
+    finish();
+    await run;
+    expect(findTask('Python install')?.status).toBe('completed');
+  });
+
+  it('lets a stoppable install stop only until it starts changing files', async () => {
+    let control: InstallTaskControl | undefined;
+    let finish: () => void = () => {};
+    const run = runInstallTask(
+      'install:dbt',
+      'Adapter install',
+      (installControl) => {
+        control = installControl;
+        return new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+      },
+      { stoppable: true },
+    );
+    await waitForQueue();
+    expect(findTask('Adapter install')?.cancellable).toBe(true);
+
+    // pip printed "Installing collected packages".
+    control!.markUnsafeToStop();
+    const task = findTask('Adapter install');
+    expect(task?.cancellable).toBe(false);
+    expect(TaskManagerService.cancel(task!.id)).toBe(false);
+
+    finish();
+    await run;
+    expect(findTask('Adapter install')?.status).toBe('completed');
+  });
+
+  it('marks a stoppable install cancelled when stopped while downloading', async () => {
+    const run = runInstallTask(
+      'install:dbt',
+      'Stopped install',
+      ({ signal }) =>
+        new Promise<void>((_resolve, reject) => {
+          signal.addEventListener('abort', () =>
+            reject(new Error(INSTALL_CANCELLED_MESSAGE)),
+          );
+        }),
+      { stoppable: true },
+    );
+    await waitForQueue();
+
+    TaskManagerService.cancel(findTask('Stopped install')!.id);
+    await expect(run).rejects.toThrow(INSTALL_CANCELLED_MESSAGE);
+    expect(findTask('Stopped install')?.status).toBe('cancelled');
+
+    // The queue moves on to the next install.
+    await runInstallTask('install:dbt', 'After stop', () =>
+      Promise.resolve({ ok: true }),
+    );
+    expect(findTask('After stop')?.status).toBe('completed');
   });
 });

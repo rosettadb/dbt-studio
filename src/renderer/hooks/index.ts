@@ -25,6 +25,7 @@ import { useProjectSqlExecution } from './useProjectSqlExecution';
 import { useAgentStream } from './useAgentStream';
 import { useTaskChannel } from './useTaskChannel';
 import { useIsTaskTypeActive } from './useIsTaskTypeActive';
+import { useActiveInstallTasks } from './useActiveInstallTasks';
 
 export {
   useIpcPromise,
@@ -53,4 +54,5 @@ export {
   useAgentStream,
   useTaskChannel,
   useIsTaskTypeActive,
+  useActiveInstallTasks,
 };

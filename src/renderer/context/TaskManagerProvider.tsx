@@ -9,9 +9,11 @@ import React, {
   ReactNode,
 } from 'react';
 import { useQueryClient } from 'react-query';
+import { toast } from 'react-toastify';
 import type { TaskEvent, TaskRecord } from '../../types/ipc';
 import { taskManagerService } from '../services';
 import { QUERY_KEYS } from '../config/constants';
+import { isInstallTaskType } from '../../shared/installTasks';
 
 type TaskListener = (task: TaskRecord | undefined) => void;
 
@@ -21,7 +23,22 @@ export interface TaskManagerContextValue {
   remove: (taskId: string) => Promise<void>;
   subscribe: (taskId: string, listener: TaskListener) => () => void;
   getTask: (taskId: string) => TaskRecord | undefined;
+  // Running installs that have taken longer than STUCK_INSTALL_AFTER_MS.
+  stuckTaskIds: string[];
 }
+
+const STUCK_INSTALL_AFTER_MS = 10 * 60 * 1000;
+const STUCK_CHECK_INTERVAL_MS = 30 * 1000;
+const MAX_POPUP_ERROR_LENGTH = 300;
+
+// The app update page already explains what to do once its download ends.
+const showsFinishPopup = (task: TaskRecord) =>
+  isInstallTaskType(task.type) && task.type !== 'install:app-update';
+
+const shortenError = (error = '') =>
+  error.length > MAX_POPUP_ERROR_LENGTH
+    ? `${error.slice(0, MAX_POPUP_ERROR_LENGTH)}…`
+    : error;
 
 export const TaskManagerContext = createContext<TaskManagerContextValue | null>(
   null,
@@ -45,6 +62,8 @@ export const TaskManagerProvider: React.FC<TaskManagerProviderProps> = ({
   const tasksRef = useRef<Map<string, TaskRecord>>(new Map());
   const listenersRef = useRef<Map<string, Set<TaskListener>>>(new Map());
   const queryClient = useQueryClient();
+  const [stuckTaskIds, setStuckTaskIds] = useState<string[]>([]);
+  const warnedStuckTaskIdsRef = useRef<Set<string>>(new Set());
 
   const notify = useCallback((taskId: string) => {
     const listeners = listenersRef.current.get(taskId);
@@ -55,6 +74,7 @@ export const TaskManagerProvider: React.FC<TaskManagerProviderProps> = ({
 
   const applyEvent = useCallback(
     (event: TaskEvent) => {
+      const previousStatus = tasksRef.current.get(event.task.id)?.status;
       if (event.type === 'removed') {
         tasksRef.current.delete(event.task.id);
       } else {
@@ -72,9 +92,55 @@ export const TaskManagerProvider: React.FC<TaskManagerProviderProps> = ({
       ) {
         queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
       }
+
+      // One popup per finished install, on whatever screen is open.
+      const justFinished =
+        previousStatus === 'running' || previousStatus === 'pending';
+      if (justFinished && showsFinishPopup(event.task)) {
+        if (event.task.status === 'completed') {
+          toast.success(`${event.task.label}: done`);
+        } else if (event.task.status === 'error') {
+          toast.error(
+            `${event.task.label} failed: ${shortenError(event.task.error)}`,
+          );
+        }
+      }
     },
     [notify, queryClient],
   );
+
+  // Nothing is stopped automatically: a long install only gets a "Looks
+  // stuck" label in the Task Manager and one popup pointing there.
+  useEffect(() => {
+    const checkForStuckInstalls = () => {
+      const now = Date.now();
+      const stuck = Array.from(tasksRef.current.values()).filter(
+        (task) =>
+          isInstallTaskType(task.type) &&
+          task.status === 'running' &&
+          now - task.startedAt >= STUCK_INSTALL_AFTER_MS,
+      );
+      stuck.forEach((task) => {
+        if (warnedStuckTaskIdsRef.current.has(task.id)) return;
+        warnedStuckTaskIdsRef.current.add(task.id);
+        toast.warning(
+          `${task.label} is taking longer than usual and may be stuck. Check the Task Manager.`,
+        );
+      });
+      setStuckTaskIds((previous) => {
+        const next = stuck.map((task) => task.id);
+        return previous.length === next.length &&
+          previous.every((id, index) => id === next[index])
+          ? previous
+          : next;
+      });
+    };
+    const interval = setInterval(
+      checkForStuckInstalls,
+      STUCK_CHECK_INTERVAL_MS,
+    );
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -129,8 +195,8 @@ export const TaskManagerProvider: React.FC<TaskManagerProviderProps> = ({
   );
 
   const value = useMemo<TaskManagerContextValue>(
-    () => ({ tasks, cancel, remove, subscribe, getTask }),
-    [tasks, cancel, remove, subscribe, getTask],
+    () => ({ tasks, cancel, remove, subscribe, getTask, stuckTaskIds }),
+    [tasks, cancel, remove, subscribe, getTask, stuckTaskIds],
   );
 
   return (

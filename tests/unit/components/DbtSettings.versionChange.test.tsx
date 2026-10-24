@@ -1,6 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { DbtSettings } from '../../../src/renderer/components/settings/DbtSettings';
+import type { TaskRecord } from '../../../src/types/ipc';
 
 const listVersions = jest.fn();
 const planVersionChange = jest.fn();
@@ -38,10 +39,34 @@ jest.mock('../../../src/renderer/controllers', () => ({
   useInstallPython: () => ({ mutateAsync: installPython }),
 }));
 
-// Installs report busy state through the task manager, which is not mounted here.
-jest.mock('../../../src/renderer/hooks/useIsTaskTypeActive', () => ({
-  useIsTaskTypeActive: () => false,
+// Installs report their state through the task manager, which is not mounted
+// here; each test sets the queued or running tasks it needs.
+let mockTasks: TaskRecord[] = [];
+const mockCancelTask = jest.fn().mockResolvedValue(undefined);
+jest.mock('../../../src/renderer/context/TaskManagerProvider', () => ({
+  ...jest.requireActual('../../../src/renderer/context/TaskManagerProvider'),
+  useTaskManager: () => ({
+    tasks: mockTasks,
+    cancel: mockCancelTask,
+    remove: jest.fn(),
+    subscribe: jest.fn(),
+    getTask: jest.fn(),
+    stuckTaskIds: [],
+  }),
 }));
+
+const dbtTask = (
+  subject: string,
+  status: TaskRecord['status'] = 'pending',
+): TaskRecord => ({
+  id: `task-${subject}`,
+  type: 'install:dbt',
+  label: `Installing ${subject}`,
+  status,
+  startedAt: Date.now(),
+  cancellable: status === 'pending',
+  subject,
+});
 
 const stableItem = {
   version: '1.11.12',
@@ -94,6 +119,7 @@ const mockVersionList = (stableItems: (typeof stableItem)[]) =>
 describe('DbtSettings runtime switch', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockTasks = [];
     getInstalledPackages.mockResolvedValue({ packages: {} });
     installPython.mockResolvedValue({
       success: true,
@@ -341,5 +367,111 @@ describe('DbtSettings runtime switch', () => {
     expect(await screen.findByText(/dbt-postgres failed/)).toHaveTextContent(
       'dbt-bigquery failed',
     );
+  });
+
+  describe('install queue', () => {
+    const installedAdapters = {
+      'dbt-postgres': '1.9.0',
+      'dbt-duckdb': '1.11.0',
+    };
+
+    // The page loads installed packages after a 1s delay.
+    const loadTimeout = { timeout: 3000 };
+
+    // Adapter rows list dbt-postgres first and dbt-duckdb after it.
+    const uninstallButtons = async () =>
+      screen.findAllByRole('button', { name: 'Uninstall' }, loadTimeout);
+
+    it('shows Queued with a cancel on the clicked adapter and greys only its other buttons', async () => {
+      getInstalledPackages.mockResolvedValue({ packages: installedAdapters });
+      mockTasks = [dbtTask('dbt-postgres@1.9.1')];
+      renderSettings();
+
+      const queuedChip = (await screen.findByText('Queued')).closest(
+        '.MuiChip-root',
+      ) as HTMLElement;
+      const [postgresUninstall, ...otherUninstalls] = await uninstallButtons();
+      expect(postgresUninstall).toBeDisabled();
+      otherUninstalls.forEach((button) => expect(button).toBeEnabled());
+
+      fireEvent.click(
+        queuedChip.querySelector('.MuiChip-deleteIcon') as Element,
+      );
+      expect(mockCancelTask).toHaveBeenCalledWith('task-dbt-postgres@1.9.1');
+    });
+
+    it('shows In progress without a cancel once the install runs', async () => {
+      getInstalledPackages.mockResolvedValue({ packages: installedAdapters });
+      mockTasks = [dbtTask('dbt-postgres', 'running')];
+      renderSettings();
+
+      expect(await screen.findByText('In progress')).toBeInTheDocument();
+      expect(screen.queryByText('Queued')).not.toBeInTheDocument();
+      const [postgresUninstall] = await uninstallButtons();
+      expect(postgresUninstall).toBeDisabled();
+    });
+
+    it('puts every adapter in the queue at once for Install All Adapters', async () => {
+      getInstalledPackages.mockResolvedValue({ packages: installedAdapters });
+      // Never resolves, like installs still waiting in the queue.
+      installLatestPackage.mockReturnValue(new Promise(() => {}));
+      renderSettings();
+      // Already-installed adapters are skipped once the list has loaded.
+      await screen.findByText('v1.9.0', {}, loadTimeout);
+
+      fireEvent.click(
+        await screen.findByRole('button', { name: 'Install All Adapters' }),
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+      await waitFor(() =>
+        expect(installLatestPackage).toHaveBeenCalledTimes(5),
+      );
+      expect(
+        installLatestPackage.mock.calls.map(([request]) => request.packageName),
+      ).toEqual([
+        'dbt-snowflake',
+        'dbt-bigquery',
+        'dbt-redshift',
+        'dbt-databricks',
+        'dbt-kinetica',
+      ]);
+    });
+
+    it('keeps a v1 to v2 switch waiting until no dbt installs are queued', async () => {
+      mockTasks = [dbtTask('dbt-bigquery')];
+      renderSettings();
+
+      fireEvent.click(runtimeToggle('v2'));
+      const v2Actions = await screen.findAllByRole('button', {
+        name: 'Upgrade',
+      });
+      v2Actions.forEach((button) => expect(button).toBeDisabled());
+
+      // A switch within v1 can still queue behind the adapter install.
+      fireEvent.click(runtimeToggle('v1'));
+      const [v1Downgrade] = await screen.findAllByRole('button', {
+        name: 'Downgrade',
+      });
+      expect(v1Downgrade).toBeEnabled();
+    });
+
+    it('greys adapters while a switch to v2 is queued', async () => {
+      getInstalledPackages.mockResolvedValue({ packages: installedAdapters });
+      mockTasks = [dbtTask('dbt-core@2.0.5')];
+      renderSettings();
+
+      (await uninstallButtons()).forEach((button) =>
+        expect(button).toBeDisabled(),
+      );
+      expect(
+        screen.getByRole('button', { name: 'Install All Adapters' }),
+      ).toBeDisabled();
+
+      fireEvent.click(runtimeToggle('v2'));
+      expect(
+        await screen.findByRole('button', { name: 'Queued' }),
+      ).toBeDisabled();
+    });
   });
 });

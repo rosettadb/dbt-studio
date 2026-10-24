@@ -97,26 +97,16 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
   const installVersion = useInstallRosettaVersion({
     onSuccess: (result) => {
       setInstallingVersion(null);
-      if (result.success) {
-        toast.success(`Rosetta ${result.version} installed successfully`);
-        checkVersions.mutate();
-      } else {
-        toast.error(`Installation failed: ${result.error}`);
-      }
+      if (result.success) checkVersions.mutate();
     },
-    onError: (error) => {
+    onError: () => {
       setInstallingVersion(null);
-      toast.error(`Installation failed: ${error.message}`);
     },
   });
 
   const uninstallRosetta = useUninstallRosetta({
     onSuccess: () => {
-      toast.success('Rosetta uninstalled successfully');
       setVersionInfo(null);
-    },
-    onError: (error) => {
-      toast.error(`Uninstall failed: ${error.message}`);
     },
   });
 

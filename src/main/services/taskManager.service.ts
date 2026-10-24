@@ -41,6 +41,7 @@ class TaskManagerServiceImpl {
     label: string;
     cancellable?: boolean;
     status?: 'pending' | 'running';
+    subject?: string;
   }): TaskRecord {
     const task: TaskRecord = {
       id: params.id,
@@ -49,6 +50,7 @@ class TaskManagerServiceImpl {
       status: params.status ?? 'running',
       startedAt: Date.now(),
       cancellable: params.cancellable ?? false,
+      subject: params.subject,
     };
     this.tasks.set(task.id, task);
     this.broadcast({ type: 'created', task });
@@ -60,6 +62,16 @@ class TaskManagerServiceImpl {
     if (!task) return;
     task.status = 'running';
     task.startedAt = Date.now();
+    this.broadcast({ type: 'updated', task });
+  }
+
+  // Turning cancelling off also drops the canceller, so cancel() and
+  // cancelAll() treat the task as one that can no longer be stopped.
+  setCancellable(id: string, cancellable: boolean) {
+    const task = this.tasks.get(id);
+    if (!task || task.cancellable === cancellable) return;
+    task.cancellable = cancellable;
+    if (!cancellable) this.cancellers.delete(id);
     this.broadcast({ type: 'updated', task });
   }
 

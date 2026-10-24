@@ -5,6 +5,7 @@ import {
   BrowserWindow,
   MenuItemConstructorOptions,
 } from 'electron';
+import { confirmQuitWithActiveInstalls } from '../../utils/installTask';
 
 interface DarwinMenuItemConstructorOptions extends MenuItemConstructorOptions {
   selector?: string;
@@ -79,7 +80,7 @@ export default class MenuBuilder {
           label: 'Quit',
           accelerator: 'Command+Q',
           click: () => {
-            app.quit();
+            if (confirmQuitWithActiveInstalls(this.mainWindow)) app.quit();
           },
         },
       ],

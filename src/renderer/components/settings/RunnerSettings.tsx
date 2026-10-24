@@ -122,27 +122,19 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
     onSuccess: (result) => {
       setInstallingVersion(null);
       if (result.success) {
-        toast.success(`Local runner ${result.version} installed`);
         result.warnings?.forEach((warning) => toast.warning(warning));
         checkVersions.mutate();
         pluginDependencies.mutate();
-      } else {
-        toast.error(`Installation failed: ${result.error}`);
       }
     },
-    onError: (error) => {
+    onError: () => {
       setInstallingVersion(null);
-      toast.error(`Installation failed: ${error.message}`);
     },
   });
 
   const uninstallRunner = useUninstallRunnerVersion({
     onSuccess: () => {
-      toast.success('Local runner uninstalled');
       setVersionInfo(null);
-    },
-    onError: (error) => {
-      toast.error(`Uninstall failed: ${error.message}`);
     },
   });
 
@@ -156,26 +148,16 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
   const installKisql = useInstallKisql({
     onSuccess: (result) => {
       if (result.success) {
-        toast.success('KiSQL installed successfully');
         pluginDependencies.mutate();
         checkKisql.mutate();
-      } else {
-        toast.error(`KiSQL installation failed: ${result.error}`);
       }
-    },
-    onError: (error) => {
-      toast.error(`KiSQL installation failed: ${error.message}`);
     },
   });
 
   const uninstallKisql = useUninstallKisql({
     onSuccess: () => {
       setKisqlUpdateAvailable(false);
-      toast.success('KiSQL uninstalled');
       pluginDependencies.mutate();
-    },
-    onError: (error) => {
-      toast.error(`KiSQL uninstall failed: ${error.message}`);
     },
   });
 

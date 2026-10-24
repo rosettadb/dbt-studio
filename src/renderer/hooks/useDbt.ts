@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useContext, useState } from 'react';
 import { toast } from 'react-toastify';
 import useCli from './useCli';
 import useSecureStorage from './useSecureStorage';
@@ -20,6 +20,11 @@ import { useAppContext } from './index';
 import { extractCliErrorDetails } from '../utils/dbtCommandResult';
 import { useDbtRunHistory } from './useDbtRunHistory';
 import { buildKineticaUrl } from '../../shared/kineticaUrl';
+import {
+  DBT_RUNTIME_CHANGING_MESSAGE,
+  isDbtRuntimeChangeTask,
+} from '../../shared/installTasks';
+import { TaskManagerContext } from '../context/TaskManagerProvider';
 
 interface UseDbtReturn {
   run: (project: Project, path?: string) => Promise<void>;
@@ -62,6 +67,17 @@ const useDbt = (
     useDbtRunHistory();
 
   const { runCommand, stopCommand, isRunning } = useCli();
+  // dbt can't run while dbt Core itself, or the Python it lives in, is being
+  // replaced. Read without useTaskManager so this hook also works outside
+  // the provider.
+  const taskManager = useContext(TaskManagerContext);
+  const isDbtRuntimeChanging = Boolean(
+    taskManager?.tasks.some(
+      (task) =>
+        (task.status === 'running' || task.status === 'pending') &&
+        isDbtRuntimeChangeTask(task),
+    ),
+  );
   const { data: connections = [] } = useGetConnections(true);
   const {
     getDatabaseUsername,
@@ -259,6 +275,11 @@ const useDbt = (
         return;
       }
 
+      if (isDbtRuntimeChanging) {
+        if (options.showToast) toast.warning(DBT_RUNTIME_CHANGING_MESSAGE);
+        return;
+      }
+
       let runHistoryId: string | undefined;
 
       try {
@@ -378,6 +399,7 @@ const useDbt = (
     },
     [
       isRunning,
+      isDbtRuntimeChanging,
       connections,
       setupConnectionEnv,
       buildCommand,
@@ -419,6 +441,10 @@ const useDbt = (
 
     compile: useCallback(
       async (project: Project, path?: string) => {
+        if (isDbtRuntimeChanging) {
+          toast.warning(DBT_RUNTIME_CHANGING_MESSAGE);
+          return '';
+        }
         try {
           // Find connection
           const connection = connections.find(
@@ -532,6 +558,7 @@ const useDbt = (
         }
       },
       [
+        isDbtRuntimeChanging,
         connections,
         setupConnectionEnv,
         buildCommand,
@@ -555,6 +582,10 @@ const useDbt = (
 
     list: useCallback(
       async (project: Project) => {
+        if (isDbtRuntimeChanging) {
+          toast.warning(DBT_RUNTIME_CHANGING_MESSAGE);
+          return '';
+        }
         try {
           const connection = connections.find(
             (c) => c.id === project.connectionId,
@@ -607,6 +638,7 @@ const useDbt = (
         }
       },
       [
+        isDbtRuntimeChanging,
         connections,
         setupConnectionEnv,
         buildCommand,

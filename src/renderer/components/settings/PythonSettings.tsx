@@ -50,27 +50,17 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
   const installVersion = useInstallPythonVersion({
     onSuccess: (result) => {
       setInstallingVersion(null);
-      if (result.success) {
-        toast.success(`Python ${result.version} installed successfully`);
-        checkVersions.mutate();
-      } else {
-        toast.error(`Installation failed: ${result.error}`);
-      }
+      if (result.success) checkVersions.mutate();
     },
-    onError: (error) => {
+    onError: () => {
       setInstallingVersion(null);
-      toast.error(`Installation failed: ${error.message}`);
     },
   });
 
   const uninstallPython = useUninstallPython({
     onSuccess: () => {
-      toast.success('Python uninstalled successfully');
       setVersionInfo(null);
       checkVersions.mutate();
-    },
-    onError: (error) => {
-      toast.error(`Uninstall failed: ${error.message}`);
     },
   });
 

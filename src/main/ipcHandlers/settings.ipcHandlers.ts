@@ -5,6 +5,7 @@ import { SettingsService, RunnerService } from '../services';
 import { SettingsChannels } from '../../types/ipc';
 import { DbtCoreVersionService } from '../services/dbtCoreVersion.service';
 import { runInstallTask } from '../utils/installTask';
+import { isDbtRuntimeSubject } from '../../shared/installTasks';
 
 const handlerChannels: SettingsChannels[] = [
   'settings:load',
@@ -198,7 +199,9 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
   });
 
   ipcMain.handle('settings:installSqlGlot', async () => {
-    return SettingsService.installSqlGlot();
+    return runInstallTask('install:sqlglot', 'Installing sqlglot', () =>
+      SettingsService.installSqlGlot(),
+    );
   });
 
   ipcMain.handle('dbt:versions:list', async (_event, request) => {
@@ -217,7 +220,8 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
     return runInstallTask(
       'install:dbt',
       `Switching to dbt-core ${request.targetVersion}`,
-      () => DbtCoreVersionService.installVersionChange(request),
+      (control) => DbtCoreVersionService.installVersionChange(request, control),
+      { subject: `dbt-core@${request.targetVersion}` },
     );
   });
 
@@ -245,7 +249,8 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
     return runInstallTask(
       'install:dbt',
       `Installing ${request.packageName}`,
-      () => DbtCoreVersionService.installLatestPackage(request),
+      (control) => DbtCoreVersionService.installLatestPackage(request, control),
+      { subject: request.packageName, stoppable: true },
     );
   });
 
@@ -253,7 +258,8 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
     return runInstallTask(
       'install:dbt',
       `Uninstalling ${request.packageName}`,
-      () => DbtCoreVersionService.uninstallPackage(request),
+      (control) => DbtCoreVersionService.uninstallPackage(request, control),
+      { subject: request.packageName },
     );
   });
 
@@ -265,7 +271,13 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
     return runInstallTask(
       'install:dbt',
       `Installing ${req.packageName} ${req.version}`,
-      () => DbtCoreVersionService.installPackageVersion(req),
+      (control) => DbtCoreVersionService.installPackageVersion(req, control),
+      {
+        subject: `${req.packageName}@${req.version}`,
+        // A dbt Core switch first uninstalls the other runtime, so it can't
+        // be stopped halfway; adapters can while pip is still downloading.
+        stoppable: !isDbtRuntimeSubject(req.packageName),
+      },
     );
   });
 

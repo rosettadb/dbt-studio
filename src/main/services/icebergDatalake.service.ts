@@ -17,6 +17,7 @@ import { app } from 'electron';
 import databaseStore from '../database';
 import secureStorage from './secureStorage.service';
 import SettingsService from './settings.service';
+import { runInstallTask } from '../utils/installTask';
 
 import type {
   IcebergInstanceConfig,
@@ -1281,29 +1282,36 @@ export class IcebergDatalakeService {
         return IcebergDatalakeService.installedCache;
       }
 
-      // Install pyiceberg with common extras
+      // Install pyiceberg with common extras. It waits in the shared install
+      // queue: it uses the same managed Python as dbt and its adapters.
       const pythonPath = await IcebergDatalakeService.getPythonPath();
-      await new Promise<void>((resolve, reject) => {
-        const child = spawn(pythonPath, [
-          '-m',
-          'pip',
-          'install',
-          // Enabled SQL/Hive catalogs plus the current FileIO profile.
-          // Windows needs 0.12+ for drive-letter warehouse paths; keep in
-          // sync with MIN_PYICEBERG_VERSION in iceberg_bridge.py.
-          // --prefer-binary avoids slow source compilation where wheels exist.
-          `pyiceberg[s3fs,sql-sqlite,sql-postgres,pyarrow,hive]>=${
-            process.platform === 'win32' ? '0.12.0' : '0.10.0'
-          }`,
-          '--prefer-binary',
-          '--quiet',
-        ]);
-        child.on('close', (code: number) => {
-          if (code === 0) resolve();
-          else reject(new Error(`pip install failed with exit code ${code}`));
-        });
-        child.on('error', (err: Error) => reject(err));
-      });
+      await runInstallTask(
+        'install:pyiceberg',
+        'Installing pyiceberg',
+        () =>
+          new Promise<void>((resolve, reject) => {
+            const child = spawn(pythonPath, [
+              '-m',
+              'pip',
+              'install',
+              // Enabled SQL/Hive catalogs plus the current FileIO profile.
+              // Windows needs 0.12+ for drive-letter warehouse paths; keep in
+              // sync with MIN_PYICEBERG_VERSION in iceberg_bridge.py.
+              // --prefer-binary avoids slow source compilation where wheels exist.
+              `pyiceberg[s3fs,sql-sqlite,sql-postgres,pyarrow,hive]>=${
+                process.platform === 'win32' ? '0.12.0' : '0.10.0'
+              }`,
+              '--prefer-binary',
+              '--quiet',
+            ]);
+            child.on('close', (code: number) => {
+              if (code === 0) resolve();
+              else
+                reject(new Error(`pip install failed with exit code ${code}`));
+            });
+            child.on('error', (err: Error) => reject(err));
+          }),
+      );
 
       // Verify installation
       const verifyResult = (await IcebergDatalakeService.runBridge({

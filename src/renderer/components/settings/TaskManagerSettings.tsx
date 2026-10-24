@@ -40,60 +40,72 @@ const isActive = (task: TaskRecord) =>
   task.status === 'running' || task.status === 'pending';
 
 export const TaskManagerSettings: React.FC = () => {
-  const { tasks, cancel, remove } = useTaskManager();
+  const { tasks, cancel, remove, stuckTaskIds } = useTaskManager();
 
   const activeTasks = tasks.filter(isActive);
   const historyTasks = tasks.filter((task) => !isActive(task));
 
-  const renderTask = (task: TaskRecord) => (
-    <SettingsRow
-      key={task.id}
-      label={
-        <Box component="span" sx={{ wordBreak: 'break-all' }}>
-          {task.label}
-        </Box>
-      }
-      description={[
-        formatDistanceToNow(new Date(task.startedAt), {
-          addSuffix: true,
-        }),
-        task.error,
-      ]
-        .filter(Boolean)
-        .join(' · ')}
-    >
-      {task.status === 'running' && task.progress && (
-        <Box sx={{ width: 140 }}>
-          <LinearProgress
-            variant="determinate"
-            value={task.progress.percentage}
-          />
-          <Typography variant="caption" color="text.secondary">
-            {task.progress.percentage}%
-          </Typography>
-        </Box>
-      )}
+  const renderTask = (task: TaskRecord) => {
+    const looksStuck = stuckTaskIds.includes(task.id);
+    return (
+      <SettingsRow
+        key={task.id}
+        label={
+          <Box component="span" sx={{ wordBreak: 'break-all' }}>
+            {task.label}
+          </Box>
+        }
+        description={[
+          formatDistanceToNow(new Date(task.startedAt), {
+            addSuffix: true,
+          }),
+          task.error,
+          // A stuck install that can't be stopped is only safe to leave by
+          // quitting; stopping it mid-copy would leave it half-installed.
+          looksStuck &&
+            !task.cancellable &&
+            "Can't be stopped safely right now. If it stays stuck, quit the app.",
+        ]
+          .filter(Boolean)
+          .join(' · ')}
+      >
+        {task.status === 'running' && task.progress && (
+          <Box sx={{ width: 140 }}>
+            <LinearProgress
+              variant="determinate"
+              value={task.progress.percentage}
+            />
+            <Typography variant="caption" color="text.secondary">
+              {task.progress.percentage}%
+            </Typography>
+          </Box>
+        )}
 
-      <SettingsStatus tone={STATUS_TONE[task.status]}>
-        {STATUS_LABEL[task.status]}
-      </SettingsStatus>
+        {looksStuck && (
+          <SettingsStatus tone="warning">Looks stuck</SettingsStatus>
+        )}
 
-      {task.status === 'running' && task.cancellable && (
-        <Tooltip title="Cancel">
-          <IconButton size="small" onClick={() => cancel(task.id)}>
-            <Cancel fontSize="small" />
-          </IconButton>
-        </Tooltip>
-      )}
-      {!isActive(task) && (
-        <Tooltip title="Dismiss">
-          <IconButton size="small" onClick={() => remove(task.id)}>
-            <Delete fontSize="small" />
-          </IconButton>
-        </Tooltip>
-      )}
-    </SettingsRow>
-  );
+        <SettingsStatus tone={STATUS_TONE[task.status]}>
+          {STATUS_LABEL[task.status]}
+        </SettingsStatus>
+
+        {isActive(task) && task.cancellable && (
+          <Tooltip title={task.status === 'pending' ? 'Cancel' : 'Stop'}>
+            <IconButton size="small" onClick={() => cancel(task.id)}>
+              <Cancel fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
+        {!isActive(task) && (
+          <Tooltip title="Dismiss">
+            <IconButton size="small" onClick={() => remove(task.id)}>
+              <Delete fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
+      </SettingsRow>
+    );
+  };
 
   return (
     <SettingsStack>
