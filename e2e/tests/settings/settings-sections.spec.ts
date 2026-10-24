@@ -78,6 +78,30 @@ test.describe('Settings', () => {
     await expect(window.getByText('No completed tasks yet.')).toBeVisible();
   });
 
+  test('should list a finished install in the Task Manager', async ({
+    electronApp,
+  }) => {
+    const page = await openSettings(electronApp);
+    await openSection(page, 'Task Manager');
+
+    // An unsupported Python version fails at once without downloading, so
+    // this stays offline while still going through the install queue.
+    const result = await page.evaluate(() =>
+      window.electron.ipcRenderer.invoke(
+        'version:python:versions:install',
+        '0.0.0',
+      ),
+    );
+    expect(result).toMatchObject({ success: false });
+
+    await expect(page.getByText('Installing Python 0.0.0')).toBeVisible();
+    await expect(page.getByText('Failed', { exact: true })).toBeVisible();
+    await expect(
+      page.getByText(/Unsupported Python version: 0\.0\.0/),
+    ).toBeVisible();
+    await expect(page.getByText('No tasks currently running.')).toBeVisible();
+  });
+
   test('should show Backup & Restore actions', async ({ electronApp }) => {
     const window = await openSettings(electronApp);
     await openSection(window, 'Backup & Restore');
