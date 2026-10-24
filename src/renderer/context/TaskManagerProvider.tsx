@@ -8,8 +8,10 @@ import React, {
   useState,
   ReactNode,
 } from 'react';
+import { useQueryClient } from 'react-query';
 import type { TaskEvent, TaskRecord } from '../../types/ipc';
 import { taskManagerService } from '../services';
+import { QUERY_KEYS } from '../config/constants';
 
 type TaskListener = (task: TaskRecord | undefined) => void;
 
@@ -42,6 +44,7 @@ export const TaskManagerProvider: React.FC<TaskManagerProviderProps> = ({
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
   const tasksRef = useRef<Map<string, TaskRecord>>(new Map());
   const listenersRef = useRef<Map<string, Set<TaskListener>>>(new Map());
+  const queryClient = useQueryClient();
 
   const notify = useCallback((taskId: string) => {
     const listeners = listenersRef.current.get(taskId);
@@ -59,8 +62,18 @@ export const TaskManagerProvider: React.FC<TaskManagerProviderProps> = ({
       }
       setTasks(sortByStartedAtDesc(Array.from(tasksRef.current.values())));
       notify(event.task.id);
+
+      // Installs save new paths and versions (dbt, Python, ...) in the main
+      // process. Reload the settings so no screen keeps an old copy that a
+      // later save would write back over them.
+      if (
+        event.task.type.startsWith('install:') &&
+        (event.task.status === 'completed' || event.task.status === 'error')
+      ) {
+        queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
+      }
     },
-    [notify],
+    [notify, queryClient],
   );
 
   useEffect(() => {

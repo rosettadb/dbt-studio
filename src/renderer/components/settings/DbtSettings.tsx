@@ -71,6 +71,7 @@ import {
   useSettingsWarningStyle,
 } from './SettingsLayout';
 import { DbtMonoIcon } from '../icon/DbtMonoIcon';
+import { useIsTaskTypeActive } from '../../hooks';
 
 interface DbtSettingsProps {
   settings: SettingsType;
@@ -105,6 +106,29 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
   const [installingPackageKey, setInstallingPackageKey] = React.useState<
     string | null
   >(null);
+  // Installs run in the task manager (dbt ones may install Python first), so
+  // this stays true while one is running or waiting, even after the page is
+  // closed and opened again.
+  const isInstallTaskActive = useIsTaskTypeActive(
+    'install:dbt',
+    'install:python',
+  );
+  const isInstallBusy =
+    isLoadingInstall || installingPackageKey !== null || isInstallTaskActive;
+
+  // Installs keep running after this page closes, and the background process
+  // saves their results itself. A closed page's settings copy is out of date,
+  // so it must not save over them.
+  const isPageOpenRef = React.useRef(true);
+  React.useEffect(() => {
+    isPageOpenRef.current = true;
+    return () => {
+      isPageOpenRef.current = false;
+    };
+  }, []);
+  const saveSettingIfPageOpen = async (name: string, value: string) => {
+    if (isPageOpenRef.current) await onInstallDbtSave(name, value);
+  };
 
   const [selectedPackages, setSelectedPackages] = React.useState<
     Record<string, boolean>
@@ -217,7 +241,6 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
 
     setIsLoadingInstall(true);
     setInstallProgress(0);
-    setIsLoadingDialog(true);
     setVersionChangeResult(null);
 
     try {
@@ -226,14 +249,13 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
         toast.info(
           'Python is required for dbt Core v1 and will be installed automatically.',
         );
-        setLoadingMessage('Installing Python...');
         const pythonResult = await installPython.mutateAsync();
         if (!pythonResult.success) {
           throw new Error(`Failed to install Python: ${pythonResult.error}`);
         }
         pythonPath = pythonResult.path;
-        await onInstallDbtSave('pythonPath', pythonResult.path);
-        await onInstallDbtSave('pythonVersion', pythonResult.version);
+        await saveSettingIfPageOpen('pythonPath', pythonResult.path);
+        await saveSettingIfPageOpen('pythonVersion', pythonResult.version);
       }
 
       const availableDbtVersions =
@@ -249,7 +271,6 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
       for (let i = 0; i < packages.length; i++) {
         const pkg = packages[i];
         setCurrentPackage(pkg);
-        setLoadingMessage(`Installing ${pkg}...`);
         setInstallProgress((i / packages.length) * 100);
 
         if (pkg === 'dbt-core') {
@@ -263,10 +284,10 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
             break;
           }
           if (result.dbtPath) {
-            onInstallDbtSave('dbtPath', result.dbtPath);
+            saveSettingIfPageOpen('dbtPath', result.dbtPath);
           }
           if (result.installedVersion) {
-            onInstallDbtSave('dbtVersion', result.installedVersion);
+            saveSettingIfPageOpen('dbtVersion', result.installedVersion);
           }
         } else {
           const result = await installLatestPackage({
@@ -291,7 +312,6 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     } finally {
       setIsLoadingInstall(false);
       setCurrentPackage('');
-      setIsLoadingDialog(false);
     }
   };
 
@@ -327,8 +347,6 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     version: string,
   ) => {
     setInstallingPackageKey(`${packageName}@${version}`);
-    setIsLoadingDialog(true);
-    setLoadingMessage(`Installing ${packageName}==${version}...`);
     try {
       const res = await installPackageVersion({
         pythonPath: settings.pythonPath,
@@ -343,8 +361,6 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
       await checkInstalledPackages();
     } finally {
       setInstallingPackageKey(null);
-      setIsLoadingDialog(false);
-      setLoadingMessage('');
     }
   };
 
@@ -365,8 +381,6 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     toast.info(
       'Python is required for dbt Core v1 and will be installed automatically.',
     );
-    setIsLoadingDialog(true);
-    setLoadingMessage('Installing Python...');
     try {
       const result = await installPython.mutateAsync();
       if (!result.success) {
@@ -376,8 +390,8 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
         });
         return false;
       }
-      await onInstallDbtSave('pythonPath', result.path);
-      await onInstallDbtSave('pythonVersion', result.version);
+      await saveSettingIfPageOpen('pythonPath', result.path);
+      await saveSettingIfPageOpen('pythonVersion', result.version);
       return true;
     } catch (error) {
       setVersionChangeResult({
@@ -386,9 +400,6 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
           error instanceof Error ? error.message : 'Failed to install Python.',
       });
       return false;
-    } finally {
-      setIsLoadingDialog(false);
-      setLoadingMessage('');
     }
   };
 
@@ -423,11 +434,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
   const confirmDbtVersionChange = async () => {
     if (!versionChangePlan) return;
     setIsVersionChangeDialogOpen(false);
-    setIsLoadingDialog(true);
     setInstallingPackageKey(`dbt-core@${versionChangePlan.targetVersion}`);
-    setLoadingMessage(
-      `Installing dbt-core==${versionChangePlan.targetVersion}...`,
-    );
     try {
       const result = await installDbtVersionChange({
         targetVersion: versionChangePlan.targetVersion,
@@ -436,16 +443,13 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
       });
       setVersionChangeResult(result);
       if (result.ok) {
-        if (result.dbtPath) onInstallDbtSave('dbtPath', result.dbtPath);
+        if (result.dbtPath) saveSettingIfPageOpen('dbtPath', result.dbtPath);
         if (result.installedVersion) {
-          onInstallDbtSave('dbtVersion', result.installedVersion);
+          saveSettingIfPageOpen('dbtVersion', result.installedVersion);
         }
         await refreshDbtCoreVersions();
         await checkInstalledPackages();
         if (runProjectCheck) {
-          setLoadingMessage(
-            'Checking the current project with dbt parse and compile...',
-          );
           setCompatibilityResult(await checkCurrentProjectCompatibility());
         }
       }
@@ -457,8 +461,6 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
       });
     } finally {
       setInstallingPackageKey(null);
-      setIsLoadingDialog(false);
-      setLoadingMessage('');
     }
   };
 
@@ -501,8 +503,6 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
 
   const handleUninstallPackage = async (packageName: string) => {
     setIsLoadingInstall(true);
-    setIsLoadingDialog(true);
-    setLoadingMessage(`Uninstalling ${packageName}...`);
 
     try {
       const result = await uninstallPackage({
@@ -521,20 +521,16 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
       });
 
       if (packageName === 'dbt-core') {
-        onInstallDbtSave('dbtPath', '');
-        onInstallDbtSave('dbtVersion', '');
+        saveSettingIfPageOpen('dbtPath', '');
+        saveSettingIfPageOpen('dbtVersion', '');
       }
     } finally {
       setIsLoadingInstall(false);
-      setIsLoadingDialog(false);
-      setLoadingMessage('');
     }
   };
 
   const handleInstallSinglePackage = async (packageName: string) => {
     setIsLoadingInstall(true);
-    setIsLoadingDialog(true);
-    setLoadingMessage(`Installing ${packageName}...`);
 
     try {
       const result = await installLatestPackage({
@@ -551,8 +547,6 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
       }
     } finally {
       setIsLoadingInstall(false);
-      setIsLoadingDialog(false);
-      setLoadingMessage('');
     }
   };
 
@@ -571,7 +565,6 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     }
 
     setIsLoadingInstall(true);
-    setIsLoadingDialog(true);
     setVersionChangeResult(null);
 
     const errors: string[] = [];
@@ -579,7 +572,6 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     for (let i = 0; i < toInstall.length; i += 1) {
       const pkg = toInstall[i];
       setCurrentPackage(pkg);
-      setLoadingMessage(`Installing ${pkg} (${i + 1}/${toInstall.length})...`);
       setInstallProgress((i / toInstall.length) * 100);
 
       // eslint-disable-next-line no-await-in-loop
@@ -613,8 +605,6 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
 
     setIsLoadingInstall(false);
     setCurrentPackage('');
-    setIsLoadingDialog(false);
-    setLoadingMessage('');
   };
 
   useEffect(() => {
@@ -759,7 +749,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
             onClick={() => {
               prepareDbtVersionChange(item.version).catch(() => undefined);
             }}
-            disabled={isInstalled || isLoadingDialog || isLoadingInstall}
+            disabled={isInstalled || isLoadingDialog || isInstallBusy}
             startIcon={
               installingPackageKey === `dbt-core@${item.version}` ? (
                 <CircularProgress size={14} />
@@ -1068,7 +1058,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
               size="small"
               variant="outlined"
               onClick={() => setShowInstallAllConfirmation(true)}
-              disabled={isLoadingInstall || isLoadingDialog}
+              disabled={isInstallBusy || isLoadingDialog}
               startIcon={
                 isLoadingInstall ? (
                   <CircularProgress size={14} color="inherit" />
@@ -1160,7 +1150,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                       onClick={() => {
                         handleInstallSinglePackage(pkg).catch(() => undefined);
                       }}
-                      disabled={isLoadingInstall || isLoadingDialog}
+                      disabled={isInstallBusy || isLoadingDialog}
                       startIcon={<Download />}
                     >
                       {installed ? 'Update from source' : 'Install'}
@@ -1174,7 +1164,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                       onClick={() => {
                         handleUninstallPackage(pkg).catch(() => undefined);
                       }}
-                      disabled={isLoadingInstall || isLoadingDialog}
+                      disabled={isInstallBusy || isLoadingDialog}
                       startIcon={<Delete />}
                     >
                       Uninstall
@@ -1267,7 +1257,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                                 disabled={
                                   isInstalled ||
                                   isLoadingDialog ||
-                                  isLoadingInstall
+                                  isInstallBusy
                                 }
                                 startIcon={
                                   installingPackageKey ===
@@ -1333,7 +1323,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                           variant="outlined"
                           size="small"
                           onClick={() => handleUninstallPackage(pkg)}
-                          disabled={isLoadingInstall}
+                          disabled={isInstallBusy}
                           startIcon={<Delete />}
                         >
                           Uninstall
@@ -1344,7 +1334,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                           variant="outlined"
                           size="small"
                           onClick={() => handleInstallSinglePackage(pkg)}
-                          disabled={isLoadingInstall}
+                          disabled={isInstallBusy}
                           startIcon={<GetApp />}
                         >
                           Install
@@ -1417,7 +1407,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
               color="primary"
               onClick={() => handleInstallDbt()}
               disabled={
-                isLoadingInstall ||
+                isInstallBusy ||
                 Object.values(selectedPackages).every((v) => !v)
               }
               startIcon={

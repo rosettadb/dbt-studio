@@ -8,7 +8,6 @@ import {
   ToggleButton,
   ToggleButtonGroup,
   Tooltip,
-  Backdrop,
   IconButton,
 } from '@mui/material';
 import {
@@ -24,6 +23,7 @@ import { toast } from 'react-toastify';
 import { SettingsType, RosettaVersionInfo } from '../../../types/backend';
 import { utils } from '../../helpers';
 import { ConfirmationModal } from '../modals';
+import { useIsTaskTypeActive } from '../../hooks';
 import {
   useCheckRosettaVersions,
   useInstallRosettaVersion,
@@ -82,7 +82,7 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
   const [showUninstallConfirmation, setShowUninstallConfirmation] =
     useState(false);
   const [showAllVersions, setShowAllVersions] = useState(false);
-  const [isBlocking, setIsBlocking] = useState(false);
+  const isInstallTaskActive = useIsTaskTypeActive('install:rosetta');
 
   // Version management hooks
   const checkVersions = useCheckRosettaVersions({
@@ -97,7 +97,6 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
   const installVersion = useInstallRosettaVersion({
     onSuccess: (result) => {
       setInstallingVersion(null);
-      setIsBlocking(false);
       if (result.success) {
         toast.success(`Rosetta ${result.version} installed successfully`);
         checkVersions.mutate();
@@ -107,19 +106,16 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
     },
     onError: (error) => {
       setInstallingVersion(null);
-      setIsBlocking(false);
       toast.error(`Installation failed: ${error.message}`);
     },
   });
 
   const uninstallRosetta = useUninstallRosetta({
     onSuccess: () => {
-      setIsBlocking(false);
       toast.success('Rosetta uninstalled successfully');
       setVersionInfo(null);
     },
     onError: (error) => {
-      setIsBlocking(false);
       toast.error(`Uninstall failed: ${error.message}`);
     },
   });
@@ -142,7 +138,6 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
     }
 
     setInstallingVersion(version);
-    setIsBlocking(true);
     installVersion.mutate(version);
   };
 
@@ -152,7 +147,6 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
 
   const confirmUninstall = () => {
     setShowUninstallConfirmation(false);
-    setIsBlocking(true);
     uninstallRosetta.mutate();
   };
 
@@ -183,13 +177,6 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
 
   return (
     <SettingsStack>
-      <Backdrop
-        open={isBlocking}
-        sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, color: '#fff' }}
-      >
-        <CircularProgress color="inherit" />
-      </Backdrop>
-
       <SettingsSection
         title="Rosetta CLI Installation"
         icon={<TerminalOutlined />}
@@ -338,7 +325,8 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
                 disabled={
                   version.version === versionInfo.currentVersion ||
                   installingVersion === version.version ||
-                  installVersion.isLoading
+                  installVersion.isLoading ||
+                  isInstallTaskActive
                 }
                 startIcon={
                   installingVersion === version.version ? (
@@ -396,7 +384,7 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
               variant="outlined"
               color="error"
               onClick={handleUninstall}
-              disabled={uninstallRosetta.isLoading}
+              disabled={uninstallRosetta.isLoading || isInstallTaskActive}
               startIcon={
                 uninstallRosetta.isLoading ? (
                   <CircularProgress size={14} />

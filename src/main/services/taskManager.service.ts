@@ -40,18 +40,27 @@ class TaskManagerServiceImpl {
     type: string;
     label: string;
     cancellable?: boolean;
+    status?: 'pending' | 'running';
   }): TaskRecord {
     const task: TaskRecord = {
       id: params.id,
       type: params.type,
       label: params.label,
-      status: 'running',
+      status: params.status ?? 'running',
       startedAt: Date.now(),
       cancellable: params.cancellable ?? false,
     };
     this.tasks.set(task.id, task);
     this.broadcast({ type: 'created', task });
     return task;
+  }
+
+  start(id: string) {
+    const task = this.tasks.get(id);
+    if (!task) return;
+    task.status = 'running';
+    task.startedAt = Date.now();
+    this.broadcast({ type: 'updated', task });
   }
 
   updateProgress(id: string, progress: TaskProgress) {
@@ -112,7 +121,9 @@ class TaskManagerServiceImpl {
 
     Array.from(this.tasks.keys()).forEach((id) => {
       const task = this.tasks.get(id);
-      if (!task || task.status !== 'running') return;
+      if (!task || (task.status !== 'running' && task.status !== 'pending')) {
+        return;
+      }
 
       const canceller = this.cancellers.get(id);
       if (!canceller) {

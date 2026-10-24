@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Button, Box, Chip, CircularProgress, Backdrop } from '@mui/material';
+import { Button, Box, Chip, CircularProgress } from '@mui/material';
 import {
   Delete,
   ListAltOutlined,
@@ -22,6 +22,7 @@ import {
   SettingsStatus,
 } from './SettingsLayout';
 import { PythonMonoIcon } from '../notebook/NotebookKindIcon';
+import { useIsTaskTypeActive } from '../../hooks';
 
 interface PythonSettingsProps {
   settings: SettingsType;
@@ -37,7 +38,7 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
   );
   const [showUninstallConfirmation, setShowUninstallConfirmation] =
     useState(false);
-  const [isBlocking, setIsBlocking] = useState(false);
+  const isInstallTaskActive = useIsTaskTypeActive('install:python');
 
   const checkVersions = useCheckPythonVersions({
     onSuccess: (data) => setVersionInfo(data),
@@ -49,7 +50,6 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
   const installVersion = useInstallPythonVersion({
     onSuccess: (result) => {
       setInstallingVersion(null);
-      setIsBlocking(false);
       if (result.success) {
         toast.success(`Python ${result.version} installed successfully`);
         checkVersions.mutate();
@@ -59,20 +59,17 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
     },
     onError: (error) => {
       setInstallingVersion(null);
-      setIsBlocking(false);
       toast.error(`Installation failed: ${error.message}`);
     },
   });
 
   const uninstallPython = useUninstallPython({
     onSuccess: () => {
-      setIsBlocking(false);
       toast.success('Python uninstalled successfully');
       setVersionInfo(null);
       checkVersions.mutate();
     },
     onError: (error) => {
-      setIsBlocking(false);
       toast.error(`Uninstall failed: ${error.message}`);
     },
   });
@@ -90,7 +87,6 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
       return;
     }
     setInstallingVersion(version);
-    setIsBlocking(true);
     installVersion.mutate(version);
   };
 
@@ -99,7 +95,6 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
     const version = pendingVersion;
     setPendingVersion(null);
     setInstallingVersion(version);
-    setIsBlocking(true);
     installVersion.mutate(version);
   };
 
@@ -113,7 +108,6 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
 
   const confirmUninstall = () => {
     setShowUninstallConfirmation(false);
-    setIsBlocking(true);
     uninstallPython.mutate();
   };
 
@@ -136,13 +130,6 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
 
   return (
     <SettingsStack>
-      <Backdrop
-        open={isBlocking}
-        sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, color: '#fff' }}
-      >
-        <CircularProgress color="inherit" />
-      </Backdrop>
-
       <SettingsSection
         title="Python Installation"
         icon={<PythonMonoIcon />}
@@ -205,7 +192,8 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
               disabled={
                 entry.version === settings.pythonVersion ||
                 installingVersion === entry.version ||
-                installVersion.isLoading
+                installVersion.isLoading ||
+                isInstallTaskActive
               }
               startIcon={
                 installingVersion === entry.version ? (
@@ -232,7 +220,7 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
               variant="outlined"
               color="error"
               onClick={handleUninstall}
-              disabled={uninstallPython.isLoading}
+              disabled={uninstallPython.isLoading || isInstallTaskActive}
               startIcon={
                 uninstallPython.isLoading ? (
                   <CircularProgress size={14} />

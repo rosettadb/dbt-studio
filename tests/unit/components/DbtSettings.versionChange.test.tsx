@@ -38,6 +38,11 @@ jest.mock('../../../src/renderer/controllers', () => ({
   useInstallPython: () => ({ mutateAsync: installPython }),
 }));
 
+// Installs report busy state through the task manager, which is not mounted here.
+jest.mock('../../../src/renderer/hooks/useIsTaskTypeActive', () => ({
+  useIsTaskTypeActive: () => false,
+}));
+
 const stableItem = {
   version: '1.11.12',
   isPrerelease: false,
