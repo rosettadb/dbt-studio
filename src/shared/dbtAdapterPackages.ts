@@ -1,4 +1,3 @@
-/* eslint-disable studio/no-connection-type-branch -- dbt adapter catalog, keyed by dbt adapter name */
 /**
  * Single source of truth for the dbt adapter packages the Studio installs into
  * its managed Python environment, and for where each one is fetched from.

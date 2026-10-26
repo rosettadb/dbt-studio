@@ -1,4 +1,3 @@
-/* eslint-disable studio/no-connection-type-branch -- dbt adapter catalog, keyed by dbt adapter name */
 import axios from 'axios';
 import fs from 'fs-extra';
 import { spawn } from 'child_process';
