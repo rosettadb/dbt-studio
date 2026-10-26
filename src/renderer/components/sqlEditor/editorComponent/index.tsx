@@ -7,7 +7,7 @@ import { projectsServices } from '../../../services';
 import { Container } from './styles';
 import { Shimmer } from '../../shimmer';
 import { parseSqlEditorStatements, ParsedStatement } from './statements';
-import { parseOracleEditorStatements } from './oracleStatements';
+import { getConnectionUi } from '../../../../connections/registry.renderer';
 import { CompletionItem } from '../../../../types/frontend';
 import type { Table } from '../../../../types/backend';
 import { useSchemaObjectDrop } from '../../../hooks/useSchemaObjectDrop';
@@ -85,10 +85,10 @@ export const SqlEditorComponent: React.FC<Props> = ({
     const monacoInstance = monacoInstanceRef.current;
     if (!model || !monacoInstance) return;
 
-    const statements =
-      connectionTypeRef.current === 'oracle'
-        ? parseOracleEditorStatements(model)
-        : parseSqlEditorStatements(model);
+    const parse =
+      getConnectionUi(connectionTypeRef.current)?.parseEditorStatements ??
+      parseSqlEditorStatements;
+    const statements = parse(model);
     statementsRef.current = statements;
 
     const seenLines = new Set<number>();

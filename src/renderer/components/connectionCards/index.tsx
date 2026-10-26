@@ -8,10 +8,9 @@ import {
   ControlBox,
   ComingSoonBanner,
 } from './style';
-import connectionIcons from '../../../../assets/connectionIcons';
 
 interface ItemDetails {
-  img: keyof typeof connectionIcons.images;
+  icon: string;
   name: string;
   disabled?: boolean;
   dbtCompatible?: boolean;
@@ -35,16 +34,10 @@ export const ConnectionCard: React.FC<Props> = ({ itemDetails, onClick }) => {
         <ContentWrapper>
           {itemDetails.disabled ? (
             <Tooltip title="This connection will be available in a future release">
-              <MediaImage
-                alt="Data source icon"
-                src={connectionIcons.images[itemDetails.img]}
-              />
+              <MediaImage alt="Data source icon" src={itemDetails.icon} />
             </Tooltip>
           ) : (
-            <MediaImage
-              alt="Data source icon"
-              src={connectionIcons.images[itemDetails.img]}
-            />
+            <MediaImage alt="Data source icon" src={itemDetails.icon} />
           )}
           {itemDetails.dbtCompatible && (
             <Tooltip title="Compatible with dbt">

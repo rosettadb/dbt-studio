@@ -34,6 +34,12 @@ import {
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import {
+  connectionIcon,
+  connectionLabel,
+  connectionAccentColor,
+  getConnectionUi,
+} from '../../../connections/registry.renderer';
+import {
   useDeleteConnection,
   useGetCloudConnections,
   useGetConnections,
@@ -43,10 +49,7 @@ import {
 import { useDeleteBucketConnection } from '../../controllers/cloudExplorer.controller';
 import { Loader, ConnectionsSidebar } from '../../components';
 import { AppLayout } from '../../layouts';
-import connectionIcons, {
-  cloudStorageImages,
-} from '../../../../assets/connectionIcons';
-import { SupportedConnectionTypes } from '../../../types/backend';
+import { cloudStorageImages } from '../../../../assets/connectionIcons';
 import { CloudProvider, CloudConnection } from '../../../types/frontend';
 import { generateCloneConnectionName } from '../../utils/connectionNaming';
 
@@ -235,7 +238,7 @@ const Connections: React.FC = () => {
 
   // Helper function to get connection icon
   const getConnectionIcon = (connectionType: string) => {
-    return connectionIcons.images[connectionType as SupportedConnectionTypes];
+    return connectionIcon(connectionType);
   };
 
   // Helper function to get cloud provider icon
@@ -254,28 +257,8 @@ const Connections: React.FC = () => {
   };
 
   // Helper function to get connection type name
-  const getConnectionTypeName = (connectionType: string) => {
-    switch (connectionType) {
-      case 'postgres':
-        return 'PostgreSQL';
-      case 'snowflake':
-        return 'Snowflake';
-      case 'bigquery':
-        return 'BigQuery';
-      case 'redshift':
-        return 'Redshift';
-      case 'databricks':
-        return 'Databricks';
-      case 'duckdb':
-        return 'DuckDB';
-      case 'oracle':
-        return 'Oracle';
-      case 'mysql':
-        return 'MySQL';
-      default:
-        return connectionType.toUpperCase();
-    }
-  };
+  const getConnectionTypeName = (connectionType: string) =>
+    connectionLabel(connectionType) ?? connectionType.toUpperCase();
 
   // Helper function to get cloud provider name
   const getCloudProviderName = (provider: string) => {
@@ -292,26 +275,8 @@ const Connections: React.FC = () => {
   };
 
   // Helper function to get connection type color
-  const getConnectionTypeColor = (connectionType: string) => {
-    switch (connectionType) {
-      case 'postgres':
-        return '#336791';
-      case 'snowflake':
-        return '#29b5e8';
-      case 'bigquery':
-        return '#4285f4';
-      case 'redshift':
-        return '#8c4fff';
-      case 'databricks':
-        return '#ff3621';
-      case 'duckdb':
-        return '#fff000';
-      case 'mysql':
-        return '#00758f';
-      default:
-        return '#666';
-    }
-  };
+  const getConnectionTypeColor = (connectionType: string) =>
+    connectionAccentColor(connectionType);
 
   // Helper function to get cloud provider color
   const getCloudProviderColor = (provider: string) => {
@@ -329,12 +294,12 @@ const Connections: React.FC = () => {
 
   // Helper function to render the appropriate icon component
   const renderConnectionIcon = (connectionType: string) => {
-    const connectionIcon = getConnectionIcon(connectionType);
+    const iconSrc = getConnectionIcon(connectionType);
 
-    if (connectionIcon) {
+    if (iconSrc) {
       return (
         <img
-          src={connectionIcon}
+          src={iconSrc}
           alt={connectionType}
           style={{
             width: 48,
@@ -361,54 +326,14 @@ const Connections: React.FC = () => {
   };
 
   const renderConnectionDetails = (connection: any) => {
-    switch (connection.type) {
-      case 'postgres':
-      case 'redshift':
-        return (
-          <Typography variant="body2" color="text.secondary">
-            Host: {connection.host}:{connection.port}
-          </Typography>
-        );
-      case 'snowflake':
-        return (
-          <Typography variant="body2" color="text.secondary">
-            Account: {connection.account}
-          </Typography>
-        );
-      case 'bigquery':
-        return (
-          <Typography variant="body2" color="text.secondary">
-            Project: {connection.project || connection.projectId}
-          </Typography>
-        );
-      case 'databricks':
-        return (
-          <Typography variant="body2" color="text.secondary">
-            Host: {connection.host}
-          </Typography>
-        );
-      case 'oracle': {
-        let description = 'Connect string';
-        if (connection.connectMode === 'basic')
-          description = `Service: ${connection.serviceName} · ${connection.host}:${connection.port}`;
-        if (connection.connectMode === 'wallet')
-          description = `Wallet alias: ${connection.connectString}`;
-        return (
-          <Typography variant="body2" color="text.secondary">
-            {description}
-          </Typography>
-        );
-      }
-      case 'duckdb':
-      case 'sqlite':
-        return (
-          <Typography variant="body2" color="text.secondary">
-            Path: {connection.short_database_path || connection.database_path}
-          </Typography>
-        );
-      default:
-        return null;
-    }
+    const details =
+      getConnectionUi(connection.type)?.listDetails?.(connection) ?? null;
+    if (details === null) return null;
+    return (
+      <Typography variant="body2" color="text.secondary">
+        {details}
+      </Typography>
+    );
   };
 
   const renderCloudConnectionDetails = (cloudConnection: CloudConnection) => {

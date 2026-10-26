@@ -8,6 +8,7 @@
  */
 
 import type { SupportedConnectionTypes } from '../../../types/backend';
+import { getDescriptor } from '../../../connections/registry.shared';
 
 export type SqlDialect = SupportedConnectionTypes | string | undefined;
 
@@ -37,18 +38,8 @@ const DEFAULT_RULES: DialectRules = {
   limit: 'limit',
 };
 
-const DIALECT_RULES: Record<string, DialectRules> = {
-  postgres: { quote: 'double', folding: 'lower', limit: 'limit' },
-  redshift: { quote: 'double', folding: 'lower', limit: 'limit' },
-  duckdb: { quote: 'double', folding: 'none', limit: 'limit' },
-  ducklake: { quote: 'double', folding: 'none', limit: 'limit' },
-  sqlite: { quote: 'double', folding: 'none', limit: 'limit' },
-  kinetica: { quote: 'double', folding: 'none', limit: 'limit' },
-  snowflake: { quote: 'double', folding: 'upper', limit: 'limit' },
-  oracle: { quote: 'double', folding: 'upper', limit: 'fetch' },
-  mysql: { quote: 'backtick', folding: 'none', limit: 'limit' },
-  bigquery: { quote: 'backtick', folding: 'none', limit: 'limit' },
-  databricks: { quote: 'backtick', folding: 'none', limit: 'limit' },
+/** Dialects that are not connection types (a dbt adapter name, a legacy SQL Server). */
+const NON_CONNECTION_DIALECT_RULES: Record<string, DialectRules> = {
   googlecloud: { quote: 'backtick', folding: 'none', limit: 'limit' },
   mssql: { quote: 'bracket', folding: 'none', limit: 'top' },
 };
@@ -142,8 +133,18 @@ const RESERVED_WORDS = new Set<string>([
 
 const SIMPLE_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
-export const getDialectRules = (dialect: SqlDialect): DialectRules =>
-  (dialect && DIALECT_RULES[dialect]) || DEFAULT_RULES;
+export const getDialectRules = (
+  dialect: SqlDialect,
+  connection?: unknown,
+): DialectRules => {
+  const descriptor = getDescriptor(dialect);
+  if (descriptor) {
+    return connection && descriptor.sql.rulesFor
+      ? descriptor.sql.rulesFor(connection)
+      : descriptor.sql.rules;
+  }
+  return (dialect && NON_CONNECTION_DIALECT_RULES[dialect]) || DEFAULT_RULES;
+};
 
 /**
  * True when `identifier` cannot be written bare in `dialect` without changing
@@ -327,9 +328,14 @@ export const buildRenameTableStatement = (
   dialect: SqlDialect,
 ): string => {
   const from = qualifiedName(ref, dialect);
+  const rename = getDescriptor(dialect)?.sql.renameTable;
+  if (rename) {
+    return rename(
+      from,
+      qualifiedName({ schema: ref.schema, name: newName }, dialect),
+    );
+  }
   switch (dialect) {
-    case 'mysql':
-      return `RENAME TABLE ${from} TO ${qualifiedName({ schema: ref.schema, name: newName }, dialect)};`;
     case 'mssql': {
       const source = ref.schema ? `${ref.schema}.${ref.name}` : ref.name;
       return `EXEC sp_rename '${source.replace(/'/g, "''")}', '${newName.replace(/'/g, "''")}';`;

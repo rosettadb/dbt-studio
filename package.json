@@ -233,6 +233,7 @@
     "eslint-plugin-jsx-a11y": "^6.7.1",
     "eslint-plugin-promise": "^6.1.1",
     "eslint-plugin-react": "^7.33.2",
+    "eslint-plugin-studio": "file:tools/eslint-plugin-studio",
     "eslint-plugin-react-hooks": "^4.6.0",
     "file-loader": "^6.2.0",
     "html-webpack-plugin": "^5.5.3",

@@ -21,6 +21,8 @@ import {
   TableChart as CsvIcon,
   InsertDriveFile as ParquetIcon,
 } from '@mui/icons-material';
+import { getDescriptor } from '../../../connections/registry.shared';
+import { isDuckLakeType } from '../../../connections/ducklake/ducklake.shared';
 import {
   QueryResponseType,
   SupportedConnectionTypes,
@@ -65,7 +67,8 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
     (results as any).originalSql ?? exportContext?.originalSql;
 
   const isDuckLake =
-    exportContext?.connectionType === 'ducklake' &&
+    !!exportContext &&
+    isDuckLakeType(exportContext.connectionType) &&
     !!exportContext.duckLakeInstanceId &&
     !!originalSql;
 
@@ -322,10 +325,10 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
   const canExportParquet =
     !!originalSql &&
     !!exportContext &&
-    ((exportContext.connectionType === 'ducklake' &&
-      !!exportContext.duckLakeInstanceId) ||
-      (exportContext.connectionType === 'duckdb' &&
-        !!exportContext.connectionId));
+    !!getDescriptor(exportContext.connectionType)?.capabilities.nativeExport &&
+    (isDuckLakeType(exportContext.connectionType)
+      ? !!exportContext.duckLakeInstanceId
+      : !!exportContext.connectionId);
 
   const handleExportParquet = async () => {
     if (!canExportParquet || !originalSql) return;
@@ -352,7 +355,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
       const exportQuery = `COPY (${normalizeSqlForCopy(originalSql)}) TO '${escapedPath}' (FORMAT PARQUET)`;
 
       if (
-        exportContext.connectionType === 'ducklake' &&
+        isDuckLakeType(exportContext.connectionType) &&
         exportContext.duckLakeInstanceId
       ) {
         const duckLakeExportResult = await window.electron.ipcRenderer.invoke(
@@ -366,7 +369,8 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
           throw new Error(duckLakeExportResult.error);
         }
       } else if (
-        exportContext.connectionType === 'duckdb' &&
+        // other nativeExport types (DuckDB) run through connector:executeQuery
+        !isDuckLakeType(exportContext.connectionType) &&
         exportContext.connectionId
       ) {
         const duckDbExportResult = await window.electron.ipcRenderer.invoke(

@@ -5,7 +5,7 @@ import {
   executeSQLiteQuery,
   extractSQLiteSchema,
   testSQLiteConnection,
-} from '../../../../src/main/utils/connectors';
+} from '../../../../src/connections/sqlite/sqlite.client.main';
 import type { SQLiteConnection } from '../../../../src/types/backend';
 
 jest.mock('better-sqlite3', () => ({

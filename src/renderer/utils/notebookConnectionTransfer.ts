@@ -4,8 +4,13 @@
  */
 import { ConnectionInput, ConnectionModel } from '../../types/backend';
 import useSecureStorage from '../hooks/useSecureStorage';
+import { DEFAULT_SECRETS } from '../../connections/core/descriptor.shared';
+import { getDescriptor } from '../../connections/registry.shared';
 
 type SecureStorage = ReturnType<typeof useSecureStorage>;
+
+const secretsOf = (connection: ConnectionInput) =>
+  getDescriptor(connection.type)?.secrets ?? DEFAULT_SECRETS;
 
 /**
  * Overlay the real credentials from secure storage onto a connection object,
@@ -20,24 +25,15 @@ export async function resolveConnectionCredentials(
   secureStorage: SecureStorage,
 ): Promise<ConnectionInput> {
   const resolved: any = { ...connection };
-  const { name } = connection;
-
-  if ('username' in resolved) {
-    const storedUsername = await secureStorage.getDatabaseUsername(name);
-    if (storedUsername) resolved.username = storedUsername;
-  }
-  if ('password' in resolved) {
-    const storedPassword = await secureStorage.getDatabasePassword(name);
-    if (storedPassword) resolved.password = storedPassword;
-  }
-  if ('token' in resolved) {
-    const storedToken = await secureStorage.getDatabaseToken(name);
-    if (storedToken) resolved.token = storedToken;
-  }
-  if (resolved.type === 'bigquery') {
-    const storedKey = await secureStorage.getBigQueryServiceAccountKey(name);
-    if (storedKey) resolved.keyfile = storedKey;
-  }
+  const fields = secretsOf(connection).filter(
+    (s) => s.exportable !== false && s.field in resolved,
+  );
+  const values = await Promise.all(
+    fields.map((s) => secureStorage.getConnectionField(s.key, connection.name)),
+  );
+  fields.forEach((s, i) => {
+    if (values[i]) resolved[s.field] = values[i];
+  });
 
   return resolved as ConnectionInput;
 }
@@ -45,48 +41,36 @@ export async function resolveConnectionCredentials(
 /**
  * Persist the credentials embedded in an imported connection into secure
  * storage, matching the writes each connection form performs on save
- * (see e.g. components/connections/postgres.tsx handleSubmit).
+ * (see e.g. connections/postgres/PostgresForm.tsx handleSubmit).
  */
 export async function storeImportedConnectionCredentials(
   connection: ConnectionInput,
   secureStorage: SecureStorage,
 ): Promise<void> {
-  const { name } = connection;
   const asAny = connection as any;
-
-  if ('username' in connection && asAny.username) {
-    await secureStorage.setDatabaseUsername(asAny.username, name);
-  }
-  if ('password' in connection && asAny.password) {
-    await secureStorage.setDatabasePassword(asAny.password, name);
-  }
-  if ('token' in connection && asAny.token) {
-    await secureStorage.setDatabaseToken(asAny.token, name);
-  }
-  if (connection.type === 'bigquery' && asAny.keyfile) {
-    await secureStorage.setBigQueryServiceAccountKey(asAny.keyfile, name);
-  }
+  await Promise.all(
+    secretsOf(connection)
+      .filter((s) => s.field in connection && asAny[s.field])
+      .map((s) =>
+        secureStorage.setConnectionField(
+          s.key,
+          asAny[s.field],
+          connection.name,
+        ),
+      ),
+  );
 }
 
 export async function deleteImportedConnectionCredentials(
   connection: ConnectionInput,
   secureStorage: SecureStorage,
 ): Promise<void> {
-  const { name } = connection;
   const asAny = connection as any;
-
-  if ('username' in connection && asAny.username) {
-    await secureStorage.deleteDatabaseUsername(name);
-  }
-  if ('password' in connection && asAny.password) {
-    await secureStorage.deleteDatabasePassword(name);
-  }
-  if ('token' in connection && asAny.token) {
-    await secureStorage.deleteDatabaseToken(name);
-  }
-  if (connection.type === 'bigquery' && asAny.keyfile) {
-    await secureStorage.deleteBigQueryServiceAccountKey(name);
-  }
+  await Promise.all(
+    secretsOf(connection)
+      .filter((s) => s.field in connection && asAny[s.field])
+      .map((s) => secureStorage.deleteConnectionField(s.key, connection.name)),
+  );
 }
 
 /**

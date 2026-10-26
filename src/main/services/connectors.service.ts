@@ -1,175 +1,49 @@
-/* eslint-disable no-case-declarations, @typescript-eslint/no-shadow, no-restricted-syntax, no-await-in-loop */
+/* eslint-disable no-restricted-syntax, no-await-in-loop */
 import yaml from 'js-yaml';
 import path from 'path';
 import fs from 'fs';
-import os from 'os';
 import { v4 as uuidV4 } from 'uuid';
 import { NotebooksService } from './notebooks.service';
 import {
-  BigQueryConnection,
   BigQueryTestResponse,
   ConnectionInput,
   ConnectionModel,
-  DatabricksConnection,
   DBTConnection,
-  DuckDBConnection,
-  DuckLakeConnectionConfig,
   ExecuteStatementType,
-  KineticaConnection,
-  MySqlConnection,
-  OracleConnection,
-  PostgresConnection,
   Project,
   QueryResponseType,
-  RedshiftConnection,
   RosettaConnection,
-  SnowflakeConnection,
-  SQLiteConnection,
   canUseAsDbtConnection,
 } from '../../types/backend';
 import databaseStore from '../database';
-import { sanitizeBigQueryKeyfile } from '../utils/sanitizeBigQueryKeyfile';
 import { ProjectsService } from './index';
 import MainDatabaseService from './mainDatabase.service';
 import { ConfigureConnectionBody, UpdateConnectionBody } from '../../types/ipc';
-import {
-  executeBigQueryQuery,
-  executeDatabricksQuery,
-  executeDuckDBQuery,
-  executePostgresQuery,
-  executeRedshiftQuery,
-  executeSnowflakeQuery,
-  testBigQueryConnection,
-  testDatabricksConnection,
-  testDuckDBConnection,
-  testPostgresConnection,
-  testRedshiftConnection,
-  testSnowflakeConnection,
-  testKineticaConnection,
-  testSQLiteConnection,
-  testMySqlConnection,
-  executeKineticaQuery,
-  executeSQLiteQuery,
-  executeMySqlQuery,
-  extractSQLiteSchema,
-} from '../utils/connectors';
 import SecureStorageService from './secureStorage.service';
 import { CloudConnection, RecentItem } from '../../types/frontend';
 import { updateProjectConfigFiles } from '../utils/yamlPartialUpdate';
-import { SnowflakeAuthManager } from '../utils/snowflakeAuth';
-import DuckLakeService from './duckLake.service';
-import DuckLakeInstanceStore from './duckLake/instanceStore.service';
-import { buildKineticaUrl, parseKineticaUrl } from '../../shared/kineticaUrl';
+import { getDescriptor } from '../../connections/registry.shared';
 import {
-  buildKineticaProfileOutput,
-  DEFAULT_KINETICA_SCHEMA,
-} from '../utils/kineticaProfile';
-
+  dbtConnectorForAdapter,
+  disposeConnectors,
+  findSecretMaterializer,
+  getConnector,
+  requireConnector,
+  requireDbtConnector,
+  sanitizeForStorage,
+} from '../../connections/registry.main';
+import { listOracleWalletAliases } from '../../connections/oracle/oracle.client.main';
 import {
-  prepareOracleConnection,
-  validateOracleConnection,
-} from '../../shared/oracle';
-import {
-  listOracleWalletAliases,
-  executeOracleQuery,
-  testOracleConnection,
-} from '../utils/oracleHelper';
-import OracleExtractor from '../extractor/oracle.extractor';
+  materializeSnowflakeOAuthEnv as materializeSnowflakeEnv,
+  revokeSnowflakeSession as revokeSnowflake,
+} from '../../connections/snowflake/snowflake.session.main';
 
 export default class ConnectorsService {
   static oracleWalletAliases = listOracleWalletAliases;
 
-  private static async oracleSecrets(conn: OracleConnection, test = false) {
-    return {
-      password:
-        (test ? conn.password : '') ||
-        (await SecureStorageService.getCredential(
-          `db-password-${conn.name}`,
-        )) ||
-        '',
-      walletPassword:
-        (test ? conn.walletPassword : '') ||
-        (await SecureStorageService.getCredential(
-          `db-walletpassword-${conn.name}`,
-        )) ||
-        undefined,
-    };
-  }
-
-  private static readonly bigQueryKeyFiles = new Map<string, string>();
-
-  private static isBigQueryCleanupRegistered = false;
-
-  private static registerBigQueryCleanup(): void {
-    if (this.isBigQueryCleanupRegistered) return;
-    this.isBigQueryCleanupRegistered = true;
-
-    process.once('exit', () => this.cleanupBigQueryKeyFiles());
-
-    const cleanupAndExit = (exitCode: number): void => {
-      this.cleanupBigQueryKeyFiles();
-      process.exitCode = exitCode;
-      setImmediate(() => process.exit(exitCode));
-    };
-
-    process.once('SIGINT', () => cleanupAndExit(130));
-    process.once('SIGTERM', () => cleanupAndExit(143));
-  }
-
-  private static async materializeBigQueryServiceAccount(
-    connectionName: string,
-    value: string,
-  ): Promise<void> {
-    let credentials: { client_email?: unknown };
-    try {
-      credentials = JSON.parse(value);
-    } catch {
-      throw new Error('Invalid BigQuery service account key JSON format.');
-    }
-
-    if (
-      typeof credentials.client_email !== 'string' ||
-      !credentials.client_email.trim()
-    ) {
-      throw new Error('BigQuery service account key is missing client_email.');
-    }
-
-    const key = `db-bigquery-${connectionName}`;
-    this.registerBigQueryCleanup();
-    const tempKeyPath = path.join(
-      os.tmpdir(),
-      `rosetta-bigquery-${uuidV4()}.json`,
-    );
-    await fs.promises.writeFile(tempKeyPath, value, {
-      encoding: 'utf8',
-      mode: 0o600,
-    });
-
-    const previousKeyPath = this.bigQueryKeyFiles.get(key);
-    this.bigQueryKeyFiles.set(key, tempKeyPath);
-    process.env[key] = tempKeyPath;
-    process.env[`db-bigquery-email-${connectionName}`] =
-      credentials.client_email;
-
-    if (previousKeyPath) {
-      await fs.promises.rm(previousKeyPath, { force: true });
-    }
-  }
-
   static cleanupBigQueryKeyFiles(): void {
-    const keyFiles = Array.from(this.bigQueryKeyFiles.entries());
-    this.bigQueryKeyFiles.clear();
-
-    keyFiles.forEach(([key, keyPath]) => {
-      if (process.env[key] === keyPath) delete process.env[key];
-      const connectionName = key.slice('db-bigquery-'.length);
-      delete process.env[`db-bigquery-email-${connectionName}`];
-      try {
-        fs.rmSync(keyPath, { force: true });
-      } catch {
-        // Continue removing the remaining materialized credentials.
-      }
-    });
+    // settings.service.ts and the tests call this name; it disposes every connector.
+    disposeConnectors();
   }
 
   static async loadConnections(
@@ -177,12 +51,16 @@ export default class ConnectorsService {
   ): Promise<ConnectionModel[]> {
     const connections = (await databaseStore.getField('connections')) ?? [];
 
-    // Filter out ducklake connections by default
+    // Filter out ducklake connections by default. Unknown (removed) types stay listed, as today.
     if (includeDataLake) {
       return connections;
     }
 
-    return connections.filter((conn) => conn.connection.type !== 'ducklake');
+    return connections.filter(
+      (conn) =>
+        getDescriptor(conn.connection.type)?.capabilities.listedByDefault !==
+        false,
+    );
   }
 
   static async getConnectionById(
@@ -213,147 +91,10 @@ export default class ConnectorsService {
     conn1: ConnectionInput,
     conn2: ConnectionInput,
   ): boolean {
-    // Different types means different connections
     if (conn1.type !== conn2.type) {
       return false;
     }
-
-    // Compare based on connection type
-    switch (conn1.type) {
-      case 'duckdb':
-        return (
-          conn1.database_path === (conn2 as DuckDBConnection).database_path &&
-          conn1.schema === (conn2 as DuckDBConnection).schema
-        );
-
-      case 'sqlite':
-        return (
-          conn1.database_path === (conn2 as SQLiteConnection).database_path
-        );
-
-      case 'ducklake':
-        return (
-          conn1.instanceId === (conn2 as DuckLakeConnectionConfig).instanceId
-        );
-
-      case 'postgres':
-        return (
-          (conn1 as PostgresConnection).host ===
-            (conn2 as PostgresConnection).host &&
-          (conn1 as PostgresConnection).port ===
-            (conn2 as PostgresConnection).port &&
-          (conn1 as PostgresConnection).database ===
-            (conn2 as PostgresConnection).database &&
-          (conn1 as PostgresConnection).username ===
-            (conn2 as PostgresConnection).username &&
-          (conn1 as PostgresConnection).schema ===
-            (conn2 as PostgresConnection).schema
-        );
-
-      case 'snowflake':
-        return (
-          (conn1 as SnowflakeConnection).account ===
-            (conn2 as SnowflakeConnection).account &&
-          (conn1 as SnowflakeConnection).database ===
-            (conn2 as SnowflakeConnection).database &&
-          (conn1 as SnowflakeConnection).username ===
-            (conn2 as SnowflakeConnection).username &&
-          (conn1 as SnowflakeConnection).warehouse ===
-            (conn2 as SnowflakeConnection).warehouse &&
-          (conn1 as SnowflakeConnection).schema ===
-            (conn2 as SnowflakeConnection).schema
-        );
-
-      case 'bigquery':
-        return (
-          (conn1 as BigQueryConnection).project ===
-            (conn2 as BigQueryConnection).project &&
-          (conn1 as BigQueryConnection).database ===
-            (conn2 as BigQueryConnection).database &&
-          (conn1 as BigQueryConnection).schema ===
-            (conn2 as BigQueryConnection).schema &&
-          (conn1 as BigQueryConnection).keyfile ===
-            (conn2 as BigQueryConnection).keyfile
-        );
-
-      case 'redshift':
-        return (
-          (conn1 as RedshiftConnection).host ===
-            (conn2 as RedshiftConnection).host &&
-          (conn1 as RedshiftConnection).port ===
-            (conn2 as RedshiftConnection).port &&
-          (conn1 as RedshiftConnection).database ===
-            (conn2 as RedshiftConnection).database &&
-          (conn1 as RedshiftConnection).username ===
-            (conn2 as RedshiftConnection).username &&
-          (conn1 as RedshiftConnection).schema ===
-            (conn2 as RedshiftConnection).schema
-        );
-
-      case 'databricks':
-        return (
-          (conn1 as DatabricksConnection).host ===
-            (conn2 as DatabricksConnection).host &&
-          (conn1 as DatabricksConnection).httpPath ===
-            (conn2 as DatabricksConnection).httpPath &&
-          (conn1 as DatabricksConnection).database ===
-            (conn2 as DatabricksConnection).database &&
-          (conn1 as DatabricksConnection).schema ===
-            (conn2 as DatabricksConnection).schema
-        );
-
-      case 'kinetica':
-        return (
-          (conn1 as KineticaConnection).host ===
-            (conn2 as KineticaConnection).host &&
-          (conn1 as KineticaConnection).port ===
-            (conn2 as KineticaConnection).port &&
-          (conn1 as KineticaConnection).useSSL ===
-            (conn2 as KineticaConnection).useSSL &&
-          (conn1 as KineticaConnection).database ===
-            (conn2 as KineticaConnection).database &&
-          (conn1 as KineticaConnection).username ===
-            (conn2 as KineticaConnection).username &&
-          (conn1 as KineticaConnection).schema ===
-            (conn2 as KineticaConnection).schema &&
-          (conn1 as KineticaConnection).timeout ===
-            (conn2 as KineticaConnection).timeout &&
-          (conn1 as KineticaConnection).bypassSslCertCheck ===
-            (conn2 as KineticaConnection).bypassSslCertCheck
-        );
-
-      case 'oracle': {
-        const other = conn2 as OracleConnection;
-        return (
-          conn1.username === other.username &&
-          conn1.schema === other.schema &&
-          conn1.connectMode === other.connectMode &&
-          (conn1.connectMode === 'basic'
-            ? conn1.host === other.host &&
-              conn1.port === other.port &&
-              conn1.serviceName === other.serviceName &&
-              !!conn1.tls === !!other.tls
-            : conn1.connectString === other.connectString &&
-              (conn1.connectMode !== 'wallet' ||
-                conn1.walletDir === other.walletDir))
-        );
-      }
-      case 'mysql':
-        return (
-          (conn1 as MySqlConnection).host === (conn2 as MySqlConnection).host &&
-          (conn1 as MySqlConnection).port === (conn2 as MySqlConnection).port &&
-          (conn1 as MySqlConnection).database ===
-            (conn2 as MySqlConnection).database &&
-          (conn1 as MySqlConnection).username ===
-            (conn2 as MySqlConnection).username &&
-          (conn1 as MySqlConnection).schema ===
-            (conn2 as MySqlConnection).schema &&
-          (conn1 as MySqlConnection).ssl === (conn2 as MySqlConnection).ssl
-        );
-
-      default:
-        return false;
-    }
+    return getConnector(conn1.type)?.sameTarget(conn1, conn2) ?? false;
   }
 
   /**
@@ -364,54 +105,8 @@ export default class ConnectorsService {
     connection: ConnectionInput,
   ): string {
     const timestamp = Date.now();
-    let baseName = 'DBT Connection';
-
-    // Try to use database name or path as part of the unique name
-    // eslint-disable-next-line default-case
-    switch (connection.type) {
-      case 'oracle':
-        baseName =
-          connection.serviceName ||
-          (connection.connectMode === 'wallet'
-            ? connection.connectString
-            : '') ||
-          'oracle';
-        break;
-      case 'duckdb': {
-        const duckConn = connection as DuckDBConnection;
-        // Extract filename from path if available
-        const fileName = path.basename(duckConn.database_path, '.duckdb');
-        baseName = fileName || duckConn.name;
-        break;
-      }
-      case 'sqlite': {
-        const sqliteConnection = connection as SQLiteConnection;
-        baseName =
-          path.basename(
-            sqliteConnection.database_path,
-            path.extname(sqliteConnection.database_path),
-          ) || sqliteConnection.name;
-        break;
-      }
-      case 'postgres':
-      case 'redshift':
-      case 'mysql':
-        baseName = connection.database;
-        break;
-      case 'snowflake':
-        baseName = `${connection.database}`;
-        break;
-      case 'bigquery':
-        baseName = (connection as BigQueryConnection).project;
-        break;
-      case 'databricks':
-        baseName = connection.database;
-        break;
-      case 'kinetica':
-        baseName = connection.database || 'kinetica';
-        break;
-    }
-
+    const baseName =
+      getConnector(connection.type)?.nameHint(connection) ?? 'DBT Connection';
     return `${baseName}_${timestamp}`;
   }
 
@@ -421,13 +116,13 @@ export default class ConnectorsService {
   static async saveNewConnectionForTemplate(
     connection: ConnectionInput,
   ): Promise<string> {
-    if (connection.type === 'oracle') {
+    const connector = getConnector(connection.type);
+    if (connector?.validatesOnSave) {
       await this.validateConnection(connection);
     }
-    const persistedConnection =
-      connection.type === 'oracle'
-        ? prepareOracleConnection(connection)
-        : connection;
+    const persistedConnection = connector
+      ? connector.prepareForStorage(connection)
+      : connection;
     const connectionId = uuidV4();
     const newConnection: ConnectionModel = {
       id: connectionId,
@@ -444,7 +139,7 @@ export default class ConnectorsService {
         throw new Error(nameValidation.message);
       }
       const next = [...connections, newConnection];
-      next.forEach((conn) => sanitizeBigQueryKeyfile(conn));
+      next.forEach((conn) => sanitizeForStorage(conn));
       return next;
     });
 
@@ -452,46 +147,16 @@ export default class ConnectorsService {
   }
 
   static async saveNewConnection(connection: ConnectionInput): Promise<string> {
-    if (connection.type === 'oracle') {
+    const connector = getConnector(connection.type);
+    if (connector?.validatesOnSave) {
       await this.validateConnection(connection);
     }
-    const persistedConnection =
-      connection.type === 'oracle'
-        ? prepareOracleConnection(connection)
-        : connection;
+    const persistedConnection = connector
+      ? connector.prepareForStorage(connection)
+      : connection;
     const connectionId = uuidV4();
 
-    // For ducklake connections, store S3 credentials securely
-    if (connection.type === 'ducklake') {
-      const instance = await DuckLakeService.getInstance(connection.instanceId);
-      const credentials = await DuckLakeInstanceStore.retrieveCredentials(
-        instance.id,
-        instance.catalog as any,
-        instance.storage as any,
-      );
-
-      // Store S3 credentials in secure storage if they exist
-      if (credentials.storage?.type === 's3' && credentials.storage.s3) {
-        await SecureStorageService.setCredential(
-          `db-s3-region-${connection.name}`,
-          credentials.storage.s3.region,
-        );
-        await SecureStorageService.setCredential(
-          `db-s3-access-key-${connection.name}`,
-          credentials.storage.s3.accessKeyId,
-        );
-        await SecureStorageService.setCredential(
-          `db-s3-secret-key-${connection.name}`,
-          credentials.storage.s3.secretAccessKey,
-        );
-        if (credentials.storage.s3.sessionToken) {
-          await SecureStorageService.setCredential(
-            `db-s3-session-token-${connection.name}`,
-            credentials.storage.s3.sessionToken,
-          );
-        }
-      }
-    }
+    await connector?.onSave(connection); // DuckLake: S3 credentials into secure storage
 
     const newConnection: ConnectionModel = {
       id: connectionId,
@@ -508,7 +173,7 @@ export default class ConnectorsService {
         throw new Error(nameValidation.message);
       }
       const next = [...connections, newConnection];
-      next.forEach((conn) => sanitizeBigQueryKeyfile(conn));
+      next.forEach((conn) => sanitizeForStorage(conn));
       return next;
     });
 
@@ -536,54 +201,11 @@ export default class ConnectorsService {
       throw new Error('Missing connection');
     }
 
-    if (
-      connection.connection.type === 'bigquery' &&
-      connection.connection.method === 'service-account'
-    ) {
-      const account = `db-bigquery-${connection.connection.name}`;
-      const serviceAccount = await SecureStorageService.getCredential(account);
-      if (!serviceAccount) {
-        throw new Error(
-          'BigQuery service account key not found in secure storage',
-        );
-      }
-      await this.materializeBigQueryServiceAccount(
-        connection.connection.name,
-        serviceAccount,
-      );
-    }
-
-    // Load credentials into environment variables for ducklake S3 connections
-    if (connection.connection.type === 'ducklake') {
-      const s3Region = await SecureStorageService.getCredential(
-        `db-s3-region-${connection.connection.name}`,
-      );
-      const s3AccessKey = await SecureStorageService.getCredential(
-        `db-s3-access-key-${connection.connection.name}`,
-      );
-      const s3SecretKey = await SecureStorageService.getCredential(
-        `db-s3-secret-key-${connection.connection.name}`,
-      );
-      const s3SessionToken = await SecureStorageService.getCredential(
-        `db-s3-session-token-${connection.connection.name}`,
-      );
-
-      if (s3Region) {
-        process.env[`db-s3-region-${connection.connection.name}`] = s3Region;
-      }
-      if (s3AccessKey) {
-        process.env[`db-s3-access-key-${connection.connection.name}`] =
-          s3AccessKey;
-      }
-      if (s3SecretKey) {
-        process.env[`db-s3-secret-key-${connection.connection.name}`] =
-          s3SecretKey;
-      }
-      if (s3SessionToken) {
-        process.env[`db-s3-session-token-${connection.connection.name}`] =
-          s3SessionToken;
-      }
-    }
+    const connector = requireDbtConnector(
+      connection.connection.type,
+      `Unsupported connection type: ${connection.connection.type}`, // DIFF-10
+    );
+    await connector.prepareProjectEnv(connection.connection); // BigQuery key file, DuckLake S3 env
 
     const rosettaConnection = await this.mapToRosettaConnection(
       connection.connection,
@@ -639,14 +261,8 @@ export default class ConnectorsService {
     }
 
     if (projectIndex !== -1 && !canUseAsDbtConnection(connection.type)) {
-      const connectionLabels: Record<string, string> = {
-        mysql: 'MySQL',
-        oracle: 'Oracle',
-        sqlite: 'SQLite',
-      };
-
       throw new Error(
-        `${connectionLabels[connection.type] ?? connection.type} connections cannot be used by dbt projects`,
+        `${getDescriptor(connection.type)?.displayName ?? connection.type} connections cannot be used by dbt projects`,
       );
     }
 
@@ -718,13 +334,14 @@ export default class ConnectorsService {
       (c) => c.id === connection.id,
     );
 
+    const connector = getConnector(connection.connection.type);
+    const prepared = connector
+      ? connector.prepareForStorage(connection.connection)
+      : connection.connection;
     const persistedModel =
-      connection.connection.type === 'oracle'
-        ? {
-            ...connection,
-            connection: prepareOracleConnection(connection.connection),
-          }
-        : connection;
+      prepared === connection.connection
+        ? connection
+        : { ...connection, connection: prepared };
 
     await databaseStore.updateField('connections', (current) => {
       const connections = current ?? [];
@@ -747,27 +364,12 @@ export default class ConnectorsService {
 
       const updated = [...connections];
       updated[connectionIndex] = persistedModel;
-      updated.forEach((conn) => sanitizeBigQueryKeyfile(conn));
+      updated.forEach((conn) => sanitizeForStorage(conn));
       return updated;
     });
 
-    if (
-      connection.connection.type === 'oracle' &&
-      previous?.connection.type === 'oracle' &&
-      previous.connection.name !== connection.connection.name
-    ) {
-      // Credentials are keyed by name; drop the ones left under the old name.
-      try {
-        await SecureStorageService.cleanupConnectionCredentials(
-          previous.connection.name,
-        );
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error(
-          `Failed to cleanup credentials for renamed connection ${previous.connection.name}:`,
-          error,
-        );
-      }
+    if (previous && previous.connection.name !== connection.connection.name) {
+      await connector?.onRename(previous.connection, connection.connection);
     }
 
     if (!canUseAsDbtConnection(connection.connection.type)) return;
@@ -890,52 +492,10 @@ export default class ConnectorsService {
     connection: ConnectionInput,
   ): Promise<boolean | BigQueryTestResponse> {
     await this.validateConnection(connection);
-    switch (connection.type) {
-      case 'postgres':
-        return testPostgresConnection(connection);
-      case 'snowflake':
-        try {
-          return await testSnowflakeConnection(connection);
-        } catch {
-          return false;
-        }
-      case 'bigquery':
-        return testBigQueryConnection(connection);
-      case 'databricks':
-        return testDatabricksConnection(connection);
-      case 'duckdb':
-        return testDuckDBConnection(connection);
-      case 'sqlite':
-        return testSQLiteConnection(connection);
-      case 'ducklake':
-        // DuckLake connection test - validate instance exists
-        try {
-          const instance = await DuckLakeService.getInstance(
-            connection.instanceId,
-          );
-          if (!instance || !instance.id) {
-            return false;
-          }
-          return true;
-        } catch (error) {
-          return false;
-        }
-      case 'redshift':
-        return testRedshiftConnection(connection);
-      case 'kinetica':
-        return testKineticaConnection(connection);
-      case 'oracle':
-        return testOracleConnection(
-          connection,
-          await this.oracleSecrets(connection, true),
-        );
-      case 'mysql':
-        return testMySqlConnection(connection);
-      default:
-        throw new Error(
-          `Unsupported connection type: ${(connection as any).type}`,
-        );
-    }
+    return requireConnector(
+      connection.type,
+      `Unsupported connection type: ${(connection as any).type}`,
+    ).test(connection);
   }
 
   private static runningQueries = new Map<string, () => void>();
@@ -957,23 +517,7 @@ export default class ConnectorsService {
   static async revokeSnowflakeSession(
     connectionName: string,
   ): Promise<boolean> {
-    const name = (connectionName ?? '').trim();
-    if (!name) {
-      throw new Error(
-        'Connection name is required to revoke Snowflake credentials.',
-      );
-    }
-    const revoked = SnowflakeAuthManager.revokeSnowflakeToken();
-    for (const field of ['password', 'token']) {
-      const key = `db-${field}-${name}`;
-      try {
-        await SecureStorageService.deleteCredential(key);
-      } catch {
-        // Missing credentials are fine; revoke stays idempotent.
-      }
-      delete process.env[key];
-    }
-    return revoked;
+    return revokeSnowflake(connectionName);
   }
 
   // Hands the live Snowflake OAuth session to dbt (Python driver) at run
@@ -991,23 +535,7 @@ export default class ConnectorsService {
       return false;
     }
     const connection = await this.findConnectionByName(name);
-    const snowflakeConn = connection?.connection;
-    if (
-      !snowflakeConn ||
-      snowflakeConn.type !== 'snowflake' ||
-      (snowflakeConn as SnowflakeConnection).authMethod !== 'oauth_browser'
-    ) {
-      return false;
-    }
-    const accessToken = await SnowflakeAuthManager.readCachedOAuthAccessToken(
-      snowflakeConn as SnowflakeConnection,
-    );
-    if (!accessToken) {
-      delete process.env[`db-token-${snowflakeConn.name}`];
-      return false;
-    }
-    process.env[`db-token-${snowflakeConn.name}`] = accessToken;
-    return true;
+    return materializeSnowflakeEnv(connection?.connection);
   }
 
   /**
@@ -1019,124 +547,26 @@ export default class ConnectorsService {
     projectName,
     queryId,
   }: ExecuteStatementType): Promise<QueryResponseType> {
-    if (connection.type === 'oracle') {
-      const start = Date.now();
-      try {
-        const result = await executeOracleQuery(
-          connection,
-          query,
-          await this.oracleSecrets(connection),
-          queryId ? (fn) => this.runningQueries.set(queryId, fn) : undefined,
-        );
-        return { ...result, duration: Date.now() - start };
-      } finally {
-        if (queryId) this.runningQueries.delete(queryId);
-      }
-    }
-    const storeUser = await SecureStorageService.getCredential(
-      `db-user-${projectName}`,
-    );
-    const storePassword = await SecureStorageService.getCredential(
-      `db-password-${projectName}`,
-    );
-
-    const storeToken = await SecureStorageService.getCredential(
-      `db-token-${projectName}`,
-    );
-
-    const bigQueryKey = await SecureStorageService.getCredential(
-      `db-bigquery-${projectName}`,
-    );
-
-    if (storeUser) {
-      (connection as any).username = storeUser;
-    }
-    if (storePassword) {
-      (connection as any).password = storePassword;
-    }
-    if (storeToken) {
-      (connection as any).token = storeToken;
-    }
-
-    if (bigQueryKey) {
-      (connection as any).keyfile = bigQueryKey;
-    }
+    const connector = getConnector(connection.type);
+    const resolved = connector
+      ? await connector.resolveSecrets(connection, () => projectName)
+      : connection;
 
     const startTime = Date.now();
     let response: QueryResponseType;
 
     // Helper to register cancel callback if queryId is present
-    const registerCancel = queryId
+    const onCancelable = queryId
       ? (fn: () => void) => {
           this.runningQueries.set(queryId, fn);
         }
       : undefined;
 
     try {
-      switch (connection.type) {
-        case 'postgres':
-          response = await executePostgresQuery(
-            connection,
-            query,
-            registerCancel,
-          );
-          break;
-        case 'snowflake':
-          response = await executeSnowflakeQuery(
-            connection,
-            query,
-            registerCancel,
-          );
-          break;
-        case 'bigquery':
-          // BigQuery cancellation not yet implemented in utils
-          response = await executeBigQueryQuery(connection, query);
-          break;
-        case 'databricks':
-          response = await executeDatabricksQuery(
-            connection,
-            query,
-            registerCancel,
-          );
-          break;
-        case 'duckdb':
-          response = await executeDuckDBQuery(
-            connection,
-            query,
-            registerCancel,
-          );
-          break;
-        case 'sqlite':
-          response = executeSQLiteQuery(connection, query);
-          break;
-        case 'redshift':
-          response = await executeRedshiftQuery(
-            connection,
-            query,
-            registerCancel,
-          );
-          break;
-        case 'ducklake':
-          response = {
-            success: false,
-            error: 'DuckLake query execution not yet implemented',
-          };
-          break;
-        case 'kinetica':
-          response = await executeKineticaQuery(
-            connection,
-            query,
-            registerCancel,
-          );
-          break;
-        case 'mysql':
-          response = await executeMySqlQuery(connection, query, registerCancel);
-          break;
-        default:
-          throw new Error(
-            `Unsupported connection type: ${(connection as any).type}`,
-          );
-      }
+      response = await requireConnector(
+        connection.type,
+        `Unsupported connection type: ${(connection as any).type}`,
+      ).query(resolved, query, { onCancelable });
     } finally {
       // Clean up running query registry
       if (queryId) {
@@ -1156,102 +586,21 @@ export default class ConnectorsService {
     connection: ConnectionInput,
     projectName: string,
   ): Promise<string> {
-    const jdbcUrl = await this.generateJdbcUrl(connection);
-    const isDuckDb = connection.type === 'duckdb';
-    const isDuckLake = connection.type === 'ducklake';
-    const isBigQuery = connection.type === 'bigquery';
-    const isDatabricks = connection.type === 'databricks';
-    const ev = (field: string) => `\${db-${field}-${connection.name}}`;
-    let databaseName: string;
-    let schemaName: string;
-
-    if (isDuckDb) {
-      databaseName = this.extractDbNameFromPath(connection.short_database_path);
-      schemaName = connection.schema;
-    } else if (isDuckLake) {
-      databaseName = projectName; // Use project name as database name for ducklake
-      schemaName = 'main';
-    } else if (isBigQuery) {
-      databaseName = ev('project');
-      schemaName = ev('dataset');
-    } else if (isDatabricks) {
-      databaseName = ev('catalog');
-      schemaName = ev('schema');
-    } else {
-      databaseName = ev('dbname');
-      schemaName = ev('schema');
-    }
-
-    // Base connection config
-    const connectionConfig: any = {
-      name: projectName,
-      databaseName,
-      schemaName,
-      dbType: connection.type,
-      url: jdbcUrl,
-    };
-
-    // Handle ducklake-specific configuration
-    if (isDuckLake) {
-      const instance = await DuckLakeService.getInstance(connection.instanceId);
-
-      // Get credentials if available
-      const credentials = await DuckLakeInstanceStore.retrieveCredentials(
-        instance.id,
-        instance.catalog as any,
-        instance.storage as any,
-      );
-
-      connectionConfig.ducklakeDataPath = instance.dataPath;
-
-      // Metadata DB path (from catalog config)
-      if (
-        instance.catalog.type === 'duckdb' &&
-        instance.catalog.duckdb?.metadataPath
-      ) {
-        connectionConfig.ducklakeMetadataDb =
-          instance.catalog.duckdb.metadataPath;
-      } else if (
-        instance.catalog.type === 'sqlite' &&
-        instance.catalog.sqlite?.metadataPath
-      ) {
-        connectionConfig.ducklakeMetadataDb =
-          instance.catalog.sqlite.metadataPath;
-      }
-
-      // Add S3 credentials if storage is S3 - use env vars for security
-      if (credentials.storage?.type === 's3' && credentials.storage.s3) {
-        connectionConfig.s3Region = `\${db-s3-region-${connection.name}}`;
-        connectionConfig.s3AccessKeyId = `\${db-s3-access-key-${connection.name}}`;
-        connectionConfig.s3SecretAccessKey = `\${db-s3-secret-key-${connection.name}}`;
-      }
-    } else if (
-      connection.type !== 'databricks' &&
-      connection.type !== 'duckdb' &&
-      connection.type !== 'bigquery'
-    ) {
-      // Only add userName/password for non-BigQuery, non-Databricks, non-DuckDB, non-ducklake.
-      // Snowflake OAuth never persists a password: the JDBC URL carries
-      // authenticator=oauth_authorization_code and tokens stay in the SDK
-      // temporary credential cache (mirrors updateMainConf in
-      // yamlPartialUpdate.ts).
-      const isSnowflakeOauth =
-        connection.type === 'snowflake' &&
-        (connection as SnowflakeConnection).authMethod === 'oauth_browser';
-      connectionConfig.userName = ev('user');
-      if (isSnowflakeOauth) {
-        connectionConfig.authenticator = 'oauth_authorization_code';
-      } else {
-        connectionConfig.password = ev('password');
-      }
-    }
-
+    const connector = requireDbtConnector(
+      connection.type,
+      'Unsupported connection type!',
+    );
     const yamlData: {
       connections: RosettaConnection[];
       openai_api_key?: string;
     } = {
       openai_api_key: `\${openai-api-key}`,
-      connections: [connectionConfig],
+      connections: [
+        (await connector.toMainConfEntry(
+          connection,
+          projectName,
+        )) as unknown as RosettaConnection,
+      ],
     };
     return yaml.dump(yamlData);
   }
@@ -1260,260 +609,33 @@ export default class ConnectorsService {
     if (!conn.type) {
       throw new Error('Connection type is required');
     }
-
-    switch (conn.type) {
-      case 'oracle': {
-        const error = validateOracleConnection(conn);
-        if (error) throw new Error(error);
-        if (conn.connectMode === 'wallet')
-          await this.oracleWalletAliases(conn.walletDir!);
-        break;
-      }
-      case 'postgres':
-      case 'redshift':
-      case 'mysql':
-        if (!conn.host) throw new Error('Host is required');
-        if (!conn.port) throw new Error('Port is required');
-        break;
-      case 'snowflake':
-        if (!conn.account) throw new Error('Snowflake account is required');
-        if (!('warehouse' in conn)) throw new Error('Warehouse is required');
-        break;
-      case 'bigquery':
-        if (!('project' in conn)) throw new Error('Project ID is required');
-        break;
-      case 'databricks':
-        if (!conn.host) throw new Error('Host is required');
-        if (!('httpPath' in conn)) throw new Error('HTTP Path is required');
-        if (!conn.token) throw new Error('Access token is required');
-        break;
-      case 'duckdb':
-        // DuckDB specific validations
-        if (!conn.database_path) throw new Error('Database path is required');
-        break;
-      case 'sqlite':
-        if (!conn.database_path) throw new Error('Database path is required');
-        break;
-      case 'ducklake':
-        // DuckLake specific validations
-        if (!conn.instanceId)
-          throw new Error('DuckLake instance ID is required');
-        break;
-      case 'kinetica':
-        if (!conn.host) throw new Error('Host is required');
-        if (!conn.port) throw new Error('Port is required');
-        break;
-      default:
-        throw new Error('Unsupported connection type!');
-    }
+    await requireConnector(conn.type, 'Unsupported connection type!').validate(
+      conn,
+    );
   }
 
   static async generateJdbcUrl(conn: ConnectionInput): Promise<string> {
-    const ev = (field: string) => `\${db-${field}-${conn.name}}`;
-    switch (conn.type) {
-      case 'postgres': {
-        let postgresUrl = `jdbc:postgresql://${ev('host')}:${ev('port')}/${ev('dbname')}?currentSchema=${ev('schema')}`;
-        if (conn.ssl) {
-          postgresUrl += '&sslmode=require';
-        }
-        return postgresUrl;
-      }
-      case 'snowflake': {
-        let snowflakeUrl = `jdbc:snowflake://${ev('account')}.snowflakecomputing.com/?warehouse=${ev('warehouse')}&db=${ev('dbname')}&schema=${ev('schema')}`;
-        if ((conn as SnowflakeConnection).authMethod === 'oauth_browser') {
-          snowflakeUrl += '&authenticator=oauth_authorization_code';
-        }
-        return snowflakeUrl;
-      }
-      case 'redshift': {
-        let redshiftUrl = `jdbc:redshift://${ev('host')}:${ev('port')}/${ev('dbname')}?currentSchema=${ev('schema')}`;
-
-        // Add SSL parameters if enabled
-        if (conn.ssl) {
-          redshiftUrl += '&ssl=true';
-          if (conn.sslrootcert) {
-            redshiftUrl += `&sslrootcert=${conn.sslrootcert}`;
-          }
-        }
-        return redshiftUrl;
-      }
-      case 'bigquery': {
-        return `jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=${ev('project')};OAuthType=0;OAuthServiceAcctEmail=${ev('bigquery-email')};OAuthPvtKeyPath=${ev('bigquery')};`;
-      }
-      case 'databricks':
-        return `jdbc:databricks://${ev('host')}:443/default;transportMode=http;ssl=1;AuthMech=3;httpPath=${ev('httppath')};PWD=${ev('token')}`;
-      case 'duckdb':
-        // DuckDB JDBC URL format
-        return `jdbc:duckdb:${conn.database_path}`;
-      case 'ducklake':
-        // DuckLake uses in-memory DuckDB session
-        return `jdbc:duckdb:`;
-      case 'kinetica': {
-        // Kinetica JDBC URL format: jdbc:kinetica:URL=http://<host>:9191
-        // Optional parameters can be appended
-        let kineticaUrl = `jdbc:kinetica:URL=${buildKineticaUrl(conn)}`;
-        // Add additional params if needed (e.g., timeout)
-        if (conn.timeout) {
-          kineticaUrl += `;Timeout=${conn.timeout}`;
-        }
-        if (conn.bypassSslCertCheck && conn.useSSL) {
-          kineticaUrl += ';BypassSslCertCheck=1';
-        }
-        return kineticaUrl;
-      }
-      case 'mysql': {
-        let mysqlUrl = `jdbc:mysql://${ev('host')}:${ev('port')}/${ev('dbname')}`;
-        mysqlUrl += `?useSSL=${conn.ssl ? 'true' : 'false'}&serverTimezone=UTC&useUnicode=true&characterEncoding=UTF-8`;
-        return mysqlUrl;
-      }
-      default:
-        throw new Error('Unsupported connection type!');
-    }
+    return requireDbtConnector(
+      conn.type,
+      'Unsupported connection type!',
+    ).toJdbcUrl(conn);
   }
 
   private static async mapToRosettaConnection(
     connection: ConnectionInput,
     project: Project,
   ): Promise<RosettaConnection> {
-    const rosettaJdbcUrl = await this.generateJdbcUrl(connection);
-    // Snowflake OAuth never persists a password; the JDBC URL carries
-    // authenticator=oauth_authorization_code and tokens stay in the SDK
-    // temporary credential cache.
-    const isSnowflakeOauth =
-      connection.type === 'snowflake' &&
-      (connection as SnowflakeConnection).authMethod === 'oauth_browser';
-
-    return {
-      name: connection.name || project.name,
-      dbType: connection.type,
-      databaseName: (() => {
-        if (connection.type === 'duckdb') {
-          return connection.database_path;
-        }
-        if (connection.type === 'ducklake') {
-          return '';
-        }
-        return connection.database;
-      })(),
-      schemaName: connection.type === 'ducklake' ? '' : connection.schema,
-      url: rosettaJdbcUrl,
-      ...(connection.type !== 'databricks' &&
-        connection.type !== 'duckdb' &&
-        connection.type !== 'bigquery' &&
-        'username' in connection &&
-        'password' in connection &&
-        !isSnowflakeOauth && {
-          userName: `db-user-${connection.name}`,
-          password: `db-password-${connection.name}`,
-        }),
-      ...(isSnowflakeOauth && {
-        userName: `db-user-${connection.name}`,
-      }),
-    };
+    return requireDbtConnector(
+      connection.type,
+      'Unsupported connection type!',
+    ).toRosettaConnection(connection, project);
   }
 
   private static mapToDbtConnection(conn: ConnectionInput): DBTConnection {
-    switch (conn.type) {
-      case 'snowflake': {
-        const isSnowflakeOauth =
-          (conn as SnowflakeConnection).authMethod === 'oauth_browser';
-        return {
-          type: 'snowflake',
-          username: `db-user-${conn.name}`,
-          ...(isSnowflakeOauth
-            ? {
-                authMethod: 'oauth_browser' as const,
-                authenticator: 'oauth_authorization_code' as const,
-              }
-            : { password: `db-password-${conn.name}` }),
-          database: conn.database,
-          schema: conn.schema,
-          account: conn.account,
-          warehouse: conn.warehouse,
-          ...(conn.role && { role: conn.role }),
-        };
-      }
-      case 'bigquery':
-        return {
-          type: 'bigquery',
-          username: conn.username,
-          password: conn.password,
-          database: conn.database,
-          schema: conn.schema,
-          method: conn.method,
-          project: conn.project,
-          ...(conn.keyfile && { keyfile: `db-bigquery-${conn.name}` }),
-          ...(conn.location && { location: conn.location }),
-          ...(conn.priority && { priority: conn.priority }),
-        };
-      case 'postgres':
-        return {
-          type: 'postgres',
-          username: `db-user-${conn.name}`,
-          password: `db-password-${conn.name}`,
-          database: conn.database,
-          schema: conn.schema,
-          host: conn.host,
-          port: conn.port,
-          ssl: conn.ssl,
-        };
-      case 'redshift':
-        return {
-          type: 'redshift',
-          username: `db-user-${conn.name}`,
-          password: `db-password-${conn.name}`,
-          database: conn.database,
-          schema: conn.schema,
-          host: conn.host,
-          port: conn.port,
-          ssl: conn.ssl,
-          sslrootcert: conn.sslrootcert,
-        };
-      case 'databricks':
-        // Special case for Databricks with token auth
-        return {
-          type: 'databricks',
-          host: conn.host,
-          port: conn.port,
-          http_path: conn.httpPath,
-          token: `db-token-${conn.name}`, // Use token directly
-          database: conn.database,
-          schema: conn.schema,
-        };
-      case 'duckdb':
-        return {
-          type: 'duckdb',
-          path: conn.database_path, // Map database_path to path for DBT connection
-          database: conn.database,
-          schema: conn.schema,
-        };
-      case 'ducklake':
-        // DuckLake uses DuckDB type for DBT
-        return {
-          type: 'duckdb',
-          path: ':memory:', // In-memory DuckDB
-          database: 'dl',
-          schema: 'main',
-        };
-      case 'kinetica':
-        return {
-          type: 'kinetica',
-          host: conn.host,
-          port: conn.port,
-          username: `db-user-${conn.name}`,
-          password: `db-password-${conn.name}`,
-          database: conn.database,
-          schema: conn.schema || DEFAULT_KINETICA_SCHEMA,
-          timeout: conn.timeout,
-          useSSL: conn.useSSL,
-          bypassSslCertCheck: conn.bypassSslCertCheck,
-        };
-      default:
-        // Use type assertion to access the type property for error message
-        throw new Error(
-          `Unsupported connection type: ${(conn as ConnectionInput).type}`,
-        );
-    }
+    return requireDbtConnector(
+      conn.type,
+      `Unsupported connection type: ${(conn as ConnectionInput).type}`,
+    ).toDbtConnection(conn);
   }
 
   private static async mapToDbtProfiles(
@@ -1542,153 +664,10 @@ export default class ConnectorsService {
   private static async mapToDbtProfileOutput(
     conn: ConnectionInput,
   ): Promise<any> {
-    const envVar = (field: string) =>
-      `{{ env_var("db-${field}-${conn.name}") }}`;
-    const envVarInt = (field: string) =>
-      `{{ env_var("db-${field}-${conn.name}") | int }}`;
-    switch (conn.type) {
-      case 'postgres':
-        return {
-          type: 'postgres',
-          host: envVar('host'),
-          port: envVarInt('port'),
-          user: envVar('user'),
-          password: envVar('password'),
-          dbname: envVar('dbname'),
-          schema: envVar('schema'),
-          threads: 4,
-          ...(conn.ssl && { sslmode: 'require' }),
-        };
-      case 'snowflake': {
-        const isSnowflakeOauth =
-          (conn as SnowflakeConnection).authMethod === 'oauth_browser';
-        return {
-          type: 'snowflake',
-          account: envVar('account'),
-          user: envVar('user'),
-          ...(isSnowflakeOauth
-            ? {
-                // Token comes from `db-token-<name>` process env, materialized
-                // main-side from the live SDK session at dbt run time (never
-                // written to files). Plain `oauth` never opens a browser: a
-                // missing/expired token fails fast with guidance instead.
-                authenticator: 'oauth',
-                token: envVar('token'),
-              }
-            : { password: envVar('password') }),
-          ...(conn.role && { role: envVar('role') }),
-          warehouse: envVar('warehouse'),
-          database: envVar('dbname'),
-          schema: envVar('schema'),
-          threads: 4,
-        };
-      }
-      case 'redshift':
-        const redshiftProfile: any = {
-          type: 'redshift',
-          host: envVar('host'),
-          port: envVarInt('port'),
-          user: envVar('user'),
-          password: envVar('password'),
-          dbname: envVar('dbname'),
-          schema: envVar('schema'),
-          threads: 4,
-        };
-
-        // Add SSL configuration if enabled
-        if (conn.ssl) {
-          redshiftProfile.sslmode = 'require';
-          if (conn.sslrootcert) {
-            redshiftProfile.sslrootcert = conn.sslrootcert;
-          }
-        }
-
-        return redshiftProfile;
-      case 'bigquery':
-        const profile: any = {
-          type: 'bigquery',
-          method: conn.method,
-          project: envVar('project'),
-          dataset: envVar('dataset'),
-          threads: 4,
-          priority: conn.priority || 'interactive',
-          keyfile: envVar('bigquery'),
-        };
-
-        return profile;
-
-      case 'databricks':
-        return {
-          type: 'databricks',
-          host: envVar('host'),
-          http_path: envVar('httppath'),
-          token: envVar('token'),
-          catalog: envVar('catalog'),
-          schema: envVar('schema'),
-          threads: 4,
-        };
-      case 'duckdb':
-        return {
-          type: 'duckdb',
-          path: conn.database_path,
-          schema: conn.schema,
-          threads: 4,
-        };
-      case 'ducklake': {
-        // For ducklake, we need to generate a DuckDB profile with ducklake extension
-        const instance = await DuckLakeService.getInstance(conn.instanceId);
-
-        const credentials = await DuckLakeInstanceStore.retrieveCredentials(
-          instance.id,
-          instance.catalog as any,
-          instance.storage as any,
-        );
-
-        let metadataPath = '';
-        if (
-          instance.catalog.type === 'duckdb' &&
-          instance.catalog.duckdb?.metadataPath
-        ) {
-          metadataPath = instance.catalog.duckdb.metadataPath;
-        } else if (
-          instance.catalog.type === 'sqlite' &&
-          instance.catalog.sqlite?.metadataPath
-        ) {
-          metadataPath = instance.catalog.sqlite.metadataPath;
-        }
-
-        const duckLakeProfile: any = {
-          type: 'duckdb',
-          threads: 4,
-          extensions: ['httpfs', 'ducklake'],
-          attach: [
-            {
-              path: `ducklake:${metadataPath}`,
-              alias: 'dl',
-              options: {
-                data_path: instance.dataPath,
-              },
-            },
-          ],
-          database: 'dl',
-        };
-
-        // Add S3 settings if storage is S3 - use env vars for security
-        if (credentials.storage?.type === 's3' && credentials.storage.s3) {
-          duckLakeProfile.settings = {
-            s3_region: `{{ env_var("db-s3-region-${conn.name}") }}`,
-            s3_access_key_id: `{{ env_var("db-s3-access-key-${conn.name}") }}`,
-            s3_secret_access_key: `{{ env_var("db-s3-secret-key-${conn.name}") }}`,
-          };
-        }
-
-        return duckLakeProfile;
-      }
-      case 'kinetica':
-        return buildKineticaProfileOutput(conn, envVar);
-      default:
-        throw new Error('Unsupported connection type!');
-    }
+    return requireDbtConnector(
+      conn.type,
+      'Unsupported connection type!',
+    ).toProfileOutput(conn);
   }
 
   /**
@@ -1766,110 +745,13 @@ export default class ConnectorsService {
 
       if (!devOutput || !devOutput.type) return null;
 
-      // Map different DBT connection types
-      switch (devOutput.type) {
-        case 'postgres':
-          return {
-            type: 'postgres',
-            host: devOutput.host,
-            port: devOutput.port || 5432,
-            username: devOutput.user,
-            password: devOutput.password,
-            database: devOutput.dbname,
-            schema: devOutput.schema,
-          };
-
-        case 'snowflake':
-          return {
-            type: 'snowflake',
-            account: devOutput.account,
-            username: devOutput.user,
-            password: devOutput.password,
-            database: devOutput.database,
-            schema: devOutput.schema,
-            warehouse: devOutput.warehouse,
-            role: devOutput.role,
-          };
-
-        case 'bigquery':
-          return {
-            type: 'bigquery',
-            method: devOutput.method || 'service-account',
-            project: devOutput.project,
-            database: devOutput.project,
-            schema: devOutput.dataset,
-            keyfile: devOutput.keyfile,
-            location: devOutput.location,
-            priority: devOutput.priority,
-            username: '',
-            password: '',
-          };
-
-        case 'redshift':
-          return {
-            type: 'redshift',
-            host: devOutput.host,
-            port: devOutput.port || 5439,
-            username: devOutput.user,
-            password: devOutput.password,
-            database: devOutput.dbname,
-            schema: devOutput.schema,
-            ssl: devOutput.sslmode === 'require',
-            sslrootcert: devOutput.sslrootcert,
-          };
-
-        case 'databricks':
-          return {
-            type: 'databricks',
-            host: devOutput.host,
-            port: devOutput.port || 443,
-            http_path: devOutput.http_path,
-            token: devOutput.token,
-            database: devOutput.catalog,
-            schema: devOutput.schema,
-          };
-
-        case 'duckdb':
-          // Convert relative path to absolute path relative to the project directory
-          const projectDir = path.dirname(profilesPath);
-          const absolutePath = path.isAbsolute(devOutput.path)
-            ? devOutput.path
-            : path.resolve(projectDir, devOutput.path);
-
-          return {
-            type: 'duckdb',
-            path: absolutePath,
-            database: absolutePath,
-            schema: devOutput.schema || 'main',
-          };
-
-        case 'kinetica': {
-          // dbt-kinetica accepts `host` (alias `url`) as a full URL and
-          // `user`/`username`, `password`/`pass`, `database`/`dbname` aliases.
-          // Profiles generated by the Studio store the URL as an env_var
-          // placeholder (`db-url-<connection>`), so resolve it first.
-          const kineticaUrl = parseKineticaUrl(
-            String(
-              this.resolveExactEnvVar(devOutput.host ?? devOutput.url) ??
-                'http://localhost:9191',
-            ),
-          );
-          return {
-            type: 'kinetica',
-            host: kineticaUrl.host,
-            port: kineticaUrl.port,
-            useSSL: kineticaUrl.useSSL,
-            bypassSslCertCheck: devOutput.skip_ssl_cert_verification === true,
-            username: devOutput.user ?? devOutput.username ?? '',
-            password: devOutput.password ?? devOutput.pass ?? '',
-            database: devOutput.database ?? devOutput.dbname ?? '',
-            schema: devOutput.schema || DEFAULT_KINETICA_SCHEMA,
-          };
-        }
-
-        default:
-          return null;
-      }
+      const connector = dbtConnectorForAdapter(devOutput.type);
+      return connector
+        ? connector.fromProfileOutput(devOutput, {
+            profilesPath,
+            resolveEnvVar: (value) => this.resolveExactEnvVar(value),
+          })
+        : null;
     } catch (error) {
       return null;
     }
@@ -1886,110 +768,12 @@ export default class ConnectorsService {
     connectionName: string = 'DBT Connection',
   ): ConnectionInput | null {
     try {
-      switch (dbtConnection.type) {
-        case 'postgres':
-          return {
-            type: 'postgres',
-            name: connectionName,
-            host: dbtConnection.host,
-            port: dbtConnection.port,
-            username: dbtConnection.username,
-            password: dbtConnection.password,
-            database: dbtConnection.database,
-            schema: dbtConnection.schema,
-            keepalives_idle: dbtConnection.keepalives_idle,
-          };
-
-        case 'snowflake':
-          return {
-            type: 'snowflake',
-            name: connectionName,
-            account: dbtConnection.account,
-            warehouse: dbtConnection.warehouse,
-            username: dbtConnection.username,
-            password: dbtConnection.password || '',
-            database: dbtConnection.database,
-            schema: dbtConnection.schema,
-            role: dbtConnection.role,
-            client_session_keep_alive: dbtConnection.client_session_keep_alive,
-          };
-
-        case 'bigquery':
-          return {
-            type: 'bigquery',
-            name: connectionName,
-            project: dbtConnection.project,
-            dataset: dbtConnection.database, // In DBT, dataset is stored in database field
-            method: dbtConnection.method,
-            keyfile: dbtConnection.keyfile || '',
-            location: dbtConnection.location,
-            priority: dbtConnection.priority,
-            // Required by ConnectionBase but not used in BigQuery
-            host: '',
-            port: 443,
-            database: dbtConnection.project, // Set to project ID
-            schema: dbtConnection.schema,
-            username: dbtConnection.project, // Set to project ID
-            password: '', // Empty for BigQuery
-          };
-
-        case 'redshift':
-          return {
-            type: 'redshift',
-            name: connectionName,
-            host: dbtConnection.host,
-            port: dbtConnection.port,
-            username: dbtConnection.username,
-            password: dbtConnection.password,
-            database: dbtConnection.database,
-            schema: dbtConnection.schema,
-            keepalives_idle: dbtConnection.keepalives_idle,
-            ssl: dbtConnection.ssl,
-            sslrootcert: dbtConnection.sslrootcert,
-          };
-
-        case 'databricks':
-          return {
-            type: 'databricks',
-            name: connectionName,
-            host: dbtConnection.host,
-            port: dbtConnection.port,
-            httpPath: dbtConnection.http_path, // Note: property name differs between types
-            token: dbtConnection.token,
-            database: dbtConnection.catalog || dbtConnection.database,
-            schema: dbtConnection.schema,
-            keepalives_idle: dbtConnection.keepalives_idle,
-          };
-
-        case 'duckdb':
-          return {
-            type: 'duckdb',
-            name: connectionName,
-            database_path: dbtConnection.path,
-            short_database_path:
-              dbtConnection.path.split('/').pop() || dbtConnection.path,
-            database: dbtConnection.database,
-            schema: dbtConnection.schema,
-          };
-
-        case 'kinetica':
-          return {
-            type: 'kinetica',
-            name: connectionName,
-            host: dbtConnection.host,
-            port: dbtConnection.port,
-            username: dbtConnection.username,
-            password: dbtConnection.password,
-            database: dbtConnection.database,
-            schema: dbtConnection.schema,
-            timeout: dbtConnection.timeout,
-            useSSL: dbtConnection.useSSL,
-            bypassSslCertCheck: dbtConnection.bypassSslCertCheck,
-          };
-
-        default:
-          return null;
-      }
+      return (
+        dbtConnectorForAdapter(dbtConnection.type)?.toConnectionInput(
+          dbtConnection,
+          connectionName,
+        ) ?? null
+      );
     } catch (error) {
       return null;
     }
@@ -2034,10 +818,9 @@ export default class ConnectorsService {
     key: string,
     value: string,
   ): Promise<void> {
-    const bigQueryPrefix = 'db-bigquery-';
-    if (key.startsWith(bigQueryPrefix)) {
-      const connectionName = key.slice(bigQueryPrefix.length);
-      await this.materializeBigQueryServiceAccount(connectionName, value);
+    const materializer = findSecretMaterializer(key);
+    if (materializer) {
+      await materializer.materialize(materializer.connectionName, value);
       return;
     }
 
@@ -2181,233 +964,15 @@ export default class ConnectorsService {
       );
     }
 
-    if (connection.type === 'oracle') {
-      const extractor = new OracleExtractor(
-        connection,
-        await this.oracleSecrets(connection),
-      );
-      try {
-        await extractor.connect();
-        return await extractor.extractSchema();
-      } finally {
-        await extractor.disconnect();
-      }
-    }
-
-    // Get credentials from secure storage
-    const storeUser = await SecureStorageService.getCredential(
-      `db-user-${connection.name}`,
+    const connector = requireConnector(
+      connection.type,
+      `Unsupported connection type: "${(connection as any).type}"`,
     );
-    const storePassword = await SecureStorageService.getCredential(
-      `db-password-${connection.name}`,
+    const resolved = await connector.resolveSecrets(
+      connection,
+      () => connection.name,
     );
-
-    if (storeUser) {
-      (connection as { username: string }).username = storeUser;
-    }
-    if (storePassword) {
-      (connection as { password: string }).password = storePassword;
-    }
-
-    const storeToken = await SecureStorageService.getCredential(
-      `db-token-${connection.name}`,
-    );
-    if (storeToken) {
-      (connection as { token: string }).token = storeToken;
-    }
-
-    const bigqueryKey = await SecureStorageService.getCredential(
-      `db-bigquery-${connection.name}`,
-    );
-    if (bigqueryKey) {
-      (connection as { keyfile: string }).keyfile = bigqueryKey;
-    }
-
-    // Import extractors dynamically to avoid circular dependency
-    const {
-      PGSchemaExtractor,
-      SnowflakeExtractor,
-      DatabricksExtractor,
-      BigQueryExtractor,
-      DuckDBExtractor,
-      RedshiftExtractor,
-      KineticaExtractor,
-      MySqlExtractor,
-    } = await import('../extractor');
-
-    switch (connection.type) {
-      case 'postgres': {
-        const pgConn = connection as PostgresConnection;
-        const extractor = new PGSchemaExtractor({
-          user: pgConn.username,
-          host: pgConn.host,
-          database: pgConn.database,
-          password: pgConn.password,
-          port: pgConn.port,
-          ssl: pgConn.ssl,
-          sslRejectUnauthorized: pgConn.sslRejectUnauthorized,
-        });
-        try {
-          await extractor.connect();
-          const schema = await extractor.extractSchema();
-          return schema;
-        } finally {
-          await extractor.disconnect();
-        }
-      }
-      case 'redshift': {
-        const rsConn = connection as RedshiftConnection;
-        const extractor = new RedshiftExtractor({
-          user: rsConn.username,
-          host: rsConn.host,
-          database: rsConn.database,
-          password: rsConn.password,
-          port: rsConn.port,
-          ssl: rsConn.ssl ?? true,
-          sslrootcert: rsConn.sslrootcert,
-        });
-        try {
-          await extractor.connect();
-          const schema = await extractor.extractSchema();
-          return schema;
-        } finally {
-          await extractor.disconnect();
-        }
-      }
-      case 'snowflake': {
-        const sfConn = connection as SnowflakeConnection;
-        const sfAuthMethod =
-          sfConn.authMethod === 'oauth_browser' ? 'oauth_browser' : 'password';
-        const extractor = new SnowflakeExtractor({
-          account:
-            sfAuthMethod === 'oauth_browser'
-              ? sfConn.account
-              : sfConn.account.split('.')[0],
-          username: sfConn.username,
-          password: sfConn.password,
-          warehouse: sfConn.warehouse,
-          database: sfConn.database,
-          schema: sfConn.schema,
-          role: sfConn.role,
-          authMethod: sfAuthMethod,
-        });
-        try {
-          await extractor.connect();
-          const schema = await extractor.extractSchema();
-          return schema;
-        } finally {
-          await extractor.disconnect();
-        }
-      }
-      case 'databricks': {
-        const dbConn = connection as DatabricksConnection;
-        const extractor = new DatabricksExtractor({
-          token: dbConn.token,
-          host: dbConn.host,
-          path: dbConn.httpPath,
-          catalog: dbConn.database || 'default',
-          schema: dbConn.schema,
-        });
-        try {
-          await extractor.connect();
-          const schema = await extractor.extractSchema();
-          return schema;
-        } finally {
-          await extractor.disconnect();
-        }
-      }
-      case 'bigquery': {
-        const bqConn = connection as BigQueryConnection;
-        const config: any = {
-          projectId: bqConn.project,
-        };
-        let keyfileValue = bqConn.keyfile;
-        if (
-          typeof keyfileValue === 'string' &&
-          keyfileValue.startsWith('db-bigquery-')
-        ) {
-          const stored = await SecureStorageService.getCredential(keyfileValue);
-          if (!stored) {
-            throw new Error(
-              'BigQuery service account key not found in secure storage',
-            );
-          }
-          keyfileValue = stored;
-        }
-        try {
-          config.credentials = JSON.parse(keyfileValue);
-        } catch (err) {
-          throw new Error('Invalid service account key JSON');
-        }
-        if (bqConn.location) {
-          config.location = bqConn.location;
-        }
-        const extractor = new BigQueryExtractor(config);
-        try {
-          await extractor.connect();
-          const schema = await extractor.extractSchema();
-          return schema;
-        } finally {
-          await extractor.disconnect();
-        }
-      }
-      case 'duckdb': {
-        const duckConn = connection as DuckDBConnection;
-        const extractor = new DuckDBExtractor({
-          database_path: duckConn.database_path,
-          schema: duckConn.schema,
-        });
-        const schema = await extractor.extractSchema();
-        return schema;
-      }
-      case 'sqlite': {
-        return { tables: extractSQLiteSchema(connection) };
-      }
-      case 'ducklake': {
-        return { tables: [] };
-      }
-      case 'kinetica': {
-        const kinConn = connection as KineticaConnection;
-        const extractor = new KineticaExtractor({
-          host: kinConn.host,
-          port: kinConn.port,
-          username: kinConn.username,
-          password: kinConn.password,
-          useSSL: kinConn.useSSL,
-          timeout: kinConn.timeout,
-          schema: kinConn.schema,
-        });
-        try {
-          await extractor.connect();
-          const schema = await extractor.extractSchema();
-          return schema;
-        } finally {
-          await extractor.disconnect();
-        }
-      }
-      case 'mysql': {
-        const myConn = connection as MySqlConnection;
-        const extractor = new MySqlExtractor({
-          user: myConn.username,
-          host: myConn.host,
-          database: myConn.database,
-          password: myConn.password,
-          port: myConn.port,
-          ssl: myConn.ssl,
-        });
-        try {
-          await extractor.connect();
-          const schema = await extractor.extractSchema();
-          return schema;
-        } finally {
-          await extractor.disconnect();
-        }
-      }
-      default:
-        throw new Error(
-          `Unsupported connection type: "${(connection as any).type}"`,
-        );
-    }
+    return connector.extractSchema(resolved);
   }
 
   /**
@@ -2451,47 +1016,14 @@ export default class ConnectorsService {
     }
 
     const { connection } = conn;
-
-    if (connection.type === 'oracle')
-      return this.executeSelectStatement({
-        connection,
-        query,
-        queryId,
-        projectName: connection.name,
-      });
-
-    // Get credentials from secure storage
-    const storeUser = await SecureStorageService.getCredential(
-      `db-user-${connection.name}`,
-    );
-    const storePassword = await SecureStorageService.getCredential(
-      `db-password-${connection.name}`,
-    );
-
-    if (storeUser) {
-      (connection as any).username = storeUser;
-    }
-    if (storePassword) {
-      (connection as any).password = storePassword;
-    }
-
-    const storeToken = await SecureStorageService.getCredential(
-      `db-token-${connection.name}`,
-    );
-    if (storeToken) {
-      (connection as any).token = storeToken;
-    }
-
-    const bigQueryKey = await SecureStorageService.getCredential(
-      `db-bigquery-${connection.name}`,
-    );
-    if (bigQueryKey) {
-      (connection as any).keyfile = bigQueryKey;
-    }
+    const connector = getConnector(connection.type);
+    const resolved = connector
+      ? await connector.resolveSecrets(connection, () => connection.name)
+      : connection;
 
     // Use a dummy project name for credential lookup (use connection name)
     return this.executeSelectStatement({
-      connection,
+      connection: resolved,
       query,
       projectName: connection.name,
       queryId,

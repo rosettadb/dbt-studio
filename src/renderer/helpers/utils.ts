@@ -1,17 +1,10 @@
 /* eslint-disable no-plusplus, consistent-return, no-case-declarations */
 import React from 'react';
 import {
-  BigQueryConnection,
   Command,
   CommandType,
   ConnectionModel,
-  DatabricksConnection,
-  DuckDBConnection,
-  PostgresConnection,
   Project,
-  RedshiftConnection,
-  SQLiteConnection,
-  SnowflakeConnection,
   Table,
 } from '../../types/backend';
 import { CompletionItem } from '../../types/frontend';
@@ -20,6 +13,7 @@ import {
   MonacoCompletionItemKind,
 } from '../config/constants';
 import { path, splitSegments } from '../lib/path';
+import { getConnectionUi } from '../../connections/registry.renderer';
 
 export const capitalizeFirstLetter = (str: string): string => {
   if (!str) return '';
@@ -192,114 +186,11 @@ export const convertToSourcePath = (filePath: string): string => {
 
 export const getConnectionInput = (conn: ConnectionModel) => {
   if (!conn) {
-    return;
+    return undefined;
   }
-  const { connection } = conn;
-  const { type } = connection;
-  switch (type) {
-    case 'postgres':
-      const pg = connection as PostgresConnection;
-      return {
-        type,
-        host: pg.host,
-        port: pg.port,
-        username: pg.username,
-        password: pg.password,
-        database: pg.database,
-        schema: pg.schema || 'public',
-      };
-    case 'redshift':
-      const rs = connection as RedshiftConnection;
-      return {
-        type,
-        host: rs.host,
-        port: rs.port,
-        username: rs.username,
-        password: rs.password,
-        database: rs.database,
-        schema: rs.schema || 'public',
-      };
-    case 'snowflake':
-      const sf = connection as SnowflakeConnection;
-      return {
-        type,
-        account: sf.account,
-        username: sf.username,
-        password: sf.password,
-        database: sf.database,
-        warehouse: sf.warehouse,
-        schema: sf.schema || 'PUBLIC',
-        role: sf.role,
-      };
-    case 'bigquery':
-      const bq = connection as BigQueryConnection;
-      return {
-        type,
-        projectId: bq.project,
-        keyFilename: bq.keyfile,
-        schema: bq.database,
-        method: bq.method,
-        keyfile: bq.keyfile,
-        location: bq.location,
-        priority: bq.priority,
-      };
-    case 'databricks':
-      const db = connection as DatabricksConnection;
-      return {
-        type,
-        host: db.host,
-        port: db.port,
-        httpPath: db.httpPath,
-        token: db.token, // Use token directly
-        database: db.database,
-        schema: db.schema,
-      };
-    case 'duckdb':
-      const duck = connection as DuckDBConnection;
-      return {
-        type,
-        database_path: duck.database_path,
-        database: duck.database,
-        schema: duck.schema || 'main',
-        name: connection.name,
-      };
-    case 'sqlite':
-      const sqlite = connection as SQLiteConnection;
-      return {
-        type,
-        database_path: sqlite.database_path,
-        database: sqlite.database_path,
-        schema: 'main',
-        name: connection.name,
-      };
-    case 'kinetica':
-      const kinetica = connection as any; // Using any as explicit import for KineticaConnection might be circular or redundant if not already there, but let's use the type structure we know
-      return {
-        type,
-        host: kinetica.host,
-        port: kinetica.port,
-        username: kinetica.username,
-        password: kinetica.password,
-        database: kinetica.database || '',
-        schema: kinetica.schema || '',
-      };
-    case 'oracle':
-      return { ...connection, password: '' };
-    case 'mysql':
-      const mysql = connection as any;
-      return {
-        type,
-        host: mysql.host,
-        port: mysql.port,
-        username: mysql.username,
-        password: mysql.password,
-        database: mysql.database || '',
-        schema: mysql.schema || '',
-        ssl: mysql.ssl,
-      };
-    default:
-      return undefined;
-  }
+  return getConnectionUi(conn.connection.type)?.sqlEditorInput?.(
+    conn.connection,
+  );
 };
 
 export const extractModelNameFromPath = (filePath: string): string => {

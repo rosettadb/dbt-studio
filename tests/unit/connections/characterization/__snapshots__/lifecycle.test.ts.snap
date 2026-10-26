@@ -1,0 +1,128 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`loadConfigurations characterization writes profiles.yml and main.conf for a dbt connection 1`] = `
+{
+  "mainConf": "openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-dbname-pg_plain}
+    schemaName: \${db-schema-pg_plain}
+    dbType: postgres
+    url: >-
+      jdbc:postgresql://\${db-host-pg_plain}:\${db-port-pg_plain}/\${db-dbname-pg_plain}?currentSchema=\${db-schema-pg_plain}
+    userName: \${db-user-pg_plain}
+    password: \${db-password-pg_plain}
+",
+  "profiles": "proj:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: '{{ env_var("db-host-pg_plain") }}'
+      port: '{{ env_var("db-port-pg_plain") | int }}'
+      user: '{{ env_var("db-user-pg_plain") }}'
+      password: '{{ env_var("db-password-pg_plain") }}'
+      dbname: '{{ env_var("db-dbname-pg_plain") }}'
+      schema: '{{ env_var("db-schema-pg_plain") }}'
+      threads: 4
+",
+  "project": {
+    "connectionId": "c1",
+    "dbtConnection": {
+      "database": "pgdb",
+      "host": "pg.example.com",
+      "password": "db-password-pg_plain",
+      "port": 5432,
+      "schema": "public",
+      "type": "postgres",
+      "username": "db-user-pg_plain",
+    },
+    "id": "p1",
+    "name": "proj",
+    "path": "<PROJECT_DIR>",
+    "rosettaConnection": {
+      "databaseName": "pgdb",
+      "dbType": "postgres",
+      "name": "proj",
+      "password": "db-password-pg_plain",
+      "schemaName": "public",
+      "url": "jdbc:postgresql://\${db-host-pg_plain}:\${db-port-pg_plain}/\${db-dbname-pg_plain}?currentSchema=\${db-schema-pg_plain}",
+      "userName": "db-user-pg_plain",
+    },
+  },
+}
+`;
+
+exports[`saveNewConnection characterization oracle is validated and normalized, with no raw password stored 1`] = `
+[
+  {
+    "connectMode": "basic",
+    "database": "ORCLPDB1",
+    "host": "ora.example.com",
+    "name": "ora_basic",
+    "password": "",
+    "port": 1521,
+    "schema": "ORA_USER",
+    "serviceName": "ORCLPDB1",
+    "tls": false,
+    "type": "oracle",
+    "username": "ora_user",
+  },
+]
+`;
+
+exports[`saveNewConnectionForTemplate characterization oracle is normalized as well 1`] = `
+[
+  {
+    "connectMode": "basic",
+    "database": "ORCLPDB1",
+    "host": "ora.example.com",
+    "name": "ora_basic",
+    "password": "",
+    "port": 1521,
+    "schema": "ORA_USER",
+    "serviceName": "ORCLPDB1",
+    "tls": false,
+    "type": "oracle",
+    "username": "ora_user",
+  },
+]
+`;
+
+exports[`updateConnection characterization a dbt type rewrites the files of the projects that use it 1`] = `
+{
+  "mainConf": "openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-dbname-pg_plain}
+    schemaName: \${db-schema-pg_plain}
+    dbType: postgres
+    url: jdbc:postgresql://\${db-host-pg_plain}:\${db-port-pg_plain}/\${db-dbname-pg_plain}?currentSchema=\${db-schema-pg_plain}
+    userName: \${db-user-pg_plain}
+    password: \${db-password-pg_plain}
+",
+  "profiles": "proj:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: '{{ env_var("db-host-pg_plain") }}'
+      port: '{{ env_var("db-port-pg_plain") | int }}'
+      user: '{{ env_var("db-user-pg_plain") }}'
+      password: '{{ env_var("db-password-pg_plain") }}'
+      dbname: '{{ env_var("db-dbname-pg_plain") }}'
+      schema: '{{ env_var("db-schema-pg_plain") }}'
+      threads: 4
+",
+}
+`;
+
+exports[`updateConnection characterization reports missing project files after saving the connection 1`] = `
+"Connection updated in database, but failed to update configuration files for some projects:
+
+Project "proj":
+  - profiles.yml: profiles.yml not found at <PROJECT_DIR>/profiles.yml. The file may have been deleted. Please reconfigure the connection to regenerate it.
+  - main.conf: main.conf not found at <PROJECT_DIR>/rosetta/main.conf. The file may have been deleted. Please reconfigure the connection to regenerate it.
+
+Please check that the profiles.yml and main.conf files exist and are not corrupted. You may need to reconfigure the connection for these projects."
+`;

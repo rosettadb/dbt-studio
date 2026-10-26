@@ -1,6 +1,6 @@
 module.exports = {
   extends: 'erb',
-  plugins: ['@typescript-eslint'],
+  plugins: ['@typescript-eslint', 'studio'],
   rules: {
     // A temporary hack related to IDE not resolving correct package.json
     'import/no-extraneous-dependencies': 'off',
@@ -20,6 +20,42 @@ module.exports = {
     'import/no-cycle': 'off',
     'jsx-a11y/label-has-associated-control': 'off',
     'react/no-array-index-key': 'off',
+    'import/no-restricted-paths': [
+      'error',
+      {
+        zones: [
+          {
+            target: [
+              './src/renderer/**/*',
+              './src/connections/**/*.tsx',
+              './src/connections/**/*.renderer.ts',
+            ],
+            from: ['./src/connections/**/*.main.ts'],
+            message: 'Renderer code cannot import main-process connection code.',
+          },
+          {
+            target: ['./src/main/**/*', './src/connections/**/*.main.ts'],
+            from: [
+              './src/connections/**/*.tsx',
+              './src/connections/**/*.renderer.ts',
+            ],
+            message: 'Main-process code cannot import renderer connection code.',
+          },
+          {
+            target: ['./src/connections/**/*.shared.ts'],
+            from: [
+              './src/main/**/*',
+              './src/renderer/**/*',
+              './src/connections/**/*.main.ts',
+              './src/connections/**/*.tsx',
+              './src/connections/**/*.renderer.ts',
+            ],
+            message:
+              'Shared connection files run in both processes: import only types and other *.shared.ts files.',
+          },
+        ],
+      },
+    ],
   },
   overrides: [
     {
@@ -27,7 +63,11 @@ module.exports = {
       // never by sniffing the browser or reading the raw bridge. The first
       // four entries are airbnb's defaults, repeated because overriding the
       // rule replaces its options instead of merging them.
-      files: ['src/renderer/**/*.{ts,tsx}'],
+      files: [
+        'src/renderer/**/*.{ts,tsx}',
+        'src/connections/**/*.tsx',
+        'src/connections/**/*.renderer.ts',
+      ],
       excludedFiles: ['src/renderer/lib/path.ts'],
       rules: {
         'no-restricted-syntax': [
@@ -63,6 +103,40 @@ module.exports = {
               "MemberExpression[property.name='os'][object.property.name='app'][object.object.property.name='electron']",
             message:
               'Do not read window.electron.app.os directly. Use isWindows()/isMac()/getPlatform() or `path` from src/renderer/lib/path.',
+          },
+        ],
+      },
+    },
+    {
+      files: ['src/**/*.{ts,tsx}'],
+      excludedFiles: [
+        'src/connections/**',
+        'src/main/services/duckLake/**',
+        'src/renderer/components/dataLake/**',
+      ],
+      rules: { 'studio/no-connection-type-branch': 'error' },
+    },
+    {
+      files: ['src/connections/**/*.{ts,tsx}'],
+      rules: {
+        // Connector methods implement a contract; many don't need `this`.
+        'class-methods-use-this': 'off',
+        '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      },
+    },
+    {
+      files: ['src/connections/**/*.shared.ts'],
+      rules: {
+        'no-restricted-imports': [
+          'error',
+          {
+            paths: [
+              'fs', 'path', 'os', 'child_process', 'electron', 'react', 'pg',
+              'snowflake-sdk', '@google-cloud/bigquery', '@databricks/sql',
+              '@duckdb/node-api', 'better-sqlite3', 'mysql2', 'mysql2/promise',
+              'oracledb', 'keytar',
+            ],
+            patterns: ['*.png', '*.svg', '*.jpg'],
           },
         ],
       },

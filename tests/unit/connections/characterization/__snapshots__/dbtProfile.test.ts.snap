@@ -1,0 +1,283 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`generateProfilesYml characterization bigquery (location and batch priority): full text 1`] = `
+"proj:
+  target: dev
+  outputs:
+    dev:
+      type: bigquery
+      method: service-account
+      project: '{{ env_var("db-project-bq_loc") }}'
+      dataset: '{{ env_var("db-dataset-bq_loc") }}'
+      threads: 4
+      priority: batch
+      keyfile: '{{ env_var("db-bigquery-bq_loc") }}'
+      location: EU
+"
+`;
+
+exports[`generateProfilesYml characterization bigquery (location and batch priority): partial update vs full 1`] = `
+{
+  "partial": {
+    "dataset": "{{ env_var("db-dataset-bq_loc") }}",
+    "keyfile": "{{ env_var("db-bigquery-bq_loc") }}",
+    "location": "EU",
+    "method": "service-account",
+    "priority": "batch",
+    "project": "{{ env_var("db-project-bq_loc") }}",
+    "type": "bigquery",
+  },
+  "tag": "DIFF-4",
+}
+`;
+
+exports[`generateProfilesYml characterization bigquery (service account, no location): full text 1`] = `
+"proj:
+  target: dev
+  outputs:
+    dev:
+      type: bigquery
+      method: service-account
+      project: '{{ env_var("db-project-bq_plain") }}'
+      dataset: '{{ env_var("db-dataset-bq_plain") }}'
+      threads: 4
+      priority: interactive
+      keyfile: '{{ env_var("db-bigquery-bq_plain") }}'
+"
+`;
+
+exports[`generateProfilesYml characterization bigquery (service account, no location): partial update vs full 1`] = `
+{
+  "partial": {
+    "dataset": "{{ env_var("db-dataset-bq_plain") }}",
+    "keyfile": "{{ env_var("db-bigquery-bq_plain") }}",
+    "method": "service-account",
+    "priority": "interactive",
+    "project": "{{ env_var("db-project-bq_plain") }}",
+    "type": "bigquery",
+  },
+  "tag": "DIFF-4",
+}
+`;
+
+exports[`generateProfilesYml characterization databricks (default): full text 1`] = `
+"proj:
+  target: dev
+  outputs:
+    dev:
+      type: databricks
+      host: '{{ env_var("db-host-dbx") }}'
+      http_path: '{{ env_var("db-httppath-dbx") }}'
+      token: '{{ env_var("db-token-dbx") }}'
+      catalog: '{{ env_var("db-catalog-dbx") }}'
+      schema: '{{ env_var("db-schema-dbx") }}'
+      threads: 4
+"
+`;
+
+exports[`generateProfilesYml characterization duckdb (absolute path with short_database_path): full text 1`] = `
+"proj:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: /data/warehouse.duckdb
+      schema: main
+      threads: 4
+"
+`;
+
+exports[`generateProfilesYml characterization duckdb (without short_database_path): full text 1`] = `
+"proj:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: /data/warehouse.duckdb
+      schema: main
+      threads: 4
+"
+`;
+
+exports[`generateProfilesYml characterization kinetica (host and port): full text 1`] = `
+"proj:
+  target: dev
+  outputs:
+    dev:
+      type: kinetica
+      host: '{{ env_var("db-url-kin_plain") }}'
+      user: '{{ env_var("db-user-kin_plain") }}'
+      password: '{{ env_var("db-password-kin_plain") }}'
+      schema: '{{ env_var("db-schema-kin_plain") }}'
+      threads: 4
+      database: '{{ env_var("db-dbname-kin_plain") }}'
+      disable_auto_discovery: true
+"
+`;
+
+exports[`generateProfilesYml characterization kinetica (useSSL with bypassSslCertCheck): full text 1`] = `
+"proj:
+  target: dev
+  outputs:
+    dev:
+      type: kinetica
+      host: '{{ env_var("db-url-kin_ssl") }}'
+      user: '{{ env_var("db-user-kin_ssl") }}'
+      password: '{{ env_var("db-password-kin_ssl") }}'
+      schema: '{{ env_var("db-schema-kin_ssl") }}'
+      threads: 4
+      database: '{{ env_var("db-dbname-kin_ssl") }}'
+      disable_auto_discovery: true
+      skip_ssl_cert_verification: true
+"
+`;
+
+exports[`generateProfilesYml characterization postgres (ssl off): full text 1`] = `
+"proj:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: '{{ env_var("db-host-pg_plain") }}'
+      port: '{{ env_var("db-port-pg_plain") | int }}'
+      user: '{{ env_var("db-user-pg_plain") }}'
+      password: '{{ env_var("db-password-pg_plain") }}'
+      dbname: '{{ env_var("db-dbname-pg_plain") }}'
+      schema: '{{ env_var("db-schema-pg_plain") }}'
+      threads: 4
+"
+`;
+
+exports[`generateProfilesYml characterization postgres (ssl on, reject unauthorized false): full text 1`] = `
+"proj:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: '{{ env_var("db-host-pg_ssl") }}'
+      port: '{{ env_var("db-port-pg_ssl") | int }}'
+      user: '{{ env_var("db-user-pg_ssl") }}'
+      password: '{{ env_var("db-password-pg_ssl") }}'
+      dbname: '{{ env_var("db-dbname-pg_ssl") }}'
+      schema: '{{ env_var("db-schema-pg_ssl") }}'
+      threads: 4
+      sslmode: require
+"
+`;
+
+exports[`generateProfilesYml characterization postgres (ssl on, reject unauthorized false): partial update vs full 1`] = `
+{
+  "partial": {
+    "dbname": "{{ env_var("db-dbname-pg_ssl") }}",
+    "host": "{{ env_var("db-host-pg_ssl") }}",
+    "password": "{{ env_var("db-password-pg_ssl") }}",
+    "port": "{{ env_var("db-port-pg_ssl") | int }}",
+    "schema": "{{ env_var("db-schema-pg_ssl") }}",
+    "sslmode": "require",
+    "type": "postgres",
+    "user": "{{ env_var("db-user-pg_ssl") }}",
+  },
+  "tag": "DIFF-1",
+}
+`;
+
+exports[`generateProfilesYml characterization redshift (ssl off): full text 1`] = `
+"proj:
+  target: dev
+  outputs:
+    dev:
+      type: redshift
+      host: '{{ env_var("db-host-rs_plain") }}'
+      port: '{{ env_var("db-port-rs_plain") | int }}'
+      user: '{{ env_var("db-user-rs_plain") }}'
+      password: '{{ env_var("db-password-rs_plain") }}'
+      dbname: '{{ env_var("db-dbname-rs_plain") }}'
+      schema: '{{ env_var("db-schema-rs_plain") }}'
+      threads: 4
+"
+`;
+
+exports[`generateProfilesYml characterization redshift (ssl on with sslrootcert): full text 1`] = `
+"proj:
+  target: dev
+  outputs:
+    dev:
+      type: redshift
+      host: '{{ env_var("db-host-rs_ssl") }}'
+      port: '{{ env_var("db-port-rs_ssl") | int }}'
+      user: '{{ env_var("db-user-rs_ssl") }}'
+      password: '{{ env_var("db-password-rs_ssl") }}'
+      dbname: '{{ env_var("db-dbname-rs_ssl") }}'
+      schema: '{{ env_var("db-schema-rs_ssl") }}'
+      threads: 4
+      sslmode: require
+      sslrootcert: /certs/root.pem
+"
+`;
+
+exports[`generateProfilesYml characterization redshift (ssl on with sslrootcert): partial update vs full 1`] = `
+{
+  "partial": {
+    "dbname": "{{ env_var("db-dbname-rs_ssl") }}",
+    "host": "{{ env_var("db-host-rs_ssl") }}",
+    "password": "{{ env_var("db-password-rs_ssl") }}",
+    "port": "{{ env_var("db-port-rs_ssl") | int }}",
+    "schema": "{{ env_var("db-schema-rs_ssl") }}",
+    "sslmode": "require",
+    "sslrootcert": "/certs/root.pem",
+    "type": "redshift",
+    "user": "{{ env_var("db-user-rs_ssl") }}",
+  },
+  "tag": "DIFF-2",
+}
+`;
+
+exports[`generateProfilesYml characterization snowflake (oauth_browser without role): full text 1`] = `
+"proj:
+  target: dev
+  outputs:
+    dev:
+      type: snowflake
+      account: '{{ env_var("db-account-sf_oauth") }}'
+      user: '{{ env_var("db-user-sf_oauth") }}'
+      authenticator: oauth
+      token: '{{ env_var("db-token-sf_oauth") }}'
+      warehouse: '{{ env_var("db-warehouse-sf_oauth") }}'
+      database: '{{ env_var("db-dbname-sf_oauth") }}'
+      schema: '{{ env_var("db-schema-sf_oauth") }}'
+      threads: 4
+"
+`;
+
+exports[`generateProfilesYml characterization snowflake (oauth_browser without role): partial update vs full 1`] = `
+{
+  "partial": {
+    "account": "{{ env_var("db-account-sf_oauth") }}",
+    "authenticator": "oauth",
+    "database": "{{ env_var("db-dbname-sf_oauth") }}",
+    "schema": "{{ env_var("db-schema-sf_oauth") }}",
+    "token": "{{ env_var("db-token-sf_oauth") }}",
+    "type": "snowflake",
+    "user": "{{ env_var("db-user-sf_oauth") }}",
+    "warehouse": "{{ env_var("db-warehouse-sf_oauth") }}",
+  },
+  "tag": "DIFF-3",
+}
+`;
+
+exports[`generateProfilesYml characterization snowflake (password with role): full text 1`] = `
+"proj:
+  target: dev
+  outputs:
+    dev:
+      type: snowflake
+      account: '{{ env_var("db-account-sf_pw") }}'
+      user: '{{ env_var("db-user-sf_pw") }}'
+      password: '{{ env_var("db-password-sf_pw") }}'
+      role: '{{ env_var("db-role-sf_pw") }}'
+      warehouse: '{{ env_var("db-warehouse-sf_pw") }}'
+      database: '{{ env_var("db-dbname-sf_pw") }}'
+      schema: '{{ env_var("db-schema-sf_pw") }}'
+      threads: 4
+"
+`;

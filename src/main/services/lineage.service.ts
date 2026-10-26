@@ -1,6 +1,7 @@
 /* eslint-disable no-console */
 import fs from 'fs/promises';
 import path from 'path';
+import { descriptorFor } from '../../connections/registry.shared';
 import {
   ColumnLineageEdge,
   ColumnLineageRequest,
@@ -682,28 +683,7 @@ class LineageService {
       return undefined;
     }
 
-    const normalized = adapter.toLowerCase().trim();
-
-    switch (normalized) {
-      case 'snowflake':
-        return 'snowflake';
-      case 'bigquery':
-        return 'bigquery';
-      case 'databricks':
-        return 'databricks';
-      case 'redshift':
-        return 'redshift';
-      case 'postgres':
-      case 'postgresql':
-        return 'postgres';
-      case 'oracle':
-        return 'oracle';
-      case 'kinetica':
-        // sqlglot has no Kinetica dialect; Kinetica SQL is closest to Postgres.
-        return 'postgres';
-      default:
-        return undefined;
-    }
+    return descriptorFor(adapter.toLowerCase().trim())?.lineageDialect;
   }
 }
 

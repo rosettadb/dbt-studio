@@ -12,7 +12,7 @@ describe('loadOracleDriver', () => {
     const imported = jest.fn(() => ({ thin: true }));
     jest.doMock('oracledb', imported);
     const { loadOracleDriver } = await import(
-      '../../../../../src/main/utils/oracleHelper'
+      '../../../../../src/connections/oracle/oracle.client.main'
     );
     expect(imported).not.toHaveBeenCalled();
     const first = loadOracleDriver();
@@ -32,7 +32,7 @@ describe('loadOracleDriver', () => {
       .mockReturnValue({ thin: true });
     jest.doMock('oracledb', imported);
     const { loadOracleDriver } = await import(
-      '../../../../../src/main/utils/oracleHelper'
+      '../../../../../src/connections/oracle/oracle.client.main'
     );
     await expect(loadOracleDriver()).rejects.toThrow(
       'Oracle driver unavailable: module missing',
@@ -44,7 +44,7 @@ describe('loadOracleDriver', () => {
   it('rejects a driver that has entered Thick mode', async () => {
     jest.doMock('oracledb', () => ({ thin: false }));
     const { loadOracleDriver } = await import(
-      '../../../../../src/main/utils/oracleHelper'
+      '../../../../../src/connections/oracle/oracle.client.main'
     );
     await expect(loadOracleDriver()).rejects.toThrow(
       'Oracle driver unavailable: Oracle Thin mode is required',
@@ -56,7 +56,7 @@ describe('loadOracleDriver', () => {
     const driver = { thin: true, outFormat: 4001, initOracleClient };
     jest.doMock('oracledb', () => driver);
     const { loadOracleDriver } = await import(
-      '../../../../../src/main/utils/oracleHelper'
+      '../../../../../src/connections/oracle/oracle.client.main'
     );
     await loadOracleDriver();
     expect(driver.outFormat).toBe(4001);

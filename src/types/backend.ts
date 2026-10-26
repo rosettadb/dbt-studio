@@ -1,41 +1,43 @@
 import { QueryResult } from 'pg';
+import type {
+  ConnectionInput,
+  DBTConnection,
+  SupportedConnectionTypes,
+} from '../connections/registry.shared';
 import { CloudConnection, RecentItem } from './frontend';
 import type { IcebergInstanceConfig } from './iceberg';
 
-export type SupportedConnectionTypes =
-  | 'postgres'
-  | 'snowflake'
-  | 'bigquery'
-  | 'redshift'
-  | 'databricks'
-  | 'mysql'
-  | 'oracle'
-  | 'mssql'
-  | 'kinetica'
-  | 'googlecloud'
-  | 'duckdb'
-  | 'sqlite'
-  | 'ducklake';
-
-export type ConnectionBase = {
-  type: SupportedConnectionTypes;
-  name: string;
-  username: string;
-  password: string;
-  database: string;
-  schema: string;
-};
-
-export type PostgresConnection = ConnectionBase & {
-  type: 'postgres';
-  host: string;
-  port: number;
-  keepalives_idle?: number;
-  ssl?: boolean;
-  sslRejectUnauthorized?: boolean;
-};
-
-export type SnowflakeAuthMethod = 'password' | 'oauth_browser';
+export type {
+  ConnectionInput,
+  DBTConnection,
+  SupportedConnectionTypes,
+  PostgresConnection,
+  PostgresDBTConnection,
+  SnowflakeConnection,
+  SnowflakeDBTConnection,
+  BigQueryConnection,
+  BigQueryDBTConnection,
+  RedshiftConnection,
+  RedshiftDBTConnection,
+  DatabricksConnection,
+  DatabricksDBTConnection,
+  DuckDBConnection,
+  DuckDBDBTConnection,
+  SQLiteConnection,
+  KineticaConnection,
+  KineticaDBTConnection,
+  OracleConnection,
+  MySqlConnection,
+  MySqlDBTConnection,
+  DuckLakeConnectionConfig,
+} from '../connections/registry.shared';
+export type {
+  ConnectionBase,
+  DBTConnectionBase,
+} from '../connections/core/types.shared';
+export type { SnowflakeAuthMethod } from '../connections/snowflake/snowflake.shared';
+export type { OracleConnectMode } from '../connections/oracle/oracle.shared';
+export { canUseAsDbtConnection } from '../connections/registry.shared';
 
 // Shown verbatim by every screen when a Snowflake OAuth session is missing.
 // Single source of truth shared by main and renderer so all three screens
@@ -43,248 +45,10 @@ export type SnowflakeAuthMethod = 'password' | 'oauth_browser';
 export const SNOWFLAKE_REAUTH_MESSAGE =
   'Snowflake session not found or expired. Open the Connections screen, select this Snowflake connection, and click Test Connection to sign in again in the browser.';
 
-export type SnowflakeConnection = ConnectionBase & {
-  type: 'snowflake';
-  account: string;
-  warehouse: string;
-  role?: string;
-  client_session_keep_alive?: boolean;
-  authMethod?: SnowflakeAuthMethod;
-};
-
-export type BigQueryConnection = ConnectionBase & {
-  type: 'bigquery';
-  project: string;
-  dataset: string;
-  method: 'service-account';
-  keyfile: string;
-  location?: string;
-  priority?: 'interactive' | 'batch';
-  // Base properties that will be ignored for BigQuery but required by interface
-  host?: string;
-  port?: number;
-  database: string; // Will be set to project ID
-  schema: string; // Will be set to dataset
-  username: string; // Will be set to project ID
-  password: string; // Will be empty for BigQuery
-};
-
-export type RedshiftConnection = ConnectionBase & {
-  type: 'redshift';
-  host: string;
-  port: number;
-  keepalives_idle?: number;
-  ssl?: boolean;
-  sslrootcert?: string;
-};
-
-export type DatabricksConnection = Omit<
-  ConnectionBase,
-  'username' | 'password'
-> & {
-  type: 'databricks';
-  host: string;
-  port: number;
-  httpPath: string;
-  token: string; // Replace password with token
-  keepalives_idle?: number;
-};
-
-export type DuckDBConnection = Omit<ConnectionBase, 'username' | 'password'> & {
-  type: 'duckdb';
-  database_path: string; // Path to .duckdb file
-  short_database_path: string;
-  // No username/password needed for DuckDB
-};
-
-export type SQLiteConnection = Omit<ConnectionBase, 'username' | 'password'> & {
-  type: 'sqlite';
-  database_path: string;
-  short_database_path: string;
-};
-
-export type KineticaConnection = ConnectionBase & {
-  type: 'kinetica';
-  host: string;
-  port: number;
-  timeout?: number;
-  useSSL?: boolean;
-  bypassSslCertCheck?: boolean;
-};
-
-export type MySqlConnection = ConnectionBase & {
-  type: 'mysql';
-  host: string;
-  port: number;
-  ssl?: boolean;
-};
-
-export type OracleConnectMode = 'basic' | 'connectString' | 'wallet';
-export type OracleConnection = ConnectionBase & {
-  type: 'oracle';
-  connectMode: OracleConnectMode;
-  host?: string;
-  port?: number;
-  serviceName?: string;
-  tls?: boolean;
-  connectString?: string;
-  walletDir?: string;
-  /** Transient: sent only with connector:test, never persisted. */
-  walletPassword?: string;
-};
-
-export type DuckLakeConnectionConfig = Omit<
-  ConnectionBase,
-  'username' | 'password' | 'database' | 'schema'
-> & {
-  type: 'ducklake';
-  instanceId: string;
-  // Metadata from instance
-  catalogType?: 'duckdb' | 'postgresql' | 'sqlite';
-  dataPath?: string;
-  status?: 'active' | 'inactive' | 'error' | 'connecting';
-};
-
-export type ConnectionInput =
-  | PostgresConnection
-  | SnowflakeConnection
-  | BigQueryConnection
-  | RedshiftConnection
-  | DatabricksConnection
-  | DuckDBConnection
-  | SQLiteConnection
-  | KineticaConnection
-  | MySqlConnection
-  | OracleConnection
-  | DuckLakeConnectionConfig;
-
-/**
- * Which connection types can back a dbt project. Every supported type must be
- * listed, so adding a type forces a decision here.
- */
-const DBT_CONNECTION_SUPPORT: Record<SupportedConnectionTypes, boolean> = {
-  postgres: true,
-  snowflake: true,
-  bigquery: true,
-  redshift: true,
-  databricks: true,
-  mssql: true,
-  kinetica: true,
-  googlecloud: true,
-  duckdb: true,
-  ducklake: true,
-  sqlite: false,
-  mysql: false,
-  oracle: false, // exclusion removed in 82b
-};
-
-/**
- * True only for types listed above as dbt-capable. A saved connection whose
- * type the app no longer supports is never selectable for a dbt project.
- */
-export const canUseAsDbtConnection = (type: string): boolean =>
-  DBT_CONNECTION_SUPPORT[type as SupportedConnectionTypes] === true;
-
 export type ConnectionModel = {
   id: string;
   connection: ConnectionInput;
 };
-
-export type DBTConnectionBase = {
-  type: SupportedConnectionTypes;
-  username: string;
-  password: string;
-  database: string;
-  schema: string;
-};
-
-export type PostgresDBTConnection = DBTConnectionBase & {
-  type: 'postgres';
-  host: string;
-  port: number;
-  keepalives_idle?: number;
-  ssl?: boolean;
-};
-
-export type SnowflakeDBTConnection = Omit<DBTConnectionBase, 'password'> & {
-  type: 'snowflake';
-  password?: string;
-  account: string;
-  warehouse: string;
-  role?: string;
-  client_session_keep_alive?: boolean;
-  query_tag?: string;
-  authMethod?: SnowflakeAuthMethod;
-  authenticator?: 'oauth_authorization_code' | 'externalbrowser';
-};
-
-export type BigQueryDBTConnection = DBTConnectionBase & {
-  type: 'bigquery';
-  method: 'service-account';
-  project: string;
-  keyfile?: string;
-  location?: string;
-  priority?: 'interactive' | 'batch';
-};
-
-export type RedshiftDBTConnection = DBTConnectionBase & {
-  type: 'redshift';
-  host: string;
-  port: number;
-  keepalives_idle?: number;
-  ssl?: boolean;
-  sslrootcert?: string;
-};
-
-export type DatabricksDBTConnection = Omit<
-  DBTConnectionBase,
-  'username' | 'password'
-> & {
-  type: 'databricks';
-  host: string;
-  port: number;
-  http_path: string;
-  schema: string;
-  catalog?: string;
-  token: string;
-  keepalives_idle?: number;
-  query_tag?: string;
-};
-
-export type DuckDBDBTConnection = Omit<
-  DBTConnectionBase,
-  'username' | 'password'
-> & {
-  type: 'duckdb';
-  path: string; // Database file path
-};
-
-export type KineticaDBTConnection = DBTConnectionBase & {
-  type: 'kinetica';
-  host: string;
-  port: number;
-  timeout?: number;
-  useSSL?: boolean;
-  bypassSslCertCheck?: boolean;
-};
-
-export type MySqlDBTConnection = DBTConnectionBase & {
-  type: 'mysql';
-  host: string;
-  port: number;
-  ssl?: boolean;
-  sslRejectUnauthorized?: boolean;
-};
-
-export type DBTConnection =
-  | PostgresDBTConnection
-  | SnowflakeDBTConnection
-  | BigQueryDBTConnection
-  | RedshiftDBTConnection
-  | DatabricksDBTConnection
-  | DuckDBDBTConnection
-  | KineticaDBTConnection
-  | MySqlDBTConnection;
 
 export type RosettaConnection = {
   name: string;

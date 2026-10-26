@@ -1,7 +1,7 @@
 import {
   buildKineticaUrl,
   parseKineticaUrl,
-} from '../../../src/shared/kineticaUrl';
+} from '../../../src/connections/kinetica/kinetica.url.shared';
 
 describe('buildKineticaUrl', () => {
   it('builds an http URL from a bare host and port', () => {
