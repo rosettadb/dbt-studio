@@ -302,6 +302,7 @@ const runProcess = (
     let stderr = '';
     let settled = false;
     let reachedInstallPhase = false;
+    let stopRequested = false;
 
     const timeout = setTimeout(() => {
       if (settled) return;
@@ -326,15 +327,17 @@ const runProcess = (
     };
 
     if (control) {
-      const stopProcess = () =>
-        finish(() => {
-          try {
-            child.kill('SIGTERM');
-          } catch {
-            // The process may already have exited.
-          }
-          reject(new Error(INSTALL_CANCELLED_MESSAGE));
-        });
+      // Settles only once pip has exited (see 'close' below), so its files
+      // are released before anything deletes or reinstalls them.
+      const stopProcess = () => {
+        if (settled) return;
+        stopRequested = true;
+        try {
+          child.kill('SIGTERM');
+        } catch {
+          // The process may already have exited.
+        }
+      };
       if (control.signal.aborted) stopProcess();
       else
         control.signal.addEventListener('abort', stopProcess, { once: true });
@@ -357,11 +360,17 @@ const runProcess = (
     });
 
     child.on('error', (error) => {
-      finish(() => reject(error));
+      finish(() =>
+        reject(stopRequested ? new Error(INSTALL_CANCELLED_MESSAGE) : error),
+      );
     });
 
     child.on('close', (exitCode) => {
-      finish(() => resolve({ exitCode, stdout, stderr }));
+      finish(() =>
+        stopRequested
+          ? reject(new Error(INSTALL_CANCELLED_MESSAGE))
+          : resolve({ exitCode, stdout, stderr }),
+      );
     });
   });
 };

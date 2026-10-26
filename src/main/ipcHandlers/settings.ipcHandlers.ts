@@ -4,9 +4,14 @@ import { FileDialogProperties, SettingsType } from '../../types/backend';
 import { SettingsService, RunnerService } from '../services';
 import { SettingsChannels } from '../../types/ipc';
 import { DbtCoreVersionService } from '../services/dbtCoreVersion.service';
-import { isDbtV2SwitchQueued, runInstallTask } from '../utils/installTask';
+import {
+  isDbtV2SwitchQueued,
+  removeQueuedInstalls,
+  runInstallTask,
+} from '../utils/installTask';
 import {
   DBT_V2_SWITCH_BLOCKS_ADAPTERS_MESSAGE,
+  MANAGED_ENVIRONMENT_INSTALL_TYPES,
   isDbtRuntimeSubject,
 } from '../../shared/installTasks';
 import { DBT_ADAPTER_PACKAGES } from '../../shared/dbtAdapterPackages';
@@ -137,8 +142,11 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
   });
 
   ipcMain.handle('version:python:uninstall', async () => {
-    return runInstallTask('install:python', 'Uninstalling Python', () =>
-      SettingsService.uninstallPython(),
+    return runInstallTask(
+      'install:python',
+      'Uninstalling Python',
+      () => SettingsService.uninstallPython(),
+      { removesManagedEnvironment: true },
     );
   });
 
@@ -153,6 +161,21 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
         'install:python',
         `Installing Python ${version}`,
         () => SettingsService.installPythonVersion(version),
+        {
+          // Picking a version on the Python page rebuilds the managed
+          // environment.
+          replacesManagedEnvironment: true,
+          // Without the new environment the installs still queued for it
+          // can't run.
+          beforeNextInstall: async (succeeded) => {
+            if (succeeded) return;
+            await removeQueuedInstalls(async (install) =>
+              MANAGED_ENVIRONMENT_INSTALL_TYPES.includes(install.type)
+                ? "Python install failed, so this wasn't installed."
+                : null,
+            );
+          },
+        },
       );
     },
   );
@@ -229,7 +252,7 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
       'install:dbt',
       `Switching to dbt-core ${request.targetVersion}`,
       (control) => DbtCoreVersionService.installVersionChange(request, control),
-      { subject: `dbt-core@${request.targetVersion}` },
+      { subject: `dbt-core@${request.targetVersion}`, endsOnSignal: true },
     );
   });
 
@@ -261,7 +284,7 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
       'install:dbt',
       `Installing ${request.packageName}`,
       (control) => DbtCoreVersionService.installLatestPackage(request, control),
-      { subject: request.packageName, stoppable: true },
+      { subject: request.packageName, stoppable: true, endsOnSignal: true },
     );
   });
 
@@ -270,7 +293,7 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
       'install:dbt',
       `Uninstalling ${request.packageName}`,
       (control) => DbtCoreVersionService.uninstallPackage(request, control),
-      { subject: request.packageName },
+      { subject: request.packageName, endsOnSignal: true },
     );
   });
 
@@ -291,6 +314,7 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
         // A dbt Core switch first uninstalls the other runtime, so it can't
         // be stopped halfway; adapters can while pip is still downloading.
         stoppable: !isDbtRuntimeSubject(req.packageName),
+        endsOnSignal: true,
       },
     );
   });

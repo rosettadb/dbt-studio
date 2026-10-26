@@ -2,6 +2,7 @@ import { TaskManagerService } from '../../../../src/main/services/taskManager.se
 import {
   InstallTaskControl,
   isDbtV2SwitchQueued,
+  removeQueuedInstalls,
   runInstallTask,
 } from '../../../../src/main/utils/installTask';
 import { INSTALL_CANCELLED_MESSAGE } from '../../../../src/shared/installTasks';
@@ -18,6 +19,22 @@ const waitForQueue = () =>
   new Promise((resolve) => {
     setTimeout(resolve, 0);
   });
+
+// Work that runs until released, or ends like a stopped pip when its signal
+// aborts.
+const blockingWork = () => {
+  const calls: { release: () => void }[] = [];
+  const work = jest.fn(
+    ({ signal }: InstallTaskControl) =>
+      new Promise<{ ok: boolean }>((resolve, reject) => {
+        calls.push({ release: () => resolve({ ok: true }) });
+        signal.addEventListener('abort', () =>
+          reject(new Error(INSTALL_CANCELLED_MESSAGE)),
+        );
+      }),
+  );
+  return { work, release: (call = 0) => calls[call].release() };
+};
 
 describe('runInstallTask', () => {
   afterEach(() => {
@@ -218,5 +235,171 @@ describe('runInstallTask', () => {
     );
     expect(isDbtV2SwitchQueued()).toBe(false);
     await v1Run;
+  });
+  describe('Python switch', () => {
+    const switchPython = (label = 'Installing Python 3.12.10') => {
+      const python = blockingWork();
+      const run = runInstallTask('install:python', label, python.work, {
+        replacesManagedEnvironment: true,
+      });
+      return { ...python, run };
+    };
+
+    it('goes ahead of installs still waiting, which keep their order', async () => {
+      const first = blockingWork();
+      const firstRun = runInstallTask('install:rosetta', 'Rosetta', first.work);
+      const notebookRun = runInstallTask(
+        'install:notebook',
+        'Notebook packages',
+        () => Promise.resolve({ ok: true }),
+      );
+      await waitForQueue();
+
+      const python = switchPython();
+      expect(findTask('Installing Python 3.12.10')!.startedAt).toBeLessThan(
+        findTask('Notebook packages')!.startedAt,
+      );
+
+      first.release();
+      await firstRun;
+      await waitForQueue();
+      expect(findTask('Installing Python 3.12.10')?.status).toBe('running');
+      expect(findTask('Notebook packages')?.status).toBe('pending');
+
+      python.release();
+      await python.run;
+      await notebookRun;
+      expect(findTask('Notebook packages')?.status).toBe('completed');
+    });
+
+    it('cancels queued dbt installs and stops a running one', async () => {
+      const adapter = blockingWork();
+      const adapterRun = runInstallTask(
+        'install:dbt',
+        'Installing dbt-snowflake',
+        adapter.work,
+        { subject: 'dbt-snowflake', endsOnSignal: true },
+      );
+      const queuedWork = jest.fn().mockResolvedValue({ ok: true });
+      const queuedRun = runInstallTask(
+        'install:dbt',
+        'Installing dbt-bigquery 1.11.2',
+        queuedWork,
+        { subject: 'dbt-bigquery@1.11.2', endsOnSignal: true },
+      );
+      await waitForQueue();
+
+      const python = switchPython();
+      await expect(adapterRun).rejects.toThrow(INSTALL_CANCELLED_MESSAGE);
+      await expect(queuedRun).rejects.toThrow(INSTALL_CANCELLED_MESSAGE);
+      expect(findTask('Installing dbt-snowflake')?.status).toBe('cancelled');
+      expect(findTask('Installing dbt-bigquery 1.11.2')?.status).toBe(
+        'cancelled',
+      );
+      expect(queuedWork).not.toHaveBeenCalled();
+
+      await waitForQueue();
+      expect(findTask('Installing Python 3.12.10')?.status).toBe('running');
+      python.release();
+      await python.run;
+    });
+
+    it('stops a running pyiceberg install and restarts it right after Python', async () => {
+      const pyiceberg = blockingWork();
+      const pyicebergRun = runInstallTask(
+        'install:pyiceberg',
+        'Installing pyiceberg',
+        pyiceberg.work,
+        { endsOnSignal: true },
+      );
+      await waitForQueue();
+
+      const python = switchPython();
+      await waitForQueue();
+      expect(findTask('Installing pyiceberg')?.status).toBe('pending');
+      expect(findTask('Installing Python 3.12.10')?.status).toBe('running');
+      expect(findTask('Installing pyiceberg')!.startedAt).toBeGreaterThan(
+        findTask('Installing Python 3.12.10')!.startedAt,
+      );
+
+      python.release();
+      await python.run;
+      await waitForQueue();
+      expect(pyiceberg.work).toHaveBeenCalledTimes(2);
+      pyiceberg.release(1);
+      await expect(pyicebergRun).resolves.toEqual({ ok: true });
+      expect(findTask('Installing pyiceberg')?.status).toBe('completed');
+    });
+
+    it('waits for a running sqlglot install, which pip runs through a shell', async () => {
+      const sqlglot = blockingWork();
+      const sqlglotRun = runInstallTask(
+        'install:sqlglot',
+        'Installing sqlglot',
+        sqlglot.work,
+      );
+      await waitForQueue();
+
+      const python = switchPython();
+      await waitForQueue();
+      expect(findTask('Installing sqlglot')?.status).toBe('running');
+      expect(findTask('Installing Python 3.12.10')?.status).toBe('pending');
+
+      sqlglot.release();
+      await sqlglotRun;
+      await waitForQueue();
+      expect(findTask('Installing Python 3.12.10')?.status).toBe('running');
+      python.release();
+      await python.run;
+    });
+  });
+
+  it('cancels queued installs into the environment on a Python uninstall', async () => {
+    const first = blockingWork();
+    const firstRun = runInstallTask('install:rosetta', 'Rosetta', first.work);
+    const flowfileRun = runInstallTask('install:flowfile', 'Flowfile', () =>
+      Promise.resolve({ success: true }),
+    );
+    await waitForQueue();
+
+    const uninstall = blockingWork();
+    const uninstallRun = runInstallTask(
+      'install:python',
+      'Uninstalling Python',
+      uninstall.work,
+      { removesManagedEnvironment: true },
+    );
+    await expect(flowfileRun).rejects.toThrow(INSTALL_CANCELLED_MESSAGE);
+    expect(findTask('Flowfile')?.status).toBe('cancelled');
+
+    first.release();
+    await firstRun;
+    await waitForQueue();
+    uninstall.release();
+    await uninstallRun;
+  });
+
+  it('takes queued installs out with the reason it is given', async () => {
+    const first = blockingWork();
+    const firstRun = runInstallTask('install:rosetta', 'Rosetta', first.work);
+    const keptRun = runInstallTask('install:runner', 'Runner', () =>
+      Promise.resolve({ success: true }),
+    );
+    const removedRun = runInstallTask('install:flowfile', 'Flowfile', () =>
+      Promise.resolve({ success: true }),
+    );
+    await waitForQueue();
+
+    await removeQueuedInstalls(async (install) =>
+      install.type === 'install:flowfile' ? 'Python install failed.' : null,
+    );
+    await expect(removedRun).rejects.toThrow('Python install failed.');
+    expect(findTask('Flowfile')?.status).toBe('error');
+    expect(findTask('Flowfile')?.error).toBe('Python install failed.');
+
+    first.release();
+    await firstRun;
+    await keptRun;
+    expect(findTask('Runner')?.status).toBe('completed');
   });
 });

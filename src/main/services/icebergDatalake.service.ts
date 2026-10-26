@@ -18,6 +18,7 @@ import databaseStore from '../database';
 import secureStorage from './secureStorage.service';
 import SettingsService from './settings.service';
 import { runInstallTask } from '../utils/installTask';
+import { INSTALL_CANCELLED_MESSAGE } from '../../shared/installTasks';
 
 import type {
   IcebergInstanceConfig,
@@ -1288,7 +1289,7 @@ export class IcebergDatalakeService {
       await runInstallTask(
         'install:pyiceberg',
         'Installing pyiceberg',
-        () =>
+        ({ signal }) =>
           new Promise<void>((resolve, reject) => {
             const child = spawn(pythonPath, [
               '-m',
@@ -1304,13 +1305,20 @@ export class IcebergDatalakeService {
               '--prefer-binary',
               '--quiet',
             ]);
+            // Stopped when a Python switch is about to delete the
+            // environment; settles once pip has exited.
+            signal.addEventListener('abort', () => child.kill(), {
+              once: true,
+            });
             child.on('close', (code: number) => {
-              if (code === 0) resolve();
+              if (signal.aborted) reject(new Error(INSTALL_CANCELLED_MESSAGE));
+              else if (code === 0) resolve();
               else
                 reject(new Error(`pip install failed with exit code ${code}`));
             });
             child.on('error', (err: Error) => reject(err));
           }),
+        { endsOnSignal: true },
       );
 
       // Verify installation

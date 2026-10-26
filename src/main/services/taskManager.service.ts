@@ -44,16 +44,26 @@ class TaskManagerServiceImpl {
     cancellable?: boolean;
     status?: 'pending' | 'running';
     subject?: string;
+    // Placed ahead of every task still waiting (a Python switch jumping the
+    // install queue), so listing pending tasks by startedAt shows run order.
+    queueFirst?: boolean;
   }): TaskRecord {
     // Strictly increasing, so tasks created in the same millisecond (e.g. a
     // batch of queued installs) keep the order they were created in.
     this.lastCreatedAt = Math.max(Date.now(), this.lastCreatedAt + 1);
+    const waitingStartedAts = Array.from(this.tasks.values())
+      .filter((task) => task.status === 'pending')
+      .map((task) => task.startedAt);
+    const startedAt =
+      params.queueFirst && waitingStartedAts.length > 0
+        ? Math.min(...waitingStartedAts) - 2
+        : this.lastCreatedAt;
     const task: TaskRecord = {
       id: params.id,
       type: params.type,
       label: params.label,
       status: params.status ?? 'running',
-      startedAt: this.lastCreatedAt,
+      startedAt,
       cancellable: params.cancellable ?? false,
       subject: params.subject,
     };
@@ -67,6 +77,26 @@ class TaskManagerServiceImpl {
     if (!task) return;
     task.status = 'running';
     task.startedAt = Date.now();
+    this.broadcast({ type: 'updated', task });
+  }
+
+  get(id: string): TaskRecord | undefined {
+    return this.tasks.get(id);
+  }
+
+  // Back to waiting, e.g. an install stopped so a Python switch can go first.
+  // `placeAfterStartedAt` puts it right behind that task in run order.
+  requeue(id: string, placeAfterStartedAt?: number) {
+    const task = this.tasks.get(id);
+    if (!task) return;
+    task.status = 'pending';
+    task.cancellable = true;
+    task.finishedAt = undefined;
+    task.error = undefined;
+    if (placeAfterStartedAt !== undefined) {
+      task.startedAt = placeAfterStartedAt + 1;
+    }
+    this.lastProgressEmit.delete(id);
     this.broadcast({ type: 'updated', task });
   }
 
