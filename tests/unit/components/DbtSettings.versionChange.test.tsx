@@ -55,15 +55,24 @@ jest.mock('../../../src/renderer/context/TaskManagerProvider', () => ({
   }),
 }));
 
+// Queued and running chips open the Task Manager when clicked.
+const mockNavigate = jest.fn();
+jest.mock('react-router-dom', () => ({
+  ...jest.requireActual('react-router-dom'),
+  useNavigate: () => mockNavigate,
+}));
+
 const dbtTask = (
   subject: string,
   status: TaskRecord['status'] = 'pending',
+  // When the task joined the queue; earlier ones run first.
+  startedAt = Date.now(),
 ): TaskRecord => ({
   id: `task-${subject}`,
   type: 'install:dbt',
   label: `Installing ${subject}`,
   status,
-  startedAt: Date.now(),
+  startedAt,
   cancellable: status === 'pending',
   subject,
 });
@@ -521,6 +530,72 @@ describe('DbtSettings runtime switch', () => {
       expect(
         await screen.findByRole('button', { name: 'Queued' }),
       ).toBeDisabled();
+    });
+
+    describe('tooltips', () => {
+      const tooltipText = async (element: HTMLElement) => {
+        fireEvent.mouseOver(element);
+        return (await screen.findByRole('tooltip')).textContent;
+      };
+
+      it('explains what a running install is doing', async () => {
+        getInstalledPackages.mockResolvedValue({ packages: installedAdapters });
+        mockTasks = [dbtTask('dbt-postgres@1.9.1', 'running')];
+        renderSettings();
+
+        const text = await tooltipText(await screen.findByText('In progress'));
+        expect(text).toContain('Installing dbt-postgres 1.9.1 now.');
+        expect(text).toContain("It can't be stopped safely now.");
+        expect(text).toContain(
+          'Click to see the full queue in the Task Manager.',
+        );
+        expect(text).not.toMatch(/ago/);
+      });
+
+      it('says a queued install is next and what it waits for', async () => {
+        getInstalledPackages.mockResolvedValue({ packages: installedAdapters });
+        mockTasks = [
+          dbtTask('dbt-duckdb@1.11.0', 'running', 1),
+          dbtTask('dbt-postgres@1.9.1', 'pending', 2),
+        ];
+        renderSettings();
+
+        expect(await tooltipText(await screen.findByText('Queued'))).toContain(
+          'dbt-postgres 1.9.1 is next. It starts when dbt-duckdb 1.11.0 finishes.',
+        );
+      });
+
+      it('counts the installs ahead of a queued one', async () => {
+        getInstalledPackages.mockResolvedValue({ packages: installedAdapters });
+        mockTasks = [
+          dbtTask('dbt-duckdb@1.11.0', 'running', 1),
+          dbtTask('dbt-snowflake', 'pending', 2),
+          dbtTask('dbt-postgres@1.9.1', 'pending', 3),
+        ];
+        renderSettings();
+
+        // Adapter rows list dbt-postgres before dbt-snowflake.
+        const [postgresQueued] = await screen.findAllByText('Queued');
+        expect(await tooltipText(postgresQueued)).toContain(
+          'dbt-postgres 1.9.1 will start after 2 other installs finish. Now running: dbt-duckdb 1.11.0.',
+        );
+      });
+
+      it('explains a queued dbt Core switch and opens the Task Manager on click', async () => {
+        mockTasks = [dbtTask('dbt-core@1.11.11')];
+        renderSettings();
+
+        fireEvent.click(runtimeToggle('v1'));
+        const queuedButton = await screen.findByRole('button', {
+          name: 'Queued',
+        });
+        expect(
+          await tooltipText(queuedButton.parentElement as HTMLElement),
+        ).toContain('The switch to dbt Core 1.11.11 is next.');
+
+        fireEvent.click(queuedButton.parentElement as HTMLElement);
+        expect(mockNavigate).toHaveBeenCalledWith('/app/settings/task-manager');
+      });
     });
   });
 });

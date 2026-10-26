@@ -17,6 +17,8 @@ class TaskManagerServiceImpl {
 
   private lastProgressEmit = new Map<string, number>();
 
+  private lastCreatedAt = 0;
+
   private window: BrowserWindow | null = null;
 
   setWindow(window: BrowserWindow) {
@@ -43,12 +45,15 @@ class TaskManagerServiceImpl {
     status?: 'pending' | 'running';
     subject?: string;
   }): TaskRecord {
+    // Strictly increasing, so tasks created in the same millisecond (e.g. a
+    // batch of queued installs) keep the order they were created in.
+    this.lastCreatedAt = Math.max(Date.now(), this.lastCreatedAt + 1);
     const task: TaskRecord = {
       id: params.id,
       type: params.type,
       label: params.label,
       status: params.status ?? 'running',
-      startedAt: Date.now(),
+      startedAt: this.lastCreatedAt,
       cancellable: params.cancellable ?? false,
       subject: params.subject,
     };

@@ -1,5 +1,6 @@
 /* eslint-disable no-restricted-syntax, no-await-in-loop, no-plusplus */
 import React, { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Typography,
   Button,
@@ -43,6 +44,7 @@ import {
   PythonPackageVersionListResponse,
   SettingsType,
 } from '../../../types/backend';
+import type { TaskRecord } from '../../../types/ipc';
 import {
   useCheckCurrentProjectCompatibility,
   useGetActiveAdapterCapabilities,
@@ -100,6 +102,75 @@ const CancelQueuedButton: React.FC<{ onCancel: () => void }> = ({
   </Tooltip>
 );
 
+// What a queued or running install on this page is about, as used in its
+// tooltip: "dbt-snowflake 1.12.8", "the latest dbt-snowflake", "the switch to
+// dbt Core 1.11.11". Installs from other pages fall back to their label.
+const describeInstallSubject = (task: TaskRecord): string => {
+  if (task.type !== 'install:dbt' || !task.subject) return `"${task.label}"`;
+  const [packageName, version] = task.subject.split('@');
+  if (isDbtRuntimeSubject(task.subject) && version) {
+    return `the switch to dbt Core ${version}`;
+  }
+  if (version) return `${packageName} ${version}`;
+  return task.label.startsWith('Uninstalling')
+    ? `uninstalling ${packageName}`
+    : `the latest ${packageName}`;
+};
+
+const describeRunningInstall = (task: TaskRecord): string => {
+  const [packageName, version] = (task.subject ?? '').split('@');
+  if (isDbtRuntimeSubject(task.subject) && version) {
+    return `Switching to dbt Core ${version} now.`;
+  }
+  if (task.label.startsWith('Uninstalling')) {
+    return `Uninstalling ${packageName} now.`;
+  }
+  return version
+    ? `Installing ${packageName} ${version} now.`
+    : `Installing the latest ${packageName} now.`;
+};
+
+const startSentence = (text: string) =>
+  text.startsWith('dbt-') ? text : text.charAt(0).toUpperCase() + text.slice(1);
+
+// Tooltip lines for a queued or running install. `activeInstallTasks` is the
+// whole studio queue, since installs from every page wait in the same line.
+const getInstallTaskTooltipLines = (
+  task: TaskRecord,
+  activeInstallTasks: TaskRecord[],
+): string[] => {
+  const lines: string[] = [];
+  if (task.status === 'running') {
+    lines.push(
+      describeRunningInstall(task),
+      task.cancellable
+        ? 'You can still stop it from the Task Manager.'
+        : "It can't be stopped safely now.",
+    );
+  } else {
+    const subject = startSentence(describeInstallSubject(task));
+    const running = activeInstallTasks.find(
+      (other) => other.status === 'running',
+    );
+    const waitingAhead = activeInstallTasks.filter(
+      (other) => other.status === 'pending' && other.startedAt < task.startedAt,
+    ).length;
+    if (!running) {
+      lines.push(`${subject} is next.`);
+    } else if (waitingAhead === 0) {
+      lines.push(
+        `${subject} is next. It starts when ${describeInstallSubject(running)} finishes.`,
+      );
+    } else {
+      lines.push(
+        `${subject} will start after ${waitingAhead + 1} other installs finish. Now running: ${describeInstallSubject(running)}.`,
+      );
+    }
+  }
+  lines.push('Click to see the full queue in the Task Manager.');
+  return lines;
+};
+
 interface DbtSettingsProps {
   settings: SettingsType;
   onInstallDbtSave: (key: string, value: string) => Promise<void>;
@@ -135,6 +206,32 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
   // it is closed and opened again.
   const { cancel: cancelTask } = useTaskManager();
   const activeInstallTasks = useActiveInstallTasks();
+  const navigate = useNavigate();
+  // Tooltip on a queued or running install. Disabled buttons get no mouse
+  // events, so a wrapper shows the tooltip and opens the Task Manager on click.
+  const withInstallTaskTooltip = (
+    task: TaskRecord | undefined,
+    element: React.ReactElement,
+  ) =>
+    task ? (
+      <Tooltip
+        title={getInstallTaskTooltipLines(task, activeInstallTasks).map(
+          (line) => (
+            <div key={line}>{line}</div>
+          ),
+        )}
+      >
+        <Box
+          component="span"
+          onClick={() => navigate('/app/settings/task-manager')}
+          sx={{ display: 'inline-flex', cursor: 'pointer' }}
+        >
+          {element}
+        </Box>
+      </Tooltip>
+    ) : (
+      element
+    );
   const activeDbtTasks = activeInstallTasks.filter(
     (task) => task.type === 'install:dbt',
   );
@@ -807,29 +904,32 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
           }
         >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={() => {
-                prepareDbtVersionChange(item.version).catch(() => undefined);
-              }}
-              disabled={
-                isInstalled ||
-                isLoadingDialog ||
-                isPythonInstalling ||
-                Boolean(switchTask) ||
-                (Boolean(dbtRuntimeTask) && !isRuntimeLineSwitch)
-              }
-              startIcon={
-                switchTask?.status === 'running' ? (
-                  <CircularProgress size={14} />
-                ) : (
-                  <Download />
-                )
-              }
-            >
-              {actionLabel}
-            </Button>
+            {withInstallTaskTooltip(
+              switchTask,
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => {
+                  prepareDbtVersionChange(item.version).catch(() => undefined);
+                }}
+                disabled={
+                  isInstalled ||
+                  isLoadingDialog ||
+                  isPythonInstalling ||
+                  Boolean(switchTask) ||
+                  (Boolean(dbtRuntimeTask) && !isRuntimeLineSwitch)
+                }
+                startIcon={
+                  switchTask?.status === 'running' ? (
+                    <CircularProgress size={14} />
+                  ) : (
+                    <Download />
+                  )
+                }
+              >
+                {actionLabel}
+              </Button>,
+            )}
             {switchTask?.status === 'pending' && (
               <CancelQueuedButton
                 onCancel={() => {
@@ -1240,7 +1340,10 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                       )}
                       {packageTask?.status === 'pending' && (
                         <Chip
-                          label="Queued"
+                          label={withInstallTaskTooltip(
+                            packageTask,
+                            <span>Queued</span>,
+                          )}
                           size="small"
                           color="info"
                           deleteIcon={
@@ -1253,9 +1356,15 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                           }}
                         />
                       )}
-                      {packageTask?.status === 'running' && (
-                        <Chip label="In progress" size="small" color="info" />
-                      )}
+                      {packageTask?.status === 'running' &&
+                        withInstallTaskTooltip(
+                          packageTask,
+                          <Chip
+                            label="In progress"
+                            size="small"
+                            color="info"
+                          />,
+                        )}
                     </Box>
                   }
                   description={packageDescriptions[pkg]}
@@ -1391,26 +1500,29 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                                   gap: 0.5,
                                 }}
                               >
-                                <Button
-                                  size="small"
-                                  variant="outlined"
-                                  onClick={() => {
-                                    installSinglePackageVersion(
-                                      pkg,
-                                      v.version,
-                                    ).catch(() => undefined);
-                                  }}
-                                  disabled={isInstalled || isPackageBusy}
-                                  startIcon={
-                                    versionTask?.status === 'running' ? (
-                                      <CircularProgress size={14} />
-                                    ) : (
-                                      <Download />
-                                    )
-                                  }
-                                >
-                                  {actionLabel}
-                                </Button>
+                                {withInstallTaskTooltip(
+                                  versionTask,
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
+                                    onClick={() => {
+                                      installSinglePackageVersion(
+                                        pkg,
+                                        v.version,
+                                      ).catch(() => undefined);
+                                    }}
+                                    disabled={isInstalled || isPackageBusy}
+                                    startIcon={
+                                      versionTask?.status === 'running' ? (
+                                        <CircularProgress size={14} />
+                                      ) : (
+                                        <Download />
+                                      )
+                                    }
+                                  >
+                                    {actionLabel}
+                                  </Button>,
+                                )}
                                 {versionTask?.status === 'pending' && (
                                   <CancelQueuedButton
                                     onCancel={() => {
