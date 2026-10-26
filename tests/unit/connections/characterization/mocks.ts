@@ -78,9 +78,7 @@ jest.mock('../../../../src/main/services/secureStorage.service', () => ({
     deleteCredential: (...a: any[]) =>
       (jest.requireActual('./mocks') as any).deleteCredential(...a),
     cleanupConnectionCredentials: (...a: any[]) =>
-      (jest.requireActual('./mocks') as any).cleanupConnectionCredentials(
-        ...a,
-      ),
+      (jest.requireActual('./mocks') as any).cleanupConnectionCredentials(...a),
   },
 }));
 
@@ -108,10 +106,19 @@ jest.mock('../../../../release/app/node_modules/@duckdb/node-api', () => ({
   DuckDBConnection: jest.fn(),
 }));
 
-jest.mock('better-sqlite3', () => ({ __esModule: true, default: jest.fn() }));
+// Both resolution paths (root node_modules and release/app/node_modules via
+// the src/node_modules symlink) must hand out the SAME constructor mock.
+jest.mock('better-sqlite3', () => ({
+  __esModule: true,
+  default:
+    (global as any).__sqliteCtorMock ??
+    ((global as any).__sqliteCtorMock = jest.fn()),
+}));
 jest.mock('../../../../release/app/node_modules/better-sqlite3', () => ({
   __esModule: true,
-  default: jest.fn(),
+  default:
+    (global as any).__sqliteCtorMock ??
+    ((global as any).__sqliteCtorMock = jest.fn()),
 }));
 
 jest.mock('../../../../src/main/lib/GPUdb', () => ({
