@@ -23,6 +23,7 @@ import {
 } from './SettingsLayout';
 import { PythonMonoIcon } from '../notebook/NotebookKindIcon';
 import { useIsTaskTypeActive } from '../../hooks';
+import { isInstallCancelledError } from '../../../shared/installTasks';
 
 interface PythonSettingsProps {
   settings: SettingsType;
@@ -50,17 +51,31 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
   const installVersion = useInstallPythonVersion({
     onSuccess: (result) => {
       setInstallingVersion(null);
-      if (result.success) checkVersions.mutate();
+      if (result.success) {
+        toast.success(`Python ${result.version} installed successfully`);
+        checkVersions.mutate();
+      } else {
+        toast.error(`Installation failed: ${result.error}`);
+      }
     },
-    onError: () => {
+    onError: (error) => {
       setInstallingVersion(null);
+      // A cancelled install never started, so it did not fail.
+      if (isInstallCancelledError(error)) return;
+      toast.error(`Installation failed: ${error.message}`);
     },
   });
 
   const uninstallPython = useUninstallPython({
     onSuccess: () => {
+      toast.success('Python uninstalled successfully');
       setVersionInfo(null);
       checkVersions.mutate();
+    },
+    onError: (error) => {
+      // A cancelled install never started, so it did not fail.
+      if (isInstallCancelledError(error)) return;
+      toast.error(`Uninstall failed: ${error.message}`);
     },
   });
 

@@ -24,6 +24,7 @@ import { SettingsType, RosettaVersionInfo } from '../../../types/backend';
 import { utils } from '../../helpers';
 import { ConfirmationModal } from '../modals';
 import { useIsTaskTypeActive } from '../../hooks';
+import { isInstallCancelledError } from '../../../shared/installTasks';
 import {
   useCheckRosettaVersions,
   useInstallRosettaVersion,
@@ -97,16 +98,30 @@ export const RosettaSettings: React.FC<RosettaSettingsProps> = ({
   const installVersion = useInstallRosettaVersion({
     onSuccess: (result) => {
       setInstallingVersion(null);
-      if (result.success) checkVersions.mutate();
+      if (result.success) {
+        toast.success(`Rosetta ${result.version} installed successfully`);
+        checkVersions.mutate();
+      } else {
+        toast.error(`Installation failed: ${result.error}`);
+      }
     },
-    onError: () => {
+    onError: (error) => {
       setInstallingVersion(null);
+      // A cancelled install never started, so it did not fail.
+      if (isInstallCancelledError(error)) return;
+      toast.error(`Installation failed: ${error.message}`);
     },
   });
 
   const uninstallRosetta = useUninstallRosetta({
     onSuccess: () => {
+      toast.success('Rosetta uninstalled successfully');
       setVersionInfo(null);
+    },
+    onError: (error) => {
+      // A cancelled install never started, so it did not fail.
+      if (isInstallCancelledError(error)) return;
+      toast.error(`Uninstall failed: ${error.message}`);
     },
   });
 

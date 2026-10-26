@@ -122,6 +122,7 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
 
       const result = await flowfileInstall();
       if (result.ok) {
+        toast.success('Flowfile installed successfully');
         await checkStatus();
       } else {
         setInstallError(result.error ?? 'Installation failed');
@@ -143,11 +144,19 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
     try {
       const result = await flowfileUninstall();
       if (result.ok) {
+        toast.success('Flowfile uninstalled successfully');
         if (isPageOpenRef.current) onSettingsChange('flowfileVersion', '');
         await checkStatus();
+      } else {
+        toast.error(result.error ?? 'Uninstall failed');
       }
-    } catch {
-      // The task manager shows the failure (or the cancel) in a popup.
+    } catch (error) {
+      // A cancelled uninstall never started, so it did not fail.
+      if (!isInstallCancelledError(error)) {
+        toast.error(
+          error instanceof Error ? error.message : 'Uninstall failed',
+        );
+      }
     } finally {
       setIsUninstalling(false);
     }

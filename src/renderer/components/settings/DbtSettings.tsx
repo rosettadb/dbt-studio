@@ -730,8 +730,8 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     setVersionChangeResult(null);
 
     // All go into the queue at once (it keeps this order), so each row shows
-    // "Queued" right away; each one's finish popup comes from the task manager.
-    await Promise.all(
+    // "Queued" right away.
+    const results = await Promise.all(
       toInstall.map(async (pkg) => {
         const result = await runQueuedInstall(pkg, () =>
           installLatestPackage({
@@ -745,8 +745,15 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
             [pkg]: result.installedVersion as string,
           }));
         }
+        return result;
       }),
     );
+
+    if (results.every((result) => result?.ok)) {
+      toast.success(
+        `All ${toInstall.length} adapter(s) installed successfully.`,
+      );
+    }
 
     setIsLoadingInstall(false);
   };
@@ -834,6 +841,34 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     0,
     showOlderVersions ? 15 : 5,
   );
+
+  // Blue "Queued ✕" / "In progress" chip for an install on this page.
+  const renderInstallTaskChip = (task: TaskRecord | undefined) => {
+    if (task?.status === 'pending') {
+      return (
+        <Chip
+          label={withInstallTaskTooltip(task, <span>Queued</span>)}
+          size="small"
+          color="info"
+          deleteIcon={
+            <Tooltip title={CANCEL_QUEUED_TOOLTIP}>
+              <Close aria-label="Remove from the queue" />
+            </Tooltip>
+          }
+          onDelete={() => {
+            cancelTask(task.id).catch(() => undefined);
+          }}
+        />
+      );
+    }
+    if (task?.status === 'running') {
+      return withInstallTaskTooltip(
+        task,
+        <Chip label="In progress" size="small" color="info" />,
+      );
+    }
+    return null;
+  };
 
   const hasDbt = Boolean(settings.dbtPath && settings.dbtPath !== 'dbt');
   const isV2Active = Boolean(settings.dbtVersion?.startsWith('2.'));
@@ -1132,6 +1167,8 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
               : `Not installed. Installing a version below switches to dbt ${shownRuntime}.`
           }
         >
+          {/* A queued or running dbt Core switch, visible with the list closed. */}
+          {renderInstallTaskChip(dbtRuntimeTask)}
           <IconButton
             size="small"
             onClick={() => setIsVersionListOpen((open) => !open)}
@@ -1338,33 +1375,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                           variant="outlined"
                         />
                       )}
-                      {packageTask?.status === 'pending' && (
-                        <Chip
-                          label={withInstallTaskTooltip(
-                            packageTask,
-                            <span>Queued</span>,
-                          )}
-                          size="small"
-                          color="info"
-                          deleteIcon={
-                            <Tooltip title={CANCEL_QUEUED_TOOLTIP}>
-                              <Close aria-label="Remove from the queue" />
-                            </Tooltip>
-                          }
-                          onDelete={() => {
-                            cancelTask(packageTask.id).catch(() => undefined);
-                          }}
-                        />
-                      )}
-                      {packageTask?.status === 'running' &&
-                        withInstallTaskTooltip(
-                          packageTask,
-                          <Chip
-                            label="In progress"
-                            size="small"
-                            color="info"
-                          />,
-                        )}
+                      {renderInstallTaskChip(packageTask)}
                     </Box>
                   }
                   description={packageDescriptions[pkg]}

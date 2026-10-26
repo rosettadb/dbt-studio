@@ -1,5 +1,6 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { toast } from 'react-toastify';
 import { DbtSettings } from '../../../src/renderer/components/settings/DbtSettings';
 import type { TaskRecord } from '../../../src/types/ipc';
 
@@ -387,6 +388,17 @@ describe('DbtSettings runtime switch', () => {
     // The page loads installed packages after a 1s delay.
     const loadTimeout = { timeout: 3000 };
 
+    // The version list's own Queued button (the versions row also has a
+    // Queued chip, which is a button too).
+    const queuedVersionButton = () =>
+      waitFor(() => {
+        const button = screen
+          .getAllByRole('button', { name: 'Queued' })
+          .find((element) => element.classList.contains('MuiButton-root'));
+        if (!button) throw new Error('Version list not shown yet');
+        return button;
+      });
+
     // Adapter rows list dbt-postgres first and dbt-duckdb after it.
     const uninstallButtons = async () =>
       screen.findAllByRole('button', { name: 'Uninstall' }, loadTimeout);
@@ -495,9 +507,7 @@ describe('DbtSettings runtime switch', () => {
       renderSettings();
 
       fireEvent.click(runtimeToggle('v1'));
-      expect(
-        await screen.findByRole('button', { name: 'Queued' }),
-      ).toBeDisabled();
+      expect(await queuedVersionButton()).toBeDisabled();
       // One switch within v1 waits at a time.
       screen
         .getAllByRole('button', { name: 'Downgrade' })
@@ -527,9 +537,7 @@ describe('DbtSettings runtime switch', () => {
       ).toBeDisabled();
 
       fireEvent.click(runtimeToggle('v2'));
-      expect(
-        await screen.findByRole('button', { name: 'Queued' }),
-      ).toBeDisabled();
+      expect(await queuedVersionButton()).toBeDisabled();
     });
 
     describe('tooltips', () => {
@@ -586,9 +594,7 @@ describe('DbtSettings runtime switch', () => {
         renderSettings();
 
         fireEvent.click(runtimeToggle('v1'));
-        const queuedButton = await screen.findByRole('button', {
-          name: 'Queued',
-        });
+        const queuedButton = await queuedVersionButton();
         expect(
           await tooltipText(queuedButton.parentElement as HTMLElement),
         ).toContain('The switch to dbt Core 1.11.11 is next.');
@@ -596,6 +602,57 @@ describe('DbtSettings runtime switch', () => {
         fireEvent.click(queuedButton.parentElement as HTMLElement);
         expect(mockNavigate).toHaveBeenCalledWith('/app/settings/task-manager');
       });
+    });
+
+    it('shows a queued dbt Core switch on the versions row while the list is closed', async () => {
+      mockTasks = [dbtTask('dbt-core@1.11.11')];
+      renderSettings();
+
+      expect(
+        await screen.findByRole('button', { name: 'Show versions' }),
+      ).toBeInTheDocument();
+      fireEvent.click(screen.getByText('Queued'));
+      expect(mockNavigate).toHaveBeenCalledWith('/app/settings/task-manager');
+
+      fireEvent.click(
+        (
+          screen.getByText('Queued').closest('.MuiChip-root') as HTMLElement
+        ).querySelector('.MuiChip-deleteIcon') as Element,
+      );
+      expect(mockCancelTask).toHaveBeenCalledWith('task-dbt-core@1.11.11');
+    });
+
+    it('shows In progress on the versions row while a switch runs', async () => {
+      mockTasks = [dbtTask('dbt-core@1.11.11', 'running')];
+      renderSettings();
+
+      expect(await screen.findByText('In progress')).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: 'Show versions' }),
+      ).toBeInTheDocument();
+    });
+
+    it("keeps dev's popup when Install All Adapters finishes", async () => {
+      const success = jest.spyOn(toast, 'success');
+      getInstalledPackages.mockResolvedValue({ packages: installedAdapters });
+      installLatestPackage.mockResolvedValue({
+        ok: true,
+        installedVersion: '1.0.0',
+      });
+      renderSettings();
+      await screen.findByText('v1.9.0', {}, loadTimeout);
+
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Install All Adapters' }),
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+      await waitFor(() =>
+        expect(success).toHaveBeenCalledWith(
+          'All 5 adapter(s) installed successfully.',
+        ),
+      );
+      success.mockRestore();
     });
   });
 });

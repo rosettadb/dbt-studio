@@ -30,6 +30,7 @@ import {
 } from '../../../types/backend';
 import { ConfirmationModal } from '../modals';
 import { useIsTaskTypeActive } from '../../hooks';
+import { isInstallCancelledError } from '../../../shared/installTasks';
 import {
   SettingsRefreshButton,
   SettingsRow,
@@ -122,19 +123,31 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
     onSuccess: (result) => {
       setInstallingVersion(null);
       if (result.success) {
+        toast.success(`Local runner ${result.version} installed`);
         result.warnings?.forEach((warning) => toast.warning(warning));
         checkVersions.mutate();
         pluginDependencies.mutate();
+      } else {
+        toast.error(`Installation failed: ${result.error}`);
       }
     },
-    onError: () => {
+    onError: (error) => {
       setInstallingVersion(null);
+      // A cancelled install never started, so it did not fail.
+      if (isInstallCancelledError(error)) return;
+      toast.error(`Installation failed: ${error.message}`);
     },
   });
 
   const uninstallRunner = useUninstallRunnerVersion({
     onSuccess: () => {
+      toast.success('Local runner uninstalled');
       setVersionInfo(null);
+    },
+    onError: (error) => {
+      // A cancelled install never started, so it did not fail.
+      if (isInstallCancelledError(error)) return;
+      toast.error(`Uninstall failed: ${error.message}`);
     },
   });
 
@@ -148,16 +161,30 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
   const installKisql = useInstallKisql({
     onSuccess: (result) => {
       if (result.success) {
+        toast.success('KiSQL installed successfully');
         pluginDependencies.mutate();
         checkKisql.mutate();
+      } else {
+        toast.error(`KiSQL installation failed: ${result.error}`);
       }
+    },
+    onError: (error) => {
+      // A cancelled install never started, so it did not fail.
+      if (isInstallCancelledError(error)) return;
+      toast.error(`KiSQL installation failed: ${error.message}`);
     },
   });
 
   const uninstallKisql = useUninstallKisql({
     onSuccess: () => {
       setKisqlUpdateAvailable(false);
+      toast.success('KiSQL uninstalled');
       pluginDependencies.mutate();
+    },
+    onError: (error) => {
+      // A cancelled install never started, so it did not fail.
+      if (isInstallCancelledError(error)) return;
+      toast.error(`KiSQL uninstall failed: ${error.message}`);
     },
   });
 

@@ -94,7 +94,6 @@ test.describe('Settings', () => {
     );
     expect(result).toMatchObject({ success: false });
 
-    // The Task Manager row...
     await expect(
       page.getByText('Installing Python 0.0.0', { exact: true }),
     ).toBeVisible();
@@ -103,12 +102,6 @@ test.describe('Settings', () => {
       page.getByText(/ago · Unsupported Python version: 0\.0\.0/),
     ).toBeVisible();
     await expect(page.getByText('No tasks currently running.')).toBeVisible();
-    // ...and the popup every finished install shows.
-    await expect(
-      page.getByText(
-        'Installing Python 0.0.0 failed: Unsupported Python version: 0.0.0',
-      ),
-    ).toBeVisible();
   });
 
   test('should show Backup & Restore actions', async ({ electronApp }) => {
