@@ -563,10 +563,12 @@ const Sql = () => {
       if (!activeTabId) return;
       updateTabResults(activeTabId, results);
 
-      // Determine if this is a DDL/DML command (no field list, but successful)
+      // Only DDL/DML commands are labeled as commands; a successful SELECT
+      // with no rows still carries a field list and should render as empty.
       const isCommand =
-        results?.isCommand ||
-        ((!results?.fields || results.fields.length === 0) && results?.success);
+        !!results?.isCommand ||
+        results?.commandType === 'DDL' ||
+        results?.commandType === 'DML';
 
       const snapshot: QueryResultSnapshot = isCommand
         ? {
@@ -1542,11 +1544,11 @@ const Sql = () => {
                               setError={handleSetError}
                               onQueryChange={handleQueryChange}
                               onQuerySaved={handleQuerySaved}
-                              onQueryStart={(id) => {
+                              onQueryStart={(id, query) => {
                                 if (activeTabId) {
                                   setTabExecutions((prev) => ({
                                     ...prev,
-                                    [activeTabId]: { id, sql: activeTab.query },
+                                    [activeTabId]: { id, sql: query },
                                   }));
                                 }
                               }}
@@ -1591,6 +1593,11 @@ const Sql = () => {
                               <ErrorMessage
                                 title="Query Failed"
                                 description={activeTab.error}
+                                query={
+                                  activeTabId
+                                    ? tabExecutions[activeTabId]?.sql
+                                    : undefined
+                                }
                               />
                             )}
                             {!isLoading && !hasError && hasResults && (
@@ -1644,11 +1651,11 @@ const Sql = () => {
                             setError={handleSetError}
                             onQueryChange={handleQueryChange}
                             onQuerySaved={handleQuerySaved}
-                            onQueryStart={(id) => {
+                            onQueryStart={(id, query) => {
                               if (activeTabId) {
                                 setTabExecutions((prev) => ({
                                   ...prev,
-                                  [activeTabId]: { id, sql: activeTab.query },
+                                  [activeTabId]: { id, sql: query },
                                 }));
                               }
                             }}

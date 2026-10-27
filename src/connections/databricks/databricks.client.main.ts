@@ -67,17 +67,27 @@ export const executeDatabricksQuery = async (
     });
 
     const result = await queryOperation.fetchAll();
+    // Read the operation schema before closing it: it is the only source of
+    // column names when the result set is empty.
+    const schema = await queryOperation.getSchema();
     await queryOperation.close();
     await session.close();
     await client.close();
 
-    const fields =
-      result.length > 0
-        ? Object.keys(result[0] as object).map((name, index) => ({
-            name,
-            type: index,
-          }))
-        : [];
+    const schemaColumns: { columnName: string; position: number }[] =
+      schema?.columns ?? [];
+
+    let fields: { name: string; type: number }[] = [];
+    if (schemaColumns.length > 0) {
+      fields = [...schemaColumns]
+        .sort((a, b) => a.position - b.position)
+        .map((column, index) => ({ name: column.columnName, type: index }));
+    } else if (result.length > 0) {
+      fields = Object.keys(result[0] as object).map((name, index) => ({
+        name,
+        type: index,
+      }));
+    }
 
     return {
       success: true,

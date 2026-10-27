@@ -158,8 +158,9 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
       results.rowCount ?? (results.data ? results.data.length : 0);
 
     const isCmd =
-      results.isCommand ||
-      ((!results.fields || results.fields.length === 0) && results.success);
+      !!results.isCommand ||
+      results.commandType === 'DDL' ||
+      results.commandType === 'DML';
 
     if (isDuckLake && !isCmd) {
       setTotalCount(baseTotal);
@@ -585,10 +586,12 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
     );
   }, [resolvedOriginalSql]);
 
-  // Use isCommand flag if available, otherwise fallback to field check
+  // Only real DDL/DML commands get the success message; a successful SELECT
+  // that returns no rows renders the (empty) grid so its columns stay visible.
   const isCommand =
-    results.isCommand ||
-    ((!results.fields || results.fields.length === 0) && results.success);
+    !!results.isCommand ||
+    results.commandType === 'DDL' ||
+    results.commandType === 'DML';
 
   // Show row count for DML or generic commands with rowCount > 0
   const showRowCount =
@@ -603,7 +606,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
         <IconWrapper>
           <CheckCircleOutline fontSize="large" color="success" />
         </IconWrapper>
-        <Box>
+        <Box sx={{ minWidth: 0, flex: 1 }}>
           <Typography variant="h6" fontWeight="bold">
             Command executed successfully
           </Typography>
@@ -621,6 +624,29 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
                 ? `${(results.duration! / 1000).toFixed(2)}s`
                 : `${results.duration!}ms`}
             </Typography>
+          )}
+          {resolvedOriginalSql && resolvedOriginalSql.trim() && (
+            <Box
+              component="pre"
+              sx={{
+                mt: 1,
+                mb: 0,
+                p: 1,
+                bgcolor: 'action.hover',
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: 1,
+                fontFamily: 'monospace',
+                fontSize: '0.8rem',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                maxHeight: 160,
+                overflow: 'auto',
+                color: 'text.primary',
+              }}
+            >
+              {resolvedOriginalSql.trim()}
+            </Box>
           )}
         </Box>
       </SuccessContainer>
