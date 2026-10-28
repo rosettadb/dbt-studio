@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
+import os from 'os';
 import nodePath from 'path';
 import { Channels } from '../types/ipc';
 import { version } from '../../package.json';
@@ -113,6 +114,7 @@ const electronHandler = {
     version,
     os: process.platform,
     arch: process.arch,
+    memory: os.totalmem(),
     isDebug:
       process.env.NODE_ENV === 'development' ||
       process.env.DEBUG_PROD === 'true',
