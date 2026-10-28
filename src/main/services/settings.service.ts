@@ -7,6 +7,7 @@ import type { Session } from 'electron';
 import os from 'os';
 import AdmZip from 'adm-zip';
 import * as tar from 'tar';
+import { downloadForInstall } from '../utils/installTask';
 import { loadDefaultSettings } from '../utils/fileHelper';
 import databaseStore from '../database';
 import {
@@ -421,7 +422,7 @@ export default class SettingsService {
     await fs.mkdirp(installBase);
     const archivePath = path.join(installBase, fileName);
 
-    const response = await axios.get(downloadUrl, {
+    const response = await downloadForInstall(downloadUrl, {
       responseType: 'arraybuffer',
     });
     await fs.writeFile(archivePath, response.data);
@@ -1049,7 +1050,7 @@ export default class SettingsService {
       const zipPath = path.join(rosettaBasePath, zipName);
 
       // Download the release
-      const response = await axios.get(downloadUrl, {
+      const response = await downloadForInstall(downloadUrl, {
         responseType: 'arraybuffer',
       });
       await fs.writeFile(zipPath, response.data);

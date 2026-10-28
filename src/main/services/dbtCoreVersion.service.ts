@@ -33,7 +33,10 @@ import {
   isSourceInstalledPackage,
 } from '../../shared/dbtAdapterPackages';
 import { INSTALL_CANCELLED_MESSAGE } from '../../shared/installTasks';
-import type { InstallTaskControl } from '../utils/installTask';
+import {
+  INSTALL_TIMEOUT_MS,
+  type InstallTaskControl,
+} from '../utils/installTask';
 
 type VersionTriple = {
   major: number;
@@ -303,6 +306,10 @@ const runProcess = (
     let settled = false;
     let reachedInstallPhase = false;
     let stopRequested = false;
+    // pip installs and uninstalls run in the background install queue and
+    // can take several minutes (a chosen version reinstalls ~90
+    // dependencies); quick commands (pip show, dbt --version/parse) keep 5.
+    const timeoutMs = control ? INSTALL_TIMEOUT_MS : PROCESS_TIMEOUT_MS;
 
     const timeout = setTimeout(() => {
       if (settled) return;
@@ -312,12 +319,8 @@ const runProcess = (
       } catch {
         // The process may have exited before the timeout callback ran.
       }
-      reject(
-        new Error(
-          `Process timed out after ${PROCESS_TIMEOUT_MS}ms: ${command}`,
-        ),
-      );
-    }, PROCESS_TIMEOUT_MS);
+      reject(new Error(`Process timed out after ${timeoutMs}ms: ${command}`));
+    }, timeoutMs);
 
     const finish = (callback: () => void) => {
       if (settled) return;

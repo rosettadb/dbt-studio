@@ -17,7 +17,7 @@ import { app } from 'electron';
 import databaseStore from '../database';
 import secureStorage from './secureStorage.service';
 import SettingsService from './settings.service';
-import { runInstallTask } from '../utils/installTask';
+import { INSTALL_TIMEOUT_MS, runInstallTask } from '../utils/installTask';
 import { INSTALL_CANCELLED_MESSAGE } from '../../shared/installTasks';
 
 import type {
@@ -1310,9 +1310,23 @@ export class IcebergDatalakeService {
             signal.addEventListener('abort', () => child.kill(), {
               once: true,
             });
+            // Same limit as the other queued installs, so a hung pip can't
+            // hold up the queue.
+            let timedOut = false;
+            const timeout = setTimeout(() => {
+              timedOut = true;
+              child.kill();
+            }, INSTALL_TIMEOUT_MS);
             child.on('close', (code: number) => {
+              clearTimeout(timeout);
               if (signal.aborted) reject(new Error(INSTALL_CANCELLED_MESSAGE));
-              else if (code === 0) resolve();
+              else if (timedOut) {
+                reject(
+                  new Error(
+                    `pip install timed out after ${INSTALL_TIMEOUT_MS / 60000} minutes`,
+                  ),
+                );
+              } else if (code === 0) resolve();
               else
                 reject(new Error(`pip install failed with exit code ${code}`));
             });

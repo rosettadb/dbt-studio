@@ -1,6 +1,7 @@
 import { TaskManagerService } from '../../../../src/main/services/taskManager.service';
 import {
   InstallTaskControl,
+  downloadForInstall,
   isDbtV2SwitchQueued,
   removeQueuedInstalls,
   runInstallTask,
@@ -312,14 +313,18 @@ describe('runInstallTask', () => {
         pyiceberg.work,
         { endsOnSignal: true },
       );
+      const laterRun = runInstallTask('install:runner', 'Runner', () =>
+        Promise.resolve({ success: true }),
+      );
       await waitForQueue();
 
       const python = switchPython();
       await waitForQueue();
       expect(findTask('Installing pyiceberg')?.status).toBe('pending');
       expect(findTask('Installing Python 3.12.10')?.status).toBe('running');
-      expect(findTask('Installing pyiceberg')!.startedAt).toBeGreaterThan(
-        findTask('Installing Python 3.12.10')!.startedAt,
+      // Back in line right after Python, ahead of what was already waiting.
+      expect(findTask('Installing pyiceberg')!.startedAt).toBeLessThan(
+        findTask('Runner')!.startedAt,
       );
 
       python.release();
@@ -329,6 +334,7 @@ describe('runInstallTask', () => {
       pyiceberg.release(1);
       await expect(pyicebergRun).resolves.toEqual({ ok: true });
       expect(findTask('Installing pyiceberg')?.status).toBe('completed');
+      await laterRun;
     });
 
     it('waits for a running sqlglot install, which pip runs through a shell', async () => {
@@ -401,5 +407,41 @@ describe('runInstallTask', () => {
     await firstRun;
     await keptRun;
     expect(findTask('Runner')?.status).toBe('completed');
+  });
+});
+
+describe('downloadForInstall', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('gives a queued install download 30 minutes in total, then says it timed out', async () => {
+    jest.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    const download = downloadForInstall('https://example.test/python.tar.gz', {
+      responseType: 'arraybuffer',
+      adapter: (config) =>
+        new Promise((_resolve, reject) => {
+          signal = config.signal as AbortSignal;
+          signal.addEventListener('abort', () => reject(new Error('canceled')));
+        }),
+    });
+    const outcome = download.catch((error: Error) => error);
+
+    await jest.advanceTimersByTimeAsync(29 * 60 * 1000);
+    expect(signal?.aborted).toBe(false);
+
+    await jest.advanceTimersByTimeAsync(60 * 1000);
+    expect(((await outcome) as Error).message).toBe(
+      'Download timed out after 30 minutes: https://example.test/python.tar.gz',
+    );
+  });
+
+  it('passes other download errors through unchanged', async () => {
+    await expect(
+      downloadForInstall('https://example.test/missing.zip', {
+        adapter: () => Promise.reject(new Error('404 Not Found')),
+      }),
+    ).rejects.toThrow('404 Not Found');
   });
 });

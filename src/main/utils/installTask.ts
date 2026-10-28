@@ -1,4 +1,5 @@
 import { BrowserWindow, dialog } from 'electron';
+import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import { TaskManagerService } from '../services/taskManager.service';
 import {
@@ -9,6 +10,36 @@ import {
   isInstallTaskType,
 } from '../../shared/installTasks';
 import type { TaskRecord } from '../../types/ipc';
+
+// Longest a queued install's pip command or download may take. Installs run
+// one at a time, so one that hangs would hold up everything behind it; the
+// slowest real installs take about 6 minutes, and this leaves room for a slow
+// connection.
+export const INSTALL_TIMEOUT_MS = 30 * 60 * 1000;
+
+// A download for a queued install (Python, Rosetta, the runner, KiSQL), with
+// the same limit in total time (axios' own `timeout` only counts time without
+// data). The file is only used once it has fully arrived, so stopping it
+// leaves nothing half-installed.
+export const downloadForInstall = async (
+  url: string,
+  config: AxiosRequestConfig = {},
+): Promise<AxiosResponse> => {
+  const limit = new AbortController();
+  const timer = setTimeout(() => limit.abort(), INSTALL_TIMEOUT_MS);
+  try {
+    return await axios.get(url, { ...config, signal: limit.signal });
+  } catch (error) {
+    if (limit.signal.aborted) {
+      throw new Error(
+        `Download timed out after ${INSTALL_TIMEOUT_MS / 60000} minutes: ${url}`,
+      );
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+};
 
 // Installs share one queue so only one runs at a time: dbt, its adapters,
 // Flowfile and sqlglot all live in the same managed Python environment, and

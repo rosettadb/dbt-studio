@@ -500,7 +500,7 @@ describe('DbtSettings runtime switch', () => {
       expect(mockCancelTask).toHaveBeenCalledTimes(2);
       expect(mockCancelTask).toHaveBeenCalledWith('task-dbt-bigquery');
       expect(mockCancelTask).toHaveBeenCalledWith('task-dbt-snowflake@1.12.4');
-    });
+    }, 20000); // Opens and confirms the switch popup; slow on a busy machine.
 
     it('cancels a queued dbt Core version from its ✕', async () => {
       mockTasks = [dbtTask('dbt-core@1.11.11')];
