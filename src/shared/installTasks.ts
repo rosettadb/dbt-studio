@@ -17,9 +17,10 @@ interface InstallTaskLike {
 
 // Installs that go into the managed Python environment, which a Python
 // switch rebuilds and a Python uninstall deletes. A switch goes ahead of
-// them: a running one is stopped and restarts after it (except Flowfile and
-// sqlglot, which run pip through a shell and finish first), and queued ones
-// are checked against the new Python. An uninstall cancels them.
+// them and cancels the queued dbt ones; a running one finishes first unless
+// it is a dbt install that is still safe to stop. An uninstall cancels them
+// and stops a running one (except Flowfile and sqlglot, which run pip
+// through a shell and finish first).
 export const MANAGED_ENVIRONMENT_INSTALL_TYPES = [
   'install:dbt',
   'install:flowfile',

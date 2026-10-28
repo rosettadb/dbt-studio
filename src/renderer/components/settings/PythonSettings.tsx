@@ -59,32 +59,32 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
   const plural = (count: number, word: string) =>
     `${count} ${word}${count === 1 ? '' : 's'}`;
 
-  // A switch rebuilds the environment empty: dbt installs are cancelled
-  // (adapters need dbt Core, which has to be installed again first), other
-  // installs into it run after the switch.
+  // A switch rebuilds the environment empty: queued dbt installs are
+  // cancelled (adapters need dbt Core, which has to be installed again
+  // first). A running install is only stopped while that is safe (a dbt
+  // adapter still downloading); otherwise it finishes first, and other
+  // installs into the environment run after the switch.
   const describeSwitchEffects = () => {
     const lines: string[] = [];
-    const dbtInstalls = environmentInstalls.filter(
+    const queuedDbtInstalls = queuedEnvironmentInstalls.filter(
       (task) => task.type === 'install:dbt',
     );
-    if (dbtInstalls.length > 0) {
+    if (queuedDbtInstalls.length > 0) {
       lines.push(
-        `${plural(dbtInstalls.length, 'dbt install')} that ${
-          dbtInstalls.length === 1 ? 'is' : 'are'
-        } queued or running (dbt Core and adapters) will be cancelled and removed.`,
+        `${plural(queuedDbtInstalls.length, 'queued dbt install')} (dbt Core and adapters) will be cancelled and removed.`,
       );
     }
-    if (
-      runningEnvironmentInstall &&
-      runningEnvironmentInstall.type !== 'install:dbt'
-    ) {
-      lines.push(
-        FINISH_BEFORE_PYTHON_INSTALL_TYPES.includes(
-          runningEnvironmentInstall.type,
-        )
-          ? `"${runningEnvironmentInstall.label}" is running now and finishes first.`
-          : `The running "${runningEnvironmentInstall.label}" will be stopped and restarts after the switch.`,
-      );
+    if (runningEnvironmentInstall) {
+      const { label } = runningEnvironmentInstall;
+      if (runningEnvironmentInstall.type !== 'install:dbt') {
+        lines.push(`"${label}" is running now and finishes first.`);
+      } else if (runningEnvironmentInstall.cancellable) {
+        lines.push(`The running "${label}" will be stopped and removed.`);
+      } else {
+        lines.push(
+          `"${label}" is running now and finishes first; it will be removed with the old environment.`,
+        );
+      }
     }
     const otherQueued = queuedEnvironmentInstalls.filter(
       (task) => task.type !== 'install:dbt',

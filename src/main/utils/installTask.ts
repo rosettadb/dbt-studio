@@ -68,9 +68,8 @@ let runningInstall: {
   taskId: string;
   type: string;
   // Only for installs that end their process on the signal. Stopping them
-  // even mid-copy is safe when the environment they install into is about to
-  // be deleted anyway.
-  stopAndRestartLater?: () => void;
+  // even mid-copy is safe when the environment they install into is deleted
+  // right after (a Python uninstall).
   stopAndCancel?: () => void;
 } | null = null;
 
@@ -83,8 +82,8 @@ const startNextInstall = () => {
   });
 };
 
-// Where an install that goes first, or one put back after it, joins the
-// queue: behind the other installs that go first.
+// Where an install that goes first joins the queue: behind the other
+// installs that go first.
 const firstPlaceInQueue = () => {
   const index = waitingInstalls.findIndex((queued) => !queued.goesFirst);
   return index === -1 ? waitingInstalls.length : index;
@@ -110,12 +109,13 @@ interface InstallTaskOptions {
   // at any point when its environment is about to be deleted anyway.
   endsOnSignal?: boolean;
   // A Python switch, which rebuilds the managed environment empty. It goes
-  // ahead of everything still waiting. dbt installs are cancelled (a running
-  // one is stopped): adapters need dbt Core, which the new environment no
-  // longer has, so dbt Core is installed again by hand first. Other installs
-  // into the environment run after it; a running one is stopped and put
-  // back right after it, except Flowfile and sqlglot, which run pip through a
-  // shell that can't be stopped reliably, so they finish first.
+  // ahead of everything still waiting, and queued dbt installs are cancelled:
+  // adapters need dbt Core, which the new environment no longer has, so dbt
+  // Core is installed again by hand first. A running install is only stopped
+  // while it is still safe to (a dbt adapter still downloading): the old
+  // environment is deleted only once the new Python has downloaded, so an
+  // install stopped mid-copy would stay half-installed if the switch fails.
+  // Anything else running finishes first.
   replacesManagedEnvironment?: boolean;
   // A Python uninstall. Installs into the managed environment can't run
   // without it, so queued ones are cancelled and a running one is stopped.
@@ -173,10 +173,9 @@ export const runInstallTask = <T>(
     waitingInstalls
       .filter((queued) => queued.type === 'install:dbt')
       .forEach((queued) => TaskManagerService.cancel(queued.taskId));
+    // cancel() only acts while the task is still cancellable (safe to stop).
     if (runningInstall?.type === 'install:dbt') {
-      runningInstall.stopAndCancel?.();
-    } else if (isManagedEnvironmentInstall(runningInstall)) {
-      runningInstall?.stopAndRestartLater?.();
+      TaskManagerService.cancel(runningInstall.taskId);
     }
   }
   if (options.removesManagedEnvironment) {
@@ -192,7 +191,7 @@ export const runInstallTask = <T>(
     options.replacesManagedEnvironment || options.removesManagedEnvironment,
   );
   const taskId = uuidv4();
-  let abortController = new AbortController();
+  const abortController = new AbortController();
   TaskManagerService.create({
     id: taskId,
     type,
@@ -220,16 +219,11 @@ export const runInstallTask = <T>(
         abortController.abort();
       },
       start: async () => {
-        let restartLater = false;
         runningInstall = {
           taskId,
           type,
           ...(options.endsOnSignal
             ? {
-                stopAndRestartLater: () => {
-                  restartLater = true;
-                  abortController.abort();
-                },
                 stopAndCancel: () => {
                   TaskManagerService.registerCanceller(taskId, queued.cancel);
                   TaskManagerService.cancel(taskId);
@@ -262,22 +256,6 @@ export const runInstallTask = <T>(
           }
           resolve(result);
         } catch (error) {
-          if (restartLater) {
-            // Stopped for a Python switch: back in the queue right after it,
-            // waiting again to run in the new environment.
-            abortController = new AbortController();
-            const index = firstPlaceInQueue();
-            const installAhead = waitingInstalls[index - 1];
-            TaskManagerService.requeue(
-              taskId,
-              installAhead
-                ? TaskManagerService.get(installAhead.taskId)?.startedAt
-                : undefined,
-            );
-            TaskManagerService.registerCanceller(taskId, queued.cancel);
-            waitingInstalls.splice(index, 0, queued);
-            return;
-          }
           if (!abortController.signal.aborted) {
             TaskManagerService.fail(
               taskId,

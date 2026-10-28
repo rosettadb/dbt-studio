@@ -273,13 +273,13 @@ describe('runInstallTask', () => {
       expect(findTask('Notebook packages')?.status).toBe('completed');
     });
 
-    it('cancels queued dbt installs and stops a running one', async () => {
+    it('cancels queued dbt installs and stops a running one still downloading', async () => {
       const adapter = blockingWork();
       const adapterRun = runInstallTask(
         'install:dbt',
         'Installing dbt-snowflake',
         adapter.work,
-        { subject: 'dbt-snowflake', endsOnSignal: true },
+        { subject: 'dbt-snowflake', stoppable: true, endsOnSignal: true },
       );
       const queuedWork = jest.fn().mockResolvedValue({ ok: true });
       const queuedRun = runInstallTask(
@@ -305,7 +305,41 @@ describe('runInstallTask', () => {
       await python.run;
     });
 
-    it('stops a running pyiceberg install and restarts it right after Python', async () => {
+    it('lets a running dbt install past the safe point finish first', async () => {
+      // If the Python download then failed, a stopped install would stay
+      // half-installed in the old environment.
+      let control: InstallTaskControl | undefined;
+      let finish: () => void = () => {};
+      const adapterRun = runInstallTask(
+        'install:dbt',
+        'Installing dbt-snowflake',
+        (installControl) => {
+          control = installControl;
+          return new Promise<{ ok: boolean }>((resolve) => {
+            finish = () => resolve({ ok: true });
+          });
+        },
+        { subject: 'dbt-snowflake', stoppable: true, endsOnSignal: true },
+      );
+      await waitForQueue();
+      // pip printed "Installing collected packages".
+      control!.markUnsafeToStop();
+
+      const python = switchPython();
+      await waitForQueue();
+      expect(control!.signal.aborted).toBe(false);
+      expect(findTask('Installing dbt-snowflake')?.status).toBe('running');
+      expect(findTask('Installing Python 3.12.10')?.status).toBe('pending');
+
+      finish();
+      await expect(adapterRun).resolves.toEqual({ ok: true });
+      await waitForQueue();
+      expect(findTask('Installing Python 3.12.10')?.status).toBe('running');
+      python.release();
+      await python.run;
+    });
+
+    it('lets a running pyiceberg install finish first', async () => {
       const pyiceberg = blockingWork();
       const pyicebergRun = runInstallTask(
         'install:pyiceberg',
@@ -313,28 +347,19 @@ describe('runInstallTask', () => {
         pyiceberg.work,
         { endsOnSignal: true },
       );
-      const laterRun = runInstallTask('install:runner', 'Runner', () =>
-        Promise.resolve({ success: true }),
-      );
       await waitForQueue();
 
       const python = switchPython();
       await waitForQueue();
-      expect(findTask('Installing pyiceberg')?.status).toBe('pending');
-      expect(findTask('Installing Python 3.12.10')?.status).toBe('running');
-      // Back in line right after Python, ahead of what was already waiting.
-      expect(findTask('Installing pyiceberg')!.startedAt).toBeLessThan(
-        findTask('Runner')!.startedAt,
-      );
+      expect(findTask('Installing pyiceberg')?.status).toBe('running');
+      expect(findTask('Installing Python 3.12.10')?.status).toBe('pending');
 
+      pyiceberg.release();
+      await expect(pyicebergRun).resolves.toEqual({ ok: true });
+      await waitForQueue();
+      expect(findTask('Installing Python 3.12.10')?.status).toBe('running');
       python.release();
       await python.run;
-      await waitForQueue();
-      expect(pyiceberg.work).toHaveBeenCalledTimes(2);
-      pyiceberg.release(1);
-      await expect(pyicebergRun).resolves.toEqual({ ok: true });
-      expect(findTask('Installing pyiceberg')?.status).toBe('completed');
-      await laterRun;
     });
 
     it('waits for a running sqlglot install, which pip runs through a shell', async () => {
@@ -358,6 +383,32 @@ describe('runInstallTask', () => {
       python.release();
       await python.run;
     });
+  });
+
+  it('stops a running dbt install on a Python uninstall, which always deletes the environment', async () => {
+    const adapter = blockingWork();
+    const adapterRun = runInstallTask(
+      'install:dbt',
+      'Switching to dbt-core 1.11.11',
+      adapter.work,
+      { subject: 'dbt-core@1.11.11', endsOnSignal: true },
+    );
+    await waitForQueue();
+    expect(findTask('Switching to dbt-core 1.11.11')?.cancellable).toBe(false);
+
+    const uninstall = blockingWork();
+    const uninstallRun = runInstallTask(
+      'install:python',
+      'Uninstalling Python',
+      uninstall.work,
+      { removesManagedEnvironment: true },
+    );
+    await expect(adapterRun).rejects.toThrow(INSTALL_CANCELLED_MESSAGE);
+    expect(findTask('Switching to dbt-core 1.11.11')?.status).toBe('cancelled');
+
+    await waitForQueue();
+    uninstall.release();
+    await uninstallRun;
   });
 
   it('cancels queued installs into the environment on a Python uninstall', async () => {

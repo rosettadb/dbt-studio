@@ -128,7 +128,10 @@ describe('PythonSettings popups', () => {
 
     const question = screen.getByText(/Are you sure you want to switch/);
     expect(question).toHaveTextContent(
-      '2 dbt installs that are queued or running (dbt Core and adapters) will be cancelled and removed.',
+      '1 queued dbt install (dbt Core and adapters) will be cancelled and removed.',
+    );
+    expect(question).toHaveTextContent(
+      '"Installing dbt-snowflake" is running now and finishes first; it will be removed with the old environment.',
     );
     expect(question).toHaveTextContent(
       '1 other queued install will run after the switch.',

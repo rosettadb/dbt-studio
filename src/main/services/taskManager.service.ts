@@ -80,26 +80,6 @@ class TaskManagerServiceImpl {
     this.broadcast({ type: 'updated', task });
   }
 
-  get(id: string): TaskRecord | undefined {
-    return this.tasks.get(id);
-  }
-
-  // Back to waiting, e.g. an install stopped so a Python switch can go first.
-  // `placeAfterStartedAt` puts it right behind that task in run order.
-  requeue(id: string, placeAfterStartedAt?: number) {
-    const task = this.tasks.get(id);
-    if (!task) return;
-    task.status = 'pending';
-    task.cancellable = true;
-    task.finishedAt = undefined;
-    task.error = undefined;
-    if (placeAfterStartedAt !== undefined) {
-      task.startedAt = placeAfterStartedAt + 1;
-    }
-    this.lastProgressEmit.delete(id);
-    this.broadcast({ type: 'updated', task });
-  }
-
   // Turning cancelling off also drops the canceller, so cancel() and
   // cancelAll() treat the task as one that can no longer be stopped.
   setCancellable(id: string, cancellable: boolean) {
