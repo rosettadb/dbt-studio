@@ -63,12 +63,12 @@ export const AboutSettings: React.FC = () => {
   };
 
   const buildVersionDetails = () => {
-    const { version, arch, memory } = window.electron.app;
+    const { version, osVersion, osArch, memory } = window.electron.app;
     return [
       `Studio: v${version}`,
-      `OS: ${formatOsName(getPlatform())}`,
+      `OS: ${formatOsName(getPlatform())} ${osVersion}`,
       `Memory: ${formatMemoryGiB(memory)}`,
-      `Architecture: ${arch}`,
+      `Architecture: ${osArch}`,
     ].join('\n');
   };
 
@@ -136,7 +136,7 @@ export const AboutSettings: React.FC = () => {
                 variant="caption"
                 color="text.secondary"
                 component="span"
-              >{`OS: ${formatOsName(getPlatform())}`}</Typography>
+              >{`OS: ${formatOsName(getPlatform())} ${window.electron.app.osVersion}`}</Typography>
               <Typography
                 variant="caption"
                 color="text.secondary"
@@ -146,7 +146,7 @@ export const AboutSettings: React.FC = () => {
                 variant="caption"
                 color="text.secondary"
                 component="span"
-              >{`Architecture: ${window.electron.app.arch}`}</Typography>
+              >{`Architecture: ${window.electron.app.osArch}`}</Typography>
             </Box>
           }
           description="Built with Electron and React"

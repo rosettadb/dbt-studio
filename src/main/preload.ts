@@ -113,7 +113,9 @@ const electronHandler = {
   app: {
     version,
     os: process.platform,
+    osVersion: process.getSystemVersion(),
     arch: process.arch,
+    osArch: os.machine(),
     memory: os.totalmem(),
     isDebug:
       process.env.NODE_ENV === 'development' ||
