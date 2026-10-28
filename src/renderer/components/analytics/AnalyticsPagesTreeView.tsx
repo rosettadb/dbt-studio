@@ -310,15 +310,24 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
               <NoteAdd sx={{ fontSize: 16 }} />
             </IconButton>
           </Tooltip>
-          <Tooltip title="Build Static Site">
-            <IconButton
-              size="small"
-              onClick={() => setBuildDialogOpen(true)}
-              disabled={isBuilding}
-              color={isBuilding ? 'primary' : 'default'}
-            >
-              <LanguageIcon sx={{ fontSize: 16 }} />
-            </IconButton>
+          <Tooltip
+            title={
+              pages.length === 0
+                ? 'Create a page first to build the site'
+                : 'Build Static Site'
+            }
+          >
+            {/* span lets the tooltip show while the button is disabled */}
+            <span>
+              <IconButton
+                size="small"
+                onClick={() => setBuildDialogOpen(true)}
+                disabled={isBuilding || pages.length === 0}
+                color={isBuilding ? 'primary' : 'default'}
+              >
+                <LanguageIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </span>
           </Tooltip>
         </Box>
       </Box>
