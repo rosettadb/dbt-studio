@@ -6,10 +6,18 @@ import MenuItem from '@mui/material/MenuItem';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import Tooltip from '@mui/material/Tooltip';
+import Divider from '@mui/material/Divider';
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
 import CloseIcon from '@mui/icons-material/Close';
 import SaveIcon from '@mui/icons-material/Save';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import FolderOpenIcon from '@mui/icons-material/FolderOpen';
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import { EditorTabId, EditorTabState } from '../../../../types/editor';
+import { path } from '../../../lib/path';
+import { copyText } from '../../../lib/clipboard';
+import { openPath } from '../../../services/utils.service';
+import { TabContextMenu } from '../../tabContextMenu';
 import {
   TabBar,
   EmptyTabsPlaceholder,
@@ -23,8 +31,16 @@ interface TabManagerProps {
   activeTabId: EditorTabId | null;
   onSelect: (tabId: EditorTabId) => void;
   onClose: (tabId: EditorTabId) => void;
+  onCloseOthers?: (tabId: EditorTabId) => void;
+  onCloseToLeft?: (tabId: EditorTabId) => void;
+  onCloseToRight?: (tabId: EditorTabId) => void;
+  onCloseSaved?: () => void;
   onCloseAll?: () => void;
   onSaveAll?: () => void;
+  onSaveTab?: (tabId: EditorTabId) => void;
+  onRevealInFinder?: (filePath: string) => void;
+  onRevealInExplorer?: (filePath: string) => void;
+  projectPath?: string;
   onReorder: (fromIndex: number, toIndex: number) => void;
 }
 
@@ -38,14 +54,26 @@ export const TabManager: React.FC<TabManagerProps> = ({
   activeTabId,
   onSelect,
   onClose,
+  onCloseOthers,
+  onCloseToLeft,
+  onCloseToRight,
+  onCloseSaved,
   onCloseAll,
   onSaveAll,
+  onSaveTab,
+  onRevealInFinder,
+  onRevealInExplorer,
+  projectPath,
   onReorder,
 }) => {
   const [dragState, setDragState] = React.useState<DragState>({
     tabId: null,
     overTabId: null,
   });
+  const [contextMenu, setContextMenu] = React.useState<{
+    tabId: EditorTabId;
+    position: { top: number; left: number };
+  } | null>(null);
   const [menuAnchor, setMenuAnchor] = React.useState<HTMLElement | null>(null);
   const [containerEl, setContainerEl] = React.useState<HTMLDivElement | null>(
     null,
@@ -145,6 +173,12 @@ export const TabManager: React.FC<TabManagerProps> = ({
             isLast={isLast}
             onSelect={() => onSelect(tab.id)}
             onClose={() => onClose(tab.id)}
+            onContextMenu={(event) => {
+              setContextMenu({
+                tabId: tab.id,
+                position: { top: event.clientY, left: event.clientX },
+              });
+            }}
           />
         </Box>
       </Box>
@@ -234,6 +268,13 @@ export const TabManager: React.FC<TabManagerProps> = ({
     onSaveAll();
   };
 
+  const contextTab = tabs.find((t) => t.id === contextMenu?.tabId);
+  const contextIndex = tabs.findIndex((t) => t.id === contextMenu?.tabId);
+  const hasTabsToLeft = contextIndex > 0;
+  const hasTabsToRight = contextIndex !== -1 && contextIndex < tabs.length - 1;
+  const hasOtherTabs = tabs.length > 1;
+  const hasSavedTabs = tabs.some((t) => !t.isModified);
+
   return (
     <TabBar>
       {tabs.length === 0 ? (
@@ -282,6 +323,142 @@ export const TabManager: React.FC<TabManagerProps> = ({
               <ListItemText>Close all tabs</ListItemText>
             </MenuItem>
           </Menu>
+          <TabContextMenu
+            anchorPosition={contextMenu ? contextMenu.position : null}
+            onClose={() => setContextMenu(null)}
+            onCloseTab={() => {
+              if (contextMenu) onClose(contextMenu.tabId);
+            }}
+            onCloseOthers={() => {
+              if (contextMenu) onCloseOthers?.(contextMenu.tabId);
+            }}
+            onCloseToLeft={() => {
+              if (contextMenu) onCloseToLeft?.(contextMenu.tabId);
+            }}
+            onCloseToRight={() => {
+              if (contextMenu) onCloseToRight?.(contextMenu.tabId);
+            }}
+            onCloseSaved={onCloseSaved}
+            onCloseAll={() => {
+              if (onCloseAll) {
+                onCloseAll();
+              } else {
+                tabs.forEach((tab) => onClose(tab.id));
+              }
+            }}
+            hasTabsToLeft={hasTabsToLeft}
+            hasTabsToRight={hasTabsToRight}
+            hasOtherTabs={hasOtherTabs}
+            hasSavedTabs={hasSavedTabs}
+            extras={
+              contextTab && (
+                <>
+                  <MenuItem
+                    dense
+                    disabled={!contextTab.isModified}
+                    onClick={() => {
+                      setContextMenu(null);
+                      onSaveTab?.(contextTab.id);
+                    }}
+                    sx={{ py: 0.5, minHeight: 'auto', fontSize: '0.8rem' }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 28 }}>
+                      <SaveIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText
+                      primaryTypographyProps={{ fontSize: '0.8rem' }}
+                    >
+                      Save
+                    </ListItemText>
+                  </MenuItem>
+
+                  <Divider sx={{ my: 0.5 }} />
+
+                  <MenuItem
+                    dense
+                    onClick={() => {
+                      setContextMenu(null);
+                      copyText(contextTab.path);
+                    }}
+                    sx={{ py: 0.5, minHeight: 'auto', fontSize: '0.8rem' }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 28 }}>
+                      <ContentCopyIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText
+                      primaryTypographyProps={{ fontSize: '0.8rem' }}
+                    >
+                      Copy Path
+                    </ListItemText>
+                  </MenuItem>
+
+                  <MenuItem
+                    dense
+                    onClick={() => {
+                      setContextMenu(null);
+                      const relPath = projectPath
+                        ? path.relative(projectPath, contextTab.path)
+                        : contextTab.path;
+                      copyText(relPath);
+                    }}
+                    sx={{ py: 0.5, minHeight: 'auto', fontSize: '0.8rem' }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 28 }}>
+                      <ContentCopyIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText
+                      primaryTypographyProps={{ fontSize: '0.8rem' }}
+                    >
+                      Copy Relative Path
+                    </ListItemText>
+                  </MenuItem>
+
+                  <Divider sx={{ my: 0.5 }} />
+
+                  <MenuItem
+                    dense
+                    onClick={() => {
+                      setContextMenu(null);
+                      if (onRevealInFinder) {
+                        onRevealInFinder(contextTab.path);
+                      } else {
+                        const parentDir = path.dirname(contextTab.path);
+                        openPath(parentDir);
+                      }
+                    }}
+                    sx={{ py: 0.5, minHeight: 'auto', fontSize: '0.8rem' }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 28 }}>
+                      <FolderOpenIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText
+                      primaryTypographyProps={{ fontSize: '0.8rem' }}
+                    >
+                      Reveal in Finder
+                    </ListItemText>
+                  </MenuItem>
+
+                  <MenuItem
+                    dense
+                    onClick={() => {
+                      setContextMenu(null);
+                      onRevealInExplorer?.(contextTab.path);
+                    }}
+                    sx={{ py: 0.5, minHeight: 'auto', fontSize: '0.8rem' }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 28 }}>
+                      <AccountTreeIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText
+                      primaryTypographyProps={{ fontSize: '0.8rem' }}
+                    >
+                      Reveal in Explorer
+                    </ListItemText>
+                  </MenuItem>
+                </>
+              )
+            }
+          />
         </>
       )}
     </TabBar>

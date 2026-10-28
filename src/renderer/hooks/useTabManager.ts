@@ -164,6 +164,10 @@ export interface UseTabManagerReturn {
   switchTab: (tabId: EditorTabId) => void;
   closeTab: (tabId: EditorTabId) => void;
   closeTabByPath: (path: string) => void;
+  closeTabsToLeft: (tabId: EditorTabId) => void;
+  closeTabsToRight: (tabId: EditorTabId) => void;
+  closeOtherTabs: (tabId: EditorTabId) => void;
+  closeAllSaved: () => void;
   updateTabContent: (
     tabId: EditorTabId,
     content: string,
@@ -328,6 +332,76 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
     },
     [projectId],
   );
+
+  const closeTabsToLeft = React.useCallback(
+    (tabId: EditorTabId) => {
+      setTabs((current) => {
+        const index = current.findIndex((t) => t.id === tabId);
+        if (index <= 0) return current;
+        const toRemove = current.slice(0, index);
+        toRemove.forEach((t) => {
+          disposeModelForPath(projectId, t.path);
+          clearViewState(t.id);
+        });
+        const remaining = current.slice(index);
+        if (activeTabId && toRemove.some((t) => t.id === activeTabId)) {
+          setActiveTabId(tabId);
+        }
+        return remaining;
+      });
+    },
+    [activeTabId, projectId],
+  );
+
+  const closeTabsToRight = React.useCallback(
+    (tabId: EditorTabId) => {
+      setTabs((current) => {
+        const index = current.findIndex((t) => t.id === tabId);
+        if (index === -1 || index === current.length - 1) return current;
+        const toRemove = current.slice(index + 1);
+        toRemove.forEach((t) => {
+          disposeModelForPath(projectId, t.path);
+          clearViewState(t.id);
+        });
+        const remaining = current.slice(0, index + 1);
+        if (activeTabId && toRemove.some((t) => t.id === activeTabId)) {
+          setActiveTabId(tabId);
+        }
+        return remaining;
+      });
+    },
+    [activeTabId, projectId],
+  );
+
+  const closeOtherTabs = React.useCallback(
+    (tabId: EditorTabId) => {
+      setTabs((current) => {
+        const toRemove = current.filter((t) => t.id !== tabId);
+        toRemove.forEach((t) => {
+          disposeModelForPath(projectId, t.path);
+          clearViewState(t.id);
+        });
+        return current.filter((t) => t.id === tabId);
+      });
+      setActiveTabId(tabId);
+    },
+    [projectId],
+  );
+
+  const closeAllSaved = React.useCallback(() => {
+    setTabs((current) => {
+      const toRemove = current.filter((t) => !t.isModified);
+      toRemove.forEach((t) => {
+        disposeModelForPath(projectId, t.path);
+        clearViewState(t.id);
+      });
+      const remaining = current.filter((t) => t.isModified);
+      if (activeTabId && !remaining.some((t) => t.id === activeTabId)) {
+        setActiveTabId(remaining[0]?.id ?? null);
+      }
+      return remaining;
+    });
+  }, [activeTabId, projectId]);
 
   const updateTab = React.useCallback(
     (tabId: EditorTabId, updater: (tab: EditorTabState) => EditorTabState) => {
@@ -766,6 +840,10 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
     switchTab,
     closeTab,
     closeTabByPath,
+    closeTabsToLeft,
+    closeTabsToRight,
+    closeOtherTabs,
+    closeAllSaved,
     updateTabContent,
     updateTabContentByPath,
     markTabSaved,

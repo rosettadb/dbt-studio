@@ -52,6 +52,7 @@ export interface TabsContextValue extends UseTabManagerReturn {
   // Opens or closes the read-only preview tab for a markdown/html source.
   togglePreview: (sourcePath: string, content: string) => Promise<void>;
   saveAll: () => Promise<void>;
+  saveTab: (tabId: EditorTabId) => Promise<void>;
   closeAll: () => void;
 }
 
@@ -161,6 +162,25 @@ export const TabsProvider: React.FC<TabsProviderProps> = ({ children }) => {
     );
     await refreshProjectFiles();
   }, [tabs, markTabSavedByPath, setTabErrorByPath, refreshProjectFiles]);
+
+  const saveTab = useCallback(
+    async (tabId: EditorTabId) => {
+      const tab = tabs.find((t) => t.id === tabId);
+      if (!tab) return;
+      try {
+        await projectsServices.saveFileContent({
+          path: tab.path,
+          content: tab.content,
+        });
+        markTabSavedByPath(tab.path);
+        setTabErrorByPath(tab.path, undefined);
+        await refreshProjectFiles();
+      } catch (error: any) {
+        setTabErrorByPath(tab.path, error?.message);
+      }
+    },
+    [tabs, markTabSavedByPath, setTabErrorByPath, refreshProjectFiles],
+  );
 
   const closeAll = useCallback(() => {
     const unmodified = tabs.filter((tab) => !tab.isModified);
@@ -283,6 +303,7 @@ export const TabsProvider: React.FC<TabsProviderProps> = ({ children }) => {
       clearRevealPosition,
       togglePreview,
       saveAll,
+      saveTab,
       closeAll,
     }),
     [
@@ -295,6 +316,7 @@ export const TabsProvider: React.FC<TabsProviderProps> = ({ children }) => {
       clearRevealPosition,
       togglePreview,
       saveAll,
+      saveTab,
       closeAll,
     ],
   );
