@@ -1,6 +1,7 @@
 export * from './sidebar';
 export * from './splash';
 export * from './menu';
+export * from './cloudAuthButton';
 export * from './fileTreeViewer';
 export * from './searchInFiles';
 export * from './editor';

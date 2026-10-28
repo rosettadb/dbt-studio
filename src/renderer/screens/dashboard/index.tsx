@@ -27,7 +27,12 @@ import StorageOutlinedIcon from '@mui/icons-material/StorageOutlined';
 import { icons, rosettaIcon } from '../../../../assets';
 import { ReactComponent as RouteIcon } from '../../assets/icons/lucide/route.svg';
 import { useAppContext } from '../../hooks';
-import { QuickStartTour, hasSeenTour, markTourSeen } from '../../components';
+import {
+  CloudAuthButton,
+  QuickStartTour,
+  hasSeenTour,
+  markTourSeen,
+} from '../../components';
 import {
   useGetProjects,
   useGetConnections,
@@ -314,6 +319,7 @@ const Dashboard: React.FC = () => {
           >
             Settings
           </Button>
+          <CloudAuthButton />
         </Box>
       </Paper>
 
