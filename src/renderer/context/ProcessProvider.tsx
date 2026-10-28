@@ -6,6 +6,7 @@ import React, {
   useState,
   ReactNode,
 } from 'react';
+import { getConnectionUi } from '../../connections/registry.renderer';
 import { useSecureStorage } from '../hooks';
 import { useSetConnectionEnvVariable } from '../controllers';
 
@@ -206,17 +207,7 @@ export const ProcessProvider: React.FC<ProcessProviderProps> = ({
 
         // Set connection-specific fields based on type
         if (connType) {
-          const fieldMap: Record<string, string[]> = {
-            postgres: ['host', 'port', 'dbname', 'schema'],
-            redshift: ['host', 'port', 'dbname', 'schema'],
-            snowflake: ['account', 'warehouse', 'dbname', 'schema', 'role'],
-            bigquery: ['project', 'dataset'],
-            databricks: ['host', 'httppath', 'catalog', 'schema'],
-            kinetica: ['host', 'port', 'dbname', 'schema'],
-            mysql: ['host', 'port', 'dbname', 'schema'],
-          };
-
-          const fields = fieldMap[connType] || [];
+          const fields = getConnectionUi(connType)?.envFields ?? [];
           const fieldPromises = fields.map(async (field) => {
             const stored = await getConnectionField(field, connectionName);
             if (stored) {

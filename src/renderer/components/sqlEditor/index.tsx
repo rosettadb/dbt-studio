@@ -9,6 +9,7 @@ import { QueryHistoryType } from '../../../types/frontend';
 import * as connectionTypes from '../../../types/backend';
 import type { ConnectionInput, Project, Table } from '../../../types/backend';
 import { SqlEditorComponent } from './editorComponent';
+import { isDuckLakeType } from '../../../connections/ducklake/ducklake.shared';
 import { useAppContext } from '../../hooks';
 import { useSqlEditorBridge } from '../../controllers';
 import { insertTextAtCursor } from '../../lib/monaco/insertText';
@@ -45,7 +46,7 @@ type Props = {
   setLoadingQuery: (v: boolean) => void;
   setQueryResults: (v: any) => void;
   setError: (v: any) => void;
-  onQueryStart?: (queryId: string) => void;
+  onQueryStart?: (queryId: string, query: string) => void;
   onQuerySuccess?: () => void;
   isLoading?: boolean;
 };
@@ -82,7 +83,8 @@ export const SqlEditor = React.forwardRef<SqlEditorHandle, Props>(
 
     // Detect if this is a DuckLake connection
     const isDuckLakeConnection =
-      connectionInput?.type === 'ducklake' &&
+      !!connectionInput &&
+      isDuckLakeType(connectionInput.type) &&
       'instanceId' in connectionInput &&
       !!connectionInput.instanceId;
 
@@ -149,7 +151,7 @@ export const SqlEditor = React.forwardRef<SqlEditorHandle, Props>(
       setLoadingQuery(true);
 
       if (onQueryStart) {
-        onQueryStart(queryId);
+        onQueryStart(queryId, selectedQuery);
       }
 
       try {

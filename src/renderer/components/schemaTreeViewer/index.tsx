@@ -3,6 +3,7 @@ import React from 'react';
 import { TreeItem } from '@mui/x-tree-view';
 import { Box, CircularProgress, Tooltip } from '@mui/material';
 import { Cached } from '@mui/icons-material';
+import { connectionIcon } from '../../../connections/registry.renderer';
 import { RenderTree } from './RenderTree';
 import { Container, Header, NoDataMessage, StyledTreeView } from './styles';
 import { SupportedConnectionTypes, Table } from '../../../types/backend';
@@ -10,7 +11,6 @@ import { TreeItems } from './TreeItems';
 import { dedupeTables } from './dedupeTables';
 import { schemaTreeKey, tableTreeKey } from './treeIds';
 import { useAppContext } from '../../hooks';
-import connectionIcons from '../../../../assets/connectionIcons';
 
 type Props = {
   databaseName: string;
@@ -90,7 +90,7 @@ const SchemaTreeViewer: React.FC<Props> = React.memo(
               label={
                 <TreeItems.Database
                   label={databaseName}
-                  icon={connectionIcons.images[type]}
+                  icon={connectionIcon(type)}
                 />
               }
             >

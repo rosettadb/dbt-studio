@@ -1,6 +1,6 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { Oracle } from '../../../src/renderer/components/connections/oracle';
+import { Oracle } from '../../../src/connections/oracle/OracleForm';
 
 const configure = jest.fn().mockResolvedValue('new-id');
 const update = jest.fn().mockResolvedValue(undefined);

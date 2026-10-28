@@ -39,6 +39,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import { connectionIcon } from '../../../connections/registry.renderer';
 import { AppLayout } from '../../layouts';
 import {
   useGetConnections,
@@ -1181,8 +1182,7 @@ const Notebooks = () => {
                   const conn = connections.find((c) => c.id === selected);
                   if (conn) {
                     const icon =
-                      connectionIcons.images[conn.connection.type] ||
-                      defaultIcon;
+                      connectionIcon(conn.connection.type) || defaultIcon;
                     const linkedProject = projects?.find(
                       (p) => p.connectionId === conn.id,
                     );
@@ -1314,8 +1314,7 @@ const Notebooks = () => {
                       >
                         <img
                           src={
-                            connectionIcons.images[conn.connection.type] ||
-                            defaultIcon
+                            connectionIcon(conn.connection.type) || defaultIcon
                           }
                           alt=""
                           style={{

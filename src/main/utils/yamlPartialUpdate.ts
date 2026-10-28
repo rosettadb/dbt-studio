@@ -9,16 +9,16 @@
 import fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
-import { ConnectionInput, SnowflakeConnection } from '../../types/backend';
-import { buildKineticaUrl } from '../../shared/kineticaUrl';
-import { buildKineticaProfileOutput } from './kineticaProfile';
+import { ConnectionInput } from '../../types/backend';
+import { getDbtConnector } from '../../connections/registry.main';
 
-/**
- * Extracts the database name from a file path (filename without extension)
- */
-function extractDbNameFromPath(filePath: string): string {
-  return path.parse(filePath).name;
-}
+const dbtConnectorOrThrow = (connection: ConnectionInput) => {
+  const connector = getDbtConnector(connection.type);
+  if (!connector) {
+    throw new Error(`Unsupported connection type: ${connection.type}`);
+  }
+  return connector;
+};
 
 /**
  * Error thrown when partial update fails
@@ -31,180 +31,6 @@ export class PartialUpdateError extends Error {
   ) {
     super(message);
     this.name = 'PartialUpdateError';
-  }
-}
-
-/**
- * Generates the connection-specific output configuration for profiles.yml
- * This is the subset of fields that should be updated
- */
-function generateProfileOutputFields(
-  connection: ConnectionInput,
-): Record<string, any> {
-  const envVar = (field: string) =>
-    `{{ env_var("db-${field}-${connection.name}") }}`;
-  const envVarInt = (field: string) =>
-    `{{ env_var("db-${field}-${connection.name}") | int }}`;
-  const baseFields: Record<string, any> = {
-    type: connection.type,
-  };
-
-  switch (connection.type) {
-    case 'postgres':
-      return {
-        ...baseFields,
-        host: envVar('host'),
-        port: envVarInt('port'),
-        user: envVar('user'),
-        password: envVar('password'),
-        dbname: envVar('dbname'),
-        schema: envVar('schema'),
-      };
-
-    case 'snowflake': {
-      const isOauth = connection.authMethod === 'oauth_browser';
-      const result: any = {
-        ...baseFields,
-        account: envVar('account'),
-        user: envVar('user'),
-        role: envVar('role'),
-        database: envVar('dbname'),
-        warehouse: envVar('warehouse'),
-        schema: envVar('schema'),
-      };
-
-      if (isOauth) {
-        // Token comes from `db-token-<name>` process env, materialized
-        // main-side from the live SDK session at dbt run time (never written
-        // to files). Plain `oauth` never opens a browser: a missing/expired
-        // token fails fast with guidance instead.
-        result.authenticator = 'oauth';
-        result.token = envVar('token');
-      } else {
-        result.password = envVar('password');
-      }
-
-      return result;
-    }
-
-    case 'bigquery':
-      return {
-        ...baseFields,
-        method: connection.method,
-        project: envVar('project'),
-        dataset: envVar('dataset'),
-        keyfile: envVar('bigquery'),
-        location: connection.location,
-        priority: connection.priority,
-      };
-
-    case 'redshift':
-      return {
-        ...baseFields,
-        host: envVar('host'),
-        port: envVarInt('port'),
-        user: envVar('user'),
-        password: envVar('password'),
-        dbname: envVar('dbname'),
-        schema: envVar('schema'),
-      };
-
-    case 'databricks':
-      return {
-        ...baseFields,
-        host: envVar('host'),
-        http_path: envVar('httppath'),
-        token: envVar('token'),
-        catalog: envVar('catalog'),
-        schema: envVar('schema'),
-      };
-
-    case 'duckdb':
-      return {
-        ...baseFields,
-        path: connection.database_path,
-        schema: connection.schema,
-      };
-
-    case 'ducklake':
-      return {
-        ...baseFields,
-        // DuckLake uses DuckDB with extensions
-        // These will be handled by the full generator in generateProfilesYml
-        path: ':memory:',
-        schema: 'main',
-      };
-
-    case 'kinetica': {
-      // Reuse the full generator so the partial update and the initial
-      // profiles.yml always agree on the dbt-kinetica field set.
-      const fields = buildKineticaProfileOutput(connection, envVar);
-      // `threads` is a per-project preference; leave whatever the user has.
-      delete fields.threads;
-      return { ...baseFields, ...fields };
-    }
-
-    default:
-      // @ts-ignore
-      throw new Error(`Unsupported connection type: ${connection.type}`);
-  }
-}
-
-/**
- * Generates the JDBC URL for main.conf
- * @param connection - Connection configuration
- * @param projectName - Name of the project (used for token references)
- */
-function generateJdbcUrl(
-  connection: ConnectionInput,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  projectName: string,
-): string {
-  const ev = (field: string) => `\${db-${field}-${connection.name}}`;
-  switch (connection.type) {
-    case 'postgres':
-      return `jdbc:postgresql://${ev('host')}:${ev('port')}/${ev('dbname')}?currentSchema=${ev('schema')}`;
-
-    case 'snowflake': {
-      let url = `jdbc:snowflake://${ev('account')}.snowflakecomputing.com/?warehouse=${ev('warehouse')}&db=${ev('dbname')}&schema=${ev('schema')}`;
-      if (connection.authMethod === 'oauth_browser') {
-        url += '&authenticator=oauth_authorization_code';
-      }
-      return url;
-    }
-
-    case 'redshift':
-      return `jdbc:redshift://${ev('host')}:${ev('port')}/${ev('dbname')}?currentSchema=${ev('schema')}`;
-
-    case 'mysql':
-      return `jdbc:mysql://${ev('host')}:${ev('port')}/${ev('dbname')}?useSSL=${connection.ssl ? 'true' : 'false'}&serverTimezone=UTC&useUnicode=true&characterEncoding=UTF-8`;
-
-    case 'bigquery':
-      return `jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=${ev('project')};OAuthType=0;OAuthServiceAcctEmail=${ev('bigquery-email')};OAuthPvtKeyPath=${ev('bigquery')};`;
-
-    case 'databricks':
-      return `jdbc:databricks://${ev('host')}:443/default;transportMode=http;ssl=1;AuthMech=3;httpPath=${ev('httppath')};PWD=${ev('token')}`;
-
-    case 'duckdb':
-      return `jdbc:duckdb:${connection.database_path}`;
-
-    case 'ducklake':
-      return `jdbc:duckdb:`; // In-memory DuckDB
-
-    case 'kinetica': {
-      let kineticaUrl = `jdbc:kinetica:URL=${buildKineticaUrl(connection)}`;
-      if (connection.timeout) {
-        kineticaUrl += `;Timeout=${connection.timeout}`;
-      }
-      if (connection.bypassSslCertCheck && connection.useSSL) {
-        kineticaUrl += ';BypassSslCertCheck=1';
-      }
-      return kineticaUrl;
-    }
-
-    default:
-      // @ts-ignore
-      throw new Error(`Unsupported connection type: ${connection.type}`);
   }
 }
 
@@ -260,8 +86,8 @@ export async function updateProfilesYml(
       profiles[projectName].outputs.dev = {};
     }
 
-    // Get new connection fields
-    const newFields = generateProfileOutputFields(connection);
+    const connector = dbtConnectorOrThrow(connection);
+    const newFields = await connector.profilePatch(connection);
 
     // Merge new fields into existing dev output, preserving custom fields
     profiles[projectName].outputs.dev = {
@@ -269,24 +95,10 @@ export async function updateProfilesYml(
       ...newFields, // Override with new connection fields
     };
 
-    // For Snowflake: explicitly enforce password/token vs authenticator
-    // fields because the merge above may keep stale values from a previous
-    // profile (including the retired oauth_authorization_code form).
-    if (connection.type === 'snowflake') {
-      if ((connection as SnowflakeConnection).authMethod === 'oauth_browser') {
-        delete profiles[projectName].outputs.dev.password;
-        delete profiles[projectName].outputs.dev
-          .client_store_temporary_credential;
-        profiles[projectName].outputs.dev.authenticator = 'oauth';
-        profiles[projectName].outputs.dev.token =
-          `{{ env_var("db-token-${connection.name}") }}`;
-      } else {
-        delete profiles[projectName].outputs.dev.authenticator;
-        delete profiles[projectName].outputs.dev.token;
-        delete profiles[projectName].outputs.dev
-          .client_store_temporary_credential;
-      }
-    }
+    // Keys the merge would keep but the connection no longer uses (Snowflake auth switch).
+    connector.profileKeysToRemove(connection).forEach((key) => {
+      delete profiles[projectName].outputs.dev[key];
+    });
 
     // Write back to file
     const updatedContent = yaml.dump(profiles, {
@@ -322,7 +134,7 @@ export async function updateMainConf(
   projectName: string,
   connection: ConnectionInput,
 ): Promise<void> {
-  if (connection.type === 'ducklake') {
+  if (getDbtConnector(connection.type)?.supportsPartialUpdate === false) {
     return;
   }
   const mainConfPath = path.join(projectPath, 'rosetta', 'main.conf');
@@ -363,50 +175,27 @@ export async function updateMainConf(
       mainConf.connections.push(connectionEntry);
     }
 
-    const ev = (field: string) => `\${db-${field}-${connection.name}}`;
-    // Determine database name based on connection type
-    const databaseName =
-      connection.type === 'duckdb'
-        ? extractDbNameFromPath(connection.database_path)
-        : ev(connection.type === 'bigquery' ? 'project' : 'dbname');
+    const connector = dbtConnectorOrThrow(connection);
+    const entry = await connector.mainConfPatch(connection, projectName);
 
     // Update connection fields (preserve other custom fields in connectionEntry)
-    connectionEntry.databaseName = databaseName;
-    connectionEntry.schemaName =
-      connection.type === 'duckdb'
-        ? connection.schema
-        : ev(connection.type === 'bigquery' ? 'dataset' : 'schema');
-    connectionEntry.dbType = connection.type;
-    connectionEntry.url = generateJdbcUrl(connection, projectName);
+    connectionEntry.databaseName = entry.databaseName;
+    connectionEntry.schemaName = entry.schemaName;
+    connectionEntry.dbType = entry.dbType;
+    connectionEntry.url = entry.url;
 
-    // Handle userName and password (some connection types don't use them)
-    const typesWithoutCredentials = ['bigquery', 'databricks', 'duckdb'];
-    if (!typesWithoutCredentials.includes(connection.type)) {
-      connectionEntry.userName = ev('user');
-      if (
-        connection.type === 'snowflake' &&
-        (connection as SnowflakeConnection).authMethod === 'oauth_browser'
-      ) {
-        delete connectionEntry.password;
-        // Snowflake Local Application OAuth (SNOWFLAKE$LOCAL_APPLICATION built-in)
-        connectionEntry.authenticator = 'oauth_authorization_code';
+    // Credentials: set what the connection uses, remove what it doesn't.
+    ['userName', 'password', 'authenticator'].forEach((key) => {
+      if (key in entry) {
+        connectionEntry[key] = entry[key];
       } else {
-        connectionEntry.password = ev('password');
-        delete connectionEntry.authenticator;
+        delete connectionEntry[key];
       }
-    } else {
-      // Remove userName/password if they exist but shouldn't for this type
-      delete connectionEntry.userName;
-      delete connectionEntry.password;
-      delete connectionEntry.authenticator;
-    }
+    });
 
-    // For Databricks, handle token
-    if (connection.type === 'databricks') {
-      // Token is embedded in JDBC URL, not as separate field
-      // Just ensure it's not duplicated
-      delete connectionEntry.token;
-    }
+    connector.mainConfKeysToRemove(connection).forEach((key) => {
+      delete connectionEntry[key];
+    });
 
     // Write back to file
     const updatedContent = yaml.dump(mainConf, {
@@ -442,7 +231,7 @@ export async function updateProjectConfigFiles(
   projectName: string,
   connection: ConnectionInput,
 ): Promise<{ success: boolean; errors: string[] }> {
-  if (connection.type === 'ducklake') {
+  if (getDbtConnector(connection.type)?.supportsPartialUpdate === false) {
     return { success: true, errors: [] };
   }
   const errors: string[] = [];

@@ -5,12 +5,12 @@ jest.mock('snowflake-sdk', () => ({
 
 // Import after mock so the modules under test use the mocked SDK.
 import * as snowflake from 'snowflake-sdk';
-import { executeSnowflakeQuery } from '../../../../src/main/utils/connectors';
-import SnowflakeExtractor from '../../../../src/main/extractor/snowflake.extractor';
+import { executeSnowflakeQuery } from '../../../../src/connections/snowflake/snowflake.client.main';
+import SnowflakeExtractor from '../../../../src/connections/snowflake/snowflake.extractor.main';
 import {
   SNOWFLAKE_REAUTH_MESSAGE,
   SnowflakeAuthManager,
-} from '../../../../src/main/utils/snowflakeAuth';
+} from '../../../../src/connections/snowflake/snowflake.auth.main';
 
 const createConnectionMock = snowflake.createConnection as jest.Mock;
 

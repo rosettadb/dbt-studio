@@ -1,5 +1,6 @@
 import { tool } from 'ai';
 import { z } from 'zod';
+import { isDuckLakeConnection } from '../../../../../connections/ducklake/ducklake.shared';
 
 import AgentService from '../../../agent.service';
 import ConnectorsService from '../../../connectors.service';
@@ -44,7 +45,7 @@ async function resolveDuckLakeInstanceId(
       }
     | undefined;
 
-  if (connection?.type !== 'ducklake' || !connection.instanceId) {
+  if (!isDuckLakeConnection(connection) || !connection.instanceId) {
     throw new Error(
       'Active connection is not a DuckLake connection. Provide instanceId explicitly.',
     );

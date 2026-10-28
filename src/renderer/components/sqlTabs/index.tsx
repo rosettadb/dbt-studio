@@ -8,8 +8,8 @@ import ListItemText from '@mui/material/ListItemText';
 import CloseIcon from '@mui/icons-material/Close';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import { connectionIcon } from '../../../connections/registry.renderer';
 import { SqlTabId, SqlTabState } from '../../../types/editor';
-import connectionIcons from '../../../../assets/connectionIcons';
 import { TabContextMenu } from '../tabContextMenu';
 import { copyText } from '../../lib/clipboard';
 import {
@@ -44,10 +44,7 @@ const SqlTab: React.FC<SqlTabProps> = ({
   };
 
   // Get connection type icon
-  const icon =
-    connectionIcons.images[
-      tab.connectionType as keyof typeof connectionIcons.images
-    ];
+  const icon = connectionIcon(tab.connectionType);
 
   const tooltipText = `${tab.connectionName} (${tab.connectionType})`;
 
