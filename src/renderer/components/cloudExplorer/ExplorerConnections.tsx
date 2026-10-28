@@ -22,7 +22,7 @@ import {
 import {
   Cloud,
   Edit,
-  Cable,
+  Storage,
   Refresh,
   Visibility,
   DeleteOutline,
@@ -67,7 +67,7 @@ export const ExplorerConnections: React.FC = () => {
         />
       );
     }
-    return <Cable />;
+    return <Storage />;
   };
 
   const getProviderName = (provider: CloudProvider) => {
@@ -186,7 +186,7 @@ export const ExplorerConnections: React.FC = () => {
           <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold' }}>
             Sources
           </Typography>
-          <Cable sx={{ color: 'text.secondary', fontSize: 28 }} />
+          <Storage sx={{ color: 'text.secondary', fontSize: 28 }} />
         </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <IconButton

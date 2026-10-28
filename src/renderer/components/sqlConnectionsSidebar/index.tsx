@@ -14,7 +14,6 @@ import {
   alpha,
 } from '@mui/material';
 import {
-  Cable,
   Settings as SettingsIcon,
   Storage as DatabaseIcon,
   OpenInNew as OpenInNewIcon,
@@ -173,7 +172,7 @@ export const SqlConnectionsSidebar: React.FC<SqlConnectionsSidebarProps> = ({
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Cable fontSize="small" color="primary" />
+          <DatabaseIcon fontSize="small" color="primary" />
           <Typography variant="subtitle2" fontWeight={600}>
             Connections
           </Typography>

@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   CodeSharp,
-  Cable,
+  Storage as DatabaseIcon,
   SnippetFolder,
   Cloud,
   ElectricalServices as ElectricalServicesIcon,
@@ -42,7 +42,7 @@ export const DataSources: React.FC = () => {
   );
 };
 
-export const Connections: React.FC = () => <Cable color="primary" />;
+export const Connections: React.FC = () => <DatabaseIcon color="primary" />;
 
 export const SelectProject: React.FC = () => <SnippetFolder color="primary" />;
 

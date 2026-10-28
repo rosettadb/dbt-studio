@@ -29,7 +29,6 @@ import DriveFolderUploadIcon from '@mui/icons-material/DriveFolderUpload';
 import DatabaseIcon from '@mui/icons-material/Storage';
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
 import { toast } from 'react-toastify';
-import { Cable } from '@mui/icons-material';
 import { projectsServices, connectorsServices } from '../../services';
 import {
   useDeleteProject,
@@ -447,7 +446,7 @@ const SelectProject: React.FC = () => {
                 <Chip
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <Cable sx={{ fontSize: 12, mr: 0.5 }} />
+                      <DatabaseIcon sx={{ fontSize: 12, mr: 0.5 }} />
                       {project.connection.name}
                     </Box>
                   }
@@ -531,7 +530,7 @@ const SelectProject: React.FC = () => {
               }}
             >
               <ListItemIcon>
-                <Cable fontSize="small" color="primary" />
+                <DatabaseIcon fontSize="small" color="primary" />
               </ListItemIcon>
               <ListItemText>Add Connection</ListItemText>
             </MenuItem>
@@ -547,7 +546,7 @@ const SelectProject: React.FC = () => {
               }}
             >
               <ListItemIcon>
-                <Cable fontSize="small" color="error" />
+                <DatabaseIcon fontSize="small" color="error" />
               </ListItemIcon>
               <ListItemText>Remove Connection</ListItemText>
             </MenuItem>

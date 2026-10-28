@@ -2,7 +2,7 @@ import React from 'react';
 import SplitPane, { Pane } from 'split-pane-react';
 import 'split-pane-react/esm/themes/default.css';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { Cable, Search as SearchIcon } from '@mui/icons-material';
+import { Search as SearchIcon, StorageOutlined } from '@mui/icons-material';
 import { Badge, Box, Tab, Tabs } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import {
@@ -206,7 +206,7 @@ const ProjectDetails: React.FC = () => {
               <Tab
                 value="connections"
                 icon={
-                  <Cable
+                  <StorageOutlined
                     sx={{
                       fontSize: 15,
                       color: sidebarIconColor('connections'),

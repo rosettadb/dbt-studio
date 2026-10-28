@@ -23,7 +23,7 @@ import {
 import {
   CheckCircle,
   Error as ErrorIcon,
-  Cable,
+  Storage,
   Add,
   Edit,
   Visibility,
@@ -1223,7 +1223,7 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
                 component="legend"
                 sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
               >
-                <Cable fontSize="small" />
+                <Storage fontSize="small" />
                 Connection Type
               </FormLabel>
               <Grid container spacing={2} sx={{ mt: 1 }}>

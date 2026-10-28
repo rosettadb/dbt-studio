@@ -10,7 +10,13 @@ import {
   styled,
   Button,
 } from '@mui/material';
-import { Cloud, Dashboard, Cable, History, Folder } from '@mui/icons-material';
+import {
+  Cloud,
+  Dashboard,
+  Storage,
+  History,
+  Folder,
+} from '@mui/icons-material';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { SettingsSidebarElement } from '../../screens/settings/settingsElements';
 import { useGetCloudConnections } from '../../controllers/cloudExplorer.controller';
@@ -43,7 +49,7 @@ export const explorerSidebarElements: SettingsSidebarElement[] = [
     path: '/app/cloud-explorer/dashboard',
   },
   {
-    icon: Cable,
+    icon: Storage,
     text: 'Sources',
     path: '/app/cloud-explorer/connections',
   },
@@ -92,7 +98,7 @@ export const ExplorerSidebar: React.FC = () => {
         />
       );
     }
-    return <Cable fontSize="small" />;
+    return <Storage fontSize="small" />;
   };
 
   return (
