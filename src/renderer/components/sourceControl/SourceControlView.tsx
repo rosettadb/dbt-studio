@@ -384,6 +384,7 @@ export const SourceControlView: React.FC<SourceControlViewProps> = ({
         {/* Changes Section */}
         <ChangesSection
           fileStatuses={fileStatuses}
+          projectPath={projectPath}
           onStage={handleStage}
           onUnstage={handleUnstage}
           onStageAll={handleStageAll}
