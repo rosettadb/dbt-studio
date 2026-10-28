@@ -13,6 +13,7 @@ import * as path from 'path';
 import { pathToFileURL } from 'url';
 import { spawn } from 'child_process';
 import { app } from 'electron';
+import { getDescriptor } from '../../connections/registry.shared';
 
 import databaseStore from '../database';
 import secureStorage from './secureStorage.service';
@@ -581,7 +582,10 @@ export class IcebergDatalakeService {
     const model = (connections ?? []).find(
       (item) => item.id === config.databaseConnectionId,
     );
-    if (!model || model.connection.type !== 'postgres') {
+    if (
+      !model ||
+      !getDescriptor(model.connection.type)?.capabilities.icebergCatalog
+    ) {
       throw new Error('ICEBERG_SQL_CONNECTION_INVALID');
     }
     const connection = model.connection as PostgresConnection;

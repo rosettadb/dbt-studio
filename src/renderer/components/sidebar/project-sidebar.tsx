@@ -20,17 +20,17 @@ import {
 import { useTheme } from '@mui/material/styles';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import {
+  connectionIcon,
+  connectionLabel,
+  connectionAccentColor,
+} from '../../../connections/registry.renderer';
 import { ReactComponent as RouteIcon } from '../../assets/icons/lucide/route.svg';
 import { FileTreeViewer, SearchInFilesPanel } from '../index';
 import type { SearchResultSelection } from '../searchInFiles';
 import { FileTreeContainer } from '../../screens/projectDetails/styles';
-import {
-  FileNode,
-  Project,
-  SupportedConnectionTypes,
-} from '../../../types/backend';
+import { FileNode, Project } from '../../../types/backend';
 import { SourceControlView } from '../sourceControl';
-import connectionIcons from '../../../../assets/connectionIcons';
 import {
   useGetConnectionById,
   useGetConnections,
@@ -65,51 +65,14 @@ const getConnectionTypeName = (connectionType?: string) => {
     return 'UNKNOWN';
   }
 
-  switch (connectionType) {
-    case 'postgres':
-      return 'PostgreSQL';
-    case 'snowflake':
-      return 'Snowflake';
-    case 'bigquery':
-      return 'BigQuery';
-    case 'redshift':
-      return 'Redshift';
-    case 'databricks':
-      return 'Databricks';
-    case 'duckdb':
-      return 'DuckDB';
-    case 'kinetica':
-      return 'Kinetica';
-    case 'oracle':
-      return 'Oracle';
-    case 'mysql':
-      return 'MySQL';
-    default:
-      return String(connectionType).toUpperCase();
-  }
+  return (
+    connectionLabel(connectionType) ?? String(connectionType).toUpperCase()
+  );
 };
 
 // Helper function to get connection type color
-const getConnectionTypeColor = (connectionType: string) => {
-  switch (connectionType) {
-    case 'postgres':
-      return '#336791';
-    case 'snowflake':
-      return '#29b5e8';
-    case 'bigquery':
-      return '#4285f4';
-    case 'redshift':
-      return '#8c4fff';
-    case 'databricks':
-      return '#ff3621';
-    case 'duckdb':
-      return '#fff000';
-    case 'mysql':
-      return '#00758f';
-    default:
-      return '#666';
-  }
-};
+const getConnectionTypeColor = (connectionType: string) =>
+  connectionAccentColor(connectionType);
 
 // Connections Tab Component — owns the add/edit/remove flows for the
 // project's database connection.
@@ -189,7 +152,7 @@ const ConnectionsTab: React.FC<{ project: Project }> = ({ project }) => {
 
   const connType = connection.connection?.type || (connection as any).type;
   const connName = connection.connection?.name || (connection as any).name;
-  const iconSrc = connectionIcons.images[connType as SupportedConnectionTypes];
+  const iconSrc = connectionIcon(connType);
   const chipBgColor = getConnectionTypeColor(connType);
   const chipTextColor = theme.palette.getContrastText(chipBgColor);
 

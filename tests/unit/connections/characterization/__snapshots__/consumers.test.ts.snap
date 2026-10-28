@@ -1,0 +1,130 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`buildDialectHints characterization bigquery 1`] = `
+"
+
+## Dialect Specifics
+You are connected to Google BigQuery. Ensure all queries use BigQuery Standard SQL syntax."
+`;
+
+exports[`buildDialectHints characterization databricks 1`] = `
+"
+
+## Dialect Specifics
+You are connected to Databricks. Ensure all queries use Databricks/Spark SQL syntax and functions."
+`;
+
+exports[`buildDialectHints characterization db2 1`] = `
+"
+
+## Dialect Specifics
+You are connected to a db2 database. Ensure all queries use the correct dialect for this database."
+`;
+
+exports[`buildDialectHints characterization duckdb 1`] = `
+"
+
+## Dialect Specifics
+You are connected to DuckDB. Ensure all queries use DuckDB SQL syntax and functions."
+`;
+
+exports[`buildDialectHints characterization ducklake 1`] = `
+"
+
+## DuckLake Specifics
+You are connected to a DuckLake lakehouse. DuckLake is a DuckDB extension (not a separate library).
+- Versions: DuckDB v<version>-r.1, DuckLake extension minimal v1.0.
+- Dialect: Use DuckDB SQL dialect and functions.
+- Attach: \`ATTACH 'ducklake:my.ducklake' AS my_ducklake; USE my_ducklake;\`
+- Time Travel: \`SELECT ... FROM tbl AT (VERSION => 2)\` or \`AT (TIMESTAMP => '2025-01-01')\`
+- Snapshots: \`FROM my_ducklake.snapshots();\`
+- Constraints: No indexes, primary keys, foreign keys, UNIQUE or CHECK constraints.
+- Updates: Modeled as deletes followed by inserts (append-only Parquet storage).
+- Detach: \`USE memory; DETACH my_ducklake;\`"
+`;
+
+exports[`buildDialectHints characterization kinetica 1`] = `
+"
+
+## Dialect Specifics
+You are connected to Kinetica. Ensure all queries use Kinetica SQL syntax and functions."
+`;
+
+exports[`buildDialectHints characterization mysql 1`] = `
+"
+
+## Dialect Specifics
+You are connected to a mysql database. Ensure all queries use the correct dialect for this database."
+`;
+
+exports[`buildDialectHints characterization oracle 1`] = `
+"
+
+## Dialect Specifics
+You are connected to Oracle Database. Use Oracle SQL. Do not add row limits to queries; the UI handles pagination with \`OFFSET ... FETCH NEXT\`. The dummy table is \`DUAL\`, unquoted identifiers fold to uppercase, table aliases cannot use \`AS\`, catalog metadata lives in \`ALL_*\` views (\`ALL_TABLES\`, \`ALL_USERS\`, \`ALL_TAB_COLUMNS\`), and statements must not end with \`;\`."
+`;
+
+exports[`buildDialectHints characterization postgres 1`] = `
+"
+
+## Dialect Specifics
+You are connected to PostgreSQL. Ensure all queries use PostgreSQL SQL syntax and functions."
+`;
+
+exports[`buildDialectHints characterization postgresql 1`] = `
+"
+
+## Dialect Specifics
+You are connected to PostgreSQL. Ensure all queries use PostgreSQL SQL syntax and functions."
+`;
+
+exports[`buildDialectHints characterization redshift 1`] = `
+"
+
+## Dialect Specifics
+You are connected to Amazon Redshift. Ensure all queries use Redshift SQL syntax and functions."
+`;
+
+exports[`buildDialectHints characterization snowflake 1`] = `
+"
+
+## Dialect Specifics
+You are connected to Snowflake. Ensure all queries use Snowflake SQL syntax and functions."
+`;
+
+exports[`buildDialectHints characterization sqlite 1`] = `
+"
+
+## Dialect Specifics
+You are connected to a sqlite database. Ensure all queries use the correct dialect for this database."
+`;
+
+exports[`mapAdapterToSqlParserDialect characterization " Snowflake " 1`] = `"snowflake"`;
+
+exports[`mapAdapterToSqlParserDialect characterization "" 1`] = `undefined`;
+
+exports[`mapAdapterToSqlParserDialect characterization "bigquery" 1`] = `"bigquery"`;
+
+exports[`mapAdapterToSqlParserDialect characterization "databricks" 1`] = `"databricks"`;
+
+exports[`mapAdapterToSqlParserDialect characterization "duckdb" 1`] = `undefined`;
+
+exports[`mapAdapterToSqlParserDialect characterization "ducklake" 1`] = `undefined`;
+
+exports[`mapAdapterToSqlParserDialect characterization "kinetica" 1`] = `"postgres"`;
+
+exports[`mapAdapterToSqlParserDialect characterization "mysql" 1`] = `undefined`;
+
+exports[`mapAdapterToSqlParserDialect characterization "oracle" 1`] = `"oracle"`;
+
+exports[`mapAdapterToSqlParserDialect characterization "postgres" 1`] = `"postgres"`;
+
+exports[`mapAdapterToSqlParserDialect characterization "postgresql" 1`] = `"postgres"`;
+
+exports[`mapAdapterToSqlParserDialect characterization "redshift" 1`] = `"redshift"`;
+
+exports[`mapAdapterToSqlParserDialect characterization "snowflake" 1`] = `"snowflake"`;
+
+exports[`mapAdapterToSqlParserDialect characterization "sqlite" 1`] = `undefined`;
+
+exports[`mapAdapterToSqlParserDialect characterization undefined 1`] = `undefined`;

@@ -6,19 +6,7 @@ import yaml from 'js-yaml';
 import { dialog, net, IncomingMessage } from 'electron';
 import AdmZip from 'adm-zip';
 import * as tar from 'tar';
-import {
-  BigQueryConnection,
-  DatabricksConnection,
-  DataBase,
-  DuckDBConnection,
-  KineticaConnection,
-  MySqlConnection,
-  PostgresConnection,
-  Project,
-  RedshiftConnection,
-  SnowflakeConnection,
-  Table,
-} from '../../types/backend';
+import { DataBase, Project, Table } from '../../types/backend';
 import {
   createNewFile,
   createNewFolder,
@@ -33,19 +21,11 @@ import {
   searchInFiles,
 } from '../utils/fileHelper';
 import databaseStore from '../database';
-import { sanitizeBigQueryKeyfile } from '../utils/sanitizeBigQueryKeyfile';
-import SettingsService from './settings.service';
 import {
-  BigQueryExtractor,
-  DatabricksExtractor,
-  DuckDBExtractor,
-  KineticaExtractor,
-  MySqlExtractor,
-  PGSchemaExtractor,
-  RedshiftExtractor,
-  SnowflakeExtractor,
-} from '../extractor';
-import SecureStorageService from './secureStorage.service';
+  getConnector,
+  sanitizeForStorage,
+} from '../../connections/registry.main';
+import SettingsService from './settings.service';
 import ConnectorsService from './connectors.service';
 import MainDatabaseService from './mainDatabase.service';
 import {
@@ -120,7 +100,7 @@ export default class ProjectsService {
   }
 
   static async saveProjects(projects: Project[]) {
-    projects.forEach((project) => sanitizeBigQueryKeyfile(project));
+    projects.forEach((project) => sanitizeForStorage(project));
     await databaseStore.updateField('projects', () => projects);
   }
 
@@ -142,7 +122,7 @@ export default class ProjectsService {
       createTemplateFolders,
     };
 
-    sanitizeBigQueryKeyfile(project);
+    sanitizeForStorage(project);
     await this.copyDbtTemplateFiles(project.path, project.name);
     // Always copy main.conf template (rosetta requires it), but profiles.yml is excluded from template
     await this.copyRosettaMainConf(project.path);
@@ -225,7 +205,7 @@ export default class ProjectsService {
       connectionId,
     };
 
-    sanitizeBigQueryKeyfile(project);
+    sanitizeForStorage(project);
 
     const rosettaPath = path.join(projectPath, 'rosetta');
 
@@ -677,7 +657,7 @@ export default class ProjectsService {
 
         const oldConnectionId = joinedProjects[index].connectionId;
         const newConnectionId = project.connectionId;
-        const merged = sanitizeBigQueryKeyfile({
+        const merged = sanitizeForStorage({
           ...joinedProjects[index],
           ...project,
         });
@@ -729,7 +709,7 @@ export default class ProjectsService {
     // in one write — see updateProject for why that matters.
     await databaseStore.transaction((db) => {
       const remaining = this.joinProjects(db).filter((p) => p.id !== id);
-      remaining.forEach((p) => sanitizeBigQueryKeyfile(p));
+      remaining.forEach((p) => sanitizeForStorage(p));
       return {
         db: {
           ...db,
@@ -765,7 +745,7 @@ export default class ProjectsService {
 
     await databaseStore.transaction((db) => {
       const remaining = this.joinProjects(db).filter((p) => p.id !== id);
-      remaining.forEach((p) => sanitizeBigQueryKeyfile(p));
+      remaining.forEach((p) => sanitizeForStorage(p));
       return {
         db: {
           ...db,
@@ -1064,160 +1044,6 @@ export default class ProjectsService {
     await databaseStore.updateField('selectedProject', () => project);
   }
 
-  static async extractPgSchema(connection: PostgresConnection) {
-    const extractor = new PGSchemaExtractor({
-      user: connection.username,
-      host: connection.host,
-      database: connection.database,
-      password: connection.password,
-      port: connection.port,
-    });
-
-    await extractor.connect();
-
-    const schema = await extractor.extractSchema();
-    await extractor.disconnect();
-    return schema.tables;
-  }
-
-  static async extractSnowflakeSchema(connection: SnowflakeConnection) {
-    const sfAuthMethod =
-      connection.authMethod === 'oauth_browser' ? 'oauth_browser' : 'password';
-    const extractor = new SnowflakeExtractor({
-      account:
-        sfAuthMethod === 'oauth_browser'
-          ? connection.account
-          : connection.account.split('.')[0],
-      username: connection.username,
-      password: connection.password,
-      warehouse: connection.warehouse,
-      database: connection.database,
-      schema: connection.schema,
-      role: connection.role,
-      authMethod: sfAuthMethod,
-    });
-
-    await extractor.connect();
-
-    const schema = await extractor.extractSchema();
-    await extractor.disconnect();
-    return schema.tables;
-  }
-
-  static async extractSchemaDatabricks(connection: DatabricksConnection) {
-    const extractor = new DatabricksExtractor({
-      token: connection.token,
-      host: connection.host,
-      path: connection.httpPath,
-      catalog: connection.database || 'default',
-      schema: connection.schema,
-    });
-
-    await extractor.connect();
-    const schema = await extractor.extractSchema();
-    await extractor.disconnect();
-    return schema.tables;
-  }
-
-  static async extractBigQuerySchema(connection: BigQueryConnection) {
-    const config: any = {
-      projectId: connection.project,
-    };
-
-    let keyfileValue = connection.keyfile;
-    if (
-      typeof keyfileValue === 'string' &&
-      keyfileValue.startsWith('db-bigquery-')
-    ) {
-      // Fetch from secure storage
-      const stored = await SecureStorageService.getCredential(keyfileValue);
-      if (!stored) {
-        throw new Error(
-          'BigQuery service account key not found in secure storage',
-        );
-      }
-      keyfileValue = stored;
-    }
-
-    try {
-      config.credentials = JSON.parse(keyfileValue);
-    } catch (err) {
-      throw new Error('Invalid service account key JSON');
-    }
-
-    if (connection.location) {
-      config.location = connection.location;
-    }
-
-    const extractor = new BigQueryExtractor(config);
-    await extractor.connect();
-    const schema = await extractor.extractSchema();
-    return schema.tables;
-  }
-
-  static async extractDuckDBSchema(connection: DuckDBConnection) {
-    const extractor = new DuckDBExtractor({
-      database_path: connection.database_path,
-      schema: connection.schema,
-    });
-
-    const schema = await extractor.extractSchema();
-    return schema.tables;
-  }
-
-  static async extractRedshiftSchema(connection: RedshiftConnection) {
-    const extractor = new RedshiftExtractor({
-      user: connection.username,
-      host: connection.host,
-      database: connection.database,
-      password: connection.password,
-      port: connection.port,
-      ssl: connection.ssl ?? true,
-      sslrootcert: connection.sslrootcert,
-    });
-
-    await extractor.connect();
-    const schema = await extractor.extractSchema();
-    await extractor.disconnect();
-    return schema.tables;
-  }
-
-  static async extractKineticaSchema(connection: KineticaConnection) {
-    const extractor = new KineticaExtractor({
-      host: connection.host,
-      port: connection.port,
-      username: connection.username,
-      password: connection.password,
-      useSSL: connection.useSSL,
-      timeout: connection.timeout,
-      schema: connection.schema,
-    });
-
-    await extractor.connect();
-    const schema = await extractor.extractSchema();
-    await extractor.disconnect();
-    return schema.tables;
-  }
-
-  static async extractMySqlSchema(connection: MySqlConnection) {
-    const extractor = new MySqlExtractor({
-      user: connection.username,
-      host: connection.host,
-      database: connection.database,
-      password: connection.password,
-      port: connection.port,
-      ssl: connection.ssl,
-    });
-
-    await extractor.connect();
-    try {
-      const schema = await extractor.extractSchema();
-      return schema.tables;
-    } finally {
-      await extractor.disconnect();
-    }
-  }
-
   static async extractSchema(project: Project): Promise<Table[]> {
     if (!project.connectionId) {
       throw new Error('No database connection configured for this project');
@@ -1239,64 +1065,19 @@ export default class ProjectsService {
       );
     }
 
-    const storeUser = await SecureStorageService.getCredential(
-      `db-user-${connection.name}`,
+    const connector = getConnector(connection.type);
+    if (!connector) {
+      throw new Error(
+        `Unsupported connection type: "${(connection as any).type}"`,
+      );
+    }
+
+    // Today's key names: user and password by connection name, token and keyfile by project name.
+    const projectKeyed = ['token', 'bigquery'];
+    const resolved = await connector.resolveSecrets(connection, (key) =>
+      projectKeyed.includes(key) ? project.name : connection.name,
     );
-    const storePassword = await SecureStorageService.getCredential(
-      `db-password-${connection.name}`,
-    );
-
-    if (storeUser) {
-      (connection as { username: string }).username = storeUser;
-    }
-    if (storePassword) {
-      (connection as { password: string }).password = storePassword;
-    }
-
-    const storeToken = await SecureStorageService.getCredential(
-      `db-token-${project.name}`,
-    );
-    if (storeToken) {
-      (connection as { token: string }).token = storeToken;
-    }
-
-    const bigqueryKey = await SecureStorageService.getCredential(
-      `db-bigquery-${project.name}`,
-    );
-
-    if (bigqueryKey) {
-      (connection as { keyfile: string }).keyfile = bigqueryKey;
-    }
-
-    switch (connection.type) {
-      case 'oracle':
-        return (await ConnectorsService.extractSchemaFromConnection(conn.id))
-          .tables;
-      case 'postgres':
-        return this.extractPgSchema(connection as PostgresConnection);
-      case 'redshift':
-        return this.extractRedshiftSchema(connection as RedshiftConnection);
-      case 'snowflake':
-        return this.extractSnowflakeSchema(connection as SnowflakeConnection);
-      case 'databricks':
-        return this.extractSchemaDatabricks(connection as DatabricksConnection);
-      case 'bigquery':
-        return this.extractBigQuerySchema(connection as BigQueryConnection);
-      case 'duckdb':
-        return this.extractDuckDBSchema(connection as DuckDBConnection);
-      case 'ducklake':
-        throw new Error(
-          'Schema extraction is not supported for DuckLake connections. DuckLake projects use dynamic data lake catalogs.',
-        );
-      case 'kinetica':
-        return this.extractKineticaSchema(connection as KineticaConnection);
-      case 'mysql':
-        return this.extractMySqlSchema(connection as MySqlConnection);
-      default:
-        throw new Error(
-          `Unsupported connection type: "${(connection as any).type}"`,
-        );
-    }
+    return connector.extractProjectSchema(resolved);
   }
 
   static async updateQuery({

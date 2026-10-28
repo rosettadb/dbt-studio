@@ -266,7 +266,24 @@ export class StaticSiteService {
     const { connectionId, outputPath, overwrite } = opts;
 
     try {
-      // 1. Check for existing output folder
+      // 1. Load pages — before touching the output folder, so a previous
+      // build is never wiped when there is nothing to build
+      sendProgress(mainWindow, {
+        phase: 'loading',
+        message: 'Loading analytics pages…',
+      });
+      const pages = await AnalyticsPagesService.list(connectionId);
+      if (pages.length === 0) {
+        return {
+          success: false,
+          outputPath,
+          pageCount: 0,
+          queryCount: 0,
+          error: 'No analytics pages found for this connection.',
+        };
+      }
+
+      // 2. Check for existing output folder
       if (fs.existsSync(outputPath)) {
         if (!overwrite) {
           return {
@@ -283,22 +300,6 @@ export class StaticSiteService {
             'Removing previous build files (preserving .git and user files)…',
         });
         wipePreviousBuild(outputPath);
-      }
-
-      // 2. Load pages
-      sendProgress(mainWindow, {
-        phase: 'loading',
-        message: 'Loading analytics pages…',
-      });
-      const pages = await AnalyticsPagesService.list(connectionId);
-      if (pages.length === 0) {
-        return {
-          success: false,
-          outputPath,
-          pageCount: 0,
-          queryCount: 0,
-          error: 'No analytics pages found for this connection.',
-        };
       }
 
       sendProgress(mainWindow, {

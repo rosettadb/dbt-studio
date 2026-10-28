@@ -1,0 +1,67 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`ProjectsService.extractSchema characterization mysql: config reaching mysql2, closed in finally 1`] = `
+{
+  "config": {
+    "connectTimeout": 5000,
+    "database": "mydb",
+    "host": "mysql.example.com",
+    "password": "FIXTURE-SECRET-mysql-password",
+    "port": 3306,
+    "ssl": {
+      "rejectUnauthorized": false,
+    },
+    "user": "my_user",
+  },
+  "ended": 1,
+  "result": {
+    "tables": [],
+  },
+}
+`;
+
+exports[`ProjectsService.extractSchema characterization postgres: config reaching pg (DIFF-7: ssl is ignored today) 1`] = `
+{
+  "config": {
+    "database": "pgdb",
+    "host": "pg.example.com",
+    "password": "FIXTURE-SECRET-postgres-password",
+    "port": 5432,
+    "ssl": {
+      "rejectUnauthorized": false,
+    },
+    "user": "pg_user",
+  },
+  "result": {
+    "tables": [],
+  },
+}
+`;
+
+exports[`ProjectsService.extractSchema characterization postgres: disconnects only after success (DIFF-8) 1`] = `
+{
+  "ended": 1,
+  "result": {
+    "error": "query failed",
+  },
+}
+`;
+
+exports[`ProjectsService.extractSchema characterization redshift: config reaching pg 1`] = `
+{
+  "config": {
+    "connectionTimeoutMillis": 15000,
+    "database": "rsdb",
+    "host": "rs.example.com",
+    "password": "FIXTURE-SECRET-redshift-password",
+    "port": 5439,
+    "ssl": {
+      "rejectUnauthorized": false,
+    },
+    "user": "rs_user",
+  },
+  "result": {
+    "tables": [],
+  },
+}
+`;

@@ -6,6 +6,7 @@ import React, {
   useState,
   ReactNode,
 } from 'react';
+import { getConnectionUi } from '../../connections/registry.renderer';
 import { useSecureStorage } from '../hooks';
 import { useSetConnectionEnvVariable } from '../controllers';
 import { materializeSnowflakeToken } from '../services/connectors.service';
@@ -208,21 +209,12 @@ export const RunnerProvider: React.FC<RunnerProviderProps> = ({ children }) => {
         // Snowflake OAuth: hand the live session token to dbt via process
         // env (main-side; the token never enters the renderer). Self-gating
         // main-side: no-op unless the named connection is snowflake+oauth.
-        if (connType === 'snowflake') {
+        if (getConnectionUi(connType)?.browserAuth) {
           await materializeSnowflakeToken(connectionName).catch(() => false);
         }
 
         if (connType) {
-          const fieldMap: Record<string, string[]> = {
-            postgres: ['host', 'port', 'dbname', 'schema'],
-            redshift: ['host', 'port', 'dbname', 'schema'],
-            snowflake: ['account', 'warehouse', 'dbname', 'schema', 'role'],
-            bigquery: ['project', 'dataset'],
-            databricks: ['host', 'httppath', 'catalog', 'schema'],
-            kinetica: ['host', 'port', 'url', 'dbname', 'schema'],
-            mysql: ['host', 'port', 'dbname', 'schema'],
-          };
-          const fields = fieldMap[connType] || [];
+          const fields = getConnectionUi(connType)?.envFields ?? [];
           const fieldPromises = fields.map(async (field) => {
             const stored = await getConnectionField(field, connectionName);
             if (stored) {

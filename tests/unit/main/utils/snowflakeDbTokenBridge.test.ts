@@ -87,7 +87,7 @@ import * as snowflake from 'snowflake-sdk';
 import {
   SNOWFLAKE_REAUTH_MESSAGE,
   SnowflakeAuthManager,
-} from '../../../../src/main/utils/snowflakeAuth';
+} from '../../../../src/connections/snowflake/snowflake.auth.main';
 import ConnectorsService from '../../../../src/main/services/connectors.service';
 import { updateProfilesYml } from '../../../../src/main/utils/yamlPartialUpdate';
 

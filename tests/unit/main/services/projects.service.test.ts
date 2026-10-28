@@ -1,8 +1,37 @@
+// Stub @aws-sdk (pulled in via cloudExplorer.service in the import graph;
+// the real dist-cjs bundle cannot be parsed by jest).
 import ProjectsService from '../../../../src/main/services/projects.service';
 import databaseStore from '../../../../src/main/database';
 import ConnectorsService from '../../../../src/main/services/connectors.service';
 import SecureStorageService from '../../../../src/main/services/secureStorage.service';
 import type { Project } from '../../../../src/types/backend';
+import { connectors } from '../../../../src/connections/registry.main';
+
+jest.mock('@aws-sdk/client-s3', () => {
+  const Dummy = class {};
+  return {
+    S3Client: Dummy,
+    ListBucketsCommand: Dummy,
+    ListObjectsV2Command: Dummy,
+    ListObjectsCommand: Dummy,
+    GetObjectCommand: Dummy,
+    PutObjectCommand: Dummy,
+    CreateMultipartUploadCommand: Dummy,
+    UploadPartCommand: Dummy,
+    CompleteMultipartUploadCommand: Dummy,
+    AbortMultipartUploadCommand: Dummy,
+    DeleteObjectCommand: Dummy,
+    DeleteObjectsCommand: Dummy,
+    CreateBucketCommand: Dummy,
+    DeleteBucketCommand: Dummy,
+    ListObjectVersionsCommand: Dummy,
+    HeadBucketCommand: Dummy,
+  };
+});
+
+jest.mock('@aws-sdk/s3-request-presigner', () => ({
+  getSignedUrl: jest.fn(),
+}));
 
 jest.mock('openai', () => ({
   OpenAI: jest.fn(),
@@ -58,15 +87,6 @@ jest.mock('../../../../src/main/services/connectors.service', () => ({
     parseProjectConnectionFiles: (...args: any[]) =>
       parseProjectConnectionFiles(...args),
   },
-}));
-
-jest.mock('../../../../src/main/extractor', () => ({
-  BigQueryExtractor: jest.fn(),
-  DatabricksExtractor: jest.fn(),
-  DuckDBExtractor: jest.fn(),
-  PGSchemaExtractor: jest.fn(),
-  RedshiftExtractor: jest.fn(),
-  SnowflakeExtractor: jest.fn(),
 }));
 
 const mockedGetSnapshot = databaseStore.getSnapshot as jest.Mock;
@@ -191,7 +211,7 @@ describe('Project schema extraction dispatch', () => {
   beforeEach(() => jest.clearAllMocks());
   afterEach(() => jest.restoreAllMocks());
 
-  it('routes Oracle through its extractor from the existing switch', async () => {
+  it('routes Oracle through its connector', async () => {
     (SecureStorageService.getCredential as jest.Mock).mockResolvedValue(null);
     const connection = {
       type: 'oracle',
@@ -204,13 +224,10 @@ describe('Project schema extraction dispatch', () => {
       connection,
     });
     const tables = [{ name: 'T', schema: 'STUDIO', columns: [] }];
-    (
-      ConnectorsService.extractSchemaFromConnection as jest.Mock
-    ).mockResolvedValue({ tables });
+    jest
+      .spyOn(connectors.oracle, 'extractSchema')
+      .mockResolvedValue({ tables } as any);
     await expect(ProjectsService.extractSchema(project)).resolves.toBe(tables);
-    expect(ConnectorsService.extractSchemaFromConnection).toHaveBeenCalledWith(
-      'connection-id',
-    );
     expect(connection.password).toBe('');
   });
 
@@ -234,9 +251,9 @@ describe('Project schema extraction dispatch', () => {
           }) as Record<string, string>
         )[key],
     );
-    const tables = [{ name: 'T', schema: 'public', columns: [] }];
+    const tables = [{ name: 'T', schema: 'public', columns: [] }] as any;
     const extract = jest
-      .spyOn(ProjectsService as any, 'extractPgSchema')
+      .spyOn(connectors.postgres, 'extractProjectSchema')
       .mockResolvedValue(tables);
     await expect(ProjectsService.extractSchema(project)).resolves.toBe(tables);
     expect(extract).toHaveBeenCalledWith(

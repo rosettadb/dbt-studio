@@ -7,7 +7,6 @@ import useCommandHistory from './useCommandHistory';
 import useRosettaExtract from './useRosettaExtract';
 import useRosettaDBT from './useRosettaDBT';
 import useDbt from './useDbt';
-import useConnectionInput from './useConnectionInput';
 import useProcess from './useProcessContext';
 import useRunner from './useRunnerContext';
 import useSecureStorage from './useSecureStorage';
@@ -37,7 +36,6 @@ export {
   useRosettaExtract,
   useRosettaDBT,
   useDbt,
-  useConnectionInput,
   useProcess,
   useRunner,
   useSecureStorage,

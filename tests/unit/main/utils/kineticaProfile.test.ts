@@ -1,4 +1,4 @@
-import { buildKineticaProfileOutput } from '../../../../src/main/utils/kineticaProfile';
+import { buildKineticaProfileOutput } from '../../../../src/connections/kinetica/kinetica.profile.main';
 import { KineticaConnection } from '../../../../src/types/backend';
 
 const envVar = (field: string) => `{{ env_var("db-${field}-kin_01") }}`;

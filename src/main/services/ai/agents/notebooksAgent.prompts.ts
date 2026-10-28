@@ -12,59 +12,14 @@ import type {
   PythonNotebook,
 } from '../../../../types/pythonNotebooks';
 import type { EnrichedConnectionMeta } from './agentTypes';
+import { agentHintFor } from '../../../../connections/registry.main';
 
 const MAX_CONTEXT_CELLS = 60;
 
 export function buildDialectHints(
   connectionMeta: EnrichedConnectionMeta,
 ): string {
-  // DuckLake is a DuckDB extension (not a JS package), version is fixed
-  let duckdbVersion = '1.5.2+';
-  const ducklakeVersion = '1.0';
-
-  try {
-    // Dynamically resolve duckdb version the exact same way the footer does
-    // eslint-disable-next-line global-require, @typescript-eslint/no-var-requires
-    const ddbPkg = require('@duckdb/node-api/package.json');
-    if (ddbPkg && ddbPkg.version) {
-      duckdbVersion = ddbPkg.version;
-    }
-  } catch (e) {
-    // fallback
-  }
-
-  switch (connectionMeta.type) {
-    case 'ducklake':
-      return `\n\n## DuckLake Specifics
-You are connected to a DuckLake lakehouse. DuckLake is a DuckDB extension (not a separate library).
-- Versions: DuckDB v${duckdbVersion}, DuckLake extension minimal v${ducklakeVersion}.
-- Dialect: Use DuckDB SQL dialect and functions.
-- Attach: \`ATTACH 'ducklake:my.ducklake' AS my_ducklake; USE my_ducklake;\`
-- Time Travel: \`SELECT ... FROM tbl AT (VERSION => 2)\` or \`AT (TIMESTAMP => '2025-01-01')\`
-- Snapshots: \`FROM my_ducklake.snapshots();\`
-- Constraints: No indexes, primary keys, foreign keys, UNIQUE or CHECK constraints.
-- Updates: Modeled as deletes followed by inserts (append-only Parquet storage).
-- Detach: \`USE memory; DETACH my_ducklake;\``;
-    case 'duckdb':
-      return '\n\n## Dialect Specifics\nYou are connected to DuckDB. Ensure all queries use DuckDB SQL syntax and functions.';
-    case 'postgres':
-    case 'postgresql':
-      return '\n\n## Dialect Specifics\nYou are connected to PostgreSQL. Ensure all queries use PostgreSQL SQL syntax and functions.';
-    case 'bigquery':
-      return '\n\n## Dialect Specifics\nYou are connected to Google BigQuery. Ensure all queries use BigQuery Standard SQL syntax.';
-    case 'snowflake':
-      return '\n\n## Dialect Specifics\nYou are connected to Snowflake. Ensure all queries use Snowflake SQL syntax and functions.';
-    case 'redshift':
-      return '\n\n## Dialect Specifics\nYou are connected to Amazon Redshift. Ensure all queries use Redshift SQL syntax and functions.';
-    case 'databricks':
-      return '\n\n## Dialect Specifics\nYou are connected to Databricks. Ensure all queries use Databricks/Spark SQL syntax and functions.';
-    case 'kinetica':
-      return '\n\n## Dialect Specifics\nYou are connected to Kinetica. Ensure all queries use Kinetica SQL syntax and functions.';
-    case 'oracle':
-      return '\n\n## Dialect Specifics\nYou are connected to Oracle Database. Use Oracle SQL. Do not add row limits to queries; the UI handles pagination with `OFFSET ... FETCH NEXT`. The dummy table is `DUAL`, unquoted identifiers fold to uppercase, table aliases cannot use `AS`, catalog metadata lives in `ALL_*` views (`ALL_TABLES`, `ALL_USERS`, `ALL_TAB_COLUMNS`), and statements must not end with `;`.';
-    default:
-      return `\n\n## Dialect Specifics\nYou are connected to a ${connectionMeta.type} database. Ensure all queries use the correct dialect for this database.`;
-  }
+  return agentHintFor(connectionMeta.type, 'notebooks');
 }
 
 /**

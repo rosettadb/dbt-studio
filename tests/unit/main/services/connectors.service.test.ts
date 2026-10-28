@@ -1,5 +1,6 @@
 /* eslint-disable import/first */
 import fs from 'fs';
+import { BigQueryKeyFiles } from '../../../../src/connections/bigquery/bigquery.keyfile.main';
 
 // Stub @aws-sdk (pulled in via cloudExplorer.service in the import graph;
 // the real dist-cjs bundle cannot be parsed by jest).
@@ -74,21 +75,19 @@ jest.mock('../../../../src/main/services/secureStorage.service', () => ({
   },
 }));
 
-jest.mock('../../../../src/main/utils/connectors', () => ({
-  executeBigQueryQuery: jest.fn(),
-  executeDatabricksQuery: jest.fn(),
-  executeDuckDBQuery: jest.fn(),
-  executePostgresQuery: jest.fn(),
-  executeRedshiftQuery: jest.fn(),
-  executeSnowflakeQuery: jest.fn(),
+jest.mock('../../../../src/connections/postgres/postgres.client.main', () => ({
+  ...jest.requireActual(
+    '../../../../src/connections/postgres/postgres.client.main',
+  ),
+  testPostgresConnection: (...args: any[]) => testPostgresConnection(...args),
+}));
+
+jest.mock('../../../../src/connections/sqlite/sqlite.client.main', () => ({
+  ...jest.requireActual(
+    '../../../../src/connections/sqlite/sqlite.client.main',
+  ),
   executeSQLiteQuery: (...args: any[]) => executeSQLiteQuery(...args),
   extractSQLiteSchema: jest.fn(),
-  testBigQueryConnection: jest.fn(),
-  testDatabricksConnection: jest.fn(),
-  testDuckDBConnection: jest.fn(),
-  testPostgresConnection: (...args: any[]) => testPostgresConnection(...args),
-  testRedshiftConnection: jest.fn(),
-  testSnowflakeConnection: jest.fn(),
   testSQLiteConnection: (...args: any[]) => testSQLiteConnection(...args),
 }));
 
@@ -365,7 +364,7 @@ describe('ConnectorsService (main)', () => {
     });
 
     it('registers BigQuery cleanup once for exit and termination signals', () => {
-      const service = ConnectorsService as unknown as {
+      const service = BigQueryKeyFiles as unknown as {
         isBigQueryCleanupRegistered: boolean;
         registerBigQueryCleanup: () => void;
       };

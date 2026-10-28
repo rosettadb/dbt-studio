@@ -30,6 +30,7 @@ import DatabaseIcon from '@mui/icons-material/Storage';
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
 import { toast } from 'react-toastify';
 import { Cable } from '@mui/icons-material';
+import { connectionIcon } from '../../../connections/registry.renderer';
 import { projectsServices, connectorsServices } from '../../services';
 import {
   useDeleteProject,
@@ -50,13 +51,8 @@ import {
   NewProject,
 } from '../../components';
 import { icons } from '../../../../assets';
-import connectionIcons from '../../../../assets/connectionIcons';
 import { AppLayout } from '../../layouts';
-import {
-  Project,
-  SupportedConnectionTypes,
-  canUseAsDbtConnection,
-} from '../../../types/backend';
+import { Project, canUseAsDbtConnection } from '../../../types/backend';
 import {
   ConnectionIcon,
   EmptyStateContainer,
@@ -153,16 +149,16 @@ const SelectProject: React.FC = () => {
       return null;
     }
 
-    return connectionIcons.images[connType as SupportedConnectionTypes];
+    return connectionIcon(connType);
   };
 
   const renderProjectIcon = (project: Project) => {
-    const connectionIcon = getConnectionIcon(project);
+    const projectIconSrc = getConnectionIcon(project);
 
-    if (connectionIcon) {
+    if (projectIconSrc) {
       return (
         <ProjectIcon
-          src={connectionIcon}
+          src={projectIconSrc}
           alt={project?.dbtConnection?.type || 'database'}
         />
       );
@@ -175,8 +171,7 @@ const SelectProject: React.FC = () => {
   };
 
   const renderConnectionIcon = (connType: string) => {
-    const iconSrc =
-      connectionIcons.images[connType as SupportedConnectionTypes];
+    const iconSrc = connectionIcon(connType);
     if (iconSrc) {
       return <ConnectionIcon src={iconSrc} alt={connType} />;
     }

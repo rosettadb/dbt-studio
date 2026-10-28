@@ -1,5 +1,5 @@
 import driver, { connection } from '../../__setup__/oracledb.mock';
-import OracleExtractor from '../../../../src/main/extractor/oracle.extractor';
+import OracleExtractor from '../../../../src/connections/oracle/oracle.extractor.main';
 import type { OracleConnection } from '../../../../src/types/backend';
 
 const config: OracleConnection = {

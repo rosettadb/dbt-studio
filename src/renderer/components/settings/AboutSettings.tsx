@@ -1,6 +1,7 @@
 import React from 'react';
 import { Typography, Box, Link, Button } from '@mui/material';
 import {
+  ContentCopy,
   OpenInNew,
   RestoreFromTrash,
   InfoOutlined,
@@ -11,6 +12,7 @@ import {
 import { toast } from 'react-toastify';
 import { icons } from '../../../../assets';
 import { utils } from '../../helpers';
+import { getPlatform } from '../../lib/path';
 import { ResetFactoryModal } from '../modals';
 import { useResetFactorySettings } from '../../controllers';
 import {
@@ -46,6 +48,47 @@ export const AboutSettings: React.FC = () => {
     setIsResetModalOpen(false);
   };
 
+  const formatOsName = (platform: string): string => {
+    const map: Record<string, string> = {
+      darwin: 'macOS',
+      win32: 'Windows',
+      linux: 'Linux',
+    };
+    return map[platform] ?? platform;
+  };
+
+  const formatMemoryGiB = (bytes: number): string => {
+    const gib = bytes / 1024 ** 3;
+    return `${Math.round(gib)} GiB`;
+  };
+
+  const buildVersionDetails = () => {
+    const { version, osVersion, osArch, memory } = window.electron.app;
+    return [
+      `Studio: v${version}`,
+      `OS: ${formatOsName(getPlatform())} ${osVersion}`,
+      `Memory: ${formatMemoryGiB(memory)}`,
+      `Architecture: ${osArch}`,
+    ].join('\n');
+  };
+
+  const handleCopyVersionDetails = async () => {
+    try {
+      await navigator.clipboard.writeText(buildVersionDetails());
+      toast.success('Version details copied to clipboard');
+    } catch {
+      toast.error('Failed to copy to clipboard');
+    }
+  };
+
+  const buildReportIssueUrl = () => {
+    const params = new URLSearchParams({
+      template: 'bug_report.yml',
+      environment: buildVersionDetails(),
+    });
+    return `https://github.com/rosettadb/dbt-studio/issues/new?${params.toString()}`;
+  };
+
   const renderExternalLinkButton = (
     label: string,
     url: string,
@@ -77,18 +120,47 @@ export const AboutSettings: React.FC = () => {
       >
         <SettingsRow
           label={
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <img
-                src={icons.rosettaLabs}
-                width={20}
-                height={20}
-                alt="Rosetta Labs"
-              />
-              Version {window.electron.app.version} (Official Build)
+            <Box
+              sx={{ display: 'flex', flexDirection: 'column', gap: 0.1, mb: 1 }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <img
+                  src={icons.rosettaLabs}
+                  width={20}
+                  height={20}
+                  alt="Rosetta Labs"
+                />
+                Version {window.electron.app.version} (Official Build)
+              </Box>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                component="span"
+              >{`OS: ${formatOsName(getPlatform())} ${window.electron.app.osVersion}`}</Typography>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                component="span"
+              >{`Memory: ${formatMemoryGiB(window.electron.app.memory)}`}</Typography>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                component="span"
+              >{`Architecture: ${window.electron.app.osArch}`}</Typography>
             </Box>
           }
           description="Built with Electron and React"
-        />
+        >
+          <Button
+            size="small"
+            variant="outlined"
+            aria-label="Copy version details to clipboard"
+            startIcon={<ContentCopy fontSize="small" />}
+            onClick={handleCopyVersionDetails}
+          >
+            Copy
+          </Button>
+        </SettingsRow>
       </SettingsSection>
 
       <SettingsSection title="Help" icon={<HelpOutline />}>
@@ -102,8 +174,8 @@ export const AboutSettings: React.FC = () => {
         <SettingsRow label="Report an issue">
           {renderExternalLinkButton(
             'Open',
-            'https://github.com/rosettadb/dbt-studio/issues',
-            'Report an issue on GitHub',
+            buildReportIssueUrl(),
+            'Report an issue on GitHub with version info pre-filled',
           )}
         </SettingsRow>
         <SettingsRow label="Learn more about Rosetta DBT Studio">

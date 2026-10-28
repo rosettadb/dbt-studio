@@ -27,7 +27,11 @@ module.exports = {
       // never by sniffing the browser or reading the raw bridge. The first
       // four entries are airbnb's defaults, repeated because overriding the
       // rule replaces its options instead of merging them.
-      files: ['src/renderer/**/*.{ts,tsx}'],
+      files: [
+        'src/renderer/**/*.{ts,tsx}',
+        'src/connections/**/*.tsx',
+        'src/connections/**/*.renderer.ts',
+      ],
       excludedFiles: ['src/renderer/lib/path.ts'],
       rules: {
         'no-restricted-syntax': [
@@ -65,6 +69,14 @@ module.exports = {
               'Do not read window.electron.app.os directly. Use isWindows()/isMac()/getPlatform() or `path` from src/renderer/lib/path.',
           },
         ],
+      },
+    },
+    {
+      files: ['src/connections/**/*.{ts,tsx}'],
+      rules: {
+        // Connector methods implement a contract; many don't need `this`.
+        'class-methods-use-this': 'off',
+        '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       },
     },
   ],

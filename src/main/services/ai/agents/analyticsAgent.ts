@@ -3,6 +3,8 @@ import { z } from 'zod';
 import type { BaseAgentConfig } from './baseAgentConfig';
 import { createStudioConnectionsTools } from '../tools/studio/connections.tools';
 import { createStudioDuckLakeTools } from '../tools/studio/ducklake.tools';
+import { agentHintFor } from '../../../../connections/registry.main';
+import { isDuckLakeConnection } from '../../../../connections/ducklake/ducklake.shared';
 import { createStudioAnalyticsPagesTools } from '../tools/studio/analyticsPages.tools';
 import {
   createStudioSqlTools,
@@ -65,71 +67,7 @@ export async function createAnalyticsAgent(
       ? `\n\n## MCP Server Tools\nConnected MCP servers have exposed these external tools:\n${mcpToolKeys.map((k) => `- ${k}`).join('\n')}\nUse these tools when the user asks about MCP-backed documentation, repository/source-code reference, or external MCP capabilities.`
       : '';
 
-  // DuckLake is a DuckDB extension (not a JS package), version is fixed
-  let duckdbVersion = '1.5.2+';
-  const ducklakeVersion = '1.0';
-
-  try {
-    // eslint-disable-next-line global-require, @typescript-eslint/no-var-requires
-    const ddbPkg = require('@duckdb/node-api/package.json');
-    if (ddbPkg && ddbPkg.version) {
-      duckdbVersion = ddbPkg.version;
-    }
-  } catch (e) {
-    // fallback
-  }
-
-  let connectionHints = '';
-  switch (connectionMeta.type) {
-    case 'ducklake':
-      connectionHints = `\n\n## DuckLake Specifics
-You are connected to a DuckLake lakehouse. DuckLake is a DuckDB extension (not a separate library).
-- Versions: DuckDB v${duckdbVersion}, DuckLake extension minimal v${ducklakeVersion}.
-- Dialect: Use DuckDB SQL dialect and functions.
-- Attach: \`ATTACH 'ducklake:my.ducklake' AS my_ducklake; USE my_ducklake;\`
-- Time Travel: \`SELECT ... FROM tbl AT (VERSION => 2)\` or \`AT (TIMESTAMP => '2025-01-01')\`
-- Snapshots: \`FROM my_ducklake.snapshots();\`
-- Constraints: No indexes, primary keys, foreign keys, UNIQUE or CHECK constraints.
-- Updates: Modeled as deletes followed by inserts (append-only Parquet storage).
-- Detach: \`USE memory; DETACH my_ducklake;\``;
-      break;
-    case 'duckdb':
-      connectionHints =
-        '\n\n## Dialect Specifics\nYou are connected to DuckDB. Ensure all queries use DuckDB SQL syntax and functions.';
-      break;
-    case 'postgres':
-    case 'postgresql':
-      connectionHints =
-        '\n\n## Dialect Specifics\nYou are connected to PostgreSQL. Ensure all queries use PostgreSQL SQL syntax and functions.';
-      break;
-    case 'bigquery':
-      connectionHints =
-        '\n\n## Dialect Specifics\nYou are connected to Google BigQuery. Ensure all queries use BigQuery Standard SQL syntax.';
-      break;
-    case 'snowflake':
-      connectionHints =
-        '\n\n## Dialect Specifics\nYou are connected to Snowflake. Ensure all queries use Snowflake SQL syntax and functions.';
-      break;
-    case 'redshift':
-      connectionHints =
-        '\n\n## Dialect Specifics\nYou are connected to Amazon Redshift. Ensure all queries use Redshift SQL syntax and functions.';
-      break;
-    case 'databricks':
-      connectionHints =
-        '\n\n## Dialect Specifics\nYou are connected to Databricks. Ensure all queries use Databricks/Spark SQL syntax and functions.';
-      break;
-    case 'oracle':
-      connectionHints =
-        '\n\n## Oracle SQL\nUse FETCH FIRST n ROWS ONLY (no LIMIT); no AS before table aliases; unquoted identifiers are uppercase; dummy table is DUAL; do not end SQL with a semicolon; use DATE literals or TO_DATE; strings are VARCHAR2.';
-      break;
-    case 'kinetica':
-      connectionHints =
-        '\n\n## Dialect Specifics\nYou are connected to Kinetica. Ensure all queries use Kinetica SQL syntax and functions.';
-      break;
-    default:
-      connectionHints = `\n\n## Dialect Specifics\nYou are connected to a ${connectionMeta.type} database. Ensure all queries use the correct dialect for this database.`;
-      break;
-  }
+  const connectionHints = agentHintFor(connectionMeta.type, 'analytics');
 
   const isAskMode = options.toolMode === 'chat';
 
@@ -229,7 +167,7 @@ ${evidenceComponentRef}
 ${skills ?? ''}
 ${mcpToolsList}`;
 
-  const isDuckLake = connectionMeta.type === 'ducklake';
+  const isDuckLake = isDuckLakeConnection(connectionMeta);
 
   const studioAnalyticsTools: Record<string, any> = {
     ...createStudioConnectionsTools(),
