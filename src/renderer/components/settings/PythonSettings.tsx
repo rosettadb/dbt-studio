@@ -77,7 +77,9 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
     if (runningEnvironmentInstall) {
       const { label } = runningEnvironmentInstall;
       if (runningEnvironmentInstall.type !== 'install:dbt') {
-        lines.push(`"${label}" is running now and finishes first.`);
+        lines.push(
+          `"${label}" is running now and finishes first; it will be removed with the old environment.`,
+        );
       } else if (runningEnvironmentInstall.cancellable) {
         lines.push(`The running "${label}" will be stopped and removed.`);
       } else {
@@ -108,7 +110,7 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
         FINISH_BEFORE_PYTHON_INSTALL_TYPES.includes(
           runningEnvironmentInstall.type,
         )
-          ? `"${runningEnvironmentInstall.label}" is running now and finishes first.`
+          ? `"${runningEnvironmentInstall.label}" is running now and finishes first; it will be removed with the environment.`
           : `The running "${runningEnvironmentInstall.label}" will be stopped.`,
       );
     }
@@ -326,7 +328,7 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
         onClose={cancelVersionSwitch}
         onConfirm={confirmVersionSwitch}
         title="Switch Python Version"
-        question={`Are you sure you want to switch to Python ${pendingVersion}? This replaces the managed environment and removes dbt Core, Flowfile, and sqlglot, since they all live inside it. You'll need to reinstall them afterward. ${describeSwitchEffects()}`.trim()}
+        question={`Are you sure you want to switch to Python ${pendingVersion}? This replaces the managed environment and removes dbt Core, Flowfile, sqlglot, and pyiceberg (used by Data Lake), since they all live inside it. You'll need to reinstall them afterward. ${describeSwitchEffects()}`.trim()}
       />
 
       <ConfirmationModal
@@ -334,7 +336,7 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
         onClose={cancelUninstall}
         onConfirm={confirmUninstall}
         title="Uninstall Python"
-        question={`Are you sure you want to uninstall the embedded Python interpreter? This also removes dbt Core, Flowfile, and sqlglot, since they all live inside the same managed environment. You'll need to reinstall them. ${describeUninstallEffects()}`.trim()}
+        question={`Are you sure you want to uninstall the embedded Python interpreter? This also removes dbt Core, Flowfile, sqlglot, and pyiceberg (used by Data Lake), since they all live inside the same managed environment. You'll need to reinstall them. ${describeUninstallEffects()}`.trim()}
       />
     </SettingsStack>
   );

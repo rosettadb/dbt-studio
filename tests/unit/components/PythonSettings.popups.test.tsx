@@ -92,6 +92,47 @@ describe('PythonSettings popups', () => {
     expect(toast.error).not.toHaveBeenCalled();
   });
 
+  it('says a running pyiceberg install finishes first and is removed by the switch', () => {
+    mockActiveTasks = [
+      task('install:pyiceberg', 'Installing pyiceberg', 'running'),
+    ];
+    render(
+      <PythonSettings
+        settings={
+          {
+            pythonPath: '/managed/venv/bin/python3',
+            pythonVersion: '3.10.17',
+          } as any
+        }
+      />,
+    );
+    act(() => {
+      mockCallbacks.check.onSuccess({
+        currentVersion: '3.10.17',
+        currentPath: '/managed/venv/bin/python3',
+        recommendedVersion: '3.10.17',
+        availableVersions: [
+          {
+            version: '3.12.10',
+            isRecommended: false,
+            isNewer: true,
+            isOlder: false,
+          },
+        ],
+      });
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Upgrade' }));
+
+    const question = screen.getByText(/Are you sure you want to switch/);
+    expect(question).toHaveTextContent(
+      'removes dbt Core, Flowfile, sqlglot, and pyiceberg (used by Data Lake)',
+    );
+    expect(question).toHaveTextContent(
+      '"Installing pyiceberg" is running now and finishes first; it will be removed with the old environment.',
+    );
+  });
+
   it('tells you a switch cancels dbt installs and to install dbt Core first', () => {
     mockActiveTasks = [
       task('install:dbt', 'Installing dbt-snowflake', 'running'),
