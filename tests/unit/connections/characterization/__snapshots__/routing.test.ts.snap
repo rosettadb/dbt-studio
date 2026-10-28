@@ -1,0 +1,233 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`mysql routing classifies non-select statements 1`] = `
+{
+  "commandType": "DML",
+  "data": [],
+  "duration": 0,
+  "fields": [],
+  "isCommand": true,
+  "rowCount": 3,
+  "success": true,
+}
+`;
+
+exports[`mysql routing executeSelectStatement returns rows and closes the connection 1`] = `
+{
+  "closed": 1,
+  "config": {
+    "connectTimeout": 5000,
+    "database": "mydb",
+    "host": "mysql.example.com",
+    "password": "FIXTURE-SECRET-mysql-password",
+    "port": 3306,
+    "ssl": {
+      "rejectUnauthorized": false,
+    },
+    "user": "my_user",
+  },
+  "response": {
+    "data": [
+      {
+        "id": 1,
+      },
+    ],
+    "duration": 0,
+    "fields": [
+      {
+        "name": "id",
+        "type": 0,
+      },
+    ],
+    "rowCount": 1,
+    "success": true,
+  },
+  "sql": "SELECT 1",
+}
+`;
+
+exports[`postgres routing executeSelectStatement (ssl off) 1`] = `
+{
+  "clientConfig": {
+    "connectionTimeoutMillis": 5000,
+    "database": "pgdb",
+    "host": "pg.example.com",
+    "password": "FIXTURE-SECRET-postgres-password",
+    "port": 5432,
+    "user": "pg_user",
+  },
+  "closed": 1,
+  "response": {
+    "data": [
+      {
+        "id": 1,
+        "name": "a",
+      },
+    ],
+    "duration": 0,
+    "fields": [
+      {
+        "name": "id",
+        "type": 23,
+      },
+      {
+        "name": "name",
+        "type": 25,
+      },
+    ],
+    "rowCount": 1,
+    "success": true,
+  },
+  "sql": "SELECT 1",
+}
+`;
+
+exports[`postgres routing executeSelectStatement (ssl on, reject unauthorized false) 1`] = `
+{
+  "clientConfig": {
+    "connectionTimeoutMillis": 5000,
+    "database": "pgdb",
+    "host": "pg.example.com",
+    "password": "FIXTURE-SECRET-postgres-password",
+    "port": 5432,
+    "ssl": {
+      "rejectUnauthorized": false,
+    },
+    "user": "pg_user",
+  },
+  "closed": 1,
+  "response": {
+    "data": [
+      {
+        "id": 1,
+        "name": "a",
+      },
+    ],
+    "duration": 0,
+    "fields": [
+      {
+        "name": "id",
+        "type": 23,
+      },
+      {
+        "name": "name",
+        "type": 25,
+      },
+    ],
+    "rowCount": 1,
+    "success": true,
+  },
+  "sql": "SELECT 1",
+}
+`;
+
+exports[`redshift routing executeSelectStatement (ssl off) 1`] = `
+{
+  "clientConfig": {
+    "connectionTimeoutMillis": 15000,
+    "database": "rsdb",
+    "host": "rs.example.com",
+    "password": "FIXTURE-SECRET-redshift-password",
+    "port": 5439,
+    "ssl": {
+      "rejectUnauthorized": false,
+    },
+    "user": "rs_user",
+  },
+  "closed": 1,
+  "response": {
+    "data": [
+      {
+        "id": 1,
+        "name": "a",
+      },
+    ],
+    "duration": 0,
+    "fields": [
+      {
+        "name": "id",
+        "type": 23,
+      },
+      {
+        "name": "name",
+        "type": 25,
+      },
+    ],
+    "success": true,
+  },
+}
+`;
+
+exports[`redshift routing executeSelectStatement (ssl on with sslrootcert) 1`] = `
+{
+  "clientConfig": {
+    "connectionTimeoutMillis": 15000,
+    "database": "rsdb",
+    "host": "rs.example.com",
+    "password": "FIXTURE-SECRET-redshift-password",
+    "port": 5439,
+    "ssl": {
+      "ca": {
+        "data": [
+          67,
+          69,
+          82,
+          84,
+        ],
+        "type": "Buffer",
+      },
+      "rejectUnauthorized": false,
+    },
+    "user": "rs_user",
+  },
+  "closed": 1,
+  "response": {
+    "data": [
+      {
+        "id": 1,
+        "name": "a",
+      },
+    ],
+    "duration": 0,
+    "fields": [
+      {
+        "name": "id",
+        "type": 23,
+      },
+      {
+        "name": "name",
+        "type": 25,
+      },
+    ],
+    "success": true,
+  },
+}
+`;
+
+exports[`sqlite routing executeSelectStatement reads rows through better-sqlite3 1`] = `
+{
+  "closed": 1,
+  "ctorArgs": [
+    "/data/app.sqlite",
+    {
+      "fileMustExist": true,
+    },
+  ],
+  "response": {
+    "data": [
+      {
+        "id": 1,
+      },
+    ],
+    "duration": 0,
+    "fields": [
+      {
+        "name": "id",
+        "type": -1,
+      },
+    ],
+    "rowCount": 1,
+    "success": true,
+  },
+}
+`;

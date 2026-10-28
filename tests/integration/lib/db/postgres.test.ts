@@ -4,7 +4,7 @@ import * as os from 'os';
 import {
   testPostgresConnection,
   executePostgresQuery,
-} from '../../../../src/main/utils/connectors';
+} from '../../../../src/connections/postgres/postgres.client.main';
 import { PostgresConnection } from '../../../../src/types/backend';
 
 // Mock electron to prevent MainDatabaseService crash on import

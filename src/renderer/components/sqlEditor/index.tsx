@@ -9,6 +9,7 @@ import { QueryHistoryType } from '../../../types/frontend';
 import * as connectionTypes from '../../../types/backend';
 import type { ConnectionInput, Project, Table } from '../../../types/backend';
 import { SqlEditorComponent } from './editorComponent';
+import { isDuckLakeType } from '../../../connections/ducklake/ducklake.shared';
 import { useAppContext } from '../../hooks';
 import { useSqlEditorBridge } from '../../controllers';
 import { insertTextAtCursor } from '../../lib/monaco/insertText';
@@ -82,7 +83,8 @@ export const SqlEditor = React.forwardRef<SqlEditorHandle, Props>(
 
     // Detect if this is a DuckLake connection
     const isDuckLakeConnection =
-      connectionInput?.type === 'ducklake' &&
+      !!connectionInput &&
+      isDuckLakeType(connectionInput.type) &&
       'instanceId' in connectionInput &&
       !!connectionInput.instanceId;
 

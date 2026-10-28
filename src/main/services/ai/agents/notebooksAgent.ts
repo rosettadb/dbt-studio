@@ -4,6 +4,7 @@ import type { BaseAgentConfig } from './baseAgentConfig';
 import { createStudioCloudTools } from '../tools/studio/cloud.tools';
 import { createStudioConnectionsTools } from '../tools/studio/connections.tools';
 import { createStudioDuckLakeTools } from '../tools/studio/ducklake.tools';
+import { isDuckLakeConnection } from '../../../../connections/ducklake/ducklake.shared';
 import { createStudioNotebooksTools } from '../tools/studio/notebooks.tools';
 import { createPythonNotebookTools } from '../tools/studio/pythonNotebook.tools';
 import { createStudioSqlTools } from '../tools/studio/sql.tools';
@@ -104,7 +105,7 @@ function pickSchemaTool(
   connectionMeta: EnrichedConnectionMeta,
   conversationId: number,
 ): Record<string, any> {
-  if (connectionMeta.type === 'ducklake') {
+  if (isDuckLakeConnection(connectionMeta)) {
     const schemaTool =
       createStudioDuckLakeTools(conversationId).studio_ducklake_schema_extract;
     return schemaTool ? { studio_ducklake_schema_extract: schemaTool } : {};

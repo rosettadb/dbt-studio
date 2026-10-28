@@ -5,6 +5,7 @@ describe('dbt connection scope', () => {
     expect(canUseAsDbtConnection('removed-type')).toBe(false);
     expect(canUseAsDbtConnection('')).toBe(false);
     expect(canUseAsDbtConnection('constructor')).toBe(false);
+    expect(canUseAsDbtConnection('db2')).toBe(false);
   });
 
   it('keeps the query-only types out of dbt projects', () => {
@@ -20,9 +21,7 @@ describe('dbt connection scope', () => {
       'bigquery',
       'redshift',
       'databricks',
-      'mssql',
       'kinetica',
-      'googlecloud',
       'duckdb',
       'ducklake',
     ].forEach((type) => {

@@ -11,7 +11,7 @@ import {
   StartSnowflakeAuthRequest,
 } from '../../types/ipc';
 import { CloudConnection, RecentItem } from '../../types/frontend';
-import { SnowflakeAuthManager } from '../utils/snowflakeAuth';
+import { SnowflakeAuthManager } from '../../connections/snowflake/snowflake.auth.main';
 
 const handlerChannels = [
   'connector:configure',

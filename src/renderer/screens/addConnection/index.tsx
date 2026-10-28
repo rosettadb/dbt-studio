@@ -11,8 +11,11 @@ import {
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ConnectionCard } from '../../components/connectionCards';
-import connectionIcons from '../../../../assets/connectionIcons';
-import { Connections } from '../../components';
+import {
+  connectionFormFor,
+  connectionLabel,
+  creatableConnections,
+} from '../../../connections/registry.renderer';
 import {
   canUseAsDbtConnection,
   SupportedConnectionTypes,
@@ -46,68 +49,17 @@ const BackButtonContainer = styled(Box)`
 type ItemType = {
   id: SupportedConnectionTypes;
   name: string;
-  img: keyof typeof connectionIcons.images;
+  icon: string;
   disabled: boolean;
   dbtCompatible?: boolean;
 };
 
-const baseItems: ItemType[] = [
-  {
-    id: 'postgres',
-    name: 'PostgreSQL',
-    img: 'postgres',
-    disabled: false,
-  },
-  {
-    id: 'snowflake',
-    name: 'Snowflake',
-    img: 'snowflake',
-    disabled: false,
-  },
-  {
-    id: 'bigquery',
-    name: 'BigQuery',
-    img: 'bigquery',
-    disabled: false,
-  },
-  {
-    id: 'redshift',
-    name: 'Redshift',
-    img: 'redshift',
-    disabled: false,
-  },
-  {
-    id: 'databricks',
-    name: 'Databricks',
-    img: 'databricks',
-    disabled: false,
-  },
-  {
-    id: 'duckdb',
-    name: 'DuckDB',
-    img: 'duckdb',
-    disabled: false,
-  },
-  {
-    id: 'sqlite',
-    name: 'SQLite',
-    img: 'sqlite',
-    disabled: false,
-  },
-  {
-    id: 'kinetica',
-    name: 'Kinetica',
-    img: 'kinetica',
-    disabled: false,
-  },
-  { id: 'oracle', name: 'Oracle', img: 'oracle', disabled: false },
-  {
-    id: 'mysql',
-    name: 'MySQL',
-    img: 'mysql',
-    disabled: false,
-  },
-];
+const baseItems: ItemType[] = creatableConnections().map((ui) => ({
+  id: ui.type,
+  name: connectionLabel(ui.type) ?? ui.type,
+  icon: ui.icon,
+  disabled: false,
+}));
 
 const AddConnection: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -143,116 +95,15 @@ const AddConnection: React.FC = () => {
   };
 
   const renderComponent = () => {
-    switch (selectedItem?.id) {
-      case 'postgres': {
-        return (
-          <Connections.Postgres
-            onCancel={() => setSelectedItem(undefined)}
-            projectId={projectId}
-            duplicateFrom={duplicateData}
-            suggestedName={suggestedName}
-          />
-        );
-      }
-      case 'snowflake': {
-        return (
-          <Connections.Snowflake
-            onCancel={() => setSelectedItem(undefined)}
-            projectId={projectId}
-            duplicateFrom={duplicateData}
-            suggestedName={suggestedName}
-          />
-        );
-      }
-      case 'bigquery': {
-        return (
-          <Connections.BigQuery
-            onCancel={() => setSelectedItem(undefined)}
-            projectId={projectId}
-            duplicateFrom={duplicateData}
-            suggestedName={suggestedName}
-          />
-        );
-      }
-      case 'redshift': {
-        return (
-          <Connections.Redshift
-            onCancel={() => setSelectedItem(undefined)}
-            projectId={projectId}
-            duplicateFrom={duplicateData}
-            suggestedName={suggestedName}
-          />
-        );
-      }
-      case 'databricks': {
-        return (
-          <Connections.Databricks
-            onCancel={() => setSelectedItem(undefined)}
-            projectId={projectId}
-            duplicateFrom={duplicateData}
-            suggestedName={suggestedName}
-          />
-        );
-      }
-      case 'duckdb': {
-        return (
-          <Connections.DuckDB
-            onCancel={() => setSelectedItem(undefined)}
-            projectId={projectId}
-            duplicateFrom={duplicateData}
-            suggestedName={suggestedName}
-          />
-        );
-      }
-      case 'sqlite': {
-        return (
-          <Connections.SQLite
-            onCancel={() => setSelectedItem(undefined)}
-            duplicateFrom={duplicateData}
-            suggestedName={suggestedName}
-          />
-        );
-      }
-      case 'kinetica': {
-        return (
-          <Connections.Kinetica
-            onCancel={() => setSelectedItem(undefined)}
-            projectId={projectId}
-            duplicateFrom={duplicateData}
-            suggestedName={suggestedName}
-          />
-        );
-      }
-      case 'oracle': {
-        return (
-          <Connections.Oracle
-            onCancel={() => setSelectedItem(undefined)}
-            duplicateFrom={duplicateData}
-            suggestedName={suggestedName}
-          />
-        );
-      }
-      case 'mysql': {
-        return (
-          <Connections.MySql
-            onCancel={() => setSelectedItem(undefined)}
-            projectId={projectId}
-            duplicateFrom={duplicateData}
-            suggestedName={suggestedName}
-          />
-        );
-      }
-      default: {
-        return (
-          <Connections.Postgres
-            onCancel={() => setSelectedItem(undefined)}
-            projectId={projectId}
-            duplicateFrom={duplicateData}
-            suggestedName={suggestedName}
-          />
-        );
-      }
-    }
+    const Form = connectionFormFor(selectedItem?.id);
+    return (
+      <Form
+        onCancel={() => setSelectedItem(undefined)}
+        projectId={projectId}
+        duplicateFrom={duplicateData}
+        suggestedName={suggestedName}
+      />
+    );
   };
 
   return (

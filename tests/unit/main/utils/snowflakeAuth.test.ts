@@ -10,7 +10,7 @@ import { shell } from 'electron';
 import {
   SNOWFLAKE_REAUTH_MESSAGE,
   SnowflakeAuthManager,
-} from '../../../../src/main/utils/snowflakeAuth';
+} from '../../../../src/connections/snowflake/snowflake.auth.main';
 
 const createConnectionMock = snowflake.createConnection as jest.Mock;
 

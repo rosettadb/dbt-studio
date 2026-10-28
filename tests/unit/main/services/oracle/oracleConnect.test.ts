@@ -5,7 +5,7 @@ import driver, { connection } from '../../../__setup__/oracledb.mock';
 import {
   openOracleConnection,
   listOracleWalletAliases,
-} from '../../../../../src/main/utils/oracleHelper';
+} from '../../../../../src/connections/oracle/oracle.client.main';
 import type { OracleConnection } from '../../../../../src/types/backend';
 
 const conn: OracleConnection = {

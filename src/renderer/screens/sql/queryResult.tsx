@@ -23,6 +23,8 @@ import {
   BarChart as BarChartIcon,
   Image as ImageIcon,
 } from '@mui/icons-material';
+import { getDescriptor } from '../../../connections/registry.shared';
+import { isDuckLakeType } from '../../../connections/ducklake/ducklake.shared';
 import {
   QueryResponseType,
   SupportedConnectionTypes,
@@ -78,7 +80,8 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
   const resolvedOriginalSql = originalSql ?? (results as any).sql;
 
   const isDuckLake =
-    exportContext?.connectionType === 'ducklake' &&
+    !!exportContext &&
+    isDuckLakeType(exportContext.connectionType) &&
     !!exportContext.duckLakeInstanceId &&
     !!originalSql;
 
@@ -376,8 +379,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
   const canExportParquet =
     !!exportContext &&
     !!resolvedOriginalSql &&
-    (exportContext.connectionType === 'duckdb' ||
-      exportContext.connectionType === 'ducklake');
+    !!getDescriptor(exportContext.connectionType)?.capabilities.nativeExport;
 
   const handleExportParquet = async () => {
     if (!canExportParquet || !resolvedOriginalSql) return;
@@ -405,7 +407,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
       const exportQuery = `COPY (${baseSql}) TO '${escapedPath}' (FORMAT PARQUET)`;
 
       if (
-        exportContext.connectionType === 'ducklake' &&
+        isDuckLakeType(exportContext.connectionType) &&
         exportContext.duckLakeInstanceId
       ) {
         const duckLakeExportResult = await window.electron.ipcRenderer.invoke(
@@ -419,7 +421,8 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
           throw new Error(duckLakeExportResult.error);
         }
       } else if (
-        exportContext.connectionType === 'duckdb' &&
+        // other nativeExport types (DuckDB) run through connector:executeQuery
+        !isDuckLakeType(exportContext.connectionType) &&
         exportContext.connectionId
       ) {
         const duckDbExportResult = await window.electron.ipcRenderer.invoke(

@@ -7,7 +7,7 @@ import {
   scrubOracleSecrets,
   validateOracleConnection,
   parseOracleWalletAliases,
-} from '../../../src/shared/oracle';
+} from '../../../src/connections/oracle/oracle.helpers.shared';
 import {
   canUseAsDbtConnection,
   OracleConnection,

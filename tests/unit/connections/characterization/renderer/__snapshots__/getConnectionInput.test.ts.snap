@@ -1,0 +1,243 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`getConnectionInput characterization bigquery (location and batch priority) 1`] = `
+{
+  "keyFilename": "FIXTURE-SECRET-bigquery-keyfile",
+  "keyfile": "FIXTURE-SECRET-bigquery-keyfile",
+  "location": "EU",
+  "method": "service-account",
+  "priority": "batch",
+  "projectId": "my-project",
+  "schema": "my-project",
+  "type": "bigquery",
+}
+`;
+
+exports[`getConnectionInput characterization bigquery (service account, no location) 1`] = `
+{
+  "keyFilename": "FIXTURE-SECRET-bigquery-keyfile",
+  "keyfile": "FIXTURE-SECRET-bigquery-keyfile",
+  "location": undefined,
+  "method": "service-account",
+  "priority": undefined,
+  "projectId": "my-project",
+  "schema": "my-project",
+  "type": "bigquery",
+}
+`;
+
+exports[`getConnectionInput characterization databricks (default) 1`] = `
+{
+  "database": "main",
+  "host": "dbc.example.cloud.databricks.com",
+  "httpPath": "/sql/1.0/warehouses/abc",
+  "port": 443,
+  "schema": "default",
+  "token": "FIXTURE-SECRET-databricks-token",
+  "type": "databricks",
+}
+`;
+
+exports[`getConnectionInput characterization duckdb (absolute path with short_database_path) 1`] = `
+{
+  "database": "warehouse",
+  "database_path": "/data/warehouse.duckdb",
+  "name": "duck_short",
+  "schema": "main",
+  "type": "duckdb",
+}
+`;
+
+exports[`getConnectionInput characterization duckdb (without short_database_path) 1`] = `
+{
+  "database": "warehouse",
+  "database_path": "/data/warehouse.duckdb",
+  "name": "duck_noshort",
+  "schema": "main",
+  "type": "duckdb",
+}
+`;
+
+exports[`getConnectionInput characterization ducklake (duckdb catalog, s3 storage) 1`] = `undefined`;
+
+exports[`getConnectionInput characterization ducklake (sqlite catalog, local storage) 1`] = `undefined`;
+
+exports[`getConnectionInput characterization kinetica (host and port) 1`] = `
+{
+  "database": "kindb",
+  "host": "kin.example.com",
+  "password": "FIXTURE-SECRET-kinetica-password",
+  "port": 9191,
+  "schema": "ki_home",
+  "type": "kinetica",
+  "username": "kin_user",
+}
+`;
+
+exports[`getConnectionInput characterization kinetica (useSSL with bypassSslCertCheck) 1`] = `
+{
+  "database": "kindb",
+  "host": "kin.example.com",
+  "password": "FIXTURE-SECRET-kinetica-password",
+  "port": 9191,
+  "schema": "ki_home",
+  "type": "kinetica",
+  "username": "kin_user",
+}
+`;
+
+exports[`getConnectionInput characterization mysql (ssl on) 1`] = `
+{
+  "database": "mydb",
+  "host": "mysql.example.com",
+  "password": "FIXTURE-SECRET-mysql-password",
+  "port": 3306,
+  "schema": "mydb",
+  "ssl": true,
+  "type": "mysql",
+  "username": "my_user",
+}
+`;
+
+exports[`getConnectionInput characterization oracle (basic with tls) 1`] = `
+{
+  "connectMode": "basic",
+  "database": "ORCLPDB1",
+  "host": "ora.example.com",
+  "name": "ora_tls",
+  "password": "",
+  "port": 2484,
+  "schema": "ORA_USER",
+  "serviceName": "ORCLPDB1",
+  "tls": true,
+  "type": "oracle",
+  "username": "ora_user",
+}
+`;
+
+exports[`getConnectionInput characterization oracle (basic) 1`] = `
+{
+  "connectMode": "basic",
+  "database": "ORCLPDB1",
+  "host": "ora.example.com",
+  "name": "ora_basic",
+  "password": "",
+  "port": 1521,
+  "schema": "ORA_USER",
+  "serviceName": "ORCLPDB1",
+  "type": "oracle",
+  "username": "ora_user",
+}
+`;
+
+exports[`getConnectionInput characterization oracle (connect string) 1`] = `
+{
+  "connectMode": "connectString",
+  "connectString": "ora.example.com:1521/ORCLPDB1",
+  "database": "ORCLPDB1",
+  "name": "ora_cs",
+  "password": "",
+  "schema": "ORA_USER",
+  "type": "oracle",
+  "username": "ora_user",
+}
+`;
+
+exports[`getConnectionInput characterization oracle (wallet) 1`] = `
+{
+  "connectMode": "wallet",
+  "connectString": "mydb_high",
+  "database": "mydb_high",
+  "name": "ora_wallet",
+  "password": "",
+  "schema": "ORA_USER",
+  "type": "oracle",
+  "username": "ora_user",
+  "walletDir": "/wallets/mydb",
+  "walletPassword": "FIXTURE-SECRET-oracle-walletpassword",
+}
+`;
+
+exports[`getConnectionInput characterization postgres (ssl off) 1`] = `
+{
+  "database": "pgdb",
+  "host": "pg.example.com",
+  "password": "FIXTURE-SECRET-postgres-password",
+  "port": 5432,
+  "schema": "public",
+  "type": "postgres",
+  "username": "pg_user",
+}
+`;
+
+exports[`getConnectionInput characterization postgres (ssl on, reject unauthorized false) 1`] = `
+{
+  "database": "pgdb",
+  "host": "pg.example.com",
+  "password": "FIXTURE-SECRET-postgres-password",
+  "port": 5432,
+  "schema": "public",
+  "type": "postgres",
+  "username": "pg_user",
+}
+`;
+
+exports[`getConnectionInput characterization redshift (ssl off) 1`] = `
+{
+  "database": "rsdb",
+  "host": "rs.example.com",
+  "password": "FIXTURE-SECRET-redshift-password",
+  "port": 5439,
+  "schema": "public",
+  "type": "redshift",
+  "username": "rs_user",
+}
+`;
+
+exports[`getConnectionInput characterization redshift (ssl on with sslrootcert) 1`] = `
+{
+  "database": "rsdb",
+  "host": "rs.example.com",
+  "password": "FIXTURE-SECRET-redshift-password",
+  "port": 5439,
+  "schema": "public",
+  "type": "redshift",
+  "username": "rs_user",
+}
+`;
+
+exports[`getConnectionInput characterization snowflake (oauth_browser without role) 1`] = `
+{
+  "account": "acme-xy123",
+  "database": "SFDB",
+  "password": "",
+  "role": undefined,
+  "schema": "PUBLIC",
+  "type": "snowflake",
+  "username": "sf_user",
+  "warehouse": "WH",
+}
+`;
+
+exports[`getConnectionInput characterization snowflake (password with role) 1`] = `
+{
+  "account": "acme-xy123",
+  "database": "SFDB",
+  "password": "FIXTURE-SECRET-snowflake-password",
+  "role": "ANALYST",
+  "schema": "PUBLIC",
+  "type": "snowflake",
+  "username": "sf_user",
+  "warehouse": "WH",
+}
+`;
+
+exports[`getConnectionInput characterization sqlite (file path) 1`] = `
+{
+  "database": "/data/app.sqlite",
+  "database_path": "/data/app.sqlite",
+  "name": "lite",
+  "schema": "main",
+  "type": "sqlite",
+}
+`;

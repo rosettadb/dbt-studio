@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Typography } from '@mui/material';
-import { Connections } from '../../components';
+import { connectionFormFor } from '../../../connections/registry.renderer';
 import { useGetConnectionById } from '../../controllers';
 import {
   ConnectionModel,
@@ -25,107 +25,8 @@ const EditConnection: React.FC = () => {
     conn: ConnectionModel,
     connId: string,
   ) => {
-    switch (connectionType) {
-      case 'postgres': {
-        return (
-          <Connections.Postgres
-            key={connId}
-            onCancel={handleCancel}
-            connection={conn}
-          />
-        );
-      }
-      case 'snowflake': {
-        return (
-          <Connections.Snowflake
-            key={connId}
-            onCancel={handleCancel}
-            connection={conn}
-          />
-        );
-      }
-      case 'bigquery': {
-        return (
-          <Connections.BigQuery
-            key={connId}
-            onCancel={handleCancel}
-            connection={conn}
-          />
-        );
-      }
-      case 'redshift': {
-        return (
-          <Connections.Redshift
-            key={connId}
-            onCancel={handleCancel}
-            connection={conn}
-          />
-        );
-      }
-      case 'databricks': {
-        return (
-          <Connections.Databricks
-            key={connId}
-            onCancel={handleCancel}
-            connection={conn}
-          />
-        );
-      }
-      case 'duckdb': {
-        return (
-          <Connections.DuckDB
-            key={connId}
-            onCancel={handleCancel}
-            connection={conn}
-          />
-        );
-      }
-      case 'sqlite': {
-        return (
-          <Connections.SQLite
-            key={connId}
-            onCancel={handleCancel}
-            connection={conn}
-          />
-        );
-      }
-      case 'kinetica': {
-        return (
-          <Connections.Kinetica
-            key={connId}
-            onCancel={handleCancel}
-            connection={conn}
-          />
-        );
-      }
-      case 'oracle': {
-        return (
-          <Connections.Oracle
-            key={connId}
-            onCancel={handleCancel}
-            connection={conn}
-          />
-        );
-      }
-      case 'mysql': {
-        return (
-          <Connections.MySql
-            key={connId}
-            onCancel={handleCancel}
-            connection={conn}
-          />
-        );
-      }
-      default: {
-        return (
-          <Connections.Postgres
-            key={connId}
-            onCancel={handleCancel}
-            connection={conn}
-          />
-        );
-      }
-    }
+    const Form = connectionFormFor(connectionType);
+    return <Form key={connId} onCancel={handleCancel} connection={conn} />;
   };
 
   if (isLoading) {

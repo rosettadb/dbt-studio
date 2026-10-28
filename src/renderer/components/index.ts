@@ -11,7 +11,6 @@ export * from './sqlEditor/queryHistory';
 export * from './sqlEditor/noConnectioMessage';
 export * from './terminal';
 export * from './fileIcon';
-export * from './connections';
 export * from './overflowTip';
 export * from './shimmer';
 export * from './splitButton';

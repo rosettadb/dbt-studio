@@ -3,7 +3,7 @@ import {
   buildPagedQuery,
   buildCountQuery,
   removeTrailingPagination,
-} from '../../../../src/main/utils/oracleHelper';
+} from '../../../../src/connections/oracle/oracle.client.main';
 import ConnectorsService from '../../../../src/main/services/connectors.service';
 
 jest.mock('../../../../src/main/services/connectors.service', () => ({

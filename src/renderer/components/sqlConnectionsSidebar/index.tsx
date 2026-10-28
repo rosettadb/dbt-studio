@@ -20,12 +20,15 @@ import {
   OpenInNew as OpenInNewIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import {
+  connectionIcon,
+  connectionLabel,
+} from '../../../connections/registry.renderer';
 import { useGetConnections } from '../../controllers';
 import {
   SupportedConnectionTypes,
   ConnectionModel,
 } from '../../../types/backend';
-import connectionIcons from '../../../../assets/connectionIcons';
 import type { SqlTabState } from '../../../types/editor';
 
 // Styled ListItem for connection selection
@@ -79,21 +82,8 @@ const groupConnectionsByType = (connections: ConnectionModel[]) => {
 };
 
 // Format connection type for display
-const formatConnectionType = (type: string): string => {
-  const typeMap: Record<string, string> = {
-    postgres: 'PostgreSQL',
-    snowflake: 'Snowflake',
-    bigquery: 'BigQuery',
-    redshift: 'Redshift',
-    databricks: 'Databricks',
-    duckdb: 'DuckDB',
-    kinetica: 'Kinetica',
-    mysql: 'MySQL',
-    mssql: 'SQL Server',
-    oracle: 'Oracle',
-  };
-  return typeMap[type] || type.charAt(0).toUpperCase() + type.slice(1);
-};
+const formatConnectionType = (type: string): string =>
+  connectionLabel(type) ?? type.charAt(0).toUpperCase() + type.slice(1);
 
 interface SqlConnectionsSidebarProps {
   openTabs: SqlTabState[];
@@ -127,7 +117,7 @@ export const SqlConnectionsSidebar: React.FC<SqlConnectionsSidebarProps> = ({
   const connectionTypes = Object.keys(groupedConnections).sort();
 
   const getConnectionIcon = (connectionType: SupportedConnectionTypes) => {
-    const iconSrc = connectionIcons.images[connectionType];
+    const iconSrc = connectionIcon(connectionType);
     if (iconSrc) {
       return (
         <img

@@ -2,6 +2,7 @@ import keytar from 'keytar';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import MainDatabaseService from './mainDatabase.service';
+import { extraStoredKeyParts } from '../../connections/registry.shared';
 
 const execFileAsync = promisify(execFile);
 const MAC_KEYCHAIN_DELETE_LIMIT = 10_000;
@@ -218,7 +219,8 @@ class SecureStorageService {
       `db-dataset-${connectionId}`,
       `db-httppath-${connectionId}`,
       `db-catalog-${connectionId}`,
-    ];
+      ...extraStoredKeyParts().map((key) => `db-${key}-${connectionId}`),
+    ].filter((key, index, all) => all.indexOf(key) === index);
 
     await Promise.all(
       credentialTypes.map(async (credentialType) => {
