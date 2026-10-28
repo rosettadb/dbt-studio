@@ -312,8 +312,7 @@ const ConnectionsTab: React.FC<{ project: Project }> = ({ project }) => {
 const ExplorerTab: React.FC<{
   project: Project;
   openCreatePipeline?: boolean;
-  selectedPath?: string;
-}> = ({ project, openCreatePipeline, selectedPath }) => {
+}> = ({ project, openCreatePipeline }) => {
   const theme = useTheme();
   const { activeFilePath, openFile, closeTabByPath, renameTab } = useTabs();
   const { data: settings } = useGetSettings();
@@ -375,7 +374,7 @@ const ExplorerTab: React.FC<{
             onNewFileCallback={(filePath) => {
               if (filePath) openFile(filePath);
             }}
-            selectedPath={selectedPath ?? activeFilePath}
+            selectedPath={activeFilePath}
             onRenameCallback={renameTab}
             onRunPipeline={(filePath) =>
               setCloudRunArgs(
@@ -538,14 +537,12 @@ interface ProjectSidebarProps {
   activeTab: SidebarTab;
   project: Project;
   openCreatePipeline?: boolean;
-  selectedPath?: string;
 }
 
 export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   activeTab,
   project,
   openCreatePipeline,
-  selectedPath,
 }) => {
   return (
     <Box
@@ -561,7 +558,6 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
           <ExplorerTab
             project={project}
             openCreatePipeline={openCreatePipeline}
-            selectedPath={selectedPath}
           />
         )}
         {activeTab === 'search' && <SearchTab project={project} />}

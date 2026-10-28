@@ -12,11 +12,10 @@ import CloseIcon from '@mui/icons-material/Close';
 import SaveIcon from '@mui/icons-material/Save';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
-import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import { EditorTabId, EditorTabState } from '../../../../types/editor';
-import { path } from '../../../lib/path';
+import { path, isMac, isWindows } from '../../../lib/path';
 import { copyText } from '../../../lib/clipboard';
-import { openPath } from '../../../services/utils.service';
+import { showItemInFolder } from '../../../services/utils.service';
 import { TabContextMenu } from '../../tabContextMenu';
 import {
   TabBar,
@@ -39,7 +38,6 @@ interface TabManagerProps {
   onSaveAll?: () => void;
   onSaveTab?: (tabId: EditorTabId) => void;
   onRevealInFinder?: (filePath: string) => void;
-  onRevealInExplorer?: (filePath: string) => void;
   projectPath?: string;
   onReorder: (fromIndex: number, toIndex: number) => void;
 }
@@ -47,6 +45,13 @@ interface TabManagerProps {
 type DragState = {
   tabId: EditorTabId | null;
   overTabId: EditorTabId | null;
+};
+
+/** Native name of the OS file manager action. */
+const getShowInFileManagerLabel = (): string => {
+  if (isMac()) return 'Show in Finder';
+  if (isWindows()) return 'Show in File Explorer';
+  return 'Show in File Manager';
 };
 
 export const TabManager: React.FC<TabManagerProps> = ({
@@ -62,7 +67,6 @@ export const TabManager: React.FC<TabManagerProps> = ({
   onSaveAll,
   onSaveTab,
   onRevealInFinder,
-  onRevealInExplorer,
   projectPath,
   onReorder,
 }) => {
@@ -422,8 +426,7 @@ export const TabManager: React.FC<TabManagerProps> = ({
                       if (onRevealInFinder) {
                         onRevealInFinder(contextTab.path);
                       } else {
-                        const parentDir = path.dirname(contextTab.path);
-                        openPath(parentDir);
+                        showItemInFolder(contextTab.path);
                       }
                     }}
                     sx={{ py: 0.5, minHeight: 'auto', fontSize: '0.8rem' }}
@@ -434,25 +437,7 @@ export const TabManager: React.FC<TabManagerProps> = ({
                     <ListItemText
                       primaryTypographyProps={{ fontSize: '0.8rem' }}
                     >
-                      Reveal in Finder
-                    </ListItemText>
-                  </MenuItem>
-
-                  <MenuItem
-                    dense
-                    onClick={() => {
-                      setContextMenu(null);
-                      onRevealInExplorer?.(contextTab.path);
-                    }}
-                    sx={{ py: 0.5, minHeight: 'auto', fontSize: '0.8rem' }}
-                  >
-                    <ListItemIcon sx={{ minWidth: 28 }}>
-                      <AccountTreeIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText
-                      primaryTypographyProps={{ fontSize: '0.8rem' }}
-                    >
-                      Reveal in Explorer
+                      {getShowInFileManagerLabel()}
                     </ListItemText>
                   </MenuItem>
                 </>

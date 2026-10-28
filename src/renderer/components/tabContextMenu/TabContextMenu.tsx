@@ -46,6 +46,35 @@ export const TabContextMenu: React.FC<TabContextMenuProps> = ({
     onClose();
   };
 
+  // While the menu is open (or fading out), its invisible backdrop covers the
+  // tab bar and swallows right-clicks. Pass a right-click on the backdrop
+  // through to the element underneath, so right-clicking another tab reopens
+  // the menu for that tab instead of keeping the old tab's menu.
+  const handleRootContextMenu = (event: React.MouseEvent<HTMLElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const clicked = event.target as HTMLElement;
+    if (clicked.closest('[role="menu"]')) return;
+
+    const root = event.currentTarget;
+    const { clientX, clientY } = event;
+    const underneath = document
+      .elementsFromPoint?.(clientX, clientY)
+      .find((el) => !root.contains(el));
+
+    onClose();
+    underneath?.dispatchEvent(
+      new MouseEvent('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+        clientX,
+        clientY,
+        button: 2,
+        buttons: 2,
+      }),
+    );
+  };
+
   return (
     <Menu
       open={Boolean(anchorPosition)}
@@ -53,6 +82,7 @@ export const TabContextMenu: React.FC<TabContextMenuProps> = ({
       anchorReference="anchorPosition"
       anchorPosition={anchorPosition ?? undefined}
       MenuListProps={{ dense: true }}
+      onContextMenu={handleRootContextMenu}
     >
       <MenuItem
         dense

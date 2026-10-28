@@ -164,9 +164,12 @@ export interface UseTabManagerReturn {
   switchTab: (tabId: EditorTabId) => void;
   closeTab: (tabId: EditorTabId) => void;
   closeTabByPath: (path: string) => void;
-  closeTabsToLeft: (tabId: EditorTabId) => void;
-  closeTabsToRight: (tabId: EditorTabId) => void;
-  closeOtherTabs: (tabId: EditorTabId) => void;
+  /** Close tabs to the left; changed tabs stay open. Returns how many were kept. */
+  closeTabsToLeft: (tabId: EditorTabId) => number;
+  /** Close tabs to the right; changed tabs stay open. Returns how many were kept. */
+  closeTabsToRight: (tabId: EditorTabId) => number;
+  /** Close all other tabs; changed tabs stay open. Returns how many were kept. */
+  closeOtherTabs: (tabId: EditorTabId) => number;
   closeAllSaved: () => void;
   updateTabContent: (
     tabId: EditorTabId,
@@ -333,59 +336,62 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
     [projectId],
   );
 
-  const closeTabsToLeft = React.useCallback(
-    (tabId: EditorTabId) => {
-      setTabs((current) => {
-        const index = current.findIndex((t) => t.id === tabId);
-        if (index <= 0) return current;
-        const toRemove = current.slice(0, index);
-        toRemove.forEach((t) => {
+  /**
+   * Closes the given tabs except ones with unsaved changes, which stay open
+   * (same rule as Close All). If the active tab closes, `fallbackActiveId`
+   * becomes active. Returns how many changed tabs were kept open.
+   */
+  const closeUnmodifiedTabs = React.useCallback(
+    (candidates: EditorTabState[], fallbackActiveId: EditorTabId): number => {
+      const toClose = candidates.filter((t) => !t.isModified);
+      if (toClose.length > 0) {
+        const closeIds = new Set(toClose.map((t) => t.id));
+        toClose.forEach((t) => {
           disposeModelForPath(projectId, t.path);
           clearViewState(t.id);
         });
-        const remaining = current.slice(index);
-        if (activeTabId && toRemove.some((t) => t.id === activeTabId)) {
-          setActiveTabId(tabId);
-        }
-        return remaining;
-      });
+        setTabs((current) => current.filter((t) => !closeIds.has(t.id)));
+        setActiveTabId((currentId) =>
+          currentId && closeIds.has(currentId) ? fallbackActiveId : currentId,
+        );
+      }
+      return candidates.length - toClose.length;
     },
-    [activeTabId, projectId],
+    [projectId],
+  );
+
+  const closeTabsToLeft = React.useCallback(
+    (tabId: EditorTabId): number => {
+      const { current } = tabsRef;
+      const index = current.findIndex((t) => t.id === tabId);
+      if (index <= 0) return 0;
+      return closeUnmodifiedTabs(current.slice(0, index), tabId);
+    },
+    [closeUnmodifiedTabs],
   );
 
   const closeTabsToRight = React.useCallback(
-    (tabId: EditorTabId) => {
-      setTabs((current) => {
-        const index = current.findIndex((t) => t.id === tabId);
-        if (index === -1 || index === current.length - 1) return current;
-        const toRemove = current.slice(index + 1);
-        toRemove.forEach((t) => {
-          disposeModelForPath(projectId, t.path);
-          clearViewState(t.id);
-        });
-        const remaining = current.slice(0, index + 1);
-        if (activeTabId && toRemove.some((t) => t.id === activeTabId)) {
-          setActiveTabId(tabId);
-        }
-        return remaining;
-      });
+    (tabId: EditorTabId): number => {
+      const { current } = tabsRef;
+      const index = current.findIndex((t) => t.id === tabId);
+      if (index === -1 || index === current.length - 1) return 0;
+      return closeUnmodifiedTabs(current.slice(index + 1), tabId);
     },
-    [activeTabId, projectId],
+    [closeUnmodifiedTabs],
   );
 
   const closeOtherTabs = React.useCallback(
-    (tabId: EditorTabId) => {
-      setTabs((current) => {
-        const toRemove = current.filter((t) => t.id !== tabId);
-        toRemove.forEach((t) => {
-          disposeModelForPath(projectId, t.path);
-          clearViewState(t.id);
-        });
-        return current.filter((t) => t.id === tabId);
-      });
+    (tabId: EditorTabId): number => {
+      const { current } = tabsRef;
+      if (!current.some((t) => t.id === tabId)) return 0;
+      const kept = closeUnmodifiedTabs(
+        current.filter((t) => t.id !== tabId),
+        tabId,
+      );
       setActiveTabId(tabId);
+      return kept;
     },
-    [projectId],
+    [closeUnmodifiedTabs],
   );
 
   const closeAllSaved = React.useCallback(() => {

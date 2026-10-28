@@ -84,7 +84,6 @@ const ProjectDetails: React.FC = () => {
     ['auto', 500],
   );
   const [sidebarTab, setSidebarTab] = React.useState<SidebarTab>('explorer');
-  const [selectedPath, setSelectedPath] = React.useState<string | null>(null);
 
   const { isChatOpen } = useAppContext();
   const { data: project, isLoading } = useGetSelectedProject();
@@ -109,11 +108,6 @@ const ProjectDetails: React.FC = () => {
     saveTab,
     reorderTabs,
   } = useTabs();
-
-  const handleRevealInExplorer = React.useCallback((filePath: string) => {
-    setSidebarTab('explorer');
-    setSelectedPath(filePath);
-  }, []);
 
   if (isLoading) {
     return <Loader />;
@@ -234,7 +228,6 @@ const ProjectDetails: React.FC = () => {
               activeTab={sidebarTab}
               project={project}
               openCreatePipeline={openCreatePipeline}
-              selectedPath={selectedPath ?? undefined}
             />
           </Box>
         </Box>
@@ -275,7 +268,6 @@ const ProjectDetails: React.FC = () => {
                         onCloseAll={closeAll}
                         onSaveAll={saveAll}
                         onSaveTab={saveTab}
-                        onRevealInExplorer={handleRevealInExplorer}
                         projectPath={project?.path}
                         onReorder={reorderTabs}
                       />
