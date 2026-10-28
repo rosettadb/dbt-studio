@@ -57,14 +57,23 @@ export const executeMySqlQuery = async (
       });
     }
 
-    const [rows] = await connection.query(query);
+    const [rows, rawFields] = await connection.query(query);
 
     if (Array.isArray(rows)) {
       const data = rows as any[];
-      const fields =
-        data.length > 0
-          ? Object.keys(data[0]).map((name) => ({ name, type: 0 }))
-          : [];
+      // mysql2 returns field metadata for SELECTs even when there are no rows.
+      const fieldPackets = Array.isArray(rawFields) ? rawFields : [];
+
+      let fields: { name: string; type: number }[] = [];
+      if (fieldPackets.length > 0) {
+        fields = fieldPackets.map((field: any) => ({
+          name: field.name,
+          type: 0,
+        }));
+      } else if (data.length > 0) {
+        fields = Object.keys(data[0]).map((name) => ({ name, type: 0 }));
+      }
+
       return {
         success: true,
         data,

@@ -46,7 +46,7 @@ type Props = {
   setLoadingQuery: (v: boolean) => void;
   setQueryResults: (v: any) => void;
   setError: (v: any) => void;
-  onQueryStart?: (queryId: string) => void;
+  onQueryStart?: (queryId: string, query: string) => void;
   onQuerySuccess?: () => void;
   isLoading?: boolean;
 };
@@ -151,7 +151,7 @@ export const SqlEditor = React.forwardRef<SqlEditorHandle, Props>(
       setLoadingQuery(true);
 
       if (onQueryStart) {
-        onQueryStart(queryId);
+        onQueryStart(queryId, selectedQuery);
       }
 
       try {

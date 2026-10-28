@@ -7,6 +7,16 @@ import {
   QueryResponseType,
 } from '../../types/backend';
 
+const BQ_NUMERIC_TYPES = new Set([
+  'INTEGER',
+  'INT64',
+  'FLOAT',
+  'FLOAT64',
+  'NUMERIC',
+  'BIGNUMERIC',
+  'DECIMAL',
+]);
+
 export async function testBigQueryConnection(
   config: BigQueryConnection,
 ): Promise<BigQueryTestResponse> {
@@ -120,14 +130,25 @@ export const executeBigQueryQuery = async (
       options.priority = 'BATCH';
     }
 
-    const [rows] = await client.query(options);
-    const fields =
-      rows.length > 0
-        ? Object.keys(rows[0]).map((name) => ({
-            name,
-            type: typeof rows[0][name] === 'number' ? 1 : 0,
-          }))
-        : [];
+    const [rows, , response] = await client.query(options);
+    // Prefer the response schema: it survives an empty result set, where
+    // deriving columns from rows[0] would leave the renderer with no fields
+    // and make an empty SELECT look like a DDL command.
+    const schemaFields: { name: string; type?: string }[] =
+      (response as any)?.schema?.fields ?? [];
+
+    let fields: { name: string; type: number }[] = [];
+    if (schemaFields.length > 0) {
+      fields = schemaFields.map((field) => ({
+        name: field.name,
+        type: BQ_NUMERIC_TYPES.has(String(field.type)) ? 1 : 0,
+      }));
+    } else if (rows.length > 0) {
+      fields = Object.keys(rows[0]).map((name) => ({
+        name,
+        type: typeof rows[0][name] === 'number' ? 1 : 0,
+      }));
+    }
 
     return {
       success: true,

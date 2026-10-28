@@ -26,22 +26,47 @@ const IconWrapper = styled(Box)(() => ({
 type Props = {
   title?: string;
   description?: string;
+  query?: string;
 };
 
 export const ErrorMessage: React.FC<Props> = ({
   title = 'Something went wrong',
   description = 'Please try again or contact support.',
+  query,
 }) => {
   return (
     <ErrorContainer data-testid="sql-error-message">
       <IconWrapper>
         <ErrorOutlineIcon fontSize="large" color="error" />
       </IconWrapper>
-      <Box>
+      <Box sx={{ minWidth: 0, flex: 1 }}>
         <Typography variant="h6" fontWeight="bold">
           {title}
         </Typography>
         <Typography variant="body2">{description}</Typography>
+        {query && query.trim() && (
+          <Box
+            component="pre"
+            sx={{
+              mt: 1,
+              mb: 0,
+              p: 1,
+              bgcolor: 'action.hover',
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 1,
+              fontFamily: 'monospace',
+              fontSize: '0.8rem',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              maxHeight: 160,
+              overflow: 'auto',
+              color: 'text.primary',
+            }}
+          >
+            {query.trim()}
+          </Box>
+        )}
       </Box>
     </ErrorContainer>
   );
