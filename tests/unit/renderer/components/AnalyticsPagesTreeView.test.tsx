@@ -63,18 +63,19 @@ const page: AnalyticsPage = {
   updatedAt: '2026-01-01T00:00:00.000Z',
 };
 
-// The tooltip text labels the wrapper around the build button
-const buildButton = (label: string) => {
-  const labelled = screen.getByLabelText(label);
-  return (labelled.querySelector('button') ?? labelled) as HTMLButtonElement;
-};
+const buildButton = () =>
+  screen.getByRole('button', { name: 'Build Static Site' });
 
 describe('AnalyticsPagesTreeView build button', () => {
   it('is disabled with a hint when there are no pages', () => {
     mockUseGetAnalyticsPages.mockReturnValue({ data: [], isLoading: false });
     renderTreeView();
 
-    expect(buildButton('Create a page first to build the site')).toBeDisabled();
+    expect(buildButton()).toBeDisabled();
+    // The tooltip text labels the wrapper around the build button
+    expect(
+      screen.getByLabelText('Create a page first to build the site'),
+    ).toBeInTheDocument();
   });
 
   it('is enabled when there is at least one page', () => {
@@ -84,6 +85,6 @@ describe('AnalyticsPagesTreeView build button', () => {
     });
     renderTreeView();
 
-    expect(buildButton('Build Static Site')).toBeEnabled();
+    expect(buildButton()).toBeEnabled();
   });
 });

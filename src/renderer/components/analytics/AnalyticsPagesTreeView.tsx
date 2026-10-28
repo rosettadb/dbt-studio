@@ -321,6 +321,7 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
             <span>
               <IconButton
                 size="small"
+                aria-label="Build Static Site"
                 onClick={() => setBuildDialogOpen(true)}
                 disabled={isBuilding || pages.length === 0}
                 color={isBuilding ? 'primary' : 'default'}
