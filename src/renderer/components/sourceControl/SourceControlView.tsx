@@ -17,6 +17,7 @@ import {
   useGitInit,
 } from '../../controllers';
 import { QUERY_KEYS } from '../../config/constants';
+import { path } from '../../lib/path';
 
 // Git Init Button Component
 interface GitInitButtonProps {
@@ -238,7 +239,7 @@ export const SourceControlView: React.FC<SourceControlViewProps> = ({
   const handleDiscard = (filePath: string) => {
     if (projectPath) {
       // Get just the filename for display
-      const fileName = filePath.split('/').pop() || filePath;
+      const fileName = path.basename(filePath) || filePath;
 
       // Show confirmation dialog
       setDiscardConfirmation({
@@ -383,6 +384,7 @@ export const SourceControlView: React.FC<SourceControlViewProps> = ({
         {/* Changes Section */}
         <ChangesSection
           fileStatuses={fileStatuses}
+          projectPath={projectPath}
           onStage={handleStage}
           onUnstage={handleUnstage}
           onStageAll={handleStageAll}
