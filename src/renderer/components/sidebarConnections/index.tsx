@@ -17,11 +17,10 @@ import {
   Cloud as CloudIcon,
 } from '@mui/icons-material';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { connectionIcon } from '../../../connections/registry.renderer';
 import { useGetConnections, useGetCloudConnections } from '../../controllers';
 import { SupportedConnectionTypes } from '../../../types/backend';
-import connectionIcons, {
-  cloudStorageImages,
-} from '../../../../assets/connectionIcons';
+import { cloudStorageImages } from '../../../../assets/connectionIcons';
 import { CloudProvider } from '../../../types/frontend';
 
 // Styled NavLink for consistent hover/active styles
@@ -72,7 +71,7 @@ export const ConnectionsSidebar: React.FC = () => {
   );
 
   const getConnectionIcon = (connectionType: SupportedConnectionTypes) => {
-    const iconSrc = connectionIcons.images[connectionType];
+    const iconSrc = connectionIcon(connectionType);
     if (iconSrc) {
       return (
         <img

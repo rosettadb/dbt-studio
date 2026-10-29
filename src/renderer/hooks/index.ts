@@ -7,7 +7,6 @@ import useCommandHistory from './useCommandHistory';
 import useRosettaExtract from './useRosettaExtract';
 import useRosettaDBT from './useRosettaDBT';
 import useDbt from './useDbt';
-import useConnectionInput from './useConnectionInput';
 import useProcess from './useProcessContext';
 import useRunner from './useRunnerContext';
 import useSecureStorage from './useSecureStorage';
@@ -24,6 +23,8 @@ import { useProjectSqlExecution } from './useProjectSqlExecution';
 
 import { useAgentStream } from './useAgentStream';
 import { useTaskChannel } from './useTaskChannel';
+import { useIsTaskTypeActive } from './useIsTaskTypeActive';
+import { useActiveInstallTasks } from './useActiveInstallTasks';
 
 export {
   useIpcPromise,
@@ -35,7 +36,6 @@ export {
   useRosettaExtract,
   useRosettaDBT,
   useDbt,
-  useConnectionInput,
   useProcess,
   useRunner,
   useSecureStorage,
@@ -51,4 +51,6 @@ export {
   useProjectSqlExecution,
   useAgentStream,
   useTaskChannel,
+  useIsTaskTypeActive,
+  useActiveInstallTasks,
 };

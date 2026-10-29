@@ -1,0 +1,720 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`rosetta generation characterization bigquery (location and batch priority): generateJdbcUrl 1`] = `"jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=\${db-project-bq_loc};OAuthType=0;OAuthServiceAcctEmail=\${db-bigquery-email-bq_loc};OAuthPvtKeyPath=\${db-bigquery-bq_loc};"`;
+
+exports[`rosetta generation characterization bigquery (location and batch priority): generateRosettaYml 1`] = `
+"openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-project-bq_loc}
+    schemaName: \${db-dataset-bq_loc}
+    dbType: bigquery
+    url: >-
+      jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=\${db-project-bq_loc};OAuthType=0;OAuthServiceAcctEmail=\${db-bigquery-email-bq_loc};OAuthPvtKeyPath=\${db-bigquery-bq_loc};
+"
+`;
+
+exports[`rosetta generation characterization bigquery (location and batch priority): mapToRosettaConnection 1`] = `
+{
+  "databaseName": "my-project",
+  "dbType": "bigquery",
+  "name": "bq_loc",
+  "schemaName": "my_dataset",
+  "url": "jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=\${db-project-bq_loc};OAuthType=0;OAuthServiceAcctEmail=\${db-bigquery-email-bq_loc};OAuthPvtKeyPath=\${db-bigquery-bq_loc};",
+}
+`;
+
+exports[`rosetta generation characterization bigquery (location and batch priority): updateMainConf entry 1`] = `
+{
+  "after": "openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-project-bq_loc}
+    schemaName: \${db-dataset-bq_loc}
+    dbType: bigquery
+    url: jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=\${db-project-bq_loc};OAuthType=0;OAuthServiceAcctEmail=\${db-bigquery-email-bq_loc};OAuthPvtKeyPath=\${db-bigquery-bq_loc};
+",
+  "full": "openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-project-bq_loc}
+    schemaName: \${db-dataset-bq_loc}
+    dbType: bigquery
+    url: >-
+      jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=\${db-project-bq_loc};OAuthType=0;OAuthServiceAcctEmail=\${db-bigquery-email-bq_loc};OAuthPvtKeyPath=\${db-bigquery-bq_loc};
+",
+  "tag": null,
+}
+`;
+
+exports[`rosetta generation characterization bigquery (service account, no location): generateJdbcUrl 1`] = `"jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=\${db-project-bq_plain};OAuthType=0;OAuthServiceAcctEmail=\${db-bigquery-email-bq_plain};OAuthPvtKeyPath=\${db-bigquery-bq_plain};"`;
+
+exports[`rosetta generation characterization bigquery (service account, no location): generateRosettaYml 1`] = `
+"openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-project-bq_plain}
+    schemaName: \${db-dataset-bq_plain}
+    dbType: bigquery
+    url: >-
+      jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=\${db-project-bq_plain};OAuthType=0;OAuthServiceAcctEmail=\${db-bigquery-email-bq_plain};OAuthPvtKeyPath=\${db-bigquery-bq_plain};
+"
+`;
+
+exports[`rosetta generation characterization bigquery (service account, no location): mapToRosettaConnection 1`] = `
+{
+  "databaseName": "my-project",
+  "dbType": "bigquery",
+  "name": "bq_plain",
+  "schemaName": "my_dataset",
+  "url": "jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=\${db-project-bq_plain};OAuthType=0;OAuthServiceAcctEmail=\${db-bigquery-email-bq_plain};OAuthPvtKeyPath=\${db-bigquery-bq_plain};",
+}
+`;
+
+exports[`rosetta generation characterization bigquery (service account, no location): updateMainConf entry 1`] = `
+{
+  "after": "openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-project-bq_plain}
+    schemaName: \${db-dataset-bq_plain}
+    dbType: bigquery
+    url: jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=\${db-project-bq_plain};OAuthType=0;OAuthServiceAcctEmail=\${db-bigquery-email-bq_plain};OAuthPvtKeyPath=\${db-bigquery-bq_plain};
+",
+  "full": "openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-project-bq_plain}
+    schemaName: \${db-dataset-bq_plain}
+    dbType: bigquery
+    url: >-
+      jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=\${db-project-bq_plain};OAuthType=0;OAuthServiceAcctEmail=\${db-bigquery-email-bq_plain};OAuthPvtKeyPath=\${db-bigquery-bq_plain};
+",
+  "tag": null,
+}
+`;
+
+exports[`rosetta generation characterization databricks (default): generateJdbcUrl 1`] = `"jdbc:databricks://\${db-host-dbx}:443/default;transportMode=http;ssl=1;AuthMech=3;httpPath=\${db-httppath-dbx};PWD=\${db-token-dbx}"`;
+
+exports[`rosetta generation characterization databricks (default): generateRosettaYml 1`] = `
+"openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-catalog-dbx}
+    schemaName: \${db-schema-dbx}
+    dbType: databricks
+    url: >-
+      jdbc:databricks://\${db-host-dbx}:443/default;transportMode=http;ssl=1;AuthMech=3;httpPath=\${db-httppath-dbx};PWD=\${db-token-dbx}
+"
+`;
+
+exports[`rosetta generation characterization databricks (default): mapToRosettaConnection 1`] = `
+{
+  "databaseName": "main",
+  "dbType": "databricks",
+  "name": "dbx",
+  "schemaName": "default",
+  "url": "jdbc:databricks://\${db-host-dbx}:443/default;transportMode=http;ssl=1;AuthMech=3;httpPath=\${db-httppath-dbx};PWD=\${db-token-dbx}",
+}
+`;
+
+exports[`rosetta generation characterization databricks (default): updateMainConf entry 1`] = `
+{
+  "after": "openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-catalog-dbx}
+    schemaName: \${db-schema-dbx}
+    dbType: databricks
+    url: jdbc:databricks://\${db-host-dbx}:443/default;transportMode=http;ssl=1;AuthMech=3;httpPath=\${db-httppath-dbx};PWD=\${db-token-dbx}
+",
+  "full": "openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-catalog-dbx}
+    schemaName: \${db-schema-dbx}
+    dbType: databricks
+    url: >-
+      jdbc:databricks://\${db-host-dbx}:443/default;transportMode=http;ssl=1;AuthMech=3;httpPath=\${db-httppath-dbx};PWD=\${db-token-dbx}
+",
+  "tag": "DIFF-5",
+}
+`;
+
+exports[`rosetta generation characterization duckdb (absolute path with short_database_path): generateJdbcUrl 1`] = `"jdbc:duckdb:/data/warehouse.duckdb"`;
+
+exports[`rosetta generation characterization duckdb (absolute path with short_database_path): generateRosettaYml 1`] = `
+"openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: warehouse
+    schemaName: main
+    dbType: duckdb
+    url: jdbc:duckdb:/data/warehouse.duckdb
+"
+`;
+
+exports[`rosetta generation characterization duckdb (absolute path with short_database_path): mapToRosettaConnection 1`] = `
+{
+  "databaseName": "/data/warehouse.duckdb",
+  "dbType": "duckdb",
+  "name": "duck_short",
+  "schemaName": "main",
+  "url": "jdbc:duckdb:/data/warehouse.duckdb",
+}
+`;
+
+exports[`rosetta generation characterization duckdb (absolute path with short_database_path): updateMainConf entry 1`] = `
+{
+  "after": "openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: warehouse
+    schemaName: main
+    dbType: duckdb
+    url: jdbc:duckdb:/data/warehouse.duckdb
+",
+  "full": "openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: warehouse
+    schemaName: main
+    dbType: duckdb
+    url: jdbc:duckdb:/data/warehouse.duckdb
+",
+  "tag": "DIFF-6",
+}
+`;
+
+exports[`rosetta generation characterization duckdb (without short_database_path): generateJdbcUrl 1`] = `"jdbc:duckdb:/data/warehouse.duckdb"`;
+
+exports[`rosetta generation characterization duckdb (without short_database_path): generateRosettaYml 1`] = `
+"openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: warehouse
+    schemaName: main
+    dbType: duckdb
+    url: jdbc:duckdb:/data/warehouse.duckdb
+"
+`;
+
+exports[`rosetta generation characterization duckdb (without short_database_path): mapToRosettaConnection 1`] = `
+{
+  "databaseName": "/data/warehouse.duckdb",
+  "dbType": "duckdb",
+  "name": "duck_noshort",
+  "schemaName": "main",
+  "url": "jdbc:duckdb:/data/warehouse.duckdb",
+}
+`;
+
+exports[`rosetta generation characterization duckdb (without short_database_path): updateMainConf entry 1`] = `
+{
+  "after": "openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: warehouse
+    schemaName: main
+    dbType: duckdb
+    url: jdbc:duckdb:/data/warehouse.duckdb
+",
+  "full": "openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: warehouse
+    schemaName: main
+    dbType: duckdb
+    url: jdbc:duckdb:/data/warehouse.duckdb
+",
+  "tag": "DIFF-6",
+}
+`;
+
+exports[`rosetta generation characterization ducklake (duckdb catalog, s3 storage): generateJdbcUrl 1`] = `"jdbc:duckdb:"`;
+
+exports[`rosetta generation characterization ducklake (duckdb catalog, s3 storage): generateRosettaYml 1`] = `
+"openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: proj
+    schemaName: main
+    dbType: ducklake
+    url: 'jdbc:duckdb:'
+    ducklakeDataPath: s3://bucket/lake
+    ducklakeMetadataDb: /meta/s3.duckdb
+    s3Region: \${db-s3-region-dl_s3}
+    s3AccessKeyId: \${db-s3-access-key-dl_s3}
+    s3SecretAccessKey: \${db-s3-secret-key-dl_s3}
+"
+`;
+
+exports[`rosetta generation characterization ducklake (duckdb catalog, s3 storage): mapToRosettaConnection 1`] = `
+{
+  "databaseName": "",
+  "dbType": "ducklake",
+  "name": "dl_s3",
+  "schemaName": "",
+  "url": "jdbc:duckdb:",
+}
+`;
+
+exports[`rosetta generation characterization ducklake (sqlite catalog, local storage): generateJdbcUrl 1`] = `"jdbc:duckdb:"`;
+
+exports[`rosetta generation characterization ducklake (sqlite catalog, local storage): generateRosettaYml 1`] = `
+"openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: proj
+    schemaName: main
+    dbType: ducklake
+    url: 'jdbc:duckdb:'
+    ducklakeDataPath: /data/lake
+    ducklakeMetadataDb: /meta/local.sqlite
+"
+`;
+
+exports[`rosetta generation characterization ducklake (sqlite catalog, local storage): mapToRosettaConnection 1`] = `
+{
+  "databaseName": "",
+  "dbType": "ducklake",
+  "name": "dl_local",
+  "schemaName": "",
+  "url": "jdbc:duckdb:",
+}
+`;
+
+exports[`rosetta generation characterization kinetica (host and port): generateJdbcUrl 1`] = `"jdbc:kinetica:URL=http://kin.example.com:9191"`;
+
+exports[`rosetta generation characterization kinetica (host and port): generateRosettaYml 1`] = `
+"openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-dbname-kin_plain}
+    schemaName: \${db-schema-kin_plain}
+    dbType: kinetica
+    url: jdbc:kinetica:URL=http://kin.example.com:9191
+    userName: \${db-user-kin_plain}
+    password: \${db-password-kin_plain}
+"
+`;
+
+exports[`rosetta generation characterization kinetica (host and port): mapToRosettaConnection 1`] = `
+{
+  "databaseName": "kindb",
+  "dbType": "kinetica",
+  "name": "kin_plain",
+  "password": "db-password-kin_plain",
+  "schemaName": "ki_home",
+  "url": "jdbc:kinetica:URL=http://kin.example.com:9191",
+  "userName": "db-user-kin_plain",
+}
+`;
+
+exports[`rosetta generation characterization kinetica (host and port): updateMainConf entry 1`] = `
+{
+  "after": "openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-dbname-kin_plain}
+    schemaName: \${db-schema-kin_plain}
+    dbType: kinetica
+    url: jdbc:kinetica:URL=http://kin.example.com:9191
+    userName: \${db-user-kin_plain}
+    password: \${db-password-kin_plain}
+",
+  "full": "openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-dbname-kin_plain}
+    schemaName: \${db-schema-kin_plain}
+    dbType: kinetica
+    url: jdbc:kinetica:URL=http://kin.example.com:9191
+    userName: \${db-user-kin_plain}
+    password: \${db-password-kin_plain}
+",
+  "tag": null,
+}
+`;
+
+exports[`rosetta generation characterization kinetica (useSSL with bypassSslCertCheck): generateJdbcUrl 1`] = `"jdbc:kinetica:URL=https://kin.example.com:9191;BypassSslCertCheck=1"`;
+
+exports[`rosetta generation characterization kinetica (useSSL with bypassSslCertCheck): generateRosettaYml 1`] = `
+"openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-dbname-kin_ssl}
+    schemaName: \${db-schema-kin_ssl}
+    dbType: kinetica
+    url: jdbc:kinetica:URL=https://kin.example.com:9191;BypassSslCertCheck=1
+    userName: \${db-user-kin_ssl}
+    password: \${db-password-kin_ssl}
+"
+`;
+
+exports[`rosetta generation characterization kinetica (useSSL with bypassSslCertCheck): mapToRosettaConnection 1`] = `
+{
+  "databaseName": "kindb",
+  "dbType": "kinetica",
+  "name": "kin_ssl",
+  "password": "db-password-kin_ssl",
+  "schemaName": "ki_home",
+  "url": "jdbc:kinetica:URL=https://kin.example.com:9191;BypassSslCertCheck=1",
+  "userName": "db-user-kin_ssl",
+}
+`;
+
+exports[`rosetta generation characterization kinetica (useSSL with bypassSslCertCheck): updateMainConf entry 1`] = `
+{
+  "after": "openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-dbname-kin_ssl}
+    schemaName: \${db-schema-kin_ssl}
+    dbType: kinetica
+    url: jdbc:kinetica:URL=https://kin.example.com:9191;BypassSslCertCheck=1
+    userName: \${db-user-kin_ssl}
+    password: \${db-password-kin_ssl}
+",
+  "full": "openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-dbname-kin_ssl}
+    schemaName: \${db-schema-kin_ssl}
+    dbType: kinetica
+    url: jdbc:kinetica:URL=https://kin.example.com:9191;BypassSslCertCheck=1
+    userName: \${db-user-kin_ssl}
+    password: \${db-password-kin_ssl}
+",
+  "tag": null,
+}
+`;
+
+exports[`rosetta generation characterization postgres (ssl off): generateJdbcUrl 1`] = `"jdbc:postgresql://\${db-host-pg_plain}:\${db-port-pg_plain}/\${db-dbname-pg_plain}?currentSchema=\${db-schema-pg_plain}"`;
+
+exports[`rosetta generation characterization postgres (ssl off): generateRosettaYml 1`] = `
+"openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-dbname-pg_plain}
+    schemaName: \${db-schema-pg_plain}
+    dbType: postgres
+    url: >-
+      jdbc:postgresql://\${db-host-pg_plain}:\${db-port-pg_plain}/\${db-dbname-pg_plain}?currentSchema=\${db-schema-pg_plain}
+    userName: \${db-user-pg_plain}
+    password: \${db-password-pg_plain}
+"
+`;
+
+exports[`rosetta generation characterization postgres (ssl off): mapToRosettaConnection 1`] = `
+{
+  "databaseName": "pgdb",
+  "dbType": "postgres",
+  "name": "pg_plain",
+  "password": "db-password-pg_plain",
+  "schemaName": "public",
+  "url": "jdbc:postgresql://\${db-host-pg_plain}:\${db-port-pg_plain}/\${db-dbname-pg_plain}?currentSchema=\${db-schema-pg_plain}",
+  "userName": "db-user-pg_plain",
+}
+`;
+
+exports[`rosetta generation characterization postgres (ssl off): updateMainConf entry 1`] = `
+{
+  "after": "openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-dbname-pg_plain}
+    schemaName: \${db-schema-pg_plain}
+    dbType: postgres
+    url: jdbc:postgresql://\${db-host-pg_plain}:\${db-port-pg_plain}/\${db-dbname-pg_plain}?currentSchema=\${db-schema-pg_plain}
+    userName: \${db-user-pg_plain}
+    password: \${db-password-pg_plain}
+",
+  "full": "openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-dbname-pg_plain}
+    schemaName: \${db-schema-pg_plain}
+    dbType: postgres
+    url: >-
+      jdbc:postgresql://\${db-host-pg_plain}:\${db-port-pg_plain}/\${db-dbname-pg_plain}?currentSchema=\${db-schema-pg_plain}
+    userName: \${db-user-pg_plain}
+    password: \${db-password-pg_plain}
+",
+  "tag": null,
+}
+`;
+
+exports[`rosetta generation characterization postgres (ssl on, reject unauthorized false): generateJdbcUrl 1`] = `"jdbc:postgresql://\${db-host-pg_ssl}:\${db-port-pg_ssl}/\${db-dbname-pg_ssl}?currentSchema=\${db-schema-pg_ssl}&sslmode=require"`;
+
+exports[`rosetta generation characterization postgres (ssl on, reject unauthorized false): generateRosettaYml 1`] = `
+"openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-dbname-pg_ssl}
+    schemaName: \${db-schema-pg_ssl}
+    dbType: postgres
+    url: >-
+      jdbc:postgresql://\${db-host-pg_ssl}:\${db-port-pg_ssl}/\${db-dbname-pg_ssl}?currentSchema=\${db-schema-pg_ssl}&sslmode=require
+    userName: \${db-user-pg_ssl}
+    password: \${db-password-pg_ssl}
+"
+`;
+
+exports[`rosetta generation characterization postgres (ssl on, reject unauthorized false): mapToRosettaConnection 1`] = `
+{
+  "databaseName": "pgdb",
+  "dbType": "postgres",
+  "name": "pg_ssl",
+  "password": "db-password-pg_ssl",
+  "schemaName": "public",
+  "url": "jdbc:postgresql://\${db-host-pg_ssl}:\${db-port-pg_ssl}/\${db-dbname-pg_ssl}?currentSchema=\${db-schema-pg_ssl}&sslmode=require",
+  "userName": "db-user-pg_ssl",
+}
+`;
+
+exports[`rosetta generation characterization postgres (ssl on, reject unauthorized false): updateMainConf entry 1`] = `
+{
+  "after": "openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-dbname-pg_ssl}
+    schemaName: \${db-schema-pg_ssl}
+    dbType: postgres
+    url: jdbc:postgresql://\${db-host-pg_ssl}:\${db-port-pg_ssl}/\${db-dbname-pg_ssl}?currentSchema=\${db-schema-pg_ssl}&sslmode=require
+    userName: \${db-user-pg_ssl}
+    password: \${db-password-pg_ssl}
+",
+  "full": "openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-dbname-pg_ssl}
+    schemaName: \${db-schema-pg_ssl}
+    dbType: postgres
+    url: >-
+      jdbc:postgresql://\${db-host-pg_ssl}:\${db-port-pg_ssl}/\${db-dbname-pg_ssl}?currentSchema=\${db-schema-pg_ssl}&sslmode=require
+    userName: \${db-user-pg_ssl}
+    password: \${db-password-pg_ssl}
+",
+  "tag": "DIFF-1",
+}
+`;
+
+exports[`rosetta generation characterization redshift (ssl off): generateJdbcUrl 1`] = `"jdbc:redshift://\${db-host-rs_plain}:\${db-port-rs_plain}/\${db-dbname-rs_plain}?currentSchema=\${db-schema-rs_plain}"`;
+
+exports[`rosetta generation characterization redshift (ssl off): generateRosettaYml 1`] = `
+"openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-dbname-rs_plain}
+    schemaName: \${db-schema-rs_plain}
+    dbType: redshift
+    url: >-
+      jdbc:redshift://\${db-host-rs_plain}:\${db-port-rs_plain}/\${db-dbname-rs_plain}?currentSchema=\${db-schema-rs_plain}
+    userName: \${db-user-rs_plain}
+    password: \${db-password-rs_plain}
+"
+`;
+
+exports[`rosetta generation characterization redshift (ssl off): mapToRosettaConnection 1`] = `
+{
+  "databaseName": "rsdb",
+  "dbType": "redshift",
+  "name": "rs_plain",
+  "password": "db-password-rs_plain",
+  "schemaName": "public",
+  "url": "jdbc:redshift://\${db-host-rs_plain}:\${db-port-rs_plain}/\${db-dbname-rs_plain}?currentSchema=\${db-schema-rs_plain}",
+  "userName": "db-user-rs_plain",
+}
+`;
+
+exports[`rosetta generation characterization redshift (ssl off): updateMainConf entry 1`] = `
+{
+  "after": "openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-dbname-rs_plain}
+    schemaName: \${db-schema-rs_plain}
+    dbType: redshift
+    url: jdbc:redshift://\${db-host-rs_plain}:\${db-port-rs_plain}/\${db-dbname-rs_plain}?currentSchema=\${db-schema-rs_plain}
+    userName: \${db-user-rs_plain}
+    password: \${db-password-rs_plain}
+",
+  "full": "openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-dbname-rs_plain}
+    schemaName: \${db-schema-rs_plain}
+    dbType: redshift
+    url: >-
+      jdbc:redshift://\${db-host-rs_plain}:\${db-port-rs_plain}/\${db-dbname-rs_plain}?currentSchema=\${db-schema-rs_plain}
+    userName: \${db-user-rs_plain}
+    password: \${db-password-rs_plain}
+",
+  "tag": null,
+}
+`;
+
+exports[`rosetta generation characterization redshift (ssl on with sslrootcert): generateJdbcUrl 1`] = `"jdbc:redshift://\${db-host-rs_ssl}:\${db-port-rs_ssl}/\${db-dbname-rs_ssl}?currentSchema=\${db-schema-rs_ssl}&ssl=true&sslrootcert=/certs/root.pem"`;
+
+exports[`rosetta generation characterization redshift (ssl on with sslrootcert): generateRosettaYml 1`] = `
+"openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-dbname-rs_ssl}
+    schemaName: \${db-schema-rs_ssl}
+    dbType: redshift
+    url: >-
+      jdbc:redshift://\${db-host-rs_ssl}:\${db-port-rs_ssl}/\${db-dbname-rs_ssl}?currentSchema=\${db-schema-rs_ssl}&ssl=true&sslrootcert=/certs/root.pem
+    userName: \${db-user-rs_ssl}
+    password: \${db-password-rs_ssl}
+"
+`;
+
+exports[`rosetta generation characterization redshift (ssl on with sslrootcert): mapToRosettaConnection 1`] = `
+{
+  "databaseName": "rsdb",
+  "dbType": "redshift",
+  "name": "rs_ssl",
+  "password": "db-password-rs_ssl",
+  "schemaName": "public",
+  "url": "jdbc:redshift://\${db-host-rs_ssl}:\${db-port-rs_ssl}/\${db-dbname-rs_ssl}?currentSchema=\${db-schema-rs_ssl}&ssl=true&sslrootcert=/certs/root.pem",
+  "userName": "db-user-rs_ssl",
+}
+`;
+
+exports[`rosetta generation characterization redshift (ssl on with sslrootcert): updateMainConf entry 1`] = `
+{
+  "after": "openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-dbname-rs_ssl}
+    schemaName: \${db-schema-rs_ssl}
+    dbType: redshift
+    url: jdbc:redshift://\${db-host-rs_ssl}:\${db-port-rs_ssl}/\${db-dbname-rs_ssl}?currentSchema=\${db-schema-rs_ssl}&ssl=true&sslrootcert=/certs/root.pem
+    userName: \${db-user-rs_ssl}
+    password: \${db-password-rs_ssl}
+",
+  "full": "openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-dbname-rs_ssl}
+    schemaName: \${db-schema-rs_ssl}
+    dbType: redshift
+    url: >-
+      jdbc:redshift://\${db-host-rs_ssl}:\${db-port-rs_ssl}/\${db-dbname-rs_ssl}?currentSchema=\${db-schema-rs_ssl}&ssl=true&sslrootcert=/certs/root.pem
+    userName: \${db-user-rs_ssl}
+    password: \${db-password-rs_ssl}
+",
+  "tag": "DIFF-2",
+}
+`;
+
+exports[`rosetta generation characterization snowflake (oauth_browser without role): generateJdbcUrl 1`] = `"jdbc:snowflake://\${db-account-sf_oauth}.snowflakecomputing.com/?warehouse=\${db-warehouse-sf_oauth}&db=\${db-dbname-sf_oauth}&schema=\${db-schema-sf_oauth}&authenticator=oauth_authorization_code"`;
+
+exports[`rosetta generation characterization snowflake (oauth_browser without role): generateRosettaYml 1`] = `
+"openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-dbname-sf_oauth}
+    schemaName: \${db-schema-sf_oauth}
+    dbType: snowflake
+    url: >-
+      jdbc:snowflake://\${db-account-sf_oauth}.snowflakecomputing.com/?warehouse=\${db-warehouse-sf_oauth}&db=\${db-dbname-sf_oauth}&schema=\${db-schema-sf_oauth}&authenticator=oauth_authorization_code
+    userName: \${db-user-sf_oauth}
+    authenticator: oauth_authorization_code
+"
+`;
+
+exports[`rosetta generation characterization snowflake (oauth_browser without role): mapToRosettaConnection 1`] = `
+{
+  "databaseName": "SFDB",
+  "dbType": "snowflake",
+  "name": "sf_oauth",
+  "schemaName": "PUBLIC",
+  "url": "jdbc:snowflake://\${db-account-sf_oauth}.snowflakecomputing.com/?warehouse=\${db-warehouse-sf_oauth}&db=\${db-dbname-sf_oauth}&schema=\${db-schema-sf_oauth}&authenticator=oauth_authorization_code",
+  "userName": "db-user-sf_oauth",
+}
+`;
+
+exports[`rosetta generation characterization snowflake (oauth_browser without role): updateMainConf entry 1`] = `
+{
+  "after": "openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-dbname-sf_oauth}
+    schemaName: \${db-schema-sf_oauth}
+    dbType: snowflake
+    url: jdbc:snowflake://\${db-account-sf_oauth}.snowflakecomputing.com/?warehouse=\${db-warehouse-sf_oauth}&db=\${db-dbname-sf_oauth}&schema=\${db-schema-sf_oauth}&authenticator=oauth_authorization_code
+    userName: \${db-user-sf_oauth}
+    authenticator: oauth_authorization_code
+",
+  "full": "openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-dbname-sf_oauth}
+    schemaName: \${db-schema-sf_oauth}
+    dbType: snowflake
+    url: >-
+      jdbc:snowflake://\${db-account-sf_oauth}.snowflakecomputing.com/?warehouse=\${db-warehouse-sf_oauth}&db=\${db-dbname-sf_oauth}&schema=\${db-schema-sf_oauth}&authenticator=oauth_authorization_code
+    userName: \${db-user-sf_oauth}
+    authenticator: oauth_authorization_code
+",
+  "tag": null,
+}
+`;
+
+exports[`rosetta generation characterization snowflake (password with role): generateJdbcUrl 1`] = `"jdbc:snowflake://\${db-account-sf_pw}.snowflakecomputing.com/?warehouse=\${db-warehouse-sf_pw}&db=\${db-dbname-sf_pw}&schema=\${db-schema-sf_pw}"`;
+
+exports[`rosetta generation characterization snowflake (password with role): generateRosettaYml 1`] = `
+"openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-dbname-sf_pw}
+    schemaName: \${db-schema-sf_pw}
+    dbType: snowflake
+    url: >-
+      jdbc:snowflake://\${db-account-sf_pw}.snowflakecomputing.com/?warehouse=\${db-warehouse-sf_pw}&db=\${db-dbname-sf_pw}&schema=\${db-schema-sf_pw}
+    userName: \${db-user-sf_pw}
+    password: \${db-password-sf_pw}
+"
+`;
+
+exports[`rosetta generation characterization snowflake (password with role): mapToRosettaConnection 1`] = `
+{
+  "databaseName": "SFDB",
+  "dbType": "snowflake",
+  "name": "sf_pw",
+  "password": "db-password-sf_pw",
+  "schemaName": "PUBLIC",
+  "url": "jdbc:snowflake://\${db-account-sf_pw}.snowflakecomputing.com/?warehouse=\${db-warehouse-sf_pw}&db=\${db-dbname-sf_pw}&schema=\${db-schema-sf_pw}",
+  "userName": "db-user-sf_pw",
+}
+`;
+
+exports[`rosetta generation characterization snowflake (password with role): updateMainConf entry 1`] = `
+{
+  "after": "openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-dbname-sf_pw}
+    schemaName: \${db-schema-sf_pw}
+    dbType: snowflake
+    url: jdbc:snowflake://\${db-account-sf_pw}.snowflakecomputing.com/?warehouse=\${db-warehouse-sf_pw}&db=\${db-dbname-sf_pw}&schema=\${db-schema-sf_pw}
+    userName: \${db-user-sf_pw}
+    password: \${db-password-sf_pw}
+",
+  "full": "openai_api_key: \${openai-api-key}
+connections:
+  - name: proj
+    databaseName: \${db-dbname-sf_pw}
+    schemaName: \${db-schema-sf_pw}
+    dbType: snowflake
+    url: >-
+      jdbc:snowflake://\${db-account-sf_pw}.snowflakecomputing.com/?warehouse=\${db-warehouse-sf_pw}&db=\${db-dbname-sf_pw}&schema=\${db-schema-sf_pw}
+    userName: \${db-user-sf_pw}
+    password: \${db-password-sf_pw}
+",
+  "tag": null,
+}
+`;

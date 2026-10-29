@@ -4,6 +4,17 @@ import { FileDialogProperties, SettingsType } from '../../types/backend';
 import { SettingsService, RunnerService } from '../services';
 import { SettingsChannels } from '../../types/ipc';
 import { DbtCoreVersionService } from '../services/dbtCoreVersion.service';
+import {
+  isDbtV2SwitchQueued,
+  removeQueuedInstalls,
+  runInstallTask,
+} from '../utils/installTask';
+import {
+  DBT_V2_SWITCH_BLOCKS_ADAPTERS_MESSAGE,
+  MANAGED_ENVIRONMENT_INSTALL_TYPES,
+  isDbtRuntimeSubject,
+} from '../../shared/installTasks';
+import { DBT_ADAPTER_PACKAGES } from '../../shared/dbtAdapterPackages';
 
 const handlerChannels: SettingsChannels[] = [
   'settings:load',
@@ -42,6 +53,10 @@ const handlerChannels: SettingsChannels[] = [
   'kisql:uninstall',
   'kisql:check',
 ];
+
+const isAdapterBlockedByV2Switch = (packageName: string) =>
+  (DBT_ADAPTER_PACKAGES as readonly string[]).includes(packageName) &&
+  isDbtV2SwitchQueued();
 
 const removeSettingsIpcHandlers = () => {
   handlerChannels.forEach((channel) => {
@@ -102,11 +117,17 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
   });
 
   ipcMain.handle('version:rosetta:install', async (_event, version: string) => {
-    return SettingsService.installRosettaVersion(version);
+    return runInstallTask(
+      'install:rosetta',
+      `Installing Rosetta ${version}`,
+      () => SettingsService.installRosettaVersion(version),
+    );
   });
 
   ipcMain.handle('version:rosetta:uninstall', async () => {
-    return SettingsService.uninstallRosetta();
+    return runInstallTask('install:rosetta', 'Uninstalling Rosetta', () =>
+      SettingsService.uninstallRosetta(),
+    );
   });
 
   // Managed Python version management handlers
@@ -115,11 +136,18 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
   });
 
   ipcMain.handle('version:python:install', async () => {
-    return SettingsService.installPython();
+    return runInstallTask('install:python', 'Installing Python', () =>
+      SettingsService.installPython(),
+    );
   });
 
   ipcMain.handle('version:python:uninstall', async () => {
-    return SettingsService.uninstallPython();
+    return runInstallTask(
+      'install:python',
+      'Uninstalling Python',
+      () => SettingsService.uninstallPython(),
+      { removesManagedEnvironment: true },
+    );
   });
 
   ipcMain.handle('version:python:versions:check', async () => {
@@ -129,7 +157,26 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
   ipcMain.handle(
     'version:python:versions:install',
     async (_event, version: string) => {
-      return SettingsService.installPythonVersion(version);
+      return runInstallTask(
+        'install:python',
+        `Installing Python ${version}`,
+        () => SettingsService.installPythonVersion(version),
+        {
+          // Picking a version on the Python page rebuilds the managed
+          // environment.
+          replacesManagedEnvironment: true,
+          // Without the new environment the installs still queued for it
+          // can't run.
+          beforeNextInstall: async (succeeded) => {
+            if (succeeded) return;
+            await removeQueuedInstalls(async (install) =>
+              MANAGED_ENVIRONMENT_INSTALL_TYPES.includes(install.type)
+                ? "Python install failed, so this wasn't installed."
+                : null,
+            );
+          },
+        },
+      );
     },
   );
 
@@ -139,11 +186,17 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
   });
 
   ipcMain.handle('version:runner:install', async (_event, version: string) => {
-    return RunnerService.installRunnerVersion(version);
+    return runInstallTask(
+      'install:runner',
+      `Installing local runner ${version}`,
+      () => RunnerService.installRunnerVersion(version),
+    );
   });
 
   ipcMain.handle('version:runner:uninstall', async () => {
-    return RunnerService.uninstallRunnerVersion();
+    return runInstallTask('install:runner', 'Uninstalling local runner', () =>
+      RunnerService.uninstallRunnerVersion(),
+    );
   });
 
   ipcMain.handle('runner:plugins:check', async () => {
@@ -177,7 +230,9 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
   });
 
   ipcMain.handle('settings:installSqlGlot', async () => {
-    return SettingsService.installSqlGlot();
+    return runInstallTask('install:sqlglot', 'Installing sqlglot', () =>
+      SettingsService.installSqlGlot(),
+    );
   });
 
   ipcMain.handle('dbt:versions:list', async (_event, request) => {
@@ -193,7 +248,12 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
   });
 
   ipcMain.handle('dbt:versionChange:install', async (_event, request) => {
-    return DbtCoreVersionService.installVersionChange(request);
+    return runInstallTask(
+      'install:dbt',
+      `Switching to dbt-core ${request.targetVersion}`,
+      (control) => DbtCoreVersionService.installVersionChange(request, control),
+      { subject: `dbt-core@${request.targetVersion}`, endsOnSignal: true },
+    );
   });
 
   ipcMain.handle('dbt:compatibility:check', async () => {
@@ -217,11 +277,24 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
   });
 
   ipcMain.handle('dbt:package:installLatest', async (_event, request) => {
-    return DbtCoreVersionService.installLatestPackage(request);
+    if (isAdapterBlockedByV2Switch(request.packageName)) {
+      return { ok: false, error: DBT_V2_SWITCH_BLOCKS_ADAPTERS_MESSAGE };
+    }
+    return runInstallTask(
+      'install:dbt',
+      `Installing ${request.packageName}`,
+      (control) => DbtCoreVersionService.installLatestPackage(request, control),
+      { subject: request.packageName, stoppable: true, endsOnSignal: true },
+    );
   });
 
   ipcMain.handle('dbt:package:uninstall', async (_event, request) => {
-    return DbtCoreVersionService.uninstallPackage(request);
+    return runInstallTask(
+      'install:dbt',
+      `Uninstalling ${request.packageName}`,
+      (control) => DbtCoreVersionService.uninstallPackage(request, control),
+      { subject: request.packageName, endsOnSignal: true },
+    );
   });
 
   ipcMain.handle('dbt:packageVersions:list', async (_event, req) => {
@@ -229,7 +302,21 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
   });
 
   ipcMain.handle('dbt:packageVersion:install', async (_event, req) => {
-    return DbtCoreVersionService.installPackageVersion(req);
+    if (isAdapterBlockedByV2Switch(req.packageName)) {
+      return { ok: false, error: DBT_V2_SWITCH_BLOCKS_ADAPTERS_MESSAGE };
+    }
+    return runInstallTask(
+      'install:dbt',
+      `Installing ${req.packageName} ${req.version}`,
+      (control) => DbtCoreVersionService.installPackageVersion(req, control),
+      {
+        subject: `${req.packageName}@${req.version}`,
+        // A dbt Core switch first uninstalls the other runtime, so it can't
+        // be stopped halfway; adapters can while pip is still downloading.
+        stoppable: !isDbtRuntimeSubject(req.packageName),
+        endsOnSignal: true,
+      },
+    );
   });
 
   // KiSQL (Kinetica CLI) handlers
@@ -238,11 +325,15 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
   });
 
   ipcMain.handle('kisql:install', async () => {
-    return RunnerService.installKisql();
+    return runInstallTask('install:runner', 'Installing KiSQL', () =>
+      RunnerService.installKisql(),
+    );
   });
 
   ipcMain.handle('kisql:uninstall', async () => {
-    return RunnerService.uninstallKisql();
+    return runInstallTask('install:runner', 'Uninstalling KiSQL', () =>
+      RunnerService.uninstallKisql(),
+    );
   });
 };
 

@@ -30,9 +30,8 @@ import lakekeeper from './lakekeeper.png';
 import nessie from './nessie.png';
 import hive from './hive.png';
 import catalog from './catalog.png';
-import { SupportedConnectionTypes } from '../../src/types/backend';
 
-type Image = Record<SupportedConnectionTypes, string>;
+type Image = Record<string, string>;
 
 // Cloud storage specific images
 export const cloudStorageImages = {

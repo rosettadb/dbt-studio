@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Button, Box, Chip, CircularProgress, Backdrop } from '@mui/material';
+import { Button, Box, Chip, CircularProgress } from '@mui/material';
 import {
   Delete,
   ListAltOutlined,
@@ -22,6 +22,12 @@ import {
   SettingsStatus,
 } from './SettingsLayout';
 import { PythonMonoIcon } from '../notebook/NotebookKindIcon';
+import { useActiveInstallTasks, useIsTaskTypeActive } from '../../hooks';
+import {
+  FINISH_BEFORE_PYTHON_INSTALL_TYPES,
+  MANAGED_ENVIRONMENT_INSTALL_TYPES,
+  isInstallCancelledError,
+} from '../../../shared/installTasks';
 
 interface PythonSettingsProps {
   settings: SettingsType;
@@ -37,7 +43,84 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
   );
   const [showUninstallConfirmation, setShowUninstallConfirmation] =
     useState(false);
-  const [isBlocking, setIsBlocking] = useState(false);
+  const isInstallTaskActive = useIsTaskTypeActive('install:python');
+
+  // A Python switch or uninstall goes ahead of the installs into the managed
+  // environment; the confirm popups say what happens to them.
+  const environmentInstalls = useActiveInstallTasks().filter((task) =>
+    MANAGED_ENVIRONMENT_INSTALL_TYPES.includes(task.type),
+  );
+  const runningEnvironmentInstall = environmentInstalls.find(
+    (task) => task.status === 'running',
+  );
+  const queuedEnvironmentInstalls = environmentInstalls.filter(
+    (task) => task.status === 'pending',
+  );
+  const plural = (count: number, word: string) =>
+    `${count} ${word}${count === 1 ? '' : 's'}`;
+
+  // A switch rebuilds the environment empty: queued dbt installs are
+  // cancelled (adapters need dbt Core, which has to be installed again
+  // first). A running install is only stopped while that is safe (a dbt
+  // adapter still downloading); otherwise it finishes first, and other
+  // installs into the environment run after the switch.
+  const describeSwitchEffects = () => {
+    const lines: string[] = [];
+    const queuedDbtInstalls = queuedEnvironmentInstalls.filter(
+      (task) => task.type === 'install:dbt',
+    );
+    if (queuedDbtInstalls.length > 0) {
+      lines.push(
+        `${plural(queuedDbtInstalls.length, 'queued dbt install')} (dbt Core and adapters) will be cancelled and removed.`,
+      );
+    }
+    if (runningEnvironmentInstall) {
+      const { label } = runningEnvironmentInstall;
+      if (runningEnvironmentInstall.type !== 'install:dbt') {
+        lines.push(
+          `"${label}" is running now and finishes first; it will be removed with the old environment.`,
+        );
+      } else if (runningEnvironmentInstall.cancellable) {
+        lines.push(`The running "${label}" will be stopped and removed.`);
+      } else {
+        lines.push(
+          `"${label}" is running now and finishes first; it will be removed with the old environment.`,
+        );
+      }
+    }
+    const otherQueued = queuedEnvironmentInstalls.filter(
+      (task) => task.type !== 'install:dbt',
+    );
+    if (otherQueued.length > 0) {
+      lines.push(
+        `${plural(otherQueued.length, 'other queued install')} will run after the switch.`,
+      );
+    }
+    lines.push(
+      'After the switch, install dbt Core first: adapters need dbt Core before they can be installed.',
+    );
+    return lines.join(' ');
+  };
+
+  // An uninstall leaves no environment, so everything for it is cancelled.
+  const describeUninstallEffects = () => {
+    const lines: string[] = [];
+    if (runningEnvironmentInstall) {
+      lines.push(
+        FINISH_BEFORE_PYTHON_INSTALL_TYPES.includes(
+          runningEnvironmentInstall.type,
+        )
+          ? `"${runningEnvironmentInstall.label}" is running now and finishes first; it will be removed with the environment.`
+          : `The running "${runningEnvironmentInstall.label}" will be stopped.`,
+      );
+    }
+    if (queuedEnvironmentInstalls.length > 0) {
+      lines.push(
+        `${plural(queuedEnvironmentInstalls.length, 'queued install')} will be cancelled.`,
+      );
+    }
+    return lines.join(' ');
+  };
 
   const checkVersions = useCheckPythonVersions({
     onSuccess: (data) => setVersionInfo(data),
@@ -49,7 +132,6 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
   const installVersion = useInstallPythonVersion({
     onSuccess: (result) => {
       setInstallingVersion(null);
-      setIsBlocking(false);
       if (result.success) {
         toast.success(`Python ${result.version} installed successfully`);
         checkVersions.mutate();
@@ -59,20 +141,21 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
     },
     onError: (error) => {
       setInstallingVersion(null);
-      setIsBlocking(false);
+      // A cancelled install never started, so it did not fail.
+      if (isInstallCancelledError(error)) return;
       toast.error(`Installation failed: ${error.message}`);
     },
   });
 
   const uninstallPython = useUninstallPython({
     onSuccess: () => {
-      setIsBlocking(false);
       toast.success('Python uninstalled successfully');
       setVersionInfo(null);
       checkVersions.mutate();
     },
     onError: (error) => {
-      setIsBlocking(false);
+      // A cancelled install never started, so it did not fail.
+      if (isInstallCancelledError(error)) return;
       toast.error(`Uninstall failed: ${error.message}`);
     },
   });
@@ -90,7 +173,6 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
       return;
     }
     setInstallingVersion(version);
-    setIsBlocking(true);
     installVersion.mutate(version);
   };
 
@@ -99,7 +181,6 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
     const version = pendingVersion;
     setPendingVersion(null);
     setInstallingVersion(version);
-    setIsBlocking(true);
     installVersion.mutate(version);
   };
 
@@ -113,7 +194,6 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
 
   const confirmUninstall = () => {
     setShowUninstallConfirmation(false);
-    setIsBlocking(true);
     uninstallPython.mutate();
   };
 
@@ -136,13 +216,6 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
 
   return (
     <SettingsStack>
-      <Backdrop
-        open={isBlocking}
-        sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, color: '#fff' }}
-      >
-        <CircularProgress color="inherit" />
-      </Backdrop>
-
       <SettingsSection
         title="Python Installation"
         icon={<PythonMonoIcon />}
@@ -205,7 +278,8 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
               disabled={
                 entry.version === settings.pythonVersion ||
                 installingVersion === entry.version ||
-                installVersion.isLoading
+                installVersion.isLoading ||
+                isInstallTaskActive
               }
               startIcon={
                 installingVersion === entry.version ? (
@@ -232,7 +306,7 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
               variant="outlined"
               color="error"
               onClick={handleUninstall}
-              disabled={uninstallPython.isLoading}
+              disabled={uninstallPython.isLoading || isInstallTaskActive}
               startIcon={
                 uninstallPython.isLoading ? (
                   <CircularProgress size={14} />
@@ -254,7 +328,7 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
         onClose={cancelVersionSwitch}
         onConfirm={confirmVersionSwitch}
         title="Switch Python Version"
-        question={`Are you sure you want to switch to Python ${pendingVersion}? This replaces the managed environment and removes dbt Core, Flowfile, and sqlglot, since they all live inside it. You'll need to reinstall them afterward.`}
+        question={`Are you sure you want to switch to Python ${pendingVersion}? This replaces the managed environment and removes dbt Core, Flowfile, sqlglot, and pyiceberg (used by Data Lake), since they all live inside it. You'll need to reinstall them afterward. ${describeSwitchEffects()}`.trim()}
       />
 
       <ConfirmationModal
@@ -262,7 +336,7 @@ export const PythonSettings: React.FC<PythonSettingsProps> = ({ settings }) => {
         onClose={cancelUninstall}
         onConfirm={confirmUninstall}
         title="Uninstall Python"
-        question="Are you sure you want to uninstall the embedded Python interpreter? This also removes dbt Core, Flowfile, and sqlglot, since they all live inside the same managed environment. You'll need to reinstall them."
+        question={`Are you sure you want to uninstall the embedded Python interpreter? This also removes dbt Core, Flowfile, sqlglot, and pyiceberg (used by Data Lake), since they all live inside the same managed environment. You'll need to reinstall them. ${describeUninstallEffects()}`.trim()}
       />
     </SettingsStack>
   );

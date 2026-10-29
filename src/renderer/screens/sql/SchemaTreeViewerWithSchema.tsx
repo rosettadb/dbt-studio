@@ -2,6 +2,7 @@
 import React from 'react';
 import { TreeItem } from '@mui/x-tree-view';
 import { Box, CircularProgress } from '@mui/material';
+import { connectionIcon } from '../../../connections/registry.renderer';
 import {
   RenderTree,
   useTreeRowProps,
@@ -22,9 +23,7 @@ import type {
 } from '../../components/schemaTreeViewer/types';
 import { SupportedConnectionTypes, Table } from '../../../types/backend';
 import { TreeItems } from '../../components/schemaTreeViewer/TreeItems';
-import connectionIcons, {
-  defaultIcon,
-} from '../../../../assets/connectionIcons';
+import { defaultIcon } from '../../../../assets/connectionIcons';
 
 type Props = {
   databaseName: string;
@@ -158,7 +157,7 @@ export const SchemaTreeViewerWithSchema: React.FC<Props> = React.memo(
               label={
                 <TreeItems.Database
                   label={databaseName || 'Database'}
-                  icon={connectionIcons.images[type] || defaultIcon}
+                  icon={connectionIcon(type) || defaultIcon}
                   rootProps={rowProps({ kind: 'database', databaseName })}
                 />
               }

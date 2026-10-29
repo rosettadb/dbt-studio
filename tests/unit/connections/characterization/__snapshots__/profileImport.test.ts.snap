@@ -1,0 +1,228 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`parseProjectConnectionFiles characterization imports bigquery 1`] = `
+{
+  "connectionInput": {
+    "database": "proj",
+    "dataset": "proj",
+    "host": "",
+    "keyfile": "/k.json",
+    "method": "service-account",
+    "name": "DBT Connection",
+    "password": "",
+    "port": 443,
+    "project": "proj",
+    "schema": "ds",
+    "type": "bigquery",
+    "username": "proj",
+  },
+  "dbtConnection": {
+    "database": "proj",
+    "keyfile": "/k.json",
+    "method": "service-account",
+    "password": "",
+    "project": "proj",
+    "schema": "ds",
+    "type": "bigquery",
+    "username": "",
+  },
+}
+`;
+
+exports[`parseProjectConnectionFiles characterization imports databricks 1`] = `
+{
+  "connectionInput": {
+    "database": "main",
+    "host": "dbc.example.com",
+    "httpPath": "/sql/1.0/warehouses/abc",
+    "name": "DBT Connection",
+    "port": 443,
+    "schema": "default",
+    "token": "t",
+    "type": "databricks",
+  },
+  "dbtConnection": {
+    "database": "main",
+    "host": "dbc.example.com",
+    "http_path": "/sql/1.0/warehouses/abc",
+    "port": 443,
+    "schema": "default",
+    "token": "t",
+    "type": "databricks",
+  },
+}
+`;
+
+exports[`parseProjectConnectionFiles characterization imports duckdb (absolute path) 1`] = `
+{
+  "connectionInput": {
+    "database": "/data/warehouse.duckdb",
+    "database_path": "/data/warehouse.duckdb",
+    "name": "DBT Connection",
+    "schema": "main",
+    "short_database_path": "warehouse.duckdb",
+    "type": "duckdb",
+  },
+  "dbtConnection": {
+    "database": "/data/warehouse.duckdb",
+    "path": "/data/warehouse.duckdb",
+    "schema": "main",
+    "type": "duckdb",
+  },
+}
+`;
+
+exports[`parseProjectConnectionFiles characterization imports duckdb (relative path) 1`] = `
+{
+  "connectionInput": {
+    "database": "<PROJECT_DIR>/data/warehouse.duckdb",
+    "database_path": "<PROJECT_DIR>/data/warehouse.duckdb",
+    "name": "DBT Connection",
+    "schema": "main",
+    "short_database_path": "warehouse.duckdb",
+    "type": "duckdb",
+  },
+  "dbtConnection": {
+    "database": "<PROJECT_DIR>/data/warehouse.duckdb",
+    "path": "<PROJECT_DIR>/data/warehouse.duckdb",
+    "schema": "main",
+    "type": "duckdb",
+  },
+}
+`;
+
+exports[`parseProjectConnectionFiles characterization imports kinetica (env placeholder, env set) 1`] = `
+{
+  "connectionInput": {
+    "bypassSslCertCheck": true,
+    "database": "kindb",
+    "host": "kin.example.com",
+    "name": "DBT Connection",
+    "password": "p",
+    "port": 9191,
+    "schema": "ki_home",
+    "type": "kinetica",
+    "useSSL": true,
+    "username": "u",
+  },
+  "dbtConnection": {
+    "bypassSslCertCheck": true,
+    "database": "kindb",
+    "host": "kin.example.com",
+    "password": "p",
+    "port": 9191,
+    "schema": "ki_home",
+    "type": "kinetica",
+    "useSSL": true,
+    "username": "u",
+  },
+}
+`;
+
+exports[`parseProjectConnectionFiles characterization imports kinetica (env placeholder, env unset) 1`] = `{}`;
+
+exports[`parseProjectConnectionFiles characterization imports kinetica (plain url) 1`] = `
+{
+  "connectionInput": {
+    "bypassSslCertCheck": false,
+    "database": "kindb",
+    "host": "kin.example.com",
+    "name": "DBT Connection",
+    "password": "p",
+    "port": 9191,
+    "schema": "ki_home",
+    "type": "kinetica",
+    "useSSL": true,
+    "username": "u",
+  },
+  "dbtConnection": {
+    "bypassSslCertCheck": false,
+    "database": "kindb",
+    "host": "kin.example.com",
+    "password": "p",
+    "port": 9191,
+    "schema": "ki_home",
+    "type": "kinetica",
+    "useSSL": true,
+    "username": "u",
+  },
+}
+`;
+
+exports[`parseProjectConnectionFiles characterization imports postgres 1`] = `
+{
+  "connectionInput": {
+    "database": "db",
+    "host": "pg.example.com",
+    "name": "DBT Connection",
+    "password": "p",
+    "port": 5432,
+    "schema": "public",
+    "type": "postgres",
+    "username": "u",
+  },
+  "dbtConnection": {
+    "database": "db",
+    "host": "pg.example.com",
+    "password": "p",
+    "port": 5432,
+    "schema": "public",
+    "type": "postgres",
+    "username": "u",
+  },
+}
+`;
+
+exports[`parseProjectConnectionFiles characterization imports redshift 1`] = `
+{
+  "connectionInput": {
+    "database": "db",
+    "host": "rs.example.com",
+    "name": "DBT Connection",
+    "password": "p",
+    "port": 5439,
+    "schema": "public",
+    "ssl": false,
+    "type": "redshift",
+    "username": "u",
+  },
+  "dbtConnection": {
+    "database": "db",
+    "host": "rs.example.com",
+    "password": "p",
+    "port": 5439,
+    "schema": "public",
+    "ssl": false,
+    "type": "redshift",
+    "username": "u",
+  },
+}
+`;
+
+exports[`parseProjectConnectionFiles characterization imports snowflake 1`] = `
+{
+  "connectionInput": {
+    "account": "acme",
+    "database": "DB",
+    "name": "DBT Connection",
+    "password": "p",
+    "role": "R",
+    "schema": "PUBLIC",
+    "type": "snowflake",
+    "username": "u",
+    "warehouse": "WH",
+  },
+  "dbtConnection": {
+    "account": "acme",
+    "database": "DB",
+    "password": "p",
+    "role": "R",
+    "schema": "PUBLIC",
+    "type": "snowflake",
+    "username": "u",
+    "warehouse": "WH",
+  },
+}
+`;
+
+exports[`parseProjectConnectionFiles characterization imports unknown type 1`] = `{}`;

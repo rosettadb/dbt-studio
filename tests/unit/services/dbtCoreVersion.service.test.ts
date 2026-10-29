@@ -635,3 +635,67 @@ describe('DbtCoreVersionService', () => {
     expect(mkdtempMock).not.toHaveBeenCalled();
   });
 });
+
+describe('DbtCoreVersionService pip time limits', () => {
+  const pythonPath = '/managed/venv/bin/python3';
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.clearAllMocks();
+    loadSettingsMock.mockResolvedValue({ pythonPath } as any);
+    pathExistsMock.mockResolvedValue(true as never);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  // A pip process that only ends when it is killed.
+  const mockHangingCommands = () => {
+    const kill = jest.fn();
+    spawnMock.mockImplementation((() => {
+      const child = new EventEmitter() as any;
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.kill = kill;
+      return child;
+    }) as typeof spawn);
+    return kill;
+  };
+
+  it('gives a queued pip install 30 minutes instead of 5', async () => {
+    const kill = mockHangingCommands();
+    const result = DbtCoreVersionService.installLatestPackage(
+      { pythonPath, packageName: 'dbt-postgres' },
+      {
+        signal: new AbortController().signal,
+        markUnsafeToStop: jest.fn(),
+      },
+    );
+
+    await jest.advanceTimersByTimeAsync(6 * 60 * 1000);
+    expect(kill).not.toHaveBeenCalled();
+
+    await jest.advanceTimersByTimeAsync(24 * 60 * 1000);
+    expect(kill).toHaveBeenCalled();
+    await expect(result).resolves.toEqual({
+      ok: false,
+      error: expect.stringContaining('Process timed out after 1800000ms'),
+    });
+  });
+
+  it('keeps 5 minutes for quick pip commands', async () => {
+    const kill = mockHangingCommands();
+    // Caught right away so the rejection isn't reported as unhandled while
+    // the clock is moved forward.
+    const outcome = DbtCoreVersionService.getInstalledPackages().catch(
+      (error: Error) => error,
+    );
+
+    await jest.advanceTimersByTimeAsync(5 * 60 * 1000 + 1000);
+    expect(kill).toHaveBeenCalled();
+    expect(((await outcome) as Error).message).toContain(
+      'Process timed out after 300000ms',
+    );
+  });
+});

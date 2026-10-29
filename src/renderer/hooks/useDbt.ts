@@ -1,5 +1,9 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useContext, useState } from 'react';
 import { toast } from 'react-toastify';
+import {
+  envFieldValueFor,
+  getConnectionUi,
+} from '../../connections/registry.renderer';
 import useCli from './useCli';
 import useSecureStorage from './useSecureStorage';
 import {
@@ -19,7 +23,11 @@ import { materializeSnowflakeToken } from '../services/connectors.service';
 import { useAppContext } from './index';
 import { extractCliErrorDetails } from '../utils/dbtCommandResult';
 import { useDbtRunHistory } from './useDbtRunHistory';
-import { buildKineticaUrl } from '../../shared/kineticaUrl';
+import {
+  DBT_RUNTIME_CHANGING_MESSAGE,
+  isDbtRuntimeChangeTask,
+} from '../../shared/installTasks';
+import { TaskManagerContext } from '../context/TaskManagerProvider';
 
 interface UseDbtReturn {
   run: (project: Project, path?: string) => Promise<void>;
@@ -40,10 +48,7 @@ interface UseDbtReturn {
 }
 
 const hasSnowflakeOAuthSession = (connection: ConnectionInput) => {
-  if (
-    connection.type !== 'snowflake' ||
-    connection.authMethod !== 'oauth_browser'
-  ) {
+  if (!getConnectionUi(connection.type)?.browserAuth?.isEnabled(connection)) {
     return Promise.resolve(true);
   }
   // The token stays in main; only the connection name crosses IPC.
@@ -62,6 +67,17 @@ const useDbt = (
     useDbtRunHistory();
 
   const { runCommand, stopCommand, isRunning } = useCli();
+  // dbt can't run while dbt Core itself, or the Python it lives in, is being
+  // replaced. Read without useTaskManager so this hook also works outside
+  // the provider.
+  const taskManager = useContext(TaskManagerContext);
+  const isDbtRuntimeChanging = Boolean(
+    taskManager?.tasks.some(
+      (task) =>
+        (task.status === 'running' || task.status === 'pending') &&
+        isDbtRuntimeChangeTask(task),
+    ),
+  );
   const { data: connections = [] } = useGetConnections(true);
   const {
     getDatabaseUsername,
@@ -133,45 +149,11 @@ const useDbt = (
 
         // Set connection-specific fields based on type
         if (conn) {
-          const fieldMap: Record<string, string[]> = {
-            postgres: ['host', 'port', 'dbname', 'schema'],
-            redshift: ['host', 'port', 'dbname', 'schema'],
-            snowflake: ['account', 'warehouse', 'dbname', 'schema', 'role'],
-            bigquery: ['project', 'dataset'],
-            databricks: ['host', 'httppath', 'catalog', 'schema'],
-            kinetica: ['host', 'port', 'url', 'dbname', 'schema'],
-            mysql: ['host', 'port', 'dbname', 'schema'],
-          };
-
-          // Map field names to connection object values for fallback
-          const c = conn as any;
-          const getFieldValue = (field: string): string | undefined => {
-            const valueMap: Record<string, string | undefined> = {
-              host: c.host ? String(c.host) : undefined,
-              port: c.port ? String(c.port) : undefined,
-              // dbt-kinetica takes the full head-node URL as `host`
-              url:
-                c.type === 'kinetica' && c.host
-                  ? buildKineticaUrl(c)
-                  : undefined,
-              dbname: c.database,
-              schema: c.schema,
-              account: c.account,
-              warehouse: c.warehouse,
-              role: c.role,
-              project: c.project,
-              dataset: c.dataset || c.schema,
-              httppath: c.httpPath,
-              catalog: c.database,
-            };
-            return valueMap[field];
-          };
-
-          const fields = fieldMap[conn.type] || [];
+          const fields = getConnectionUi(conn.type)?.envFields ?? [];
           const fieldPromises = fields.map(async (field) => {
             // Try secure storage first, fall back to connection model
             const stored = await getConnectionField(field, connectionName);
-            const value = stored || getFieldValue(field);
+            const value = stored || envFieldValueFor(conn as any, field);
             if (value) {
               return setEnvVariables.mutateAsync({
                 key: `db-${field}-${connectionName}`,
@@ -256,6 +238,11 @@ const useDbt = (
         if (options.showToast) {
           toast.warning('Another dbt command is currently running');
         }
+        return;
+      }
+
+      if (isDbtRuntimeChanging) {
+        if (options.showToast) toast.warning(DBT_RUNTIME_CHANGING_MESSAGE);
         return;
       }
 
@@ -378,6 +365,7 @@ const useDbt = (
     },
     [
       isRunning,
+      isDbtRuntimeChanging,
       connections,
       setupConnectionEnv,
       buildCommand,
@@ -419,6 +407,10 @@ const useDbt = (
 
     compile: useCallback(
       async (project: Project, path?: string) => {
+        if (isDbtRuntimeChanging) {
+          toast.warning(DBT_RUNTIME_CHANGING_MESSAGE);
+          return '';
+        }
         try {
           // Find connection
           const connection = connections.find(
@@ -532,6 +524,7 @@ const useDbt = (
         }
       },
       [
+        isDbtRuntimeChanging,
         connections,
         setupConnectionEnv,
         buildCommand,
@@ -555,6 +548,10 @@ const useDbt = (
 
     list: useCallback(
       async (project: Project) => {
+        if (isDbtRuntimeChanging) {
+          toast.warning(DBT_RUNTIME_CHANGING_MESSAGE);
+          return '';
+        }
         try {
           const connection = connections.find(
             (c) => c.id === project.connectionId,
@@ -607,6 +604,7 @@ const useDbt = (
         }
       },
       [
+        isDbtRuntimeChanging,
         connections,
         setupConnectionEnv,
         buildCommand,

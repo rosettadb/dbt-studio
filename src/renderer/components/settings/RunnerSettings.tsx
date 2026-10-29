@@ -9,7 +9,6 @@ import {
   CircularProgress,
   IconButton,
   Tooltip,
-  Backdrop,
   Popover,
 } from '@mui/material';
 import {
@@ -30,6 +29,8 @@ import {
   RunnerPluginId,
 } from '../../../types/backend';
 import { ConfirmationModal } from '../modals';
+import { useIsTaskTypeActive } from '../../hooks';
+import { isInstallCancelledError } from '../../../shared/installTasks';
 import {
   SettingsRefreshButton,
   SettingsRow,
@@ -98,7 +99,7 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
     useState(false);
   const [showKisqlUninstallConfirmation, setShowKisqlUninstallConfirmation] =
     useState(false);
-  const [isBlocking, setIsBlocking] = useState(false);
+  const isInstallTaskActive = useIsTaskTypeActive('install:runner');
   const [kisqlUpdateAvailable, setKisqlUpdateAvailable] = useState(false);
   const [helpAnchor, setHelpAnchor] = useState<{
     el: HTMLElement;
@@ -121,7 +122,6 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
   const installVersion = useInstallRunnerVersion({
     onSuccess: (result) => {
       setInstallingVersion(null);
-      setIsBlocking(false);
       if (result.success) {
         toast.success(`Local runner ${result.version} installed`);
         result.warnings?.forEach((warning) => toast.warning(warning));
@@ -133,19 +133,20 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
     },
     onError: (error) => {
       setInstallingVersion(null);
-      setIsBlocking(false);
+      // A cancelled install never started, so it did not fail.
+      if (isInstallCancelledError(error)) return;
       toast.error(`Installation failed: ${error.message}`);
     },
   });
 
   const uninstallRunner = useUninstallRunnerVersion({
     onSuccess: () => {
-      setIsBlocking(false);
       toast.success('Local runner uninstalled');
       setVersionInfo(null);
     },
     onError: (error) => {
-      setIsBlocking(false);
+      // A cancelled install never started, so it did not fail.
+      if (isInstallCancelledError(error)) return;
       toast.error(`Uninstall failed: ${error.message}`);
     },
   });
@@ -159,7 +160,6 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
 
   const installKisql = useInstallKisql({
     onSuccess: (result) => {
-      setIsBlocking(false);
       if (result.success) {
         toast.success('KiSQL installed successfully');
         pluginDependencies.mutate();
@@ -169,20 +169,21 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
       }
     },
     onError: (error) => {
-      setIsBlocking(false);
+      // A cancelled install never started, so it did not fail.
+      if (isInstallCancelledError(error)) return;
       toast.error(`KiSQL installation failed: ${error.message}`);
     },
   });
 
   const uninstallKisql = useUninstallKisql({
     onSuccess: () => {
-      setIsBlocking(false);
       setKisqlUpdateAvailable(false);
       toast.success('KiSQL uninstalled');
       pluginDependencies.mutate();
     },
     onError: (error) => {
-      setIsBlocking(false);
+      // A cancelled install never started, so it did not fail.
+      if (isInstallCancelledError(error)) return;
       toast.error(`KiSQL uninstall failed: ${error.message}`);
     },
   });
@@ -195,24 +196,20 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
 
   const handleInstallVersion = (version: string) => {
     setInstallingVersion(version);
-    setIsBlocking(true);
     installVersion.mutate(version);
   };
 
   const handleInstallKisql = () => {
-    setIsBlocking(true);
     installKisql.mutate();
   };
 
   const confirmUninstall = () => {
     setShowUninstallConfirmation(false);
-    setIsBlocking(true);
     uninstallRunner.mutate();
   };
 
   const confirmKisqlUninstall = () => {
     setShowKisqlUninstallConfirmation(false);
-    setIsBlocking(true);
     uninstallKisql.mutate();
   };
 
@@ -241,13 +238,6 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
 
   return (
     <SettingsStack>
-      <Backdrop
-        open={isBlocking}
-        sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, color: '#fff' }}
-      >
-        <CircularProgress color="inherit" />
-      </Backdrop>
-
       <SettingsSection
         title="Local Runner"
         icon={<TerminalOutlined />}
@@ -328,7 +318,8 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
               disabled={
                 version.version === versionInfo.currentVersion ||
                 installingVersion === version.version ||
-                installVersion.isLoading
+                installVersion.isLoading ||
+                isInstallTaskActive
               }
               startIcon={
                 installingVersion === version.version ? (
@@ -413,6 +404,7 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
                   onClick={handleInstallKisql}
                   disabled={
                     installKisql.isLoading ||
+                    isInstallTaskActive ||
                     (dep.available && !kisqlUpdateAvailable)
                   }
                   startIcon={
@@ -435,7 +427,7 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
                       size="small"
                       color="error"
                       onClick={() => setShowKisqlUninstallConfirmation(true)}
-                      disabled={uninstallKisql.isLoading}
+                      disabled={uninstallKisql.isLoading || isInstallTaskActive}
                     >
                       <Delete fontSize="small" />
                     </IconButton>
@@ -484,7 +476,7 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
               variant="outlined"
               color="error"
               onClick={() => setShowUninstallConfirmation(true)}
-              disabled={uninstallRunner.isLoading}
+              disabled={uninstallRunner.isLoading || isInstallTaskActive}
               startIcon={
                 uninstallRunner.isLoading ? (
                   <CircularProgress size={14} />

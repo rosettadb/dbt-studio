@@ -1,0 +1,211 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`generateUniqueConnectionName characterization bigquery (location and batch priority) 1`] = `"my-project_1700000000000"`;
+
+exports[`generateUniqueConnectionName characterization bigquery (service account, no location) 1`] = `"my-project_1700000000000"`;
+
+exports[`generateUniqueConnectionName characterization databricks (default) 1`] = `"main_1700000000000"`;
+
+exports[`generateUniqueConnectionName characterization duckdb (absolute path with short_database_path) 1`] = `"warehouse_1700000000000"`;
+
+exports[`generateUniqueConnectionName characterization duckdb (without short_database_path) 1`] = `"warehouse_1700000000000"`;
+
+exports[`generateUniqueConnectionName characterization ducklake (duckdb catalog, s3 storage) 1`] = `"DBT Connection_1700000000000"`;
+
+exports[`generateUniqueConnectionName characterization ducklake (sqlite catalog, local storage) 1`] = `"DBT Connection_1700000000000"`;
+
+exports[`generateUniqueConnectionName characterization kinetica (host and port) 1`] = `"kindb_1700000000000"`;
+
+exports[`generateUniqueConnectionName characterization kinetica (useSSL with bypassSslCertCheck) 1`] = `"kindb_1700000000000"`;
+
+exports[`generateUniqueConnectionName characterization mysql (ssl on) 1`] = `"mydb_1700000000000"`;
+
+exports[`generateUniqueConnectionName characterization oracle (basic with tls) 1`] = `"ORCLPDB1_1700000000000"`;
+
+exports[`generateUniqueConnectionName characterization oracle (basic) 1`] = `"ORCLPDB1_1700000000000"`;
+
+exports[`generateUniqueConnectionName characterization oracle (connect string) 1`] = `"oracle_1700000000000"`;
+
+exports[`generateUniqueConnectionName characterization oracle (wallet) 1`] = `"mydb_high_1700000000000"`;
+
+exports[`generateUniqueConnectionName characterization postgres (ssl off) 1`] = `"pgdb_1700000000000"`;
+
+exports[`generateUniqueConnectionName characterization postgres (ssl on, reject unauthorized false) 1`] = `"pgdb_1700000000000"`;
+
+exports[`generateUniqueConnectionName characterization redshift (ssl off) 1`] = `"rsdb_1700000000000"`;
+
+exports[`generateUniqueConnectionName characterization redshift (ssl on with sslrootcert) 1`] = `"rsdb_1700000000000"`;
+
+exports[`generateUniqueConnectionName characterization snowflake (oauth_browser without role) 1`] = `"SFDB_1700000000000"`;
+
+exports[`generateUniqueConnectionName characterization snowflake (password with role) 1`] = `"SFDB_1700000000000"`;
+
+exports[`generateUniqueConnectionName characterization sqlite (file path) 1`] = `"app_1700000000000"`;
+
+exports[`mapToDbtConnection characterization bigquery (location and batch priority) 1`] = `
+{
+  "database": "my-project",
+  "keyfile": "db-bigquery-bq_loc",
+  "location": "EU",
+  "method": "service-account",
+  "password": "",
+  "priority": "batch",
+  "project": "my-project",
+  "schema": "my_dataset",
+  "type": "bigquery",
+  "username": "my-project",
+}
+`;
+
+exports[`mapToDbtConnection characterization bigquery (service account, no location) 1`] = `
+{
+  "database": "my-project",
+  "keyfile": "db-bigquery-bq_plain",
+  "method": "service-account",
+  "password": "",
+  "project": "my-project",
+  "schema": "my_dataset",
+  "type": "bigquery",
+  "username": "my-project",
+}
+`;
+
+exports[`mapToDbtConnection characterization databricks (default) 1`] = `
+{
+  "database": "main",
+  "host": "dbc.example.cloud.databricks.com",
+  "http_path": "/sql/1.0/warehouses/abc",
+  "port": 443,
+  "schema": "default",
+  "token": "db-token-dbx",
+  "type": "databricks",
+}
+`;
+
+exports[`mapToDbtConnection characterization duckdb (absolute path with short_database_path) 1`] = `
+{
+  "database": "warehouse",
+  "path": "/data/warehouse.duckdb",
+  "schema": "main",
+  "type": "duckdb",
+}
+`;
+
+exports[`mapToDbtConnection characterization duckdb (without short_database_path) 1`] = `
+{
+  "database": "warehouse",
+  "path": "/data/warehouse.duckdb",
+  "schema": "main",
+  "type": "duckdb",
+}
+`;
+
+exports[`mapToDbtConnection characterization kinetica (host and port) 1`] = `
+{
+  "bypassSslCertCheck": undefined,
+  "database": "kindb",
+  "host": "kin.example.com",
+  "password": "db-password-kin_plain",
+  "port": 9191,
+  "schema": "ki_home",
+  "timeout": undefined,
+  "type": "kinetica",
+  "useSSL": undefined,
+  "username": "db-user-kin_plain",
+}
+`;
+
+exports[`mapToDbtConnection characterization kinetica (useSSL with bypassSslCertCheck) 1`] = `
+{
+  "bypassSslCertCheck": true,
+  "database": "kindb",
+  "host": "kin.example.com",
+  "password": "db-password-kin_ssl",
+  "port": 9191,
+  "schema": "ki_home",
+  "timeout": undefined,
+  "type": "kinetica",
+  "useSSL": true,
+  "username": "db-user-kin_ssl",
+}
+`;
+
+exports[`mapToDbtConnection characterization postgres (ssl off) 1`] = `
+{
+  "database": "pgdb",
+  "host": "pg.example.com",
+  "password": "db-password-pg_plain",
+  "port": 5432,
+  "schema": "public",
+  "ssl": undefined,
+  "type": "postgres",
+  "username": "db-user-pg_plain",
+}
+`;
+
+exports[`mapToDbtConnection characterization postgres (ssl on, reject unauthorized false) 1`] = `
+{
+  "database": "pgdb",
+  "host": "pg.example.com",
+  "password": "db-password-pg_ssl",
+  "port": 5432,
+  "schema": "public",
+  "ssl": true,
+  "type": "postgres",
+  "username": "db-user-pg_ssl",
+}
+`;
+
+exports[`mapToDbtConnection characterization redshift (ssl off) 1`] = `
+{
+  "database": "rsdb",
+  "host": "rs.example.com",
+  "password": "db-password-rs_plain",
+  "port": 5439,
+  "schema": "public",
+  "ssl": undefined,
+  "sslrootcert": undefined,
+  "type": "redshift",
+  "username": "db-user-rs_plain",
+}
+`;
+
+exports[`mapToDbtConnection characterization redshift (ssl on with sslrootcert) 1`] = `
+{
+  "database": "rsdb",
+  "host": "rs.example.com",
+  "password": "db-password-rs_ssl",
+  "port": 5439,
+  "schema": "public",
+  "ssl": true,
+  "sslrootcert": "/certs/root.pem",
+  "type": "redshift",
+  "username": "db-user-rs_ssl",
+}
+`;
+
+exports[`mapToDbtConnection characterization snowflake (oauth_browser without role) 1`] = `
+{
+  "account": "acme-xy123",
+  "authMethod": "oauth_browser",
+  "authenticator": "oauth_authorization_code",
+  "database": "SFDB",
+  "schema": "PUBLIC",
+  "type": "snowflake",
+  "username": "db-user-sf_oauth",
+  "warehouse": "WH",
+}
+`;
+
+exports[`mapToDbtConnection characterization snowflake (password with role) 1`] = `
+{
+  "account": "acme-xy123",
+  "database": "SFDB",
+  "password": "db-password-sf_pw",
+  "role": "ANALYST",
+  "schema": "PUBLIC",
+  "type": "snowflake",
+  "username": "db-user-sf_pw",
+  "warehouse": "WH",
+}
+`;

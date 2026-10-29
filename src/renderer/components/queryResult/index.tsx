@@ -21,6 +21,8 @@ import {
   TableChart as CsvIcon,
   InsertDriveFile as ParquetIcon,
 } from '@mui/icons-material';
+import { getDescriptor } from '../../../connections/registry.shared';
+import { isDuckLakeType } from '../../../connections/ducklake/ducklake.shared';
 import {
   QueryResponseType,
   SupportedConnectionTypes,
@@ -65,7 +67,8 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
     (results as any).originalSql ?? exportContext?.originalSql;
 
   const isDuckLake =
-    exportContext?.connectionType === 'ducklake' &&
+    !!exportContext &&
+    isDuckLakeType(exportContext.connectionType) &&
     !!exportContext.duckLakeInstanceId &&
     !!originalSql;
 
@@ -322,10 +325,10 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
   const canExportParquet =
     !!originalSql &&
     !!exportContext &&
-    ((exportContext.connectionType === 'ducklake' &&
-      !!exportContext.duckLakeInstanceId) ||
-      (exportContext.connectionType === 'duckdb' &&
-        !!exportContext.connectionId));
+    !!getDescriptor(exportContext.connectionType)?.capabilities.nativeExport &&
+    (isDuckLakeType(exportContext.connectionType)
+      ? !!exportContext.duckLakeInstanceId
+      : !!exportContext.connectionId);
 
   const handleExportParquet = async () => {
     if (!canExportParquet || !originalSql) return;
@@ -352,7 +355,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
       const exportQuery = `COPY (${normalizeSqlForCopy(originalSql)}) TO '${escapedPath}' (FORMAT PARQUET)`;
 
       if (
-        exportContext.connectionType === 'ducklake' &&
+        isDuckLakeType(exportContext.connectionType) &&
         exportContext.duckLakeInstanceId
       ) {
         const duckLakeExportResult = await window.electron.ipcRenderer.invoke(
@@ -366,7 +369,8 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
           throw new Error(duckLakeExportResult.error);
         }
       } else if (
-        exportContext.connectionType === 'duckdb' &&
+        // other nativeExport types (DuckDB) run through connector:executeQuery
+        !isDuckLakeType(exportContext.connectionType) &&
         exportContext.connectionId
       ) {
         const duckDbExportResult = await window.electron.ipcRenderer.invoke(
@@ -392,10 +396,12 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
     }
   };
 
-  // Use isCommand flag if available, otherwise fallback to field check
+  // Only real DDL/DML commands get the success message; a successful SELECT
+  // that returns no rows renders the (empty) grid so its columns stay visible.
   const isCommand =
-    results.isCommand ||
-    ((!results.fields || results.fields.length === 0) && results.success);
+    !!results.isCommand ||
+    results.commandType === 'DDL' ||
+    results.commandType === 'DML';
 
   // Show row count for DML or generic commands with rowCount > 0
   const showRowCount =
@@ -405,12 +411,13 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
       results.rowCount > 0);
 
   if (isCommand) {
+    const executedSql = originalSql ?? (results as any).sql;
     return (
       <SuccessContainer data-testid="sql-results-pane">
         <IconWrapper>
           <CheckCircleOutline fontSize="large" color="success" />
         </IconWrapper>
-        <Box>
+        <Box sx={{ minWidth: 0, flex: 1 }}>
           <Typography variant="h6" fontWeight="bold">
             Command executed successfully
           </Typography>
@@ -428,6 +435,29 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
                 ? `${(results.duration! / 1000).toFixed(2)}s`
                 : `${results.duration!}ms`}
             </Typography>
+          )}
+          {executedSql && executedSql.trim() && (
+            <Box
+              component="pre"
+              sx={{
+                mt: 1,
+                mb: 0,
+                p: 1,
+                bgcolor: 'action.hover',
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: 1,
+                fontFamily: 'monospace',
+                fontSize: '0.8rem',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                maxHeight: 160,
+                overflow: 'auto',
+                color: 'text.primary',
+              }}
+            >
+              {executedSql.trim()}
+            </Box>
           )}
         </Box>
       </SuccessContainer>

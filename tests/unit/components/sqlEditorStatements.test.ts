@@ -1,4 +1,4 @@
-import { parseOracleEditorStatements } from '../../../src/renderer/components/sqlEditor/editorComponent/oracleStatements';
+import { parseOracleEditorStatements } from '../../../src/connections/oracle/oracle.statements.renderer';
 import { parseSqlEditorStatements } from '../../../src/renderer/components/sqlEditor/editorComponent/statements';
 
 function parse(sql: string, type = 'oracle') {

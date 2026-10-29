@@ -248,6 +248,7 @@ export type UtilChannels =
   | 'windows:closeSetup'
   | 'utils:getFileContentList'
   | 'utils:open-path'
+  | 'utils:show-item-in-folder'
   | 'utils:run-in-terminal'
   | 'dialog:showOpenDialog'
   | 'dialog:showSaveDialog'
@@ -743,6 +744,7 @@ export interface TaskRecord {
   finishedAt?: number;
   error?: string;
   cancellable: boolean;
+  subject?: string;
 }
 
 export interface TaskEvent {

@@ -38,6 +38,8 @@ import {
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { isDuckLakeType } from '../../../connections/ducklake/ducklake.shared';
+import { connectionIcon } from '../../../connections/registry.renderer';
 import { connectorsServices, DuckLakeService } from '../../services';
 import { QueryResultStore } from './queryResultStore';
 import { registerQueryResultBridge } from '../../services/agentEditorBridge.service';
@@ -153,6 +155,10 @@ const Sql = () => {
     openConnectionTab,
     switchTab,
     closeTab,
+    closeTabsToLeft,
+    closeTabsToRight,
+    closeOtherTabs,
+    closeAllTabs,
     updateTabQuery,
     updateTabResults,
     setTabLoading,
@@ -561,10 +567,12 @@ const Sql = () => {
       if (!activeTabId) return;
       updateTabResults(activeTabId, results);
 
-      // Determine if this is a DDL/DML command (no field list, but successful)
+      // Only DDL/DML commands are labeled as commands; a successful SELECT
+      // with no rows still carries a field list and should render as empty.
       const isCommand =
-        results?.isCommand ||
-        ((!results?.fields || results.fields.length === 0) && results?.success);
+        !!results?.isCommand ||
+        results?.commandType === 'DDL' ||
+        results?.commandType === 'DML';
 
       const snapshot: QueryResultSnapshot = isCommand
         ? {
@@ -901,7 +909,7 @@ const Sql = () => {
                   const conn = connections.find((c) => c.id === selected);
                   if (!conn) return 'Select Connection';
                   const icon =
-                    connectionIcons.images[conn.connection.type] || defaultIcon;
+                    connectionIcon(conn.connection.type) || defaultIcon;
                   const linkedProject = projects?.find(
                     (p) => p.connectionId === conn.id,
                   );
@@ -992,8 +1000,7 @@ const Sql = () => {
                       >
                         <img
                           src={
-                            connectionIcons.images[conn.connection.type] ||
-                            defaultIcon
+                            connectionIcon(conn.connection.type) || defaultIcon
                           }
                           alt=""
                           style={{
@@ -1397,6 +1404,10 @@ const Sql = () => {
                     activeTabId={activeTabId}
                     onSelect={switchTab}
                     onClose={closeTab}
+                    onCloseOthers={closeOtherTabs}
+                    onCloseToLeft={closeTabsToLeft}
+                    onCloseToRight={closeTabsToRight}
+                    onCloseAll={closeAllTabs}
                     onReorder={reorderTabs}
                     actions={
                       activeTab && (
@@ -1541,11 +1552,11 @@ const Sql = () => {
                               setError={handleSetError}
                               onQueryChange={handleQueryChange}
                               onQuerySaved={handleQuerySaved}
-                              onQueryStart={(id) => {
+                              onQueryStart={(id, query) => {
                                 if (activeTabId) {
                                   setTabExecutions((prev) => ({
                                     ...prev,
-                                    [activeTabId]: { id, sql: activeTab.query },
+                                    [activeTabId]: { id, sql: query },
                                   }));
                                 }
                               }}
@@ -1590,6 +1601,11 @@ const Sql = () => {
                               <ErrorMessage
                                 title="Query Failed"
                                 description={activeTab.error}
+                                query={
+                                  activeTabId
+                                    ? tabExecutions[activeTabId]?.sql
+                                    : undefined
+                                }
                               />
                             )}
                             {!isLoading && !hasError && hasResults && (
@@ -1598,17 +1614,19 @@ const Sql = () => {
                                 exportContext={{
                                   connectionType: connectionInput.type,
                                   connectionId: activeTab.connectionId,
-                                  duckLakeInstanceId:
-                                    connectionInput.type === 'ducklake'
-                                      ? (connectionInput as any).instanceId
-                                      : undefined,
-                                  duckLakeReady:
-                                    connectionInput.type === 'ducklake'
-                                      ? (connectionInput as any).status !==
-                                          'loading' &&
-                                        (connectionInput as any).status !==
-                                          'connecting'
-                                      : undefined,
+                                  duckLakeInstanceId: isDuckLakeType(
+                                    connectionInput.type,
+                                  )
+                                    ? (connectionInput as any).instanceId
+                                    : undefined,
+                                  duckLakeReady: isDuckLakeType(
+                                    connectionInput.type,
+                                  )
+                                    ? (connectionInput as any).status !==
+                                        'loading' &&
+                                      (connectionInput as any).status !==
+                                        'connecting'
+                                    : undefined,
                                   originalSql:
                                     (activeTab.results as any)?.originalSql ??
                                     activeTab.query,
@@ -1641,11 +1659,11 @@ const Sql = () => {
                             setError={handleSetError}
                             onQueryChange={handleQueryChange}
                             onQuerySaved={handleQuerySaved}
-                            onQueryStart={(id) => {
+                            onQueryStart={(id, query) => {
                               if (activeTabId) {
                                 setTabExecutions((prev) => ({
                                   ...prev,
-                                  [activeTabId]: { id, sql: activeTab.query },
+                                  [activeTabId]: { id, sql: query },
                                 }));
                               }
                             }}

@@ -8,7 +8,7 @@ import {
   mapOracleValue,
   normalizeOracleStatement,
   testOracleConnection,
-} from '../../../../../src/main/utils/oracleHelper';
+} from '../../../../../src/connections/oracle/oracle.client.main';
 import type { OracleConnection } from '../../../../../src/types/backend';
 
 const conn: OracleConnection = {
@@ -26,7 +26,7 @@ const conn: OracleConnection = {
 const secrets = { password: 'p$ss', walletPassword: 'wallet-secret' };
 const realTypeDriver = driver as unknown as Awaited<
   ReturnType<
-    typeof import('../../../../../src/main/utils/oracleHelper').loadOracleDriver
+    typeof import('../../../../../src/connections/oracle/oracle.client.main').loadOracleDriver
   >
 >;
 const meta = (type: number) =>
