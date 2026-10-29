@@ -20,6 +20,8 @@ import {
   AlertTitle,
   ToggleButton,
   ToggleButtonGroup,
+  TextField,
+  MenuItem,
   Tooltip,
 } from '@mui/material';
 import {
@@ -298,6 +300,12 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
   const [viewedRuntime, setViewedRuntime] = React.useState<'v1' | 'v2' | null>(
     null,
   );
+  // Activate was clicked on the runtime that is not installed.
+  const [isActivatingRuntime, setIsActivatingRuntime] = React.useState(false);
+  // Version picked in the dropdown; null means the latest stable.
+  const [selectedInstallVersion, setSelectedInstallVersion] = React.useState<
+    string | null
+  >(null);
   const warningStyle = useSettingsWarningStyle();
   const [versionChangePlan, setVersionChangePlan] =
     React.useState<DbtVersionChangePlan | null>(null);
@@ -623,6 +631,9 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
         if (result.installedVersion) {
           saveSettingIfPageOpen('dbtVersion', result.installedVersion);
         }
+        // The new runtime is active now, so show its normal version list.
+        setIsActivatingRuntime(false);
+        setIsVersionListOpen(true);
         await refreshDbtCoreVersions();
         await checkInstalledPackages();
         if (runProjectCheck) {
@@ -886,9 +897,15 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
       const isInstalled = item.isInstalled || installed === item.version;
       const isLatest = item.isLatestStable;
 
+      const isOtherRuntime =
+        !!installed &&
+        item.version.startsWith('2.') !== installed.startsWith('2.');
+
       let actionLabel = installed ? 'Downgrade' : 'Install';
       if (isInstalled) {
-        actionLabel = 'Installed';
+        actionLabel = 'Active';
+      } else if (isOtherRuntime) {
+        actionLabel = 'Switch to this version';
       } else if (item.isPrerelease) {
         actionLabel = 'Install Preview';
       } else if (
@@ -1058,12 +1075,38 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
   const shownRuntime = viewedRuntime ?? activeRuntime;
   const isShownRuntimeActive = hasDbt && shownRuntime === activeRuntime;
 
-  // The toggle picks which runtime's versions are shown (the header pill shows
-  // what is installed). Installing a version does the switch.
+  // The toggle picks which runtime is shown (the header pill shows what is
+  // installed). The installed runtime shows its version list; the other one
+  // shows an Activate button, then a version dropdown and an Install button.
+
   const showRuntimeVersions = (runtime: 'v1' | 'v2') => {
     setViewedRuntime(runtime);
-    setIsVersionListOpen(true);
+    setIsVersionListOpen(hasDbt && runtime === activeRuntime);
+    setIsActivatingRuntime(false);
+    setSelectedInstallVersion(null);
   };
+
+  // Same cap as the version list with "Show older versions" expanded.
+  const shownRuntimeVersions = (
+    shownRuntime === 'v1' ? allPythonDbtVersions : allRustDbtVersions
+  ).slice(0, 15);
+  const latestStableShownVersion =
+    shownRuntimeVersions.find(
+      (item) => item.isLatestStable && !item.isPrerelease,
+    )?.version ??
+    shownRuntimeVersions[0]?.version ??
+    '';
+  const versionToInstall = selectedInstallVersion ?? latestStableShownVersion;
+  // The picked version's switch while it is queued or running.
+  const activationTask =
+    dbtRuntimeTask?.subject === `dbt-core@${versionToInstall}`
+      ? dbtRuntimeTask
+      : undefined;
+  let activationLabel = 'Install';
+  if (activationTask) {
+    activationLabel =
+      activationTask.status === 'pending' ? 'Queued' : 'Switching…';
+  }
 
   const renderRuntimeVersions = (
     versions: DbtVersionListResponse['versions'],
@@ -1127,70 +1170,155 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
               : 'dbt v2 · Rust. Installed from the Apache-licensed dbt-oss package. Requires Python 3.11+. Cloud pipeline runs are unavailable while v2 is active.'
           }
         >
-          <ToggleButtonGroup
-            exclusive
-            size="small"
-            value={shownRuntime}
+          {/* Clicking the runtime that is not installed shows a version
+              dropdown and a switch button under the toggle. */}
+          <Box
             sx={{
-              flexShrink: 0,
-              '& .MuiToggleButton-root': {
-                textTransform: 'none',
-                fontSize: 12,
-                py: 0.25,
-                px: 1.25,
-                whiteSpace: 'nowrap',
-              },
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 1,
+              width: 200,
             }}
           >
-            <ToggleButton
-              value="v1"
-              aria-label="Show dbt v1 versions"
-              onClick={() => showRuntimeVersions('v1')}
+            <ToggleButtonGroup
+              exclusive
+              fullWidth
+              size="small"
+              value={shownRuntime}
+              sx={{
+                flexShrink: 0,
+                '& .MuiToggleButton-root': {
+                  textTransform: 'none',
+                  fontSize: 12,
+                  py: 0.25,
+                  px: 1.25,
+                  whiteSpace: 'nowrap',
+                },
+              }}
             >
-              dbt v1
-            </ToggleButton>
-            <ToggleButton
-              value="v2"
-              aria-label="Show dbt v2 versions"
-              onClick={() => showRuntimeVersions('v2')}
-            >
-              dbt v2
-            </ToggleButton>
-          </ToggleButtonGroup>
+              <ToggleButton
+                value="v1"
+                aria-label="Show dbt v1 versions"
+                onClick={() => showRuntimeVersions('v1')}
+              >
+                dbt v1
+              </ToggleButton>
+              <ToggleButton
+                value="v2"
+                aria-label="Show dbt v2 versions"
+                onClick={() => showRuntimeVersions('v2')}
+              >
+                dbt v2
+              </ToggleButton>
+            </ToggleButtonGroup>
+            {!isShownRuntimeActive && !isActivatingRuntime && (
+              <Button
+                fullWidth
+                size="small"
+                variant="contained"
+                onClick={() => setIsActivatingRuntime(true)}
+                startIcon={<Download />}
+              >
+                {hasDbt
+                  ? `Activate ${shownRuntime}`
+                  : `Install ${shownRuntime}`}
+              </Button>
+            )}
+            {!isShownRuntimeActive &&
+              isActivatingRuntime &&
+              shownRuntimeVersions.length > 0 && (
+                <>
+                  <TextField
+                    select
+                    fullWidth
+                    size="small"
+                    value={versionToInstall}
+                    onChange={(event) =>
+                      setSelectedInstallVersion(event.target.value)
+                    }
+                    inputProps={{
+                      'aria-label': `dbt ${shownRuntime} version to install`,
+                    }}
+                  >
+                    {shownRuntimeVersions.map((item) => (
+                      <MenuItem key={item.version} value={item.version}>
+                        {item.version}
+                        {item.isLatestStable && !item.isPrerelease
+                          ? ' (latest stable)'
+                          : ''}
+                        {item.isPrerelease ? ' (preview)' : ''}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                  {/* Switching runtimes can always be chosen: confirming it
+                      cancels the dbt installs still in the queue. */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <Box sx={{ flex: 1, display: 'flex' }}>
+                      {withInstallTaskTooltip(
+                        activationTask,
+                        <Button
+                          fullWidth
+                          size="small"
+                          variant="contained"
+                          onClick={() => {
+                            prepareDbtVersionChange(versionToInstall).catch(
+                              () => undefined,
+                            );
+                          }}
+                          disabled={
+                            isLoadingDialog ||
+                            isLoadingInstall ||
+                            isPythonInstalling ||
+                            Boolean(activationTask)
+                          }
+                          startIcon={
+                            activationTask?.status === 'running' ? (
+                              <CircularProgress size={14} />
+                            ) : (
+                              <Download />
+                            )
+                          }
+                        >
+                          {activationLabel}
+                        </Button>,
+                      )}
+                    </Box>
+                    {activationTask?.status === 'pending' && (
+                      <CancelQueuedButton
+                        onCancel={() => {
+                          cancelTask(activationTask.id).catch(() => undefined);
+                        }}
+                      />
+                    )}
+                  </Box>
+                </>
+              )}
+          </Box>
         </SettingsRow>
 
-        <SettingsRow
-          label={`dbt ${shownRuntime} versions`}
-          description={
-            isShownRuntimeActive
-              ? undefined
-              : `Not installed. Installing a version below switches to dbt ${shownRuntime}.`
-          }
-        >
-          {/* A queued or running dbt Core switch, visible with the list closed. */}
-          {renderInstallTaskChip(dbtRuntimeTask)}
-          <IconButton
-            size="small"
-            onClick={() => setIsVersionListOpen((open) => !open)}
-            aria-label={isVersionListOpen ? 'Hide versions' : 'Show versions'}
-          >
-            <ExpandMore
-              fontSize="small"
-              sx={{
-                transform: isVersionListOpen ? 'rotate(180deg)' : 'none',
-                transition: 'transform 0.15s',
-              }}
-            />
-          </IconButton>
-        </SettingsRow>
-        {isVersionListOpen && (
+        {/* Only the installed runtime has a version list. */}
+        {isShownRuntimeActive && (
+          <SettingsRow label={`dbt ${shownRuntime} versions`}>
+            {/* A queued or running dbt Core switch, visible with the list
+                closed. */}
+            {renderInstallTaskChip(dbtRuntimeTask)}
+            <IconButton
+              size="small"
+              onClick={() => setIsVersionListOpen((open) => !open)}
+              aria-label={isVersionListOpen ? 'Hide versions' : 'Show versions'}
+            >
+              <ExpandMore
+                fontSize="small"
+                sx={{
+                  transform: isVersionListOpen ? 'rotate(180deg)' : 'none',
+                  transition: 'transform 0.15s',
+                }}
+              />
+            </IconButton>
+          </SettingsRow>
+        )}
+        {isShownRuntimeActive && isVersionListOpen && (
           <SettingsSectionBody>
-            {shownRuntime === 'v1' && !settings.pythonPath && (
-              <Alert severity="info" sx={{ mb: 1.25 }}>
-                Python is not installed yet. Installing a dbt v1 version below
-                will install it automatically.
-              </Alert>
-            )}
             {shownRuntime === 'v1'
               ? renderRuntimeVersions(
                   pythonDbtVersions,
