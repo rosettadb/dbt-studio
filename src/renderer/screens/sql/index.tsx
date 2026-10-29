@@ -155,6 +155,10 @@ const Sql = () => {
     openConnectionTab,
     switchTab,
     closeTab,
+    closeTabsToLeft,
+    closeTabsToRight,
+    closeOtherTabs,
+    closeAllTabs,
     updateTabQuery,
     updateTabResults,
     setTabLoading,
@@ -1400,6 +1404,10 @@ const Sql = () => {
                     activeTabId={activeTabId}
                     onSelect={switchTab}
                     onClose={closeTab}
+                    onCloseOthers={closeOtherTabs}
+                    onCloseToLeft={closeTabsToLeft}
+                    onCloseToRight={closeTabsToRight}
+                    onCloseAll={closeAllTabs}
                     onReorder={reorderTabs}
                     actions={
                       activeTab && (

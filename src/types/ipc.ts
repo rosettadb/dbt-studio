@@ -248,6 +248,7 @@ export type UtilChannels =
   | 'windows:closeSetup'
   | 'utils:getFileContentList'
   | 'utils:open-path'
+  | 'utils:show-item-in-folder'
   | 'utils:run-in-terminal'
   | 'dialog:showOpenDialog'
   | 'dialog:showSaveDialog'

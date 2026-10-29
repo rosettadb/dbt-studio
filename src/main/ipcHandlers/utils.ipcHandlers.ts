@@ -15,6 +15,7 @@ const handlerChannels = [
   'dialog:showOpenDialog',
   'dialog:showSaveDialog',
   'utils:saveBase64File',
+  'utils:show-item-in-folder',
 ];
 
 const removeUtilsIpcHandlers = () => {
@@ -62,6 +63,11 @@ const registerUtilsHandlers = () => {
 
   ipcMain.handle('utils:open-path', (_event, filePath: string) =>
     shell.openPath(filePath),
+  );
+
+  // Opens the OS file manager (Finder / File Explorer / Files) with the file selected.
+  ipcMain.handle('utils:show-item-in-folder', (_event, filePath: string) =>
+    shell.showItemInFolder(filePath),
   );
 
   // Handler for saving a base64-encoded file to disk (e.g. PNG export)

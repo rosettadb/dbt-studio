@@ -13,3 +13,7 @@ export const getFileContentList = async (
 
 export const openPath = (filePath: string): Promise<string> =>
   window.electron.ipcRenderer.invoke('utils:open-path', filePath);
+
+/** Opens the OS file manager with the file selected. */
+export const showItemInFolder = (filePath: string): Promise<void> =>
+  window.electron.ipcRenderer.invoke('utils:show-item-in-folder', filePath);

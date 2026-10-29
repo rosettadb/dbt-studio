@@ -1622,6 +1622,10 @@ const Notebooks = () => {
                     activeTabId={notebookTabManager.activeTabId}
                     onSelect={notebookTabManager.switchTab}
                     onClose={notebookTabManager.closeTab}
+                    onCloseOthers={notebookTabManager.closeOtherTabs}
+                    onCloseToLeft={notebookTabManager.closeTabsToLeft}
+                    onCloseToRight={notebookTabManager.closeTabsToRight}
+                    onCloseAll={notebookTabManager.closeAllTabs}
                     onReorder={notebookTabManager.reorderTabs}
                   />
 

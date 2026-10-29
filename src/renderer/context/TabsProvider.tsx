@@ -52,6 +52,7 @@ export interface TabsContextValue extends UseTabManagerReturn {
   // Opens or closes the read-only preview tab for a markdown/html source.
   togglePreview: (sourcePath: string, content: string) => Promise<void>;
   saveAll: () => Promise<void>;
+  saveTab: (tabId: EditorTabId) => Promise<void>;
   closeAll: () => void;
 }
 
@@ -65,6 +66,14 @@ interface TabsProviderProps {
 // owner of file content in the renderer: file views render a tab, the
 // sidebar/chat/agent open and refresh tabs through this API, and nobody keeps
 // a parallel copy of a file's text.
+const notifyModifiedTabsKept = (count: number) => {
+  if (count > 0) {
+    toast.info(
+      `${count} modified tab${count > 1 ? 's are' : ' is'} still open. Save or discard changes before closing.`,
+    );
+  }
+};
+
 export const TabsProvider: React.FC<TabsProviderProps> = ({ children }) => {
   const { data: project } = useGetSelectedProject();
   const { data: connection } = useGetConnectionById(project?.connectionId);
@@ -162,16 +171,62 @@ export const TabsProvider: React.FC<TabsProviderProps> = ({ children }) => {
     await refreshProjectFiles();
   }, [tabs, markTabSavedByPath, setTabErrorByPath, refreshProjectFiles]);
 
+  const saveTab = useCallback(
+    async (tabId: EditorTabId) => {
+      const tab = tabs.find((t) => t.id === tabId);
+      if (!tab) return;
+      try {
+        await projectsServices.saveFileContent({
+          path: tab.path,
+          content: tab.content,
+        });
+        markTabSavedByPath(tab.path);
+        setTabErrorByPath(tab.path, undefined);
+        await refreshProjectFiles();
+      } catch (error: any) {
+        setTabErrorByPath(tab.path, error?.message);
+      }
+    },
+    [tabs, markTabSavedByPath, setTabErrorByPath, refreshProjectFiles],
+  );
+
   const closeAll = useCallback(() => {
     const unmodified = tabs.filter((tab) => !tab.isModified);
     const modifiedCount = tabs.length - unmodified.length;
     unmodified.forEach((tab) => closeTab(tab.id));
-    if (modifiedCount > 0) {
-      toast.info(
-        `${modifiedCount} modified tab${modifiedCount > 1 ? 's are' : ' is'} still open. Save or discard changes before closing.`,
-      );
-    }
+    notifyModifiedTabsKept(modifiedCount);
   }, [tabs, closeTab]);
+
+  // Bulk closes from the tab context menu keep changed tabs open, like Close All.
+  const {
+    closeTabsToLeft: closeLeftKeepingModified,
+    closeTabsToRight: closeRightKeepingModified,
+    closeOtherTabs: closeOthersKeepingModified,
+  } = manager;
+  const closeTabsToLeft = useCallback(
+    (tabId: EditorTabId) => {
+      const kept = closeLeftKeepingModified(tabId);
+      notifyModifiedTabsKept(kept);
+      return kept;
+    },
+    [closeLeftKeepingModified],
+  );
+  const closeTabsToRight = useCallback(
+    (tabId: EditorTabId) => {
+      const kept = closeRightKeepingModified(tabId);
+      notifyModifiedTabsKept(kept);
+      return kept;
+    },
+    [closeRightKeepingModified],
+  );
+  const closeOtherTabs = useCallback(
+    (tabId: EditorTabId) => {
+      const kept = closeOthersKeepingModified(tabId);
+      notifyModifiedTabsKept(kept);
+      return kept;
+    },
+    [closeOthersKeepingModified],
+  );
 
   // Switching to another project starts it with an empty editor.
   const previousProjectPathRef = useRef<string | undefined>();
@@ -283,7 +338,11 @@ export const TabsProvider: React.FC<TabsProviderProps> = ({ children }) => {
       clearRevealPosition,
       togglePreview,
       saveAll,
+      saveTab,
       closeAll,
+      closeTabsToLeft,
+      closeTabsToRight,
+      closeOtherTabs,
     }),
     [
       manager,
@@ -295,7 +354,11 @@ export const TabsProvider: React.FC<TabsProviderProps> = ({ children }) => {
       clearRevealPosition,
       togglePreview,
       saveAll,
+      saveTab,
       closeAll,
+      closeTabsToLeft,
+      closeTabsToRight,
+      closeOtherTabs,
     ],
   );
 

@@ -13,6 +13,7 @@ interface EditorTabProps {
   isLast?: boolean;
   onSelect: () => void;
   onClose: () => void;
+  onContextMenu?: (event: React.MouseEvent) => void;
 }
 
 export const EditorTab: React.FC<EditorTabProps> = ({
@@ -21,6 +22,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
   isLast,
   onSelect,
   onClose,
+  onContextMenu,
 }) => {
   const handleClose = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
@@ -35,7 +37,24 @@ export const EditorTab: React.FC<EditorTabProps> = ({
       enterDelay={600}
       enterNextDelay={600}
     >
-      <TabButton active={isActive} isLast={isLast} onClick={onSelect}>
+      <TabButton
+        active={isActive}
+        isLast={isLast}
+        onClick={onSelect}
+        onContextMenu={(e) => {
+          if (onContextMenu) {
+            e.preventDefault();
+            onContextMenu(e);
+          }
+        }}
+        onAuxClick={(e) => {
+          if (e.button === 1) {
+            e.preventDefault();
+            e.stopPropagation();
+            onClose();
+          }
+        }}
+      >
         <TabIconSlot>
           <FileIcon fileName={tab.title} />
         </TabIconSlot>

@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, IconButton, Tooltip, useTheme } from '@mui/material';
 import { Close } from '@mui/icons-material';
 import { NotebookTabState } from '../../hooks/useNotebookTabManager';
+import { TabContextMenu } from '../tabContextMenu';
 import { NotebookKindIcon } from './NotebookKindIcon';
 
 interface NotebookTabProps {
@@ -9,6 +10,7 @@ interface NotebookTabProps {
   isActive: boolean;
   onSelect: () => void;
   onClose: () => void;
+  onContextMenu?: (event: React.MouseEvent) => void;
 }
 
 const NotebookTab: React.FC<NotebookTabProps> = ({
@@ -16,6 +18,7 @@ const NotebookTab: React.FC<NotebookTabProps> = ({
   isActive,
   onSelect,
   onClose,
+  onContextMenu,
 }) => {
   const theme = useTheme();
 
@@ -52,6 +55,19 @@ const NotebookTab: React.FC<NotebookTabProps> = ({
     >
       <Box
         onClick={onSelect}
+        onContextMenu={(e) => {
+          if (onContextMenu) {
+            e.preventDefault();
+            onContextMenu(e);
+          }
+        }}
+        onAuxClick={(e) => {
+          if (e.button === 1) {
+            e.preventDefault();
+            e.stopPropagation();
+            onClose();
+          }
+        }}
         role="tab"
         tabIndex={0}
         aria-selected={isActive}
@@ -150,6 +166,10 @@ interface NotebookTabManagerProps {
   activeTabId: string | null;
   onSelect: (tabId: string) => void;
   onClose: (tabId: string) => void;
+  onCloseOthers?: (tabId: string) => void;
+  onCloseToLeft?: (tabId: string) => void;
+  onCloseToRight?: (tabId: string) => void;
+  onCloseAll?: () => void;
   onReorder: (fromIndex: number, toIndex: number) => void;
 }
 
@@ -163,6 +183,10 @@ export const NotebookTabManager: React.FC<NotebookTabManagerProps> = ({
   activeTabId,
   onSelect,
   onClose,
+  onCloseOthers,
+  onCloseToLeft,
+  onCloseToRight,
+  onCloseAll,
   onReorder,
 }) => {
   const theme = useTheme();
@@ -170,6 +194,10 @@ export const NotebookTabManager: React.FC<NotebookTabManagerProps> = ({
     tabId: null,
     overTabId: null,
   });
+  const [contextMenu, setContextMenu] = React.useState<{
+    tabId: string;
+    position: { top: number; left: number };
+  } | null>(null);
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const tabRefs = React.useRef<Map<string, HTMLDivElement>>(new Map());
 
@@ -271,6 +299,12 @@ export const NotebookTabManager: React.FC<NotebookTabManagerProps> = ({
             isActive={tab.notebookId === activeTabId}
             onSelect={() => onSelect(tab.notebookId)}
             onClose={() => onClose(tab.notebookId)}
+            onContextMenu={(event) => {
+              setContextMenu({
+                tabId: tab.notebookId,
+                position: { top: event.clientY, left: event.clientX },
+              });
+            }}
           />
         </Box>
       </Box>
@@ -308,6 +342,13 @@ export const NotebookTabManager: React.FC<NotebookTabManagerProps> = ({
       });
     }
   }, [activeTabId, tabs]);
+
+  const contextIndex = tabs.findIndex(
+    (t) => t.notebookId === contextMenu?.tabId,
+  );
+  const hasTabsToLeft = contextIndex > 0;
+  const hasTabsToRight = contextIndex !== -1 && contextIndex < tabs.length - 1;
+  const hasOtherTabs = tabs.length > 1;
 
   return (
     <Box
@@ -353,6 +394,32 @@ export const NotebookTabManager: React.FC<NotebookTabManagerProps> = ({
           />
         )}
       </Box>
+      <TabContextMenu
+        anchorPosition={contextMenu ? contextMenu.position : null}
+        onClose={() => setContextMenu(null)}
+        onCloseTab={() => {
+          if (contextMenu) onClose(contextMenu.tabId);
+        }}
+        onCloseOthers={() => {
+          if (contextMenu) onCloseOthers?.(contextMenu.tabId);
+        }}
+        onCloseToLeft={() => {
+          if (contextMenu) onCloseToLeft?.(contextMenu.tabId);
+        }}
+        onCloseToRight={() => {
+          if (contextMenu) onCloseToRight?.(contextMenu.tabId);
+        }}
+        onCloseAll={() => {
+          if (onCloseAll) {
+            onCloseAll();
+          } else {
+            tabs.forEach((tab) => onClose(tab.notebookId));
+          }
+        }}
+        hasTabsToLeft={hasTabsToLeft}
+        hasTabsToRight={hasTabsToRight}
+        hasOtherTabs={hasOtherTabs}
+      />
     </Box>
   );
 };
