@@ -27,6 +27,15 @@ export const MANAGED_ENVIRONMENT_INSTALL_TYPES = [
   'install:sqlglot',
   'install:pyiceberg',
 ];
+// Installs with no time limit: Flowfile and sqlglot run pip through a shell,
+// which can't be stopped reliably, and the app update uses Electron's
+// updater. If one is still running after 30 minutes, a popup says so.
+export const UNLIMITED_INSTALL_TYPES = [
+  'install:flowfile',
+  'install:sqlglot',
+  'install:app-update',
+];
+
 export const FINISH_BEFORE_PYTHON_INSTALL_TYPES = [
   'install:flowfile',
   'install:sqlglot',

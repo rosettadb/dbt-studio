@@ -52,7 +52,6 @@ jest.mock('../../../src/renderer/context/TaskManagerProvider', () => ({
     remove: jest.fn(),
     subscribe: jest.fn(),
     getTask: jest.fn(),
-    stuckTaskIds: [],
   }),
 }));
 
@@ -385,8 +384,9 @@ describe('DbtSettings runtime switch', () => {
       'dbt-duckdb': '1.11.0',
     };
 
-    // The page loads installed packages after a 1s delay.
-    const loadTimeout = { timeout: 3000 };
+    // The page loads installed packages after a 1s delay; a busy full test
+    // run can take a few seconds more.
+    const loadTimeout = { timeout: 6000 };
 
     // The version list's own Queued button (the versions row also has a
     // Queued chip, which is a button too).

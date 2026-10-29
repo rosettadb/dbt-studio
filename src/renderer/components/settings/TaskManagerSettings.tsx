@@ -47,13 +47,12 @@ const byRunOrder = (a: TaskRecord, b: TaskRecord) => {
 };
 
 export const TaskManagerSettings: React.FC = () => {
-  const { tasks, cancel, remove, stuckTaskIds } = useTaskManager();
+  const { tasks, cancel, remove } = useTaskManager();
 
   const activeTasks = tasks.filter(isActive).sort(byRunOrder);
   const historyTasks = tasks.filter((task) => !isActive(task));
 
   const renderTask = (task: TaskRecord) => {
-    const looksStuck = stuckTaskIds.includes(task.id);
     return (
       <SettingsRow
         key={task.id}
@@ -67,11 +66,6 @@ export const TaskManagerSettings: React.FC = () => {
             addSuffix: true,
           }),
           task.error,
-          // A stuck install that can't be stopped is only safe to leave by
-          // quitting; stopping it mid-copy would leave it half-installed.
-          looksStuck &&
-            !task.cancellable &&
-            "Can't be stopped safely right now. If it stays stuck, quit the app.",
         ]
           .filter(Boolean)
           .join(' · ')}
@@ -86,10 +80,6 @@ export const TaskManagerSettings: React.FC = () => {
               {task.progress.percentage}%
             </Typography>
           </Box>
-        )}
-
-        {looksStuck && (
-          <SettingsStatus tone="warning">Looks stuck</SettingsStatus>
         )}
 
         <SettingsStatus tone={STATUS_TONE[task.status]}>

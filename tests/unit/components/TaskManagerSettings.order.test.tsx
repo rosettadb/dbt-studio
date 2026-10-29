@@ -24,7 +24,6 @@ jest.mock('../../../src/renderer/context/TaskManagerProvider', () => ({
     remove: jest.fn(),
     subscribe: jest.fn(),
     getTask: jest.fn(),
-    stuckTaskIds: [],
   }),
 }));
 
