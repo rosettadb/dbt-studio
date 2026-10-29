@@ -289,6 +289,29 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     [key: string]: string;
   }>({});
   const [isCheckingPackages, setIsCheckingPackages] = React.useState(false);
+  // Package checks run pip and take seconds, so they can overlap. Only the
+  // newest check or row update counts: a check that finishes after a newer
+  // one is dropped instead of undoing it.
+  const latestInstalledPackagesChangeRef = React.useRef(0);
+  const changeInstalledPackages: typeof setInstalledPackages = (change) => {
+    latestInstalledPackagesChangeRef.current += 1;
+    setInstalledPackages(change);
+  };
+  const reloadInstalledPackages = async (
+    clearOnError: boolean,
+  ): Promise<void> => {
+    latestInstalledPackagesChangeRef.current += 1;
+    const thisChange = latestInstalledPackagesChangeRef.current;
+    let packages: { [key: string]: string } | null = null;
+    try {
+      packages = (await getInstalledPackages()).packages;
+    } catch {
+      if (clearOnError) packages = {};
+    }
+    if (packages && thisChange === latestInstalledPackagesChangeRef.current) {
+      setInstalledPackages(packages);
+    }
+  };
 
   const [dbtCoreVersions, setDbtCoreVersions] =
     React.useState<DbtVersionListResponse | null>(null);
@@ -502,10 +525,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
 
     setIsCheckingPackages(true);
     try {
-      const result = await getInstalledPackages();
-      setInstalledPackages(result.packages);
-    } catch {
-      setInstalledPackages({});
+      await reloadInstalledPackages(true);
     } finally {
       setIsCheckingPackages(false);
     }
@@ -536,7 +556,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
       }),
     );
     if (result?.ok && result.installedVersion) {
-      setInstalledPackages((prev) => ({
+      changeInstalledPackages((prev) => ({
         ...prev,
         [packageName]: result.installedVersion as string,
       }));
@@ -701,7 +721,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     );
     if (!result?.ok) return;
 
-    setInstalledPackages((prev) => {
+    changeInstalledPackages((prev) => {
       const updated = { ...prev };
       delete updated[packageName];
       return updated;
@@ -721,7 +741,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
       }),
     );
     if (result?.ok && result.installedVersion) {
-      setInstalledPackages((prev) => ({
+      changeInstalledPackages((prev) => ({
         ...prev,
         [packageName]: result.installedVersion as string,
       }));
@@ -756,7 +776,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
           }),
         );
         if (result?.ok && result.installedVersion) {
-          setInstalledPackages((prev) => ({
+          changeInstalledPackages((prev) => ({
             ...prev,
             [pkg]: result.installedVersion as string,
           }));
@@ -841,9 +861,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     );
     previousActiveDbtTaskIdsRef.current = ids;
     if (!anInstallLeftTheQueue || !settings.pythonPath) return;
-    getInstalledPackages()
-      .then((result) => setInstalledPackages(result.packages))
-      .catch(() => undefined);
+    reloadInstalledPackages(false).catch(() => undefined);
   }, [activeDbtTaskIds, getInstalledPackages, settings.pythonPath]);
 
   useEffect(() => {

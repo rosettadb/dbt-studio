@@ -561,6 +561,78 @@ describe('DbtSettings runtime switch', () => {
       );
     });
 
+    it('ignores a package check that finishes after a newer row update', async () => {
+      getInstalledPackages.mockResolvedValue({ packages: installedAdapters });
+      listPackageVersions.mockResolvedValue({
+        versions: [{ version: '1.12.4', isPrerelease: false }],
+        latestStable: '1.12.4',
+      });
+      let finishInstall: (value: unknown) => void = () => undefined;
+      installPackageVersion.mockReturnValue(
+        new Promise((resolve) => {
+          finishInstall = resolve;
+        }),
+      );
+      const settings = {
+        dbtPath: '/managed/venv/bin/dbt',
+        dbtVersion: '1.11.12',
+        pythonPath: '/managed/venv/bin/python3',
+        pythonVersion: '3.12.0',
+      } as any;
+      const { rerender } = render(
+        <DbtSettings settings={settings} onInstallDbtSave={jest.fn()} />,
+      );
+      expect(await uninstallButtons()).toHaveLength(2);
+
+      fireEvent.click(
+        within(screen.getByRole('group', { name: /^dbt-snowflake/ })).getByRole(
+          'button',
+          { name: 'Show details' },
+        ),
+      );
+      const versionRow = await screen.findByRole('group', {
+        name: /^1\.12\.4/,
+      });
+      fireEvent.click(
+        within(versionRow).getByRole('button', { name: 'Install' }),
+      );
+
+      // The install runs, then leaves the queue: a package check starts, and
+      // it is slow and still reports what was installed before.
+      let finishStaleCheck: (value: unknown) => void = () => undefined;
+      getInstalledPackages.mockClear();
+      getInstalledPackages.mockReturnValue(
+        new Promise((resolve) => {
+          finishStaleCheck = resolve;
+        }),
+      );
+      mockTasks = [dbtTask('dbt-snowflake@1.12.4', 'running')];
+      rerender(
+        <DbtSettings settings={settings} onInstallDbtSave={jest.fn()} />,
+      );
+      mockTasks = [];
+      rerender(
+        <DbtSettings settings={settings} onInstallDbtSave={jest.fn()} />,
+      );
+      await waitFor(() =>
+        expect(getInstalledPackages.mock.calls.length).toBeGreaterThan(0),
+      );
+
+      // The install's own result arrives first and updates the row.
+      finishInstall({ ok: true, installedVersion: '1.12.4' });
+      expect(await screen.findByText('v1.12.4')).toBeInTheDocument();
+
+      // The older check finishes last and must not undo it.
+      finishStaleCheck({ packages: installedAdapters });
+      await new Promise((resolve) => {
+        setTimeout(resolve, 50);
+      });
+      expect(screen.getByText('v1.12.4')).toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: 'Uninstall' })).toHaveLength(
+        3,
+      );
+    });
+
     it('shows In progress without a cancel once the install runs', async () => {
       getInstalledPackages.mockResolvedValue({ packages: installedAdapters });
       mockTasks = [dbtTask('dbt-postgres', 'running')];

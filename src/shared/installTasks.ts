@@ -56,19 +56,24 @@ export const isDbtRuntimeSubject = (subject: string | undefined): boolean =>
     isSubjectForPackage(subject, packageName),
   );
 
-// `dbt-core@2.0.5` is a switch to dbt Core v2.
+// `dbt-core@2.0.5` (or `dbt-core@v2.0.5`) is a switch to dbt Core v2.
 export const isDbtV2SwitchSubject = (subject: string | undefined): boolean =>
   isDbtRuntimeSubject(subject) &&
-  Number.parseInt(subject?.split('@')[1] ?? '', 10) >= 2;
+  Number.parseInt(
+    (subject?.split('@')[1] ?? '').trim().replace(/^v/i, ''),
+    10,
+  ) >= 2;
 
 export const DBT_V2_SWITCH_BLOCKS_ADAPTERS_MESSAGE =
   "dbt Core v2 is being installed, so v1 adapters can't be installed now.";
 
 // dbt commands can't run while dbt Core itself, or the Python it lives in, is
-// being replaced.
+// being replaced. Installing a chosen adapter version (`dbt-postgres@1.9.0`)
+// counts too: it uses --force-reinstall, which reinstalls dbt-core with it.
 export const isDbtRuntimeChangeTask = (task: InstallTaskLike): boolean =>
   task.type === 'install:python' ||
-  (task.type === 'install:dbt' && isDbtRuntimeSubject(task.subject));
+  (task.type === 'install:dbt' &&
+    (isDbtRuntimeSubject(task.subject) || !!task.subject?.includes('@')));
 
 export const isInstallCancelledError = (error: unknown): boolean =>
   error instanceof Error && error.message.includes(INSTALL_CANCELLED_MESSAGE);
