@@ -1,5 +1,11 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { DbtSettings } from '../../../src/renderer/components/settings/DbtSettings';
 
 const listVersions = jest.fn();
@@ -125,6 +131,7 @@ describe('DbtSettings runtime switch', () => {
   // dbtPath 'dbt' is how the page represents "dbt is not installed".
   const renderSettings = ({
     dbtPath = '/managed/venv/bin/dbt',
+    dbtVersion = '1.11.12',
     pythonPath = '/managed/venv/bin/python3',
   } = {}) =>
     render(
@@ -132,7 +139,7 @@ describe('DbtSettings runtime switch', () => {
         settings={
           {
             dbtPath,
-            dbtVersion: '1.11.12',
+            dbtVersion,
             pythonPath,
             pythonVersion: '3.12.0',
           } as any
@@ -144,13 +151,27 @@ describe('DbtSettings runtime switch', () => {
   const runtimeToggle = (runtime: 'v1' | 'v2') =>
     screen.getByRole('button', { name: `Show dbt ${runtime} versions` });
 
-  // Clicks the action on the newest v2 row (2.0.5, listed first).
-  const clickNewestV2Version = async () => {
-    fireEvent.click(runtimeToggle('v2'));
-    const [newestV2Action] = await screen.findAllByRole('button', {
-      name: 'Upgrade',
+  // Opens the version dropdown of a runtime that is not installed.
+  const openVersionDropdown = async (runtime: 'v1' | 'v2') => {
+    fireEvent.click(runtimeToggle(runtime));
+    fireEvent.click(
+      await screen.findByRole('button', { name: `Activate ${runtime}` }),
+    );
+    return screen.getByRole('combobox', {
+      name: `dbt ${runtime} version to install`,
     });
-    fireEvent.click(newestV2Action);
+  };
+
+  // The page has other Install buttons (adapters), so look in the Runtime row.
+  const runtimeInstallButton = () =>
+    within(screen.getByRole('group', { name: 'Runtime' })).getByRole('button', {
+      name: 'Install',
+    });
+
+  // Activates v2 and installs the dropdown's default (latest stable 2.0.5).
+  const clickNewestV2Version = async () => {
+    await openVersionDropdown('v2');
+    fireEvent.click(runtimeInstallButton());
   };
 
   const openV2InstallDialog = async () => {
@@ -173,29 +194,70 @@ describe('DbtSettings runtime switch', () => {
     });
   });
 
-  it('shows v2 versions without installing when dbt v2 is clicked', async () => {
+  it('shows Activate v2 instead of the v2 list when dbt v2 is clicked', async () => {
     renderSettings();
+    await screen.findByText('v1 · 1.11.12 installed');
 
     fireEvent.click(runtimeToggle('v2'));
 
-    expect(await screen.findByText('2.0.5')).toBeInTheDocument();
-    expect(screen.getByText('2.0.4')).toBeInTheDocument();
-    expect(screen.getByText('Latest stable')).toBeInTheDocument();
-    expect(screen.queryByText(/Preview/)).not.toBeInTheDocument();
-    expect(screen.getByText('dbt v2 versions')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Activate v2' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('2.0.5')).not.toBeInTheDocument();
+    expect(screen.queryByText('dbt v2 versions')).not.toBeInTheDocument();
     expect(
       screen.getByText(/Installed from the Apache-licensed dbt-oss package/),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/Installing a version below switches to dbt v2/),
-    ).toBeInTheDocument();
-    expect(screen.queryByText('1.11.11')).not.toBeInTheDocument();
     // The toggle follows what is shown; the header still shows what is installed.
     expect(runtimeToggle('v1')).toHaveAttribute('aria-pressed', 'false');
     expect(runtimeToggle('v2')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('v1 · 1.11.12 installed')).toBeInTheDocument();
     expect(planVersionChange).not.toHaveBeenCalled();
     expect(installVersionChange).not.toHaveBeenCalled();
+  });
+
+  it('replaces Activate v2 with a dropdown on the latest stable and an Install button', async () => {
+    renderSettings();
+
+    const dropdown = await openVersionDropdown('v2');
+
+    expect(dropdown).toHaveTextContent('2.0.5 (latest stable)');
+    expect(runtimeInstallButton()).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Activate v2' }),
+    ).not.toBeInTheDocument();
+    expect(planVersionChange).not.toHaveBeenCalled();
+  });
+
+  it('installs the version picked in the dropdown', async () => {
+    renderSettings();
+
+    fireEvent.mouseDown(await openVersionDropdown('v2'));
+    fireEvent.click(await screen.findByRole('option', { name: '2.0.4' }));
+    fireEvent.click(runtimeInstallButton());
+
+    await waitFor(() =>
+      expect(planVersionChange).toHaveBeenCalledWith({
+        targetVersion: '2.0.4',
+        includeAdapters: true,
+      }),
+    );
+  });
+
+  it('offers at most 15 versions when activating v1 from v2', async () => {
+    mockVersionList([
+      stableItem,
+      ...Array.from({ length: 20 }, (_, index) =>
+        olderStableItem(`1.10.${20 - index}`),
+      ),
+    ]);
+    renderSettings({ dbtVersion: '2.0.5' });
+
+    fireEvent.mouseDown(await openVersionDropdown('v1'));
+
+    const options = await screen.findAllByRole('option');
+    expect(options).toHaveLength(15);
+    expect(options[0]).toHaveTextContent('1.11.12 (latest stable)');
   });
 
   it('shows the v1 versions without Python previews', async () => {
@@ -208,7 +270,7 @@ describe('DbtSettings runtime switch', () => {
       expect(screen.getByText(version)).toBeInTheDocument();
     });
     expect(screen.queryByText('1.12.0rc2')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Installed' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Active' })).toBeDisabled();
   });
 
   it('explains a v1 to v2 switch before installing', async () => {
@@ -300,8 +362,11 @@ describe('DbtSettings runtime switch', () => {
       screen.getByRole('button', { name: 'Show fewer' }),
     ).toBeInTheDocument();
 
+    // The runtime that is not installed has no version list at all.
     fireEvent.click(runtimeToggle('v2'));
-    expect(await screen.findByText('2.0.5')).toBeInTheDocument();
+    expect(
+      await screen.findByRole('button', { name: 'Activate v2' }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: /Show older versions|Show fewer/ }),
     ).not.toBeInTheDocument();
