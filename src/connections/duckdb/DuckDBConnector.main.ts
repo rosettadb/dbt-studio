@@ -9,7 +9,11 @@ import {
   type DuckDBConnection,
   type DuckDBDBTConnection,
 } from './duckdb.shared';
-import { executeDuckDBQuery, testDuckDBConnection } from './duckdb.client.main';
+import {
+  duckDBSearchOrder,
+  executeDuckDBQuery,
+  testDuckDBConnection,
+} from './duckdb.client.main';
 import DuckDBExtractor from './duckdb.extractor.main';
 
 export class DuckDBConnector extends ConnectionDbt<
@@ -40,14 +44,35 @@ export class DuckDBConnector extends ConnectionDbt<
     return executeDuckDBQuery(conn, sql, ctx.onCancelable);
   }
 
-  // CS extractSchemaFromConnection (2354-2362): no connect/disconnect, as today
+  // CS extractSchemaFromConnection (2354-2362): no connect/disconnect, as today.
+  // The SQL Editor, Notebooks and the SQL agent see every schema in the file;
+  // the form's schema is only for dbt and Rosetta.
   async extractSchema(conn: DuckDBConnection): Promise<{ tables: Table[] }> {
     const extractor = new DuckDBExtractor({
       database_path: conn.database_path,
-      schema: conn.schema,
     });
-    const schema = await extractor.extractSchema();
-    return schema;
+    const { tables } = await extractor.extractSchema();
+
+    // List schemas in the order queries look up unqualified names, because
+    // autocomplete uses the first table that matches a name.
+    const order = duckDBSearchOrder(
+      conn.schema || 'main',
+      tables.map((table) => table.schema),
+    );
+    return {
+      tables: [...tables].sort(
+        (a, b) => order.indexOf(a.schema) - order.indexOf(b.schema),
+      ),
+    };
+  }
+
+  // ProjectsService.extractSchema: a dbt project reads only its own schema
+  async extractProjectSchema(conn: DuckDBConnection): Promise<Table[]> {
+    const extractor = new DuckDBExtractor({
+      database_path: conn.database_path,
+      schema: conn.schema || 'main',
+    });
+    return (await extractor.extractSchema()).tables;
   }
 
   // CS areConnectionConfigsEqual (223-228)

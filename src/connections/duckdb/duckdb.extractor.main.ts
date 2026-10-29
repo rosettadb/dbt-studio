@@ -2,14 +2,36 @@
 import { DuckDBInstance } from '@duckdb/node-api';
 import { Column, Table } from '../../types/backend';
 
+type TableRef = { schema: string; name: string };
+
+// Schema and object names come from the file, so they are escaped before
+// they go into SQL.
+const sqlString = (value: string) => `'${value.replace(/'/g, "''")}'`;
+
+const sqlIdentifier = (value: string) => `"${value.replace(/"/g, '""')}"`;
+
+const refKey = (ref: TableRef) => JSON.stringify([ref.schema, ref.name]);
+
+// Drops repeated refs and refs whose key is already in `exclude`.
+const uniqueRefs = (refs: TableRef[], exclude = new Set<string>()) => {
+  const seen = new Set(exclude);
+  return refs.filter((ref) => {
+    const key = refKey(ref);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
 export default class DuckDBSchemaExtractor {
   private database_path: string;
 
-  private schema: string;
+  // Without a schema, every schema in the database file is read.
+  private schema?: string;
 
   constructor(config: { database_path: string; schema?: string }) {
     this.database_path = config.database_path;
-    this.schema = config.schema || 'main';
+    this.schema = config.schema;
   }
 
   private async executeQuery(query: string): Promise<any[]> {
@@ -68,24 +90,46 @@ export default class DuckDBSchemaExtractor {
     }
   }
 
-  private async getTables(): Promise<string[]> {
+  // information_schema also lists the system and temp catalogs, so rows are
+  // limited to the database file and, when set, to one schema.
+  private scopeFilter(): string {
+    const schemaFilter = this.schema
+      ? ` AND table_schema = ${sqlString(this.schema)}`
+      : '';
+    return `table_catalog = current_database()${schemaFilter}`;
+  }
+
+  private static toTableRefs(rows: any[]): TableRef[] {
+    return rows
+      .map((row) => {
+        if (Array.isArray(row)) {
+          return { schema: row[0], name: row[1] };
+        }
+        return { schema: row.table_schema, name: row.table_name };
+      })
+      .filter(
+        (ref) =>
+          ref.schema &&
+          typeof ref.schema === 'string' &&
+          ref.name &&
+          typeof ref.name === 'string',
+      );
+  }
+
+  private async getTables(): Promise<TableRef[]> {
     try {
       const rows = await this.executeQuery(`
-        SELECT table_name
+        SELECT table_schema, table_name
         FROM information_schema.tables
-        WHERE table_schema = '${this.schema}'
+        WHERE ${this.scopeFilter()}
           AND table_type = 'BASE TABLE'
+        ORDER BY table_schema, table_name
       `);
-      return rows
-        .map((row) => {
-          if (Array.isArray(row)) {
-            return row[0];
-          }
-          return row.table_name;
-        })
-        .filter((name) => name && typeof name === 'string');
+      return DuckDBSchemaExtractor.toTableRefs(rows);
     } catch (error) {
       try {
+        // SHOW TABLES lists only the schema set by USE, or main.
+        const schema = this.schema || 'main';
         const rows = await this.executeQuery('SHOW TABLES');
         return rows
           .map((row) => {
@@ -94,35 +138,30 @@ export default class DuckDBSchemaExtractor {
             }
             return row.name;
           })
-          .filter((name) => name && typeof name === 'string');
+          .filter((name) => name && typeof name === 'string')
+          .map((name) => ({ schema, name }));
       } catch (fallbackError) {
         return [];
       }
     }
   }
 
-  private async getViews(): Promise<string[]> {
+  private async getViews(): Promise<TableRef[]> {
     try {
       const rows = await this.executeQuery(`
-        SELECT table_name
+        SELECT table_schema, table_name
         FROM information_schema.tables
-        WHERE table_schema = '${this.schema}'
+        WHERE ${this.scopeFilter()}
           AND table_type = 'VIEW'
+        ORDER BY table_schema, table_name
       `);
-      return rows
-        .map((row) => {
-          if (Array.isArray(row)) {
-            return row[0];
-          }
-          return row.table_name;
-        })
-        .filter((name) => name && typeof name === 'string');
+      return DuckDBSchemaExtractor.toTableRefs(rows);
     } catch (error) {
       return [];
     }
   }
 
-  private async getDetailedColumns(tableName: string): Promise<Column[]> {
+  private async getDetailedColumns(ref: TableRef): Promise<Column[]> {
     try {
       const rows = await this.executeQuery(`
         SELECT
@@ -132,8 +171,9 @@ export default class DuckDBSchemaExtractor {
           is_nullable,
           column_default
         FROM information_schema.columns
-        WHERE table_name = '${tableName}'
-          AND table_schema = '${this.schema}'
+        WHERE table_catalog = current_database()
+          AND table_schema = ${sqlString(ref.schema)}
+          AND table_name = ${sqlString(ref.name)}
         ORDER BY ordinal_position
       `);
 
@@ -170,7 +210,9 @@ export default class DuckDBSchemaExtractor {
         .filter((col) => col.name && typeof col.name === 'string');
     } catch (error) {
       try {
-        const rows = await this.executeQuery(`DESCRIBE ${tableName}`);
+        const rows = await this.executeQuery(
+          `DESCRIBE ${sqlIdentifier(ref.schema)}.${sqlIdentifier(ref.name)}`,
+        );
         return rows
           .map((row, index) => {
             let columnName;
@@ -208,7 +250,7 @@ export default class DuckDBSchemaExtractor {
   }
 
   async extractSchema(): Promise<{ tables: Table[] }> {
-    const [tableNamesRaw, viewNamesRaw] = await Promise.all([
+    const [tableRefsRaw, viewRefsRaw] = await Promise.all([
       this.getTables(),
       this.getViews(),
     ]);
@@ -216,24 +258,21 @@ export default class DuckDBSchemaExtractor {
     // Deduplicate defensively: concurrent connections against the same
     // database file (opened separately for the tables and views queries)
     // have been observed to yield repeated rows on Windows.
-    const tableNameSet = new Set(tableNamesRaw);
-    const tableNames = Array.from(tableNameSet);
+    const tableRefs = uniqueRefs(tableRefsRaw);
     // Tables and views are read as two separate snapshots, so a name that
     // was replaced (table -> view or vice versa) mid-refresh could show up
     // in both lists. Prefer the table entry on a collision.
-    const viewNames = Array.from(new Set(viewNamesRaw)).filter(
-      (name) => !tableNameSet.has(name),
-    );
+    const viewRefs = uniqueRefs(viewRefsRaw, new Set(tableRefs.map(refKey)));
 
     const allTables: Table[] = [];
 
-    for (const tableName of tableNames) {
+    for (const tableRef of tableRefs) {
       try {
-        const columns = await this.getDetailedColumns(tableName);
+        const columns = await this.getDetailedColumns(tableRef);
         allTables.push({
-          name: tableName,
+          name: tableRef.name,
           type: 'TABLE',
-          schema: this.schema,
+          schema: tableRef.schema,
           columns,
         });
       } catch {
@@ -241,13 +280,13 @@ export default class DuckDBSchemaExtractor {
       }
     }
 
-    for (const viewName of viewNames) {
+    for (const viewRef of viewRefs) {
       try {
-        const columns = await this.getDetailedColumns(viewName);
+        const columns = await this.getDetailedColumns(viewRef);
         allTables.push({
-          name: viewName,
+          name: viewRef.name,
           type: 'VIEW',
-          schema: this.schema,
+          schema: viewRef.schema,
           columns,
         });
       } catch {
