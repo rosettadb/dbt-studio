@@ -528,13 +528,19 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     packageName: string,
     version: string,
   ) => {
-    await runQueuedInstall(packageName, () =>
+    const result = await runQueuedInstall(packageName, () =>
       installPackageVersion({
         pythonPath: settings.pythonPath,
         packageName,
         version,
       }),
     );
+    if (result?.ok && result.installedVersion) {
+      setInstalledPackages((prev) => ({
+        ...prev,
+        [packageName]: result.installedVersion as string,
+      }));
+    }
   };
 
   const ensurePythonForVersion = async (version: string): Promise<boolean> => {

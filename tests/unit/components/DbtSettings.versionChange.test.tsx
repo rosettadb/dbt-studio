@@ -20,6 +20,7 @@ const installVersionChange = jest.fn();
 const installPackageVersion = jest.fn();
 const installLatestPackage = jest.fn();
 const getInstalledPackages = jest.fn();
+const listPackageVersions = jest.fn();
 const getActiveAdapterCapabilities = jest.fn();
 const installPython = jest.fn();
 
@@ -42,7 +43,7 @@ jest.mock('../../../src/renderer/controllers', () => ({
   useInstallPackageVersion: () => installPackageVersion,
   useInstallLatestPackage: () => installLatestPackage,
   useUninstallPackage: () => jest.fn(),
-  useListPackageVersions: () => jest.fn(),
+  useListPackageVersions: () => listPackageVersions,
   usePlanDbtVersionChange: () => planVersionChange,
   useInstallDbtVersionChange: () => installVersionChange,
   useCheckCurrentProjectCompatibility: () => jest.fn(),
@@ -517,6 +518,46 @@ describe('DbtSettings runtime switch', () => {
       expect(await screen.findByText('v1.12.4')).toBeInTheDocument();
       expect(screen.getAllByRole('button', { name: 'Uninstall' })).toHaveLength(
         3,
+      );
+    });
+
+    it('shows Uninstall as soon as a picked adapter version finishes installing', async () => {
+      // The full re-check doesn't list it yet, so only the install's own
+      // result can switch the row.
+      getInstalledPackages.mockResolvedValue({ packages: installedAdapters });
+      listPackageVersions.mockResolvedValue({
+        versions: [{ version: '1.12.4', isPrerelease: false }],
+        latestStable: '1.12.4',
+      });
+      installPackageVersion.mockResolvedValue({
+        ok: true,
+        installedVersion: '1.12.4',
+      });
+      renderSettings();
+      expect(await uninstallButtons()).toHaveLength(2);
+
+      const snowflakeRow = screen.getByRole('group', {
+        name: /^dbt-snowflake/,
+      });
+      fireEvent.click(
+        within(snowflakeRow).getByRole('button', { name: 'Show details' }),
+      );
+      const versionRow = await screen.findByRole('group', {
+        name: /^1\.12\.4/,
+      });
+      fireEvent.click(
+        within(versionRow).getByRole('button', { name: 'Install' }),
+      );
+
+      expect(await screen.findByText('v1.12.4')).toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: 'Uninstall' })).toHaveLength(
+        3,
+      );
+      expect(installPackageVersion).toHaveBeenCalledWith(
+        expect.objectContaining({
+          packageName: 'dbt-snowflake',
+          version: '1.12.4',
+        }),
       );
     });
 
