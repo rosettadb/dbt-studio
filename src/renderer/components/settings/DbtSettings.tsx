@@ -1,5 +1,6 @@
 /* eslint-disable no-restricted-syntax, no-await-in-loop, no-plusplus */
 import React, { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Typography,
   Button,
@@ -21,6 +22,7 @@ import {
   ToggleButtonGroup,
   TextField,
   MenuItem,
+  Tooltip,
 } from '@mui/material';
 import {
   Info,
@@ -32,6 +34,7 @@ import {
   ExpandMore,
   ExtensionOutlined,
   Inventory2Outlined,
+  Close,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import {
@@ -43,6 +46,7 @@ import {
   PythonPackageVersionListResponse,
   SettingsType,
 } from '../../../types/backend';
+import type { TaskRecord } from '../../../types/ipc';
 import {
   useCheckCurrentProjectCompatibility,
   useGetActiveAdapterCapabilities,
@@ -73,6 +77,101 @@ import {
   useSettingsWarningStyle,
 } from './SettingsLayout';
 import { DbtMonoIcon } from '../icon/DbtMonoIcon';
+import { useActiveInstallTasks } from '../../hooks';
+import { useTaskManager } from '../../context';
+import {
+  isDbtRuntimeSubject,
+  isDbtV2SwitchSubject,
+  isInstallCancelledError,
+  isSubjectForPackage,
+} from '../../../shared/installTasks';
+
+const CANCEL_QUEUED_TOOLTIP =
+  'Remove from the queue. Nothing has been installed yet, so nothing needs cleaning up.';
+
+// Next to an install that is still waiting in the queue.
+const CancelQueuedButton: React.FC<{ onCancel: () => void }> = ({
+  onCancel,
+}) => (
+  <Tooltip title={CANCEL_QUEUED_TOOLTIP}>
+    <IconButton
+      size="small"
+      aria-label="Remove from the queue"
+      onClick={onCancel}
+    >
+      <Close fontSize="small" />
+    </IconButton>
+  </Tooltip>
+);
+
+// What a queued or running install on this page is about, as used in its
+// tooltip: "dbt-snowflake 1.12.8", "the latest dbt-snowflake", "the switch to
+// dbt Core 1.11.11". Installs from other pages fall back to their label.
+const describeInstallSubject = (task: TaskRecord): string => {
+  if (task.type !== 'install:dbt' || !task.subject) return `"${task.label}"`;
+  const [packageName, version] = task.subject.split('@');
+  if (isDbtRuntimeSubject(task.subject) && version) {
+    return `the switch to dbt Core ${version}`;
+  }
+  if (version) return `${packageName} ${version}`;
+  return task.label.startsWith('Uninstalling')
+    ? `uninstalling ${packageName}`
+    : `the latest ${packageName}`;
+};
+
+const describeRunningInstall = (task: TaskRecord): string => {
+  const [packageName, version] = (task.subject ?? '').split('@');
+  if (isDbtRuntimeSubject(task.subject) && version) {
+    return `Switching to dbt Core ${version} now.`;
+  }
+  if (task.label.startsWith('Uninstalling')) {
+    return `Uninstalling ${packageName} now.`;
+  }
+  return version
+    ? `Installing ${packageName} ${version} now.`
+    : `Installing the latest ${packageName} now.`;
+};
+
+const startSentence = (text: string) =>
+  text.startsWith('dbt-') ? text : text.charAt(0).toUpperCase() + text.slice(1);
+
+// Tooltip lines for a queued or running install. `activeInstallTasks` is the
+// whole studio queue, since installs from every page wait in the same line.
+const getInstallTaskTooltipLines = (
+  task: TaskRecord,
+  activeInstallTasks: TaskRecord[],
+): string[] => {
+  const lines: string[] = [];
+  if (task.status === 'running') {
+    lines.push(
+      describeRunningInstall(task),
+      task.cancellable
+        ? 'You can still stop it from the Task Manager.'
+        : "It can't be stopped safely now.",
+    );
+  } else {
+    const subject = startSentence(describeInstallSubject(task));
+    const running = activeInstallTasks.find(
+      (other) => other.status === 'running',
+    );
+    const waitingAhead = activeInstallTasks.filter(
+      (other) => other.status === 'pending' && other.startedAt < task.startedAt,
+    ).length;
+    if (!running) {
+      lines.push(`${subject} is next.`);
+    } else if (waitingAhead === 0) {
+      lines.push(
+        `${subject} is next. It starts when ${describeInstallSubject(running)} finishes.`,
+      );
+    } else {
+      lines.push(
+        `${subject} will start after ${waitingAhead + 1} other installs finish. Now running: ${describeInstallSubject(running)}.`,
+      );
+    }
+  }
+  lines.push('Click to see the full queue in the Task Manager.');
+  return lines;
+};
 
 interface DbtSettingsProps {
   settings: SettingsType;
@@ -104,9 +203,79 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
 
   const [isLoadingDialog, setIsLoadingDialog] = React.useState(false);
   const [loadingMessage, setLoadingMessage] = React.useState('');
-  const [installingPackageKey, setInstallingPackageKey] = React.useState<
-    string | null
-  >(null);
+  // Installs wait in the task manager's queue. Each task's subject says what
+  // it installs, so this page shows "Queued" on what was clicked even after
+  // it is closed and opened again.
+  const { cancel: cancelTask } = useTaskManager();
+  const activeInstallTasks = useActiveInstallTasks();
+  const navigate = useNavigate();
+  // Tooltip on a queued or running install. Disabled buttons get no mouse
+  // events, so a wrapper shows the tooltip and opens the Task Manager on click.
+  const withInstallTaskTooltip = (
+    task: TaskRecord | undefined,
+    element: React.ReactElement,
+  ) =>
+    task ? (
+      <Tooltip
+        title={getInstallTaskTooltipLines(task, activeInstallTasks).map(
+          (line) => (
+            <div key={line}>{line}</div>
+          ),
+        )}
+      >
+        <Box
+          component="span"
+          onClick={() => navigate('/app/settings/task-manager')}
+          sx={{ display: 'inline-flex', cursor: 'pointer' }}
+        >
+          {element}
+        </Box>
+      </Tooltip>
+    ) : (
+      element
+    );
+  const activeDbtTasks = activeInstallTasks.filter(
+    (task) => task.type === 'install:dbt',
+  );
+  // Adapters need Python to exist first.
+  const isPythonInstalling = activeInstallTasks.some(
+    (task) => task.type === 'install:python',
+  );
+  const getPackageTask = (packageName: string) =>
+    activeDbtTasks.find((task) =>
+      isSubjectForPackage(task.subject, packageName),
+    );
+  const dbtRuntimeTask = activeDbtTasks.find((task) =>
+    isDbtRuntimeSubject(task.subject),
+  );
+  const hasQueuedAdapterInstalls = activeDbtTasks.some(
+    (task) => !isDbtRuntimeSubject(task.subject),
+  );
+  const queuedDbtTasks = activeDbtTasks.filter(
+    (task) => task.status === 'pending',
+  );
+  const runningDbtTask = activeDbtTasks.find(
+    (task) => task.status === 'running',
+  );
+  // v1 adapters require dbt-core < 2.0, so one installed after a switch to v2
+  // would bring dbt-core back next to dbt-oss. Adapters wait while a v2
+  // switch is queued or running.
+  const isV2SwitchActive = isDbtV2SwitchSubject(dbtRuntimeTask?.subject);
+  const isAdapterInstallBlocked = isPythonInstalling || isV2SwitchActive;
+
+  // Installs keep running after this page closes, and the background process
+  // saves their results itself. A closed page's settings copy is out of date,
+  // so it must not save over them.
+  const isPageOpenRef = React.useRef(true);
+  React.useEffect(() => {
+    isPageOpenRef.current = true;
+    return () => {
+      isPageOpenRef.current = false;
+    };
+  }, []);
+  const saveSettingIfPageOpen = async (name: string, value: string) => {
+    if (isPageOpenRef.current) await onInstallDbtSave(name, value);
+  };
 
   const [selectedPackages, setSelectedPackages] = React.useState<
     Record<string, boolean>
@@ -120,6 +289,29 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     [key: string]: string;
   }>({});
   const [isCheckingPackages, setIsCheckingPackages] = React.useState(false);
+  // Package checks run pip and take seconds, so they can overlap. Only the
+  // newest check or row update counts: a check that finishes after a newer
+  // one is dropped instead of undoing it.
+  const latestInstalledPackagesChangeRef = React.useRef(0);
+  const changeInstalledPackages: typeof setInstalledPackages = (change) => {
+    latestInstalledPackagesChangeRef.current += 1;
+    setInstalledPackages(change);
+  };
+  const reloadInstalledPackages = async (
+    clearOnError: boolean,
+  ): Promise<void> => {
+    latestInstalledPackagesChangeRef.current += 1;
+    const thisChange = latestInstalledPackagesChangeRef.current;
+    let packages: { [key: string]: string } | null = null;
+    try {
+      packages = (await getInstalledPackages()).packages;
+    } catch {
+      if (clearOnError) packages = {};
+    }
+    if (packages && thisChange === latestInstalledPackagesChangeRef.current) {
+      setInstalledPackages(packages);
+    }
+  };
 
   const [dbtCoreVersions, setDbtCoreVersions] =
     React.useState<DbtVersionListResponse | null>(null);
@@ -218,6 +410,40 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     }
   }
 
+  // Each queued install reports on its own, so failures add up in the error
+  // box instead of replacing each other. A cancelled install is not an error.
+  function addInstallError(message: string) {
+    setVersionChangeResult((previous) => ({
+      ok: false,
+      error:
+        previous && !previous.ok
+          ? [previous.error, message].filter(Boolean).join('\n')
+          : message,
+    }));
+  }
+
+  async function runQueuedInstall(
+    packageName: string,
+    request: () => Promise<PythonPackageInstallVersionResponse>,
+  ): Promise<PythonPackageInstallVersionResponse | null> {
+    try {
+      const result = await request();
+      if (!result.ok) {
+        addInstallError(
+          `${packageName}: ${result.error || `Unable to install ${packageName}.`}`,
+        );
+      }
+      return result;
+    } catch (error) {
+      if (!isInstallCancelledError(error)) {
+        addInstallError(
+          `${packageName}: ${error instanceof Error ? error.message : 'Install failed.'}`,
+        );
+      }
+      return null;
+    }
+  }
+
   const handleInstallDbt = async () => {
     const allPackages = ['dbt-core', ...DBT_ADAPTER_PACKAGES, 'sqlglot'];
 
@@ -225,7 +451,6 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
 
     setIsLoadingInstall(true);
     setInstallProgress(0);
-    setIsLoadingDialog(true);
     setVersionChangeResult(null);
 
     try {
@@ -234,14 +459,13 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
         toast.info(
           'Python is required for dbt Core v1 and will be installed automatically.',
         );
-        setLoadingMessage('Installing Python...');
         const pythonResult = await installPython.mutateAsync();
         if (!pythonResult.success) {
           throw new Error(`Failed to install Python: ${pythonResult.error}`);
         }
         pythonPath = pythonResult.path;
-        await onInstallDbtSave('pythonPath', pythonResult.path);
-        await onInstallDbtSave('pythonVersion', pythonResult.version);
+        await saveSettingIfPageOpen('pythonPath', pythonResult.path);
+        await saveSettingIfPageOpen('pythonVersion', pythonResult.version);
       }
 
       const availableDbtVersions =
@@ -254,52 +478,45 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
         throw new Error('No stable dbt Core v1 version is available.');
       }
 
-      for (let i = 0; i < packages.length; i++) {
-        const pkg = packages[i];
-        setCurrentPackage(pkg);
-        setLoadingMessage(`Installing ${pkg}...`);
-        setInstallProgress((i / packages.length) * 100);
-
-        if (pkg === 'dbt-core') {
-          const result = await installPackageVersion({
+      // dbt-core goes first; if it fails, the adapters after it are skipped.
+      if (packages.includes('dbt-core')) {
+        setCurrentPackage('dbt-core');
+        const result = await runQueuedInstall('dbt-core', () =>
+          installPackageVersion({
             pythonPath,
-            packageName: pkg,
+            packageName: 'dbt-core',
             version: targetDbtVersion,
-          });
-          if (!result.ok) {
-            setVersionChangeResult(result);
-            break;
-          }
-          if (result.dbtPath) {
-            onInstallDbtSave('dbtPath', result.dbtPath);
-          }
-          if (result.installedVersion) {
-            onInstallDbtSave('dbtVersion', result.installedVersion);
-          }
-        } else {
-          const result = await installLatestPackage({
-            pythonPath,
-            packageName: pkg,
-          });
-          if (!result.ok) {
-            const error = result.error || `Unable to install ${pkg}.`;
-            setVersionChangeResult((previous) => ({
-              ok: false,
-              error:
-                previous && !previous.ok
-                  ? [previous.error, error].filter(Boolean).join('\n')
-                  : error,
-            }));
-          }
+          }),
+        );
+        if (!result?.ok) return;
+        if (result.dbtPath) {
+          saveSettingIfPageOpen('dbtPath', result.dbtPath);
+        }
+        if (result.installedVersion) {
+          saveSettingIfPageOpen('dbtVersion', result.installedVersion);
         }
       }
+
+      // The rest go into the queue at once (it keeps this order), so each
+      // row shows "Queued" right away.
+      const rest = packages.filter((pkg) => pkg !== 'dbt-core');
+      setCurrentPackage(rest.join(', '));
+      let finishedCount = 0;
+      await Promise.all(
+        rest.map(async (pkg) => {
+          await runQueuedInstall(pkg, () =>
+            installLatestPackage({ pythonPath, packageName: pkg }),
+          );
+          finishedCount += 1;
+          setInstallProgress((finishedCount / rest.length) * 100);
+        }),
+      );
       setInstallProgress(100);
       // eslint-disable-next-line no-use-before-define
       await checkInstalledPackages();
     } finally {
       setIsLoadingInstall(false);
       setCurrentPackage('');
-      setIsLoadingDialog(false);
     }
   };
 
@@ -308,10 +525,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
 
     setIsCheckingPackages(true);
     try {
-      const result = await getInstalledPackages();
-      setInstalledPackages(result.packages);
-    } catch {
-      setInstalledPackages({});
+      await reloadInstalledPackages(true);
     } finally {
       setIsCheckingPackages(false);
     }
@@ -334,25 +548,18 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     packageName: string,
     version: string,
   ) => {
-    setInstallingPackageKey(`${packageName}@${version}`);
-    setIsLoadingDialog(true);
-    setLoadingMessage(`Installing ${packageName}==${version}...`);
-    try {
-      const res = await installPackageVersion({
+    const result = await runQueuedInstall(packageName, () =>
+      installPackageVersion({
         pythonPath: settings.pythonPath,
         packageName,
         version,
-      });
-
-      if (!res.ok) {
-        setVersionChangeResult(res);
-        return;
-      }
-      await checkInstalledPackages();
-    } finally {
-      setInstallingPackageKey(null);
-      setIsLoadingDialog(false);
-      setLoadingMessage('');
+      }),
+    );
+    if (result?.ok && result.installedVersion) {
+      changeInstalledPackages((prev) => ({
+        ...prev,
+        [packageName]: result.installedVersion as string,
+      }));
     }
   };
 
@@ -373,8 +580,6 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     toast.info(
       'Python is required for dbt Core v1 and will be installed automatically.',
     );
-    setIsLoadingDialog(true);
-    setLoadingMessage('Installing Python...');
     try {
       const result = await installPython.mutateAsync();
       if (!result.success) {
@@ -384,8 +589,8 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
         });
         return false;
       }
-      await onInstallDbtSave('pythonPath', result.path);
-      await onInstallDbtSave('pythonVersion', result.version);
+      await saveSettingIfPageOpen('pythonPath', result.path);
+      await saveSettingIfPageOpen('pythonVersion', result.version);
       return true;
     } catch (error) {
       setVersionChangeResult({
@@ -394,9 +599,6 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
           error instanceof Error ? error.message : 'Failed to install Python.',
       });
       return false;
-    } finally {
-      setIsLoadingDialog(false);
-      setLoadingMessage('');
     }
   };
 
@@ -431,11 +633,17 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
   const confirmDbtVersionChange = async () => {
     if (!versionChangePlan) return;
     setIsVersionChangeDialogOpen(false);
-    setIsLoadingDialog(true);
-    setInstallingPackageKey(`dbt-core@${versionChangePlan.targetVersion}`);
-    setLoadingMessage(
-      `Installing dbt-core==${versionChangePlan.targetVersion}...`,
-    );
+    // A switch between v1 and v2 drops the dbt installs still waiting: v2
+    // brings its own adapters, and a v1 adapter installed after the switch
+    // would bring dbt-core back next to dbt-oss. They have not started, so
+    // nothing is left half-done; one already running finishes first.
+    const { currentVersion, targetVersion } = versionChangePlan;
+    const isLineSwitch =
+      Boolean(currentVersion) &&
+      currentVersion?.startsWith('2.') !== targetVersion.startsWith('2.');
+    if (isLineSwitch) {
+      await Promise.all(queuedDbtTasks.map((task) => cancelTask(task.id)));
+    }
     try {
       const result = await installDbtVersionChange({
         targetVersion: versionChangePlan.targetVersion,
@@ -444,9 +652,9 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
       });
       setVersionChangeResult(result);
       if (result.ok) {
-        if (result.dbtPath) onInstallDbtSave('dbtPath', result.dbtPath);
+        if (result.dbtPath) saveSettingIfPageOpen('dbtPath', result.dbtPath);
         if (result.installedVersion) {
-          onInstallDbtSave('dbtVersion', result.installedVersion);
+          saveSettingIfPageOpen('dbtVersion', result.installedVersion);
         }
         // The new runtime is active now, so show its normal version list.
         setIsActivatingRuntime(false);
@@ -454,22 +662,16 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
         await refreshDbtCoreVersions();
         await checkInstalledPackages();
         if (runProjectCheck) {
-          setLoadingMessage(
-            'Checking the current project with dbt parse and compile...',
-          );
           setCompatibilityResult(await checkCurrentProjectCompatibility());
         }
       }
     } catch (error) {
+      if (isInstallCancelledError(error)) return;
       setVersionChangeResult({
         ok: false,
         error:
           error instanceof Error ? error.message : 'Version change failed.',
       });
-    } finally {
-      setInstallingPackageKey(null);
-      setIsLoadingDialog(false);
-      setLoadingMessage('');
     }
   };
 
@@ -511,59 +713,38 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
   };
 
   const handleUninstallPackage = async (packageName: string) => {
-    setIsLoadingInstall(true);
-    setIsLoadingDialog(true);
-    setLoadingMessage(`Uninstalling ${packageName}...`);
-
-    try {
-      const result = await uninstallPackage({
+    const result = await runQueuedInstall(packageName, () =>
+      uninstallPackage({
         pythonPath: settings.pythonPath,
         packageName,
-      });
-      if (!result.ok) {
-        setVersionChangeResult(result);
-        return;
-      }
+      }),
+    );
+    if (!result?.ok) return;
 
-      setInstalledPackages((prev) => {
-        const updated = { ...prev };
-        delete updated[packageName];
-        return updated;
-      });
+    changeInstalledPackages((prev) => {
+      const updated = { ...prev };
+      delete updated[packageName];
+      return updated;
+    });
 
-      if (packageName === 'dbt-core') {
-        onInstallDbtSave('dbtPath', '');
-        onInstallDbtSave('dbtVersion', '');
-      }
-    } finally {
-      setIsLoadingInstall(false);
-      setIsLoadingDialog(false);
-      setLoadingMessage('');
+    if (packageName === 'dbt-core') {
+      saveSettingIfPageOpen('dbtPath', '');
+      saveSettingIfPageOpen('dbtVersion', '');
     }
   };
 
   const handleInstallSinglePackage = async (packageName: string) => {
-    setIsLoadingInstall(true);
-    setIsLoadingDialog(true);
-    setLoadingMessage(`Installing ${packageName}...`);
-
-    try {
-      const result = await installLatestPackage({
+    const result = await runQueuedInstall(packageName, () =>
+      installLatestPackage({
         pythonPath: settings.pythonPath,
         packageName,
-      });
-      if (result.ok && result.installedVersion) {
-        setInstalledPackages((prev) => ({
-          ...prev,
-          [packageName]: result.installedVersion as string,
-        }));
-      } else if (!result.ok) {
-        setVersionChangeResult(result);
-      }
-    } finally {
-      setIsLoadingInstall(false);
-      setIsLoadingDialog(false);
-      setLoadingMessage('');
+      }),
+    );
+    if (result?.ok && result.installedVersion) {
+      changeInstalledPackages((prev) => ({
+        ...prev,
+        [packageName]: result.installedVersion as string,
+      }));
     }
   };
 
@@ -582,50 +763,35 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     }
 
     setIsLoadingInstall(true);
-    setIsLoadingDialog(true);
     setVersionChangeResult(null);
 
-    const errors: string[] = [];
+    // All go into the queue at once (it keeps this order), so each row shows
+    // "Queued" right away.
+    const results = await Promise.all(
+      toInstall.map(async (pkg) => {
+        const result = await runQueuedInstall(pkg, () =>
+          installLatestPackage({
+            pythonPath: settings.pythonPath,
+            packageName: pkg,
+          }),
+        );
+        if (result?.ok && result.installedVersion) {
+          changeInstalledPackages((prev) => ({
+            ...prev,
+            [pkg]: result.installedVersion as string,
+          }));
+        }
+        return result;
+      }),
+    );
 
-    for (let i = 0; i < toInstall.length; i += 1) {
-      const pkg = toInstall[i];
-      setCurrentPackage(pkg);
-      setLoadingMessage(`Installing ${pkg} (${i + 1}/${toInstall.length})...`);
-      setInstallProgress((i / toInstall.length) * 100);
-
-      // eslint-disable-next-line no-await-in-loop
-      const result = await installLatestPackage({
-        pythonPath: settings.pythonPath,
-        packageName: pkg,
-      });
-
-      if (result.ok && result.installedVersion) {
-        setInstalledPackages((prev) => ({
-          ...prev,
-          [pkg]: result.installedVersion as string,
-        }));
-      } else if (!result.ok) {
-        errors.push(`${pkg}: ${result.error || 'unknown error'}`);
-      }
-    }
-
-    setInstallProgress(100);
-
-    if (errors.length > 0) {
-      setVersionChangeResult({
-        ok: false,
-        error: errors.join('\n'),
-      });
-    } else {
+    if (results.every((result) => result?.ok)) {
       toast.success(
         `All ${toInstall.length} adapter(s) installed successfully.`,
       );
     }
 
     setIsLoadingInstall(false);
-    setCurrentPackage('');
-    setIsLoadingDialog(false);
-    setLoadingMessage('');
   };
 
   useEffect(() => {
@@ -682,6 +848,22 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     refreshDbtCoreVersions().catch(() => undefined);
   }, []);
 
+  // Re-checks the installed adapters whenever a dbt install leaves the queue
+  // (finished, failed or cancelled), so rows switch to Uninstall without
+  // leaving the page. This also covers installs this page didn't start:
+  // Install All, or ones queued before the page was opened.
+  const activeDbtTaskIds = activeDbtTasks.map((task) => task.id).join(',');
+  const previousActiveDbtTaskIdsRef = React.useRef<string[]>([]);
+  useEffect(() => {
+    const ids = activeDbtTaskIds ? activeDbtTaskIds.split(',') : [];
+    const anInstallLeftTheQueue = previousActiveDbtTaskIdsRef.current.some(
+      (id) => !ids.includes(id),
+    );
+    previousActiveDbtTaskIdsRef.current = ids;
+    if (!anInstallLeftTheQueue || !settings.pythonPath) return;
+    reloadInstalledPackages(false).catch(() => undefined);
+  }, [activeDbtTaskIds, getInstalledPackages, settings.pythonPath]);
+
   useEffect(() => {
     getActiveAdapterCapabilities()
       .then(setAdapterCapabilities)
@@ -711,6 +893,37 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     0,
     showOlderVersions ? 15 : 5,
   );
+
+  // Blue "Queued ✕" / "In progress" chip for an install on this page.
+  const renderInstallTaskChip = (task: TaskRecord | undefined) => {
+    if (task?.status === 'pending') {
+      return (
+        <Chip
+          label={withInstallTaskTooltip(task, <span>Queued</span>)}
+          size="small"
+          color="info"
+          deleteIcon={
+            <Tooltip title={CANCEL_QUEUED_TOOLTIP}>
+              <Close aria-label="Remove from the queue" />
+            </Tooltip>
+          }
+          onDelete={() => {
+            cancelTask(task.id).catch(() => undefined);
+          }}
+        />
+      );
+    }
+    if (task?.status === 'running') {
+      return withInstallTaskTooltip(
+        task,
+        <Chip label="In progress" size="small" color="info" />,
+      );
+    }
+    return null;
+  };
+
+  const hasDbt = Boolean(settings.dbtPath && settings.dbtPath !== 'dbt');
+  const isV2Active = Boolean(settings.dbtVersion?.startsWith('2.'));
 
   const renderVersionList = (
     versions: DbtVersionListResponse['versions'],
@@ -743,6 +956,19 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
         actionLabel = 'Upgrade';
       }
 
+      const switchTask =
+        dbtRuntimeTask?.subject === `dbt-core@${item.version}`
+          ? dbtRuntimeTask
+          : undefined;
+      if (switchTask) {
+        actionLabel = switchTask.status === 'pending' ? 'Queued' : 'Switching…';
+      }
+      // A switch between v1 and v2 can always be chosen: confirming it
+      // cancels the dbt installs still in the queue (see
+      // confirmDbtVersionChange). Within one line, one switch waits at a time.
+      const isRuntimeLineSwitch =
+        hasDbt && Number.parseInt(item.version, 10) >= 2 !== isV2Active;
+
       return (
         <SettingsRow
           key={item.version}
@@ -770,30 +996,45 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
             </Box>
           }
         >
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={() => {
-              prepareDbtVersionChange(item.version).catch(() => undefined);
-            }}
-            disabled={isInstalled || isLoadingDialog || isLoadingInstall}
-            startIcon={
-              installingPackageKey === `dbt-core@${item.version}` ? (
-                <CircularProgress size={14} />
-              ) : (
-                <Download />
-              )
-            }
-          >
-            {actionLabel}
-          </Button>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            {withInstallTaskTooltip(
+              switchTask,
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => {
+                  prepareDbtVersionChange(item.version).catch(() => undefined);
+                }}
+                disabled={
+                  isInstalled ||
+                  isLoadingDialog ||
+                  isPythonInstalling ||
+                  Boolean(switchTask) ||
+                  (Boolean(dbtRuntimeTask) && !isRuntimeLineSwitch)
+                }
+                startIcon={
+                  switchTask?.status === 'running' ? (
+                    <CircularProgress size={14} />
+                  ) : (
+                    <Download />
+                  )
+                }
+              >
+                {actionLabel}
+              </Button>,
+            )}
+            {switchTask?.status === 'pending' && (
+              <CancelQueuedButton
+                onCancel={() => {
+                  cancelTask(switchTask.id).catch(() => undefined);
+                }}
+              />
+            )}
+          </Box>
         </SettingsRow>
       );
     });
   };
-
-  const hasDbt = Boolean(settings.dbtPath && settings.dbtPath !== 'dbt');
-  const isV2Active = Boolean(settings.dbtVersion?.startsWith('2.'));
 
   const getRuntimeShort = (version: string) =>
     version.startsWith('2.') ? 'v2' : 'v1';
@@ -833,9 +1074,36 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
       `${getRuntimeLabel(planTargetVersion)} ${planTargetVersion} will be installed.`,
       'Your adapter packages stay installed.',
     );
+    if (planTargetVersion.startsWith('2.')) {
+      versionChangeSteps.push(
+        'dbt Core v2 comes with its own adapters (Snowflake, BigQuery, Redshift, Databricks, DuckDB); Postgres and Kinetica are not supported on v2.',
+      );
+    }
+    if (queuedDbtTasks.length > 0) {
+      versionChangeSteps.push(
+        `${queuedDbtTasks.length} queued dbt install${
+          queuedDbtTasks.length === 1 ? '' : 's'
+        } will be cancelled: ${queuedDbtTasks
+          .map((task) => task.subject ?? task.label)
+          .join(', ')}.`,
+      );
+    }
+    if (runningDbtTask) {
+      versionChangeSteps.push(
+        `${runningDbtTask.label} is running now and finishes first.`,
+      );
+    }
   } else {
     versionChangeSteps.push(
       `${getRuntimeLabel(planTargetVersion)} ${planCurrentVersion} will be replaced by ${planTargetVersion} (${versionChangePlan?.direction}).`,
+    );
+  }
+  if (
+    versionChangePlan?.direction === 'downgrade' &&
+    hasQueuedAdapterInstalls
+  ) {
+    versionChangeSteps.push(
+      'Adapter installs queued before this can raise dbt-core again; check the version after.',
     );
   }
   if (versionChangePlan?.rollbackVersion) {
@@ -870,6 +1138,16 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     shownRuntimeVersions[0]?.version ??
     '';
   const versionToInstall = selectedInstallVersion ?? latestStableShownVersion;
+  // The picked version's switch while it is queued or running.
+  const activationTask =
+    dbtRuntimeTask?.subject === `dbt-core@${versionToInstall}`
+      ? dbtRuntimeTask
+      : undefined;
+  let activationLabel = 'Install';
+  if (activationTask) {
+    activationLabel =
+      activationTask.status === 'pending' ? 'Queued' : 'Switching…';
+  }
 
   const renderRuntimeVersions = (
     versions: DbtVersionListResponse['versions'],
@@ -1013,27 +1291,47 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                       </MenuItem>
                     ))}
                   </TextField>
-                  <Button
-                    fullWidth
-                    size="small"
-                    variant="contained"
-                    onClick={() => {
-                      prepareDbtVersionChange(versionToInstall).catch(
-                        () => undefined,
-                      );
-                    }}
-                    disabled={isLoadingDialog || isLoadingInstall}
-                    startIcon={
-                      installingPackageKey ===
-                      `dbt-core@${versionToInstall}` ? (
-                        <CircularProgress size={14} />
-                      ) : (
-                        <Download />
-                      )
-                    }
-                  >
-                    Install
-                  </Button>
+                  {/* Switching runtimes can always be chosen: confirming it
+                      cancels the dbt installs still in the queue. */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <Box sx={{ flex: 1, display: 'flex' }}>
+                      {withInstallTaskTooltip(
+                        activationTask,
+                        <Button
+                          fullWidth
+                          size="small"
+                          variant="contained"
+                          onClick={() => {
+                            prepareDbtVersionChange(versionToInstall).catch(
+                              () => undefined,
+                            );
+                          }}
+                          disabled={
+                            isLoadingDialog ||
+                            isLoadingInstall ||
+                            isPythonInstalling ||
+                            Boolean(activationTask)
+                          }
+                          startIcon={
+                            activationTask?.status === 'running' ? (
+                              <CircularProgress size={14} />
+                            ) : (
+                              <Download />
+                            )
+                          }
+                        >
+                          {activationLabel}
+                        </Button>,
+                      )}
+                    </Box>
+                    {activationTask?.status === 'pending' && (
+                      <CancelQueuedButton
+                        onCancel={() => {
+                          cancelTask(activationTask.id).catch(() => undefined);
+                        }}
+                      />
+                    )}
+                  </Box>
                 </>
               )}
           </Box>
@@ -1042,6 +1340,9 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
         {/* Only the installed runtime has a version list. */}
         {isShownRuntimeActive && (
           <SettingsRow label={`dbt ${shownRuntime} versions`}>
+            {/* A queued or running dbt Core switch, visible with the list
+                closed. */}
+            {renderInstallTaskChip(dbtRuntimeTask)}
             <IconButton
               size="small"
               onClick={() => setIsVersionListOpen((open) => !open)}
@@ -1072,6 +1373,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                 )}
           </SettingsSectionBody>
         )}
+
         {hasDbt && isV2Active && (
           <SettingsSectionBody>
             <Alert severity="warning">
@@ -1164,7 +1466,9 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
               size="small"
               variant="outlined"
               onClick={() => setShowInstallAllConfirmation(true)}
-              disabled={isLoadingInstall || isLoadingDialog}
+              disabled={
+                isLoadingInstall || isLoadingDialog || isAdapterInstallBlocked
+              }
               startIcon={
                 isLoadingInstall ? (
                   <CircularProgress size={14} color="inherit" />
@@ -1219,6 +1523,13 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
             const isLoading = isCheckingPackageVersions[pkg] ?? false;
             const installSource = getPackageInstallSource(pkg);
             const isExpanded = expandedPackage === pkg;
+            // One action per adapter: while one of its installs is queued or
+            // running, its other buttons wait.
+            const packageTask = getPackageTask(pkg);
+            const isPackageBusy =
+              Boolean(packageTask) ||
+              isAdapterInstallBlocked ||
+              isLoadingDialog;
 
             return (
               <Box key={pkg}>
@@ -1233,6 +1544,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                           variant="outlined"
                         />
                       )}
+                      {renderInstallTaskChip(packageTask)}
                     </Box>
                   }
                   description={packageDescriptions[pkg]}
@@ -1256,7 +1568,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                       onClick={() => {
                         handleInstallSinglePackage(pkg).catch(() => undefined);
                       }}
-                      disabled={isLoadingInstall || isLoadingDialog}
+                      disabled={isPackageBusy}
                       startIcon={<Download />}
                     >
                       {installed ? 'Update from source' : 'Install'}
@@ -1270,7 +1582,7 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                       onClick={() => {
                         handleUninstallPackage(pkg).catch(() => undefined);
                       }}
-                      disabled={isLoadingInstall || isLoadingDialog}
+                      disabled={isPackageBusy}
                       startIcon={<Delete />}
                     >
                       Uninstall
@@ -1316,6 +1628,10 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                         {versions.map((v) => {
                           const isInstalled = installed === v.version;
                           const isLatest = v.version === latestStable;
+                          const versionTask =
+                            packageTask?.subject === `${pkg}@${v.version}`
+                              ? packageTask
+                              : undefined;
 
                           let actionLabel = 'Install';
                           if (isInstalled) {
@@ -1327,6 +1643,12 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                             actionLabel = 'Upgrade';
                           } else if (installed) {
                             actionLabel = 'Downgrade';
+                          }
+                          if (versionTask) {
+                            actionLabel =
+                              versionTask.status === 'pending'
+                                ? 'Queued'
+                                : 'Installing…';
                           }
 
                           return (
@@ -1351,31 +1673,46 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                                 </Box>
                               }
                             >
-                              <Button
-                                size="small"
-                                variant="outlined"
-                                onClick={() => {
-                                  installSinglePackageVersion(
-                                    pkg,
-                                    v.version,
-                                  ).catch(() => undefined);
+                              <Box
+                                sx={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 0.5,
                                 }}
-                                disabled={
-                                  isInstalled ||
-                                  isLoadingDialog ||
-                                  isLoadingInstall
-                                }
-                                startIcon={
-                                  installingPackageKey ===
-                                  `${pkg}@${v.version}` ? (
-                                    <CircularProgress size={14} />
-                                  ) : (
-                                    <Download />
-                                  )
-                                }
                               >
-                                {actionLabel}
-                              </Button>
+                                {withInstallTaskTooltip(
+                                  versionTask,
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
+                                    onClick={() => {
+                                      installSinglePackageVersion(
+                                        pkg,
+                                        v.version,
+                                      ).catch(() => undefined);
+                                    }}
+                                    disabled={isInstalled || isPackageBusy}
+                                    startIcon={
+                                      versionTask?.status === 'running' ? (
+                                        <CircularProgress size={14} />
+                                      ) : (
+                                        <Download />
+                                      )
+                                    }
+                                  >
+                                    {actionLabel}
+                                  </Button>,
+                                )}
+                                {versionTask?.status === 'pending' && (
+                                  <CancelQueuedButton
+                                    onCancel={() => {
+                                      cancelTask(versionTask.id).catch(
+                                        () => undefined,
+                                      );
+                                    }}
+                                  />
+                                )}
+                              </Box>
                             </SettingsRow>
                           );
                         })}
@@ -1429,7 +1766,9 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                           variant="outlined"
                           size="small"
                           onClick={() => handleUninstallPackage(pkg)}
-                          disabled={isLoadingInstall}
+                          disabled={
+                            Boolean(getPackageTask(pkg)) || isPythonInstalling
+                          }
                           startIcon={<Delete />}
                         >
                           Uninstall
@@ -1440,7 +1779,9 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
                           variant="outlined"
                           size="small"
                           onClick={() => handleInstallSinglePackage(pkg)}
-                          disabled={isLoadingInstall}
+                          disabled={
+                            Boolean(getPackageTask(pkg)) || isPythonInstalling
+                          }
                           startIcon={<GetApp />}
                         >
                           Install
@@ -1514,6 +1855,8 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
               onClick={() => handleInstallDbt()}
               disabled={
                 isLoadingInstall ||
+                isAdapterInstallBlocked ||
+                Boolean(dbtRuntimeTask) ||
                 Object.values(selectedPackages).every((v) => !v)
               }
               startIcon={

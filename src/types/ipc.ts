@@ -744,6 +744,7 @@ export interface TaskRecord {
   finishedAt?: number;
   error?: string;
   cancellable: boolean;
+  subject?: string;
 }
 
 export interface TaskEvent {

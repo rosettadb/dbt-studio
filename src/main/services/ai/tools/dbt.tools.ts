@@ -14,6 +14,8 @@ import SecureStorageService from '../../secureStorage.service';
 import { TerminalConfirmGate } from './terminalConfirmGate';
 import { isProtectedPipelineWritePath } from './studio/pipeline.tools';
 import FileMutationRollbackService from '../fileMutationRollback.service';
+import { isDbtRuntimeChanging } from '../../../utils/installTask';
+import { DBT_RUNTIME_CHANGING_MESSAGE } from '../../../../shared/installTasks';
 
 // Security constraints
 const ALLOWED_DBT_COMMANDS = [
@@ -123,6 +125,10 @@ export async function executeDbtCommand(opts: {
   } = opts;
 
   const normalizedCommand = normalizeCommand(command);
+
+  if (isDbtRuntimeChanging()) {
+    return { ok: false, error: DBT_RUNTIME_CHANGING_MESSAGE };
+  }
 
   if (allowedCommands && allowedCommands.length > 0) {
     if (!isAllowedCommand(normalizedCommand, allowedCommands)) {

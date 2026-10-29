@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import UpdateManager from '../services/update.service';
+import { runInstallTask } from '../utils/installTask';
 
 const registerUpdateHandlers = () => {
   ipcMain.handle('updates:check', async () => {
@@ -12,7 +13,9 @@ const registerUpdateHandlers = () => {
   });
 
   ipcMain.handle('updates:download', async () => {
-    return UpdateManager.downloadAndInstall();
+    return runInstallTask('install:app-update', 'Downloading app update', () =>
+      UpdateManager.downloadAndInstall(),
+    );
   });
 
   ipcMain.handle('updates:reject-version', async (_event, version: string) => {
