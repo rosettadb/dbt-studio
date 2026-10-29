@@ -528,14 +528,13 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
     packageName: string,
     version: string,
   ) => {
-    const result = await runQueuedInstall(packageName, () =>
+    await runQueuedInstall(packageName, () =>
       installPackageVersion({
         pythonPath: settings.pythonPath,
         packageName,
         version,
       }),
     );
-    if (result?.ok) await checkInstalledPackages();
   };
 
   const ensurePythonForVersion = async (version: string): Promise<boolean> => {
@@ -822,6 +821,24 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
   useEffect(() => {
     refreshDbtCoreVersions().catch(() => undefined);
   }, []);
+
+  // Re-checks the installed adapters whenever a dbt install leaves the queue
+  // (finished, failed or cancelled), so rows switch to Uninstall without
+  // leaving the page. This also covers installs this page didn't start:
+  // Install All, or ones queued before the page was opened.
+  const activeDbtTaskIds = activeDbtTasks.map((task) => task.id).join(',');
+  const previousActiveDbtTaskIdsRef = React.useRef<string[]>([]);
+  useEffect(() => {
+    const ids = activeDbtTaskIds ? activeDbtTaskIds.split(',') : [];
+    const anInstallLeftTheQueue = previousActiveDbtTaskIdsRef.current.some(
+      (id) => !ids.includes(id),
+    );
+    previousActiveDbtTaskIdsRef.current = ids;
+    if (!anInstallLeftTheQueue || !settings.pythonPath) return;
+    getInstalledPackages()
+      .then((result) => setInstalledPackages(result.packages))
+      .catch(() => undefined);
+  }, [activeDbtTaskIds, getInstalledPackages, settings.pythonPath]);
 
   useEffect(() => {
     getActiveAdapterCapabilities()

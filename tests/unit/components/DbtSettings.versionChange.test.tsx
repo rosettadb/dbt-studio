@@ -490,6 +490,36 @@ describe('DbtSettings runtime switch', () => {
       expect(mockCancelTask).toHaveBeenCalledWith('task-dbt-postgres@1.9.1');
     });
 
+    it('shows Uninstall once a queued install finishes, without leaving the page', async () => {
+      getInstalledPackages.mockResolvedValue({ packages: installedAdapters });
+      mockTasks = [dbtTask('dbt-snowflake@1.12.4', 'running')];
+      const settings = {
+        dbtPath: '/managed/venv/bin/dbt',
+        dbtVersion: '1.11.12',
+        pythonPath: '/managed/venv/bin/python3',
+        pythonVersion: '3.12.0',
+      } as any;
+      const { rerender } = render(
+        <DbtSettings settings={settings} onInstallDbtSave={jest.fn()} />,
+      );
+      expect(await uninstallButtons()).toHaveLength(2);
+      expect(screen.queryByText('v1.12.4')).not.toBeInTheDocument();
+
+      // The install finishes: it leaves the queue, and pip now lists it.
+      getInstalledPackages.mockResolvedValue({
+        packages: { ...installedAdapters, 'dbt-snowflake': '1.12.4' },
+      });
+      mockTasks = [];
+      rerender(
+        <DbtSettings settings={settings} onInstallDbtSave={jest.fn()} />,
+      );
+
+      expect(await screen.findByText('v1.12.4')).toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: 'Uninstall' })).toHaveLength(
+        3,
+      );
+    });
+
     it('shows In progress without a cancel once the install runs', async () => {
       getInstalledPackages.mockResolvedValue({ packages: installedAdapters });
       mockTasks = [dbtTask('dbt-postgres', 'running')];
