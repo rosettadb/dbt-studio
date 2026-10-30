@@ -231,7 +231,7 @@ describe('buildActionText', () => {
 
 describe('useSchemaTreeContextMenu', () => {
   const Host: React.FC<{
-    onInsertText?: (t: string) => void;
+    onInsertText?: (t: string, options: { asStatement: boolean }) => void;
     onPreviewSql?: (t: string) => void;
     onRename?: (n: SchemaTreeNodeRef, name: string) => void;
     onRefresh?: () => void;
@@ -270,7 +270,20 @@ describe('useSchemaTreeContextMenu', () => {
 
     expect(onInsertText).toHaveBeenCalledWith(
       'SELECT COUNT(*) AS total_rows\nFROM sales.orders;',
+      { asStatement: true },
     );
+  });
+
+  it('inserts names without marking them as statements', () => {
+    const onInsertText = jest.fn();
+    wrap(<Host onInsertText={onInsertText} />);
+
+    fireEvent.contextMenu(screen.getByTestId('row'));
+    fireEvent.click(screen.getByTestId('schema-tree-menu-insert-name'));
+
+    expect(onInsertText).toHaveBeenCalledWith('sales.orders', {
+      asStatement: false,
+    });
   });
 
   it('copies names to the clipboard', async () => {

@@ -11,6 +11,8 @@ const createFakeModel = (initial: string) => {
   const lines = () => value.split('\n');
   return {
     getValue: () => value,
+    getLineContent: (lineNumber: number) => lines()[lineNumber - 1],
+    getLineCount: () => lines().length,
     getOffsetAt: ({ lineNumber, column }: Pos) => {
       const ls = lines();
       let offset = 0;
@@ -161,6 +163,59 @@ describe('insertTextAtCursor', () => {
     expect(insertTextAtCursor({ getModel: () => null } as any, 'x')).toBe(
       false,
     );
+  });
+});
+
+describe('insertTextAtCursor with asStatement', () => {
+  const statement = 'SELECT *\nFROM t;';
+  const insertStatementAt = (
+    initial: string,
+    lineNumber: number,
+    column: number,
+  ) => {
+    const editor = createFakeEditor(initial);
+    insertTextAtCursor(editor as any, statement, {
+      position: { lineNumber, column },
+      asStatement: true,
+    });
+    return editor;
+  };
+
+  it('adds no blank lines in an empty editor', () => {
+    const editor = insertStatementAt('', 1, 1);
+    expect(editor.model.getValue()).toBe(statement);
+  });
+
+  it('adds a blank line after text on the same line', () => {
+    const editor = insertStatementAt('select 1;', 1, 10);
+    expect(editor.model.getValue()).toBe(`select 1;\n\n${statement}`);
+  });
+
+  it('adds one line break when the cursor is on an empty line under text', () => {
+    const editor = insertStatementAt('select 1;\n', 2, 1);
+    expect(editor.model.getValue()).toBe(`select 1;\n\n${statement}`);
+  });
+
+  it('adds nothing when a blank line is already above', () => {
+    const editor = insertStatementAt('select 1;\n\n', 3, 1);
+    expect(editor.model.getValue()).toBe(`select 1;\n\n${statement}`);
+  });
+
+  it('separates text on both sides when inserted mid-line', () => {
+    const editor = insertStatementAt('select 1; select 2;', 1, 11);
+    expect(editor.model.getValue()).toBe(
+      `select 1; \n\n${statement}\n\nselect 2;`,
+    );
+  });
+
+  it('adds a blank line before text on the next line', () => {
+    const editor = insertStatementAt('\nselect 2;', 1, 1);
+    expect(editor.model.getValue()).toBe(`${statement}\n\nselect 2;`);
+  });
+
+  it('puts the cursor at the end of the statement, not after the padding', () => {
+    const editor = insertStatementAt('select 1; select 2;', 1, 11);
+    expect(editor.position).toEqual({ lineNumber: 4, column: 8 });
   });
 });
 
