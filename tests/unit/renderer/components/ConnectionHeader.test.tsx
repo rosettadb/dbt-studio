@@ -14,6 +14,9 @@ const renderHeader = (isLoading = false) => {
         onSave={onSave}
         isLoading={isLoading}
       />
+      <form>
+        <input aria-label="Host" />
+      </form>
     </div>,
   );
   return { onClose, onSave, container };
@@ -51,5 +54,13 @@ describe('ConnectionHeader', () => {
     const actionBar = screen.getByText('Setup connection').parentElement;
     expect(actionBar?.parentElement).toBe(screen.getByTestId('form-root'));
     expect(screen.getByRole('img', { name: 'Postgres' })).toBeInTheDocument();
+  });
+
+  it('leaves room above form fields so focused fields are not hidden behind the bar', () => {
+    renderHeader();
+
+    expect(screen.getByLabelText('Host')).toHaveStyle({
+      scrollMarginTop: '80px',
+    });
   });
 });

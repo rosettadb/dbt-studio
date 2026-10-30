@@ -42,6 +42,8 @@ const ConnectionHeader = ({
           mb: 1,
           gap: 2,
           flexWrap: 'wrap',
+          // Fields scrolled into view (e.g. Shift+Tab) land below the bar, not behind it
+          '& ~ * *': { scrollMarginTop: '80px' },
         }}
       >
         <Typography variant="h6" component="h5">
