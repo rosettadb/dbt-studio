@@ -5,8 +5,11 @@ import {
 
 type Pos = { lineNumber: number; column: number };
 
-/** A tiny single-buffer model that understands offsets and positions. */
-const createFakeModel = (initial: string) => {
+/**
+ * A tiny single-buffer model that understands offsets and positions.
+ * `eolLength` 2 makes offsets count line breaks like a CRLF Monaco model.
+ */
+const createFakeModel = (initial: string, eolLength = 1) => {
   let value = initial;
   const lines = () => value.split('\n');
   return {
@@ -16,7 +19,9 @@ const createFakeModel = (initial: string) => {
     getOffsetAt: ({ lineNumber, column }: Pos) => {
       const ls = lines();
       let offset = 0;
-      for (let i = 0; i < lineNumber - 1; i += 1) offset += ls[i].length + 1;
+      for (let i = 0; i < lineNumber - 1; i += 1) {
+        offset += ls[i].length + eolLength;
+      }
       return offset + column - 1;
     },
     getPositionAt: (offset: number): Pos => {
@@ -26,7 +31,7 @@ const createFakeModel = (initial: string) => {
         if (remaining <= ls[i].length) {
           return { lineNumber: i + 1, column: remaining + 1 };
         }
-        remaining -= ls[i].length + 1;
+        remaining -= ls[i].length + eolLength;
       }
       const last = ls.length;
       return { lineNumber: last, column: ls[last - 1].length + 1 };
@@ -62,8 +67,9 @@ const createFakeEditor = (
     endLineNumber: number;
     endColumn: number;
   },
+  eolLength = 1,
 ) => {
-  const model = createFakeModel(initial);
+  const model = createFakeModel(initial, eolLength);
   const editor = {
     model,
     position: null as Pos | null,
@@ -215,6 +221,17 @@ describe('insertTextAtCursor with asStatement', () => {
 
   it('puts the cursor at the end of the statement, not after the padding', () => {
     const editor = insertStatementAt('select 1; select 2;', 1, 11);
+    expect(editor.position).toEqual({ lineNumber: 4, column: 8 });
+  });
+
+  it('puts the cursor at the end of the statement with CRLF line endings', () => {
+    // Windows models count each line break as two characters in offsets, so
+    // the cursor must be placed by lines, not by the inserted text's length.
+    const editor = createFakeEditor('select 1;', undefined, 2);
+    insertTextAtCursor(editor as any, statement, {
+      position: { lineNumber: 1, column: 10 },
+      asStatement: true,
+    });
     expect(editor.position).toEqual({ lineNumber: 4, column: 8 });
   });
 });

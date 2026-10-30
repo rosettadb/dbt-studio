@@ -116,7 +116,7 @@ export const insertTextAtCursor = (
 
   // The cursor lands at the end of the statement, not after the padding.
   let insertedText = text;
-  let cursorOffset = text.length;
+  let insertedTextUpToCursor = text;
   if (options.asStatement) {
     const before = lineBreaksBeforeStatement(
       model,
@@ -129,18 +129,27 @@ export const insertTextAtCursor = (
       range.endColumn,
     );
     insertedText = before + text + after;
-    cursorOffset = before.length + text.length;
+    insertedTextUpToCursor = before + text;
   }
 
   editor.executeEdits(options.source ?? 'schema-tree', [
     { range, text: insertedText, forceMoveMarkers: true },
   ]);
 
-  const startOffset = model.getOffsetAt({
-    lineNumber: range.startLineNumber,
-    column: range.startColumn,
-  });
-  const endPosition = model.getPositionAt(startOffset + cursorOffset);
+  // Count lines rather than characters: with CRLF models a line break is two
+  // characters in the model but one in `text`, so offsets would land early.
+  const insertedLines = insertedTextUpToCursor.split('\n');
+  const lastInsertedLine = insertedLines[insertedLines.length - 1];
+  const endPosition =
+    insertedLines.length === 1
+      ? {
+          lineNumber: range.startLineNumber,
+          column: range.startColumn + lastInsertedLine.length,
+        }
+      : {
+          lineNumber: range.startLineNumber + insertedLines.length - 1,
+          column: lastInsertedLine.length + 1,
+        };
   editor.setPosition(endPosition);
   editor.revealPositionInCenterIfOutsideViewport(endPosition);
 
