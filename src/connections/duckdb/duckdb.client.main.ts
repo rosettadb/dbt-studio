@@ -3,6 +3,36 @@ import { DuckDBInstance } from '@duckdb/node-api';
 import fs from 'fs';
 import { DuckDBConnection, QueryResponseType } from '../../types/backend';
 
+/**
+ * The order unqualified names are looked up in for SQL Editor queries: the
+ * connection's schema, then main, then the other schemas by name. The
+ * connector lists tables in the same order, so autocomplete matches it.
+ */
+export const duckDBSearchOrder = (
+  defaultSchema: string,
+  schemas: string[],
+): string[] =>
+  Array.from(new Set([defaultSchema, 'main', ...[...schemas].sort()])).filter(
+    (schema) => schemas.includes(schema),
+  );
+
+// The SQL Editor shows every schema, so a query can name any of their
+// tables without the schema. Names are escaped because they come from the
+// file.
+const setSearchPath = async (connection: any, defaultSchema: string) => {
+  const result = await connection.run(
+    'SELECT schema_name FROM information_schema.schemata WHERE catalog_name = current_database()',
+  );
+  const rows = await result.getRows();
+  const schemas = rows
+    .map((row: any[]) => row[0])
+    .filter((name: unknown): name is string => typeof name === 'string');
+  const searchPath = duckDBSearchOrder(defaultSchema, schemas)
+    .map((schema) => `"${schema.replace(/"/g, '""')}"`)
+    .join(',');
+  await connection.run(`SET search_path = '${searchPath.replace(/'/g, "''")}'`);
+};
+
 export async function testDuckDBConnection(
   config: DuckDBConnection,
 ): Promise<boolean> {
@@ -190,6 +220,12 @@ export const executeDuckDBQuery = async (
         }
         // If it's some other error, continue - might be a permission issue but schema exists
       }
+    }
+
+    try {
+      await setSearchPath(connection, config.schema || 'main');
+    } catch {
+      // Keep DuckDB's default lookup: the connection's schema, then main
     }
 
     const result = await connection.run(query);

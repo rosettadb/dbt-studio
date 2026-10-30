@@ -1,8 +1,14 @@
 import './characterization/mocks';
 import { connectors } from '../../../src/connections/registry.main';
 import { getCredential } from './characterization/mocks';
+import { duckDBSearchOrder } from '../../../src/connections/duckdb/duckdb.client.main';
 
 const get = getCredential as jest.Mock;
+
+jest.mock('../../../src/connections/duckdb/duckdb.extractor.main', () => ({
+  __esModule: true,
+  default: jest.fn(),
+}));
 
 describe('Connection.resolveSecrets', () => {
   beforeEach(() => get.mockReset());
@@ -59,5 +65,76 @@ describe('connector hooks', () => {
     await expect(
       connectors.sqlite.extractProjectSchema({ type: 'sqlite' } as any),
     ).rejects.toThrow('Unsupported connection type: "sqlite"');
+  });
+});
+
+describe('DuckDB schema extraction', () => {
+  const DuckDBExtractor = jest.requireMock(
+    '../../../src/connections/duckdb/duckdb.extractor.main',
+  ).default as jest.Mock;
+  const table = (schema: string, name: string) => ({
+    schema,
+    name,
+    type: 'TABLE',
+    columns: [],
+  });
+
+  beforeEach(() => {
+    DuckDBExtractor.mockReset().mockImplementation(() => ({
+      extractSchema: async () => ({
+        tables: [
+          table('analytics', 'orders'),
+          table('main', 'customers'),
+          table('public', 'customers'),
+          table('staging', 'customers'),
+        ],
+      }),
+    }));
+  });
+
+  it('SQL Editor reads every schema, the form schema first, then main', async () => {
+    const { tables } = await connectors.duckdb.extractSchema({
+      type: 'duckdb',
+      database_path: '/db.duckdb',
+      schema: 'public',
+    } as any);
+    expect(DuckDBExtractor).toHaveBeenCalledWith({
+      database_path: '/db.duckdb',
+    });
+    expect(tables.map((t) => t.schema)).toEqual([
+      'public',
+      'main',
+      'analytics',
+      'staging',
+    ]);
+  });
+
+  it('search order is the form schema, then main, then the rest by name', () => {
+    expect(
+      duckDBSearchOrder('public', [
+        'staging',
+        'main',
+        'Staging Area',
+        'public',
+        'analytics',
+      ]),
+    ).toEqual(['public', 'main', 'Staging Area', 'analytics', 'staging']);
+    // A form schema that is not in the file is left out
+    expect(duckDBSearchOrder('missing', ['main', 'b', 'a'])).toEqual([
+      'main',
+      'a',
+      'b',
+    ]);
+  });
+
+  it('project schema reads only the form schema, main by default', async () => {
+    await connectors.duckdb.extractProjectSchema({
+      type: 'duckdb',
+      database_path: '/db.duckdb',
+    } as any);
+    expect(DuckDBExtractor).toHaveBeenCalledWith({
+      database_path: '/db.duckdb',
+      schema: 'main',
+    });
   });
 });
