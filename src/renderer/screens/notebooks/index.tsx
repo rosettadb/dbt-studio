@@ -476,11 +476,14 @@ const Notebooks = () => {
     ? 'ducklake'
     : activeConnection?.connection.type;
 
-  const handleSchemaInsertText = useCallback((text: string) => {
-    if (!notebookEditorRef.current?.insertText(text)) {
-      toast.info('Open a notebook to insert text');
-    }
-  }, []);
+  const handleSchemaInsertText = useCallback(
+    (text: string, options: { asStatement: boolean }) => {
+      if (!notebookEditorRef.current?.insertText(text, options)) {
+        toast.info('Open a notebook to insert text');
+      }
+    },
+    [],
+  );
 
   const handleSchemaPreview = useCallback((sql: string) => {
     if (!notebookEditorRef.current) {
@@ -544,7 +547,7 @@ const Notebooks = () => {
             )
           : buildRenameTableStatement(ref, newName, activeConnectionType);
 
-      if (notebookEditorRef.current?.insertText(sql)) {
+      if (notebookEditorRef.current?.insertText(sql, { asStatement: true })) {
         toast.info('Rename statement added. Review it, then run it.');
       } else {
         toast.info('Open a notebook to add the rename statement');
