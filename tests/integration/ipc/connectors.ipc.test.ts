@@ -354,6 +354,52 @@ describe('Connectors IPC Integration', () => {
     });
   });
 
+  describe('connector:duckdbCreateDatabase', () => {
+    const create = (filePath: string) =>
+      mockIpc.invoke('connector:duckdbCreateDatabase', filePath);
+
+    it('creates an empty database at a new path', async () => {
+      const dbPath = path.join(TEST_DIR, 'created.duckdb');
+
+      expect(await create(dbPath)).toEqual({ path: dbPath, created: true });
+      expect(fs.existsSync(dbPath)).toBe(true);
+      expect(fs.existsSync(`${dbPath}.wal`)).toBe(false);
+    });
+
+    it('adds .duckdb when the name has no extension', async () => {
+      const result = await create(path.join(TEST_DIR, 'no_extension'));
+
+      expect(result.path).toBe(path.join(TEST_DIR, 'no_extension.duckdb'));
+      expect(fs.existsSync(result.path)).toBe(true);
+    });
+
+    it('reuses an existing DuckDB database without changing it', async () => {
+      const dbPath = path.join(TEST_DIR, 'existing.duckdb');
+      await create(dbPath);
+      const before = fs.readFileSync(dbPath);
+
+      expect(await create(dbPath)).toEqual({ path: dbPath, created: false });
+      expect(fs.readFileSync(dbPath).equals(before)).toBe(true);
+    });
+
+    it('refuses a file that is not a DuckDB database and leaves it intact', async () => {
+      const textPath = path.join(TEST_DIR, 'notes.duckdb');
+      fs.writeFileSync(textPath, 'not a database');
+
+      await expect(create(textPath)).rejects.toThrow(
+        'already exists and is not a DuckDB database',
+      );
+      expect(fs.readFileSync(textPath, 'utf8')).toBe('not a database');
+    });
+
+    it('fails when the folder does not exist', async () => {
+      const dbPath = path.join(TEST_DIR, 'no', 'such', 'folder', 'db.duckdb');
+
+      await expect(create(dbPath)).rejects.toThrow();
+      expect(fs.existsSync(dbPath)).toBe(false);
+    });
+  });
+
   describe('connector:test', () => {
     describe('PostgreSQL', () => {
       it('should invoke PostgreSQL connection test', async () => {
@@ -430,20 +476,34 @@ describe('Connectors IPC Integration', () => {
     });
 
     describe('DuckDB', () => {
+      const duckdbInput = (databasePath: string) => ({
+        type: 'duckdb',
+        name: 'test-duckdb',
+        database_path: databasePath,
+        short_database_path: path.basename(databasePath),
+        database: databasePath,
+        schema: 'main',
+      });
+
       it('should invoke DuckDB connection test', async () => {
         const testDbPath = path.join(TEST_DIR, 'test.duckdb');
+        await mockIpc.invoke('connector:duckdbCreateDatabase', testDbPath);
 
-        // DuckDB test should return a boolean result
-        const result = await mockIpc.invoke('connector:test', {
-          type: 'duckdb',
-          name: 'test-duckdb',
-          database_path: testDbPath,
-          short_database_path: 'test.duckdb',
-          database: testDbPath,
-          schema: 'main',
-        });
+        const result = await mockIpc.invoke(
+          'connector:test',
+          duckdbInput(testDbPath),
+        );
 
-        expect(typeof result).toBe('boolean');
+        expect(result).toBe(true);
+      });
+
+      it('should fail the test without creating a missing database file', async () => {
+        const missingPath = path.join(TEST_DIR, 'missing.duckdb');
+
+        await expect(
+          mockIpc.invoke('connector:test', duckdbInput(missingPath)),
+        ).rejects.toThrow('Database file not found');
+        expect(fs.existsSync(missingPath)).toBe(false);
       });
     });
   });

@@ -9,13 +9,16 @@ import {
   useTheme,
   CircularProgress,
   IconButton,
+  InputAdornment,
+  Tooltip,
   Typography,
 } from '@mui/material';
-import { FolderOpen } from '@mui/icons-material';
+import { Add, FolderOpen } from '@mui/icons-material';
 import { ConnectionModel, DuckDBConnection } from '../../types/backend';
 import connectionIcons from '../../../assets/connectionIcons';
 import {
   useConfigureConnection,
+  useCreateDuckDBDatabase,
   useTestConnection,
   useFilePicker,
   useUpdateConnection,
@@ -39,6 +42,16 @@ function shortDuckdbPath(databasePath: string): string {
   return path.basename(databasePath, '.duckdb');
 }
 
+// "Sales Analytics" -> "sales_analytics.duckdb"
+function defaultDatabaseFileName(connectionName: string): string {
+  const base = connectionName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return `${base || 'database'}.duckdb`;
+}
+
 export const DuckDB: React.FC<Props> = ({
   onCancel,
   connection,
@@ -50,6 +63,8 @@ export const DuckDB: React.FC<Props> = ({
   const theme = useTheme();
 
   const { mutate: getFiles } = useFilePicker();
+  const { mutate: createDatabase, isLoading: isCreating } =
+    useCreateDuckDBDatabase();
 
   const existingConnection = React.useMemo(
     () => connection?.connection as DuckDBConnection,
@@ -192,6 +207,32 @@ export const DuckDB: React.FC<Props> = ({
     );
   };
 
+  const handleCreateDatabase = () => {
+    if (isCreating) return;
+    createDatabase(defaultDatabaseFileName(formState.name), {
+      onSuccess: (result) => {
+        if (!result) return;
+        const fileName = path.basename(result.path);
+        toast.success(
+          result.created
+            ? `Created new database ${fileName}`
+            : `${fileName} already exists, using it`,
+        );
+        const connectionData = {
+          ...formState,
+          database_path: result.path,
+          database: result.path,
+        };
+        setFormState(connectionData);
+        setConnectionStatus('idle');
+        testConnection(connectionData);
+      },
+      onError: (error) => {
+        toast.error(`Could not create database: ${error.message}`);
+      },
+    });
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -308,14 +349,27 @@ export const DuckDB: React.FC<Props> = ({
           fullWidth
           required
           placeholder="/path/to/your/database.duckdb"
-          helperText="Path to your DuckDB database file"
+          helperText="Choose an existing DuckDB file, or create a new empty one"
           sx={{ mb: 2 }}
           slotProps={{
             input: {
               endAdornment: (
-                <IconButton onClick={handleFileSelect} edge="end">
-                  <FolderOpen />
-                </IconButton>
+                <InputAdornment position="end">
+                  <Tooltip title="Choose existing database">
+                    <IconButton size="small" onClick={handleFileSelect}>
+                      <FolderOpen fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Create new database">
+                    <IconButton
+                      size="small"
+                      edge="end"
+                      onClick={handleCreateDatabase}
+                    >
+                      <Add fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </InputAdornment>
               ),
             },
           }}
