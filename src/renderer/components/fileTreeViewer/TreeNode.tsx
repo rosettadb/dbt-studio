@@ -20,11 +20,27 @@ import { FileNode, FileStatuses } from './types';
 import { GitStatusBadge } from './GitStatusBadge';
 import { PipelineThumbnailPreview } from './PipelineThumbnailPreview';
 
+// Pixels each tree level is indented by. The indent guides below are drawn
+// at the same step, halfway between each ancestor folder's icon and its
+// children's icons.
+export const TREE_INDENT = 8;
+
+// Thin vertical line showing which open folder a row belongs to.
+const IndentGuide = styled('span')(({ theme }) => ({
+  position: 'absolute',
+  top: 0,
+  bottom: 0,
+  width: 1,
+  backgroundColor: alpha(theme.palette.text.primary, 0.6),
+  pointerEvents: 'none',
+}));
+
 const NodeContainer = styled('div')<{
   $isSelected: boolean;
   $isEditing: boolean;
   $isDragOver: boolean;
 }>(({ theme, $isSelected, $isEditing, $isDragOver }) => ({
+  position: 'relative',
   display: 'flex',
   alignItems: 'center',
   height: '100%',
@@ -246,6 +262,13 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
           : undefined
       }
     >
+      {/* One guide per ancestor folder below the project root */}
+      {Array.from({ length: Math.max(0, node.level - 1) }, (_, i) => (
+        <IndentGuide
+          key={i}
+          style={{ left: (i + 1) * TREE_INDENT + TREE_INDENT / 2 }}
+        />
+      ))}
       <NodeContent>
         {renderIcon()}
         {node.isEditing ? (
