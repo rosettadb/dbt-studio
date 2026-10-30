@@ -23,23 +23,27 @@ const ConnectionHeader = ({
   onSave,
   isLoading,
 }: Props) => {
+  // Rendered as siblings (no wrapper) so the sticky action bar stays pinned
+  // for the whole height of the form, not just inside this header.
   return (
-    <Box
-      sx={{
-        width: '100%',
-        maxWidth: '800px', // Changed from 800px to 500px
-        mb: 3,
-      }}
-    >
+    <>
       <Box
         sx={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 2,
+          bgcolor: 'background.default',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           width: '100%',
-          mb: 2,
+          maxWidth: '800px',
+          py: 1,
+          mb: 1,
           gap: 2,
           flexWrap: 'wrap',
+          // Fields scrolled into view (e.g. Shift+Tab) land below the bar, not behind it
+          '& ~ * *': { scrollMarginTop: '80px' },
         }}
       >
         <Typography variant="h6" component="h5">
@@ -74,37 +78,45 @@ const ConnectionHeader = ({
         </Box>
       </Box>
 
-      <Divider sx={{ my: 2 }} />
-
       <Box
         sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 2,
+          width: '100%',
+          maxWidth: '800px', // Changed from 800px to 500px
+          mb: 3,
         }}
       >
-        <img
-          src={imageSource}
-          alt={title}
-          style={{
-            width: '150px',
-            height: '50px',
-            objectFit: 'contain',
+        <Divider sx={{ mb: 2 }} />
+
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 2,
           }}
-        />
-        {/*
-        <TextField
-          label="Project"
-          name="project"
-          value={title}
-          onChange={(e) => console.log(e.target.value)}
-          fullWidth
-          size="small"
-        />
-        */}
+        >
+          <img
+            src={imageSource}
+            alt={title}
+            style={{
+              width: '150px',
+              height: '50px',
+              objectFit: 'contain',
+            }}
+          />
+          {/*
+          <TextField
+            label="Project"
+            name="project"
+            value={title}
+            onChange={(e) => console.log(e.target.value)}
+            fullWidth
+            size="small"
+          />
+          */}
+        </Box>
       </Box>
-    </Box>
+    </>
   );
 };
 
