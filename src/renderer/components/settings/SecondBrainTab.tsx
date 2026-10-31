@@ -118,6 +118,8 @@ import {
   getSecondBrainOperationTitle,
   getSecondBrainProgressMessage,
   getSecondBrainProviderTooltip,
+  getRunningSecondBrainOperation,
+  getSecondBrainTerminalPhase,
   isCurrentSecondBrainProgress,
   isSecondBrainTerminalStage,
   SECOND_BRAIN_GENERATION_HELPERS,
@@ -143,6 +145,8 @@ type SecondBrainOperationDialogState = {
   result?: SecondBrainRefreshResult;
   error?: string;
   stopError?: string;
+  /** Started outside this tab; this tab only follows its progress. */
+  adopted?: boolean;
 };
 
 const getOperationPrimaryMessage = (
@@ -316,6 +320,35 @@ export const SecondBrainTab: React.FC = () => {
     operationDialog?.phase === 'running' ||
     operationDialog?.phase === 'stopping';
 
+  // Follow a build started elsewhere (the AI panel's memory prompt) so the
+  // user can watch or stop it here. Status can be stale right after a local
+  // build ends, so adopt only from a fresh read.
+  const runningElsewhere = Boolean(
+    !operationDialog && getRunningSecondBrainOperation(status),
+  );
+  React.useEffect(() => {
+    if (!runningElsewhere) return undefined;
+    let ignore = false;
+    const followRunningBuild = async () => {
+      const { data } = await statusQuery.refetch();
+      const running = getRunningSecondBrainOperation(data);
+      if (ignore || !running) return;
+      setOperationDialog(
+        (current) =>
+          current ?? {
+            ...running,
+            phase: 'running',
+            providerName: activeProvider?.name ?? '',
+            adopted: true,
+          },
+      );
+    };
+    followRunningBuild().catch(() => undefined);
+    return () => {
+      ignore = true;
+    };
+  }, [runningElsewhere]);
+
   React.useEffect(() => {
     if (!operationDialog || !operationActive || !progress) return;
     if (
@@ -346,6 +379,44 @@ export const SecondBrainTab: React.FC = () => {
       };
     });
   }, [
+    operationActive,
+    operationDialog?.operationId,
+    operationDialog?.startedAt,
+    progress,
+  ]);
+
+  // A followed build has no local promise; its final progress event ends it.
+  React.useEffect(() => {
+    if (!operationDialog?.adopted || !operationActive || !progress) return;
+    const phase = getSecondBrainTerminalPhase(progress.stage);
+    if (
+      !phase ||
+      !isCurrentSecondBrainProgress(
+        progress,
+        operationDialog.operationId,
+        operationDialog.startedAt,
+      )
+    ) {
+      return;
+    }
+    setOperationDialog((current) =>
+      current
+        ? {
+            ...current,
+            phase,
+            progress: undefined,
+            error:
+              phase === 'failed'
+                ? 'The Agent Memory build failed. The error notification has the reason.'
+                : undefined,
+          }
+        : current,
+    );
+    clearProgress();
+    statusQuery.refetch();
+    treeQuery.refetch();
+  }, [
+    operationDialog?.adopted,
     operationActive,
     operationDialog?.operationId,
     operationDialog?.startedAt,
@@ -404,15 +475,34 @@ export const SecondBrainTab: React.FC = () => {
     isApplyingExternalContentRef.current = false;
   }, [model, revisionQuery.data, selectedRevisionId]);
 
+  // The tree query is disabled once memory is gone, but keeps its old data.
+  const memoryPages = status?.initialized ? treeQuery.data : undefined;
+
   React.useEffect(() => {
-    if (!selected && treeQuery.data?.length) {
+    if (!selected && memoryPages?.length) {
       setSelected(
-        treeQuery.data.find(
-          (page) => page.pageId === AGENT_MEMORY_ENTRY_FILE,
-        ) ?? treeQuery.data[0],
+        memoryPages.find((page) => page.pageId === AGENT_MEMORY_ENTRY_FILE) ??
+          memoryPages[0],
       );
     }
-  }, [selected, treeQuery.data]);
+  }, [selected, memoryPages]);
+
+  // Memory can be deleted under this tab (Clear and disable, or a failed first
+  // build rolling back). Drop the selection once its page is gone.
+  React.useEffect(() => {
+    if (!selected || treeQuery.isFetching || statusQuery.isFetching) return;
+    const pageStillExists = memoryPages?.some(
+      (page) => page.pageId === selected.pageId,
+    );
+    if (pageStillExists) return;
+    setSelected(null);
+    setSelectedRevisionId(undefined);
+    setDraft('');
+    savedContentRef.current = '';
+    dirtyRef.current = false;
+    setDirty(false);
+    model.setValue('');
+  }, [selected, memoryPages, treeQuery.isFetching, statusQuery.isFetching]);
 
   const selectPage = (item: SecondBrainTreeItem) => {
     if (

@@ -91,6 +91,9 @@ export const registerSecondBrainHandlers = (): void => {
       lastSuccessfulRefreshAt: status.lastSuccessfulRefreshAt,
       busy: operationStatus.busy,
       activeOperationId: operationStatus.activeOperationId,
+      activeOperationKind: operationStatus.activeOperationKind,
+      activeOperationStartedAt: operationStatus.activeOperationStartedAt,
+      activeProgress: operationStatus.activeProgress,
       layoutVersion: status.layoutVersion,
       okfVersion: status.okfVersion,
     };
