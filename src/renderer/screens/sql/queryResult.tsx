@@ -2,6 +2,7 @@ import React from 'react';
 import { toast } from 'react-toastify';
 import { styled } from '@mui/material/styles';
 import {
+  Alert,
   Box,
   Backdrop,
   CircularProgress,
@@ -891,6 +892,17 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
         overflow: 'hidden',
       }}
     >
+      {results.truncated && (
+        <Alert
+          severity="info"
+          data-testid="sql-results-truncated"
+          sx={{ m: 1, flex: '0 0 auto' }}
+        >
+          {`Showing the first ${(
+            results.rowCount ?? rows.length
+          ).toLocaleString()} rows. Add filters or aggregate in SQL to see the rest.`}
+        </Alert>
+      )}
       {viewMode === 'chart' ? (
         <Box
           ref={chartContainerRef}

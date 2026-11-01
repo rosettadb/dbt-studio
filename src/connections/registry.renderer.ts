@@ -15,6 +15,7 @@ import { sqliteUi } from './sqlite/sqlite.ui';
 import { kineticaUi } from './kinetica/kinetica.ui';
 import { oracleUi } from './oracle/oracle.ui';
 import { mysqlUi } from './mysql/mysql.ui';
+import { spannerUi } from './spanner/spanner.ui';
 import { ducklakeUi } from './ducklake/ducklake.ui';
 
 export const connectionUis: {
@@ -30,6 +31,7 @@ export const connectionUis: {
   kinetica: kineticaUi,
   oracle: oracleUi,
   mysql: mysqlUi,
+  spanner: spannerUi,
   ducklake: ducklakeUi,
 };
 
