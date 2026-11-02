@@ -31,7 +31,7 @@ const IndentGuide = styled('span')(({ theme }) => ({
   top: 0,
   bottom: 0,
   width: 1,
-  backgroundColor: alpha(theme.palette.text.primary, 0.6),
+  backgroundColor: alpha(theme.palette.text.primary, 0.1),
   pointerEvents: 'none',
 }));
 
