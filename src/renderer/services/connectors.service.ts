@@ -119,15 +119,16 @@ export const getConnectionById = async (
 };
 
 /**
- * Extract schema directly from a connection (not project-based)
+ * Extract schema directly from a connection (not project-based).
+ * `schemas` lists every schema, also empty ones; only DuckDB sends it.
  */
 export const extractSchemaFromConnection = async (
   connectionId: string,
-): Promise<{ tables: any[]; error?: string }> => {
-  const { data } = await client.post<string, { tables: any[]; error?: string }>(
-    'connector:extractSchema',
-    connectionId,
-  );
+): Promise<{ tables: any[]; schemas?: string[]; error?: string }> => {
+  const { data } = await client.post<
+    string,
+    { tables: any[]; schemas?: string[]; error?: string }
+  >('connector:extractSchema', connectionId);
   return data;
 };
 

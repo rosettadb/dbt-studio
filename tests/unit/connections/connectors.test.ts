@@ -89,7 +89,30 @@ describe('DuckDB schema extraction', () => {
           table('staging', 'customers'),
         ],
       }),
+      // raw has no tables yet
+      getSchemaNames: async () => [
+        'analytics',
+        'main',
+        'public',
+        'raw',
+        'staging',
+      ],
     }));
+  });
+
+  it('SQL Editor lists schemas with no tables, in search order', async () => {
+    const result = await connectors.duckdb.extractSchema({
+      type: 'duckdb',
+      database_path: '/db.duckdb',
+      schema: 'public',
+    } as any);
+    expect((result as { schemas?: string[] }).schemas).toEqual([
+      'public',
+      'main',
+      'analytics',
+      'raw',
+      'staging',
+    ]);
   });
 
   it('SQL Editor reads every schema, the form schema first, then main', async () => {

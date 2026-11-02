@@ -161,6 +161,23 @@ export default class DuckDBSchemaExtractor {
     }
   }
 
+  // Every schema in the database file, also the ones with no tables yet.
+  async getSchemaNames(): Promise<string[]> {
+    try {
+      const rows = await this.executeQuery(`
+        SELECT schema_name
+        FROM information_schema.schemata
+        WHERE catalog_name = current_database()
+        ORDER BY schema_name
+      `);
+      return rows
+        .map((row) => (Array.isArray(row) ? row[0] : row.schema_name))
+        .filter((name) => name && typeof name === 'string');
+    } catch (error) {
+      return [];
+    }
+  }
+
   private async getDetailedColumns(ref: TableRef): Promise<Column[]> {
     try {
       const rows = await this.executeQuery(`
