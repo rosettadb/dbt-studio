@@ -94,7 +94,7 @@ export default class DuckDBSchemaExtractor {
   // limited to the database file and, when set, to one schema.
   private scopeFilter(): string {
     const schemaFilter = this.schema
-      ? ` AND table_schema = ${sqlString(this.schema)}`
+      ? ` AND lower(table_schema) = lower(${sqlString(this.schema)})`
       : '';
     return `table_catalog = current_database()${schemaFilter}`;
   }

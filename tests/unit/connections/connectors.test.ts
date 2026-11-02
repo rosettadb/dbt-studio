@@ -125,6 +125,12 @@ describe('DuckDB schema extraction', () => {
       'a',
       'b',
     ]);
+    // DuckDB identifiers are case-insensitive, so the stored spelling is first
+    expect(duckDBSearchOrder('public', ['Main', 'Public', 'staging'])).toEqual([
+      'Public',
+      'Main',
+      'staging',
+    ]);
   });
 
   it('project schema reads only the form schema, main by default', async () => {

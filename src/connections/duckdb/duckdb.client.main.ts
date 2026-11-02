@@ -11,10 +11,17 @@ import { DuckDBConnection, QueryResponseType } from '../../types/backend';
 export const duckDBSearchOrder = (
   defaultSchema: string,
   schemas: string[],
-): string[] =>
-  Array.from(new Set([defaultSchema, 'main', ...[...schemas].sort()])).filter(
-    (schema) => schemas.includes(schema),
-  );
+): string[] => {
+  const resolveSchema = (name: string) =>
+    schemas.find((schema) => schema.toLowerCase() === name.toLowerCase());
+  return Array.from(
+    new Set([
+      resolveSchema(defaultSchema),
+      resolveSchema('main'),
+      ...[...schemas].sort(),
+    ]),
+  ).filter((schema): schema is string => typeof schema === 'string');
+};
 
 // The SQL Editor shows every schema, so a query can name any of their
 // tables without the schema. Names are escaped because they come from the
