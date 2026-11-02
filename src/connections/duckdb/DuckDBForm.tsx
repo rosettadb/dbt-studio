@@ -47,7 +47,7 @@ function defaultDatabaseFileName(connectionName: string): string {
   const base = connectionName
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/[^\p{L}\p{N}]+/gu, '_')
     .replace(/^_+|_+$/g, '');
   return `${base || 'database'}.duckdb`;
 }
