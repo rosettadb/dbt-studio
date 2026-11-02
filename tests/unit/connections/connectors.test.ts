@@ -131,6 +131,12 @@ describe('DuckDB schema extraction', () => {
       'Main',
       'staging',
     ]);
+    // DuckDB only folds ASCII case, so É and é are distinct schemas
+    expect(duckDBSearchOrder('é', ['É', 'é', 'main'])).toEqual([
+      'é',
+      'main',
+      'É',
+    ]);
   });
 
   it('project schema reads only the form schema, main by default', async () => {

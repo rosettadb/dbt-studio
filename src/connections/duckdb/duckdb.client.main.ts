@@ -8,12 +8,15 @@ import { DuckDBConnection, QueryResponseType } from '../../types/backend';
  * connection's schema, then main, then the other schemas by name. The
  * connector lists tables in the same order, so autocomplete matches it.
  */
+const asciiFold = (value: string) =>
+  value.replace(/[A-Z]/g, (char) => char.toLowerCase());
+
 export const duckDBSearchOrder = (
   defaultSchema: string,
   schemas: string[],
 ): string[] => {
   const resolveSchema = (name: string) =>
-    schemas.find((schema) => schema.toLowerCase() === name.toLowerCase());
+    schemas.find((schema) => asciiFold(schema) === asciiFold(name));
   return Array.from(
     new Set([
       resolveSchema(defaultSchema),
