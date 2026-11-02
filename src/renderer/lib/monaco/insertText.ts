@@ -11,6 +11,11 @@
 
 import type * as monaco from 'monaco-editor';
 
+import {
+  parseSqlEditorStatements,
+  type ParsedStatement,
+} from '../../components/sqlEditor/editorComponent/statements';
+
 export type InsertTextOptions = {
   /** Insert at this position instead of the current selection. */
   position?: monaco.IPosition | null;
@@ -20,15 +25,58 @@ export type InsertTextOptions = {
   source?: string;
   /**
    * Treat the text as a full statement: add only the line breaks needed so a
-   * blank line separates it from any text above and below.
+   * blank line separates it from any text above and below. A cursor inside an
+   * existing statement inserts after that statement rather than splitting it;
+   * an explicit `position` or a selection is still used as given.
    */
   asStatement?: boolean;
 };
 
 type ModelLike = Pick<
   monaco.editor.ITextModel,
-  'getLineContent' | 'getLineCount'
+  | 'getLineContent'
+  | 'getLineCount'
+  | 'getValue'
+  | 'getOffsetAt'
+  | 'getPositionAt'
 >;
+
+/** The parser leaves the semicolon out of a statement, so include it here. */
+const statementEndOffsetWithSemicolon = (
+  model: ModelLike,
+  statement: ParsedStatement,
+): number => {
+  const statementEndOffset = model.getOffsetAt({
+    lineNumber: statement.endLine,
+    column: statement.endColumn,
+  });
+  const textAfterStatement = model.getValue().slice(statementEndOffset);
+  const trimmedTextAfterStatement = textAfterStatement.trimStart();
+  if (!trimmedTextAfterStatement.startsWith(';')) return statementEndOffset;
+  const whitespaceLength =
+    textAfterStatement.length - trimmedTextAfterStatement.length;
+  return statementEndOffset + whitespaceLength + 1;
+};
+
+/** The end of the statement the cursor is inside, or null if it is in none. */
+const endOfStatementAroundCursor = (
+  model: ModelLike,
+  cursor: monaco.IPosition,
+): monaco.IPosition | null => {
+  const cursorOffset = model.getOffsetAt(cursor);
+  const statementAroundCursor = parseSqlEditorStatements(model).find(
+    (statement) =>
+      cursorOffset >
+        model.getOffsetAt({
+          lineNumber: statement.startLine,
+          column: statement.startColumn,
+        }) && cursorOffset < statementEndOffsetWithSemicolon(model, statement),
+  );
+  if (!statementAroundCursor) return null;
+  return model.getPositionAt(
+    statementEndOffsetWithSemicolon(model, statementAroundCursor),
+  );
+};
 
 const lineBreaksBeforeStatement = (
   model: ModelLike,
@@ -110,6 +158,25 @@ export const insertTextAtCursor = (
         startColumn: position.column,
         endLineNumber: position.lineNumber,
         endColumn: position.column,
+      };
+    }
+  }
+
+  const isCursorWithoutSelection =
+    !options.position &&
+    range.startLineNumber === range.endLineNumber &&
+    range.startColumn === range.endColumn;
+  if (options.asStatement && isCursorWithoutSelection) {
+    const statementEnd = endOfStatementAroundCursor(model, {
+      lineNumber: range.startLineNumber,
+      column: range.startColumn,
+    });
+    if (statementEnd) {
+      range = {
+        startLineNumber: statementEnd.lineNumber,
+        startColumn: statementEnd.column,
+        endLineNumber: statementEnd.lineNumber,
+        endColumn: statementEnd.column,
       };
     }
   }

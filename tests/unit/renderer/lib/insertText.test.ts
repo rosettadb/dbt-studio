@@ -234,6 +234,105 @@ describe('insertTextAtCursor with asStatement', () => {
     });
     expect(editor.position).toEqual({ lineNumber: 4, column: 8 });
   });
+
+  describe('with the cursor inside an existing statement', () => {
+    const insertStatementAtCursor = (
+      initial: string,
+      lineNumber: number,
+      column: number,
+    ) => {
+      const editor = createFakeEditor(initial, {
+        startLineNumber: lineNumber,
+        startColumn: column,
+        endLineNumber: lineNumber,
+        endColumn: column,
+      });
+      insertTextAtCursor(editor as any, statement, { asStatement: true });
+      return editor;
+    };
+
+    it('inserts after the statement instead of splitting it', () => {
+      const editor = insertStatementAtCursor('select col from t;', 1, 10);
+      expect(editor.model.getValue()).toBe(
+        `select col from t;\n\n${statement}`,
+      );
+      expect(editor.position).toEqual({ lineNumber: 4, column: 8 });
+    });
+
+    it('keeps a multi-line INSERT whole and the next statement apart', () => {
+      const editor = insertStatementAtCursor(
+        'insert into c (a, b)\nvalues (1, 2);\n\nselect 2;',
+        2,
+        12,
+      );
+      expect(editor.model.getValue()).toBe(
+        `insert into c (a, b)\nvalues (1, 2);\n\n${statement}\n\nselect 2;`,
+      );
+    });
+
+    it('treats the cursor right before the semicolon as inside', () => {
+      const editor = insertStatementAtCursor('select 1;', 1, 9);
+      expect(editor.model.getValue()).toBe(`select 1;\n\n${statement}`);
+    });
+
+    it('finds a semicolon on the line after the statement', () => {
+      const editor = insertStatementAtCursor('select 1\n;', 1, 5);
+      expect(editor.model.getValue()).toBe(`select 1\n;\n\n${statement}`);
+    });
+
+    it('inserts after a statement with no semicolon', () => {
+      const editor = insertStatementAtCursor('select col from t', 1, 10);
+      expect(editor.model.getValue()).toBe(`select col from t\n\n${statement}`);
+    });
+
+    it('finds the end of the statement with CRLF line endings', () => {
+      const editor = insertStatementAtCursor(
+        'insert into c (a)\r\nvalues (1);',
+        2,
+        9,
+      );
+      expect(editor.model.getValue()).toBe(
+        `insert into c (a)\r\nvalues (1);\n\n${statement}`,
+      );
+    });
+
+    it('stays at the cursor at the start of a statement', () => {
+      const editor = insertStatementAtCursor('select 1;', 1, 1);
+      expect(editor.model.getValue()).toBe(`${statement}\n\nselect 1;`);
+    });
+
+    it('stays at the cursor right after the semicolon', () => {
+      const editor = insertStatementAtCursor('select 1;', 1, 10);
+      expect(editor.model.getValue()).toBe(`select 1;\n\n${statement}`);
+    });
+
+    it('stays at the cursor on an empty line between statements', () => {
+      const editor = insertStatementAtCursor('select 1;\n\nselect 2;', 2, 1);
+      expect(editor.model.getValue()).toBe(
+        `select 1;\n\n${statement}\n\nselect 2;`,
+      );
+    });
+
+    it('keeps an explicit position such as a drop', () => {
+      const editor = insertStatementAt('select col from t;', 1, 10);
+      expect(editor.model.getValue()).toBe(
+        `select co\n\n${statement}\n\nl from t;`,
+      );
+    });
+
+    it('replaces a selection rather than moving', () => {
+      const editor = createFakeEditor('select col from t;', {
+        startLineNumber: 1,
+        startColumn: 8,
+        endLineNumber: 1,
+        endColumn: 11,
+      });
+      insertTextAtCursor(editor as any, statement, { asStatement: true });
+      expect(editor.model.getValue()).toBe(
+        `select \n\n${statement}\n\n from t;`,
+      );
+    });
+  });
 });
 
 describe('getPositionAtClientPoint', () => {
