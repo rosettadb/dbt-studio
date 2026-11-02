@@ -313,6 +313,62 @@ describe('insertTextAtCursor with asStatement', () => {
       );
     });
 
+    it('uses the statement around the cursor when there are several', () => {
+      const editor = insertStatementAtCursor(
+        'select 1;\nselect col from t;\nselect 3;',
+        2,
+        10,
+      );
+      expect(editor.model.getValue()).toBe(
+        `select 1;\nselect col from t;\n\n${statement}\n\nselect 3;`,
+      );
+    });
+
+    it('keeps a trailing comment with its statement', () => {
+      const editor = insertStatementAtCursor(
+        'select col from t; -- note\nselect 2;',
+        1,
+        10,
+      );
+      expect(editor.model.getValue()).toBe(
+        `select col from t; -- note\n\n${statement}\n\nselect 2;`,
+      );
+    });
+
+    it('keeps a trailing comment when there is no semicolon', () => {
+      const editor = insertStatementAtCursor(
+        'select col from t -- note\n\nselect 2;',
+        1,
+        10,
+      );
+      expect(editor.model.getValue()).toBe(
+        `select col from t -- note\n\n${statement}\n\nselect 2;`,
+      );
+    });
+
+    it('does not cut a trailing comment when the cursor is inside it', () => {
+      const editor = insertStatementAtCursor('select 1; -- note', 1, 15);
+      expect(editor.model.getValue()).toBe(`select 1; -- note\n\n${statement}`);
+    });
+
+    it('does not take a comment after the next statement on the line', () => {
+      const editor = insertStatementAtCursor(
+        'select 1; select 2; -- note',
+        1,
+        8,
+      );
+      expect(editor.model.getValue()).toBe(
+        `select 1;\n\n${statement}\n\n select 2; -- note`,
+      );
+    });
+
+    it('does not treat -- inside a string as a comment', () => {
+      const editor = insertStatementAtCursor("select '--' from t;", 1, 10);
+      expect(editor.model.getValue()).toBe(
+        `select '--' from t;\n\n${statement}`,
+      );
+    });
+
     it('keeps an explicit position such as a drop', () => {
       const editor = insertStatementAt('select col from t;', 1, 10);
       expect(editor.model.getValue()).toBe(

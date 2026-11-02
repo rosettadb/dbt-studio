@@ -41,8 +41,11 @@ type ModelLike = Pick<
   | 'getPositionAt'
 >;
 
-/** The parser leaves the semicolon out of a statement, so include it here. */
-const statementEndOffsetWithSemicolon = (
+/**
+ * The parser leaves a statement's semicolon out, and a `--` comment after it
+ * on the same line belongs with it, so include both here.
+ */
+const statementEndOffsetWithSemicolonAndComment = (
   model: ModelLike,
   statement: ParsedStatement,
 ): number => {
@@ -52,10 +55,17 @@ const statementEndOffsetWithSemicolon = (
   });
   const textAfterStatement = model.getValue().slice(statementEndOffset);
   const trimmedTextAfterStatement = textAfterStatement.trimStart();
-  if (!trimmedTextAfterStatement.startsWith(';')) return statementEndOffset;
   const whitespaceLength =
     textAfterStatement.length - trimmedTextAfterStatement.length;
-  return statementEndOffset + whitespaceLength + 1;
+  const endOffset = trimmedTextAfterStatement.startsWith(';')
+    ? statementEndOffset + whitespaceLength + 1
+    : statementEndOffset;
+
+  const { lineNumber, column } = model.getPositionAt(endOffset);
+  const endLine = model.getLineContent(lineNumber);
+  const textAfterEnd = endLine.slice(column - 1).trimStart();
+  if (!textAfterEnd.startsWith('--')) return endOffset;
+  return model.getOffsetAt({ lineNumber, column: endLine.length + 1 });
 };
 
 /** The end of the statement the cursor is inside, or null if it is in none. */
@@ -64,18 +74,24 @@ const endOfStatementAroundCursor = (
   cursor: monaco.IPosition,
 ): monaco.IPosition | null => {
   const cursorOffset = model.getOffsetAt(cursor);
-  const statementAroundCursor = parseSqlEditorStatements(model).find(
+  // Statements are in document order and never overlap, so only the last one
+  // starting before the cursor can contain it.
+  const statementsStartingBeforeCursor = parseSqlEditorStatements(model).filter(
     (statement) =>
-      cursorOffset >
-        model.getOffsetAt({
-          lineNumber: statement.startLine,
-          column: statement.startColumn,
-        }) && cursorOffset < statementEndOffsetWithSemicolon(model, statement),
+      model.getOffsetAt({
+        lineNumber: statement.startLine,
+        column: statement.startColumn,
+      }) < cursorOffset,
   );
-  if (!statementAroundCursor) return null;
-  return model.getPositionAt(
-    statementEndOffsetWithSemicolon(model, statementAroundCursor),
+  const closestStatement =
+    statementsStartingBeforeCursor[statementsStartingBeforeCursor.length - 1];
+  if (!closestStatement) return null;
+
+  const endOffset = statementEndOffsetWithSemicolonAndComment(
+    model,
+    closestStatement,
   );
+  return cursorOffset < endOffset ? model.getPositionAt(endOffset) : null;
 };
 
 const lineBreaksBeforeStatement = (
