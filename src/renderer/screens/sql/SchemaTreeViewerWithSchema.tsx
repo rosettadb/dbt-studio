@@ -25,6 +25,9 @@ import { SupportedConnectionTypes, Table } from '../../../types/backend';
 import { TreeItems } from '../../components/schemaTreeViewer/TreeItems';
 import { defaultIcon } from '../../../../assets/connectionIcons';
 
+/** A database's unnamed default schema is shown as "default". */
+const schemaLabel = (schema: string) => schema || 'default';
+
 type Props = {
   databaseName: string;
   type: SupportedConnectionTypes;
@@ -80,7 +83,7 @@ export const SchemaTreeViewerWithSchema: React.FC<Props> = React.memo(
       return dedupedTables.filter(
         (table) =>
           table.name.toLowerCase().includes(lowerFilter) ||
-          table.schema.toLowerCase().includes(lowerFilter),
+          schemaLabel(table.schema).toLowerCase().includes(lowerFilter),
       );
     }, [dedupedTables, filter]);
 
@@ -179,7 +182,7 @@ export const SchemaTreeViewerWithSchema: React.FC<Props> = React.memo(
                     itemId={schemaTreeKey(databaseName, schemaName)}
                     label={
                       <TreeItems.Schema
-                        label={schemaName}
+                        label={schemaLabel(schemaName)}
                         rootProps={rowProps({
                           kind: 'schema',
                           databaseName,
