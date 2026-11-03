@@ -10,6 +10,12 @@ const sqlString = (value: string) => `'${value.replace(/'/g, "''")}'`;
 
 const sqlIdentifier = (value: string) => `"${value.replace(/"/g, '""')}"`;
 
+// DuckDB matches identifiers ignoring ASCII case only (É and é are two
+// schemas), so lower() and COLLATE NOCASE, which fold all letters, can't
+// be used.
+const sqlAsciiLower = (expression: string) =>
+  `translate(${expression}, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz')`;
+
 const refKey = (ref: TableRef) => JSON.stringify([ref.schema, ref.name]);
 
 // Drops repeated refs and refs whose key is already in `exclude`.
@@ -45,17 +51,13 @@ export default class DuckDBSchemaExtractor {
       // Set schema context if not 'main'
       if (this.schema && this.schema !== 'main') {
         try {
-          await connection.run(`USE ${this.schema}`);
+          await connection.run(`USE ${sqlIdentifier(this.schema)}`);
         } catch (schemaError: any) {
-          // If schema doesn't exist, throw a clear error
-          if (
-            schemaError.message?.includes('does not exist') ||
-            schemaError.message?.includes('not found')
-          ) {
-            throw new Error(
-              `Schema '${this.schema}' does not exist in the DuckDB database.`,
-            );
-          }
+          // Any failure must stop here: current_schema() would still be
+          // main, and the query would return main's tables.
+          throw new Error(
+            `Schema '${this.schema}' could not be selected: ${schemaError.message}`,
+          );
         }
       }
 
@@ -92,9 +94,11 @@ export default class DuckDBSchemaExtractor {
 
   // information_schema also lists the system and temp catalogs, so rows are
   // limited to the database file and, when set, to one schema.
+  // current_schema() keeps the spelling given to USE (SALES for a schema
+  // stored as sales), so the names are compared the way DuckDB does.
   private scopeFilter(): string {
     const schemaFilter = this.schema
-      ? ' AND table_schema = current_schema()'
+      ? ` AND ${sqlAsciiLower('table_schema')} = ${sqlAsciiLower('current_schema()')}`
       : '';
     return `table_catalog = current_database()${schemaFilter}`;
   }
