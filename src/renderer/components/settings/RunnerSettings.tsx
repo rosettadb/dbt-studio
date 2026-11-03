@@ -83,9 +83,8 @@ const MANUAL_INSTALL_HELP: Partial<
   },
 };
 
-// Versions shown before and after "Show older versions" is clicked.
+// Versions shown before "Show older versions" is clicked.
 const LATEST_RUNNER_VERSIONS_SHOWN = 4;
-const RUNNER_VERSIONS_SHOWN_WITH_OLDER = 10;
 
 interface RunnerSettingsProps {
   settings: SettingsType;
@@ -242,14 +241,66 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
   };
 
   const availableVersions = versionInfo?.availableVersions ?? [];
-  const shownVersions = availableVersions.slice(
+  const latestVersions = availableVersions.slice(
     0,
-    showOlderVersions
-      ? RUNNER_VERSIONS_SHOWN_WITH_OLDER
-      : LATEST_RUNNER_VERSIONS_SHOWN,
+    LATEST_RUNNER_VERSIONS_SHOWN,
   );
-  const hasOlderVersions =
-    availableVersions.length > LATEST_RUNNER_VERSIONS_SHOWN;
+  const olderVersions = availableVersions.slice(LATEST_RUNNER_VERSIONS_SHOWN);
+
+  const renderVersionRow = (
+    version: RunnerVersionInfo['availableVersions'][number],
+  ) => (
+    <SettingsRow
+      key={version.version}
+      label={
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {version.version}
+          {version.version === versionInfo?.latestStable && (
+            <Chip label="Latest" size="small" variant="outlined" />
+          )}
+        </Box>
+      }
+      description={`Released: ${new Date(
+        version.releaseDate,
+      ).toLocaleDateString()}`}
+    >
+      {version.releaseNotes && (
+        <Tooltip title="View release notes">
+          <IconButton
+            size="small"
+            onClick={() =>
+              window.open(
+                `https://github.com/rosettadb/dbt-studio/releases/tag/${version.version}`,
+                '_blank',
+              )
+            }
+          >
+            <Info fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      )}
+      <Button
+        size="small"
+        variant="outlined"
+        onClick={() => handleInstallVersion(version.version)}
+        disabled={
+          version.version === versionInfo?.currentVersion ||
+          installingVersion === version.version ||
+          installVersion.isLoading ||
+          isInstallTaskActive
+        }
+        startIcon={
+          installingVersion === version.version ? (
+            <CircularProgress size={14} />
+          ) : (
+            <Download />
+          )
+        }
+      >
+        {getButtonText(version)}
+      </Button>
+    </SettingsRow>
+  );
 
   return (
     <SettingsStack>
@@ -296,59 +347,19 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
             }
           />
         )}
-        {shownVersions.map((version) => (
-          <SettingsRow
-            key={version.version}
-            label={
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                {version.version}
-                {version.version === versionInfo?.latestStable && (
-                  <Chip label="Latest" size="small" variant="outlined" />
-                )}
-              </Box>
-            }
-            description={`Released: ${new Date(
-              version.releaseDate,
-            ).toLocaleDateString()}`}
+        {latestVersions.map(renderVersionRow)}
+        {showOlderVersions && olderVersions.length > 0 && (
+          <Box
+            sx={(theme) => ({
+              maxHeight: 240,
+              overflowY: 'auto',
+              '& > * + *': { borderTop: `1px solid ${theme.palette.divider}` },
+            })}
           >
-            {version.releaseNotes && (
-              <Tooltip title="View release notes">
-                <IconButton
-                  size="small"
-                  onClick={() =>
-                    window.open(
-                      `https://github.com/rosettadb/dbt-studio/releases/tag/${version.version}`,
-                      '_blank',
-                    )
-                  }
-                >
-                  <Info fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            )}
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={() => handleInstallVersion(version.version)}
-              disabled={
-                version.version === versionInfo?.currentVersion ||
-                installingVersion === version.version ||
-                installVersion.isLoading ||
-                isInstallTaskActive
-              }
-              startIcon={
-                installingVersion === version.version ? (
-                  <CircularProgress size={14} />
-                ) : (
-                  <Download />
-                )
-              }
-            >
-              {getButtonText(version)}
-            </Button>
-          </SettingsRow>
-        ))}
-        {hasOlderVersions && (
+            {olderVersions.map(renderVersionRow)}
+          </Box>
+        )}
+        {olderVersions.length > 0 && (
           <Box sx={{ px: 1.75, py: 0.75, textAlign: 'center' }}>
             <Button
               size="small"
