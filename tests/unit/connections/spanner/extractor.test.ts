@@ -119,8 +119,8 @@ describe('SpannerExtractor', () => {
 
     expect(database.getSnapshot).toHaveBeenCalledWith({ strong: true });
     expect(tables.map((t) => [t.name, t.type, t.schema])).toEqual([
-      ['orders', 'TABLE', 'default'],
-      ['order_totals', 'VIEW', 'default'],
+      ['orders', 'TABLE', ''],
+      ['order_totals', 'VIEW', ''],
     ]);
     const orders = tables[0].columns;
     expect(

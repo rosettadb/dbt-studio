@@ -179,7 +179,8 @@ export const SchemaTreeViewerWithSchema: React.FC<Props> = React.memo(
                     itemId={schemaTreeKey(databaseName, schemaName)}
                     label={
                       <TreeItems.Schema
-                        label={schemaName}
+                        // A database's unnamed default schema.
+                        label={schemaName || 'default'}
                         rootProps={rowProps({
                           kind: 'schema',
                           databaseName,

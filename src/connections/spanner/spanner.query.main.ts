@@ -5,11 +5,7 @@ import {
   SPANNER_MAX_JSON_CHARS,
   SPANNER_MAX_ROWS,
 } from './spanner.helpers.shared';
-import {
-  acquireSpannerDatabase,
-  spannerErrorText,
-  type SpannerLease,
-} from './spanner.client.main';
+import { spannerErrorText, withSpannerDatabase } from './spanner.client.main';
 
 type StatementKind = 'QUERY' | 'DML' | 'DDL';
 type Cancellable = (cancel: () => void) => void;
@@ -212,13 +208,12 @@ async function runQuery(
         settled = true;
         reject(error);
       };
-      const succeed = (truncated: boolean) =>
+      const succeed = () =>
         settle({
           success: true,
           data: asRows(rows),
           fields: toFields(columns ?? []),
           rowCount: rows.length,
-          ...(truncated && { truncated }),
         });
       onCancelable?.(() =>
         settle({ success: false, error: 'Query cancelled.' }),
@@ -235,14 +230,14 @@ async function runQuery(
       stream.on('data', (row: any[]) => {
         if (settled) return;
         columns = columns ?? columnsFrom(undefined, row) ?? [];
-        // One row past the cap means the result was cut off.
+        // Stop reading at the cap; the rest of the result is dropped.
         if (rows.length === SPANNER_MAX_ROWS) {
-          succeed(true);
+          succeed();
           return;
         }
         rows.push(toRecord(columns, row));
       });
-      stream.on('end', () => succeed(false));
+      stream.on('end', succeed);
       stream.on('error', fail);
       stream.on('close', () =>
         fail(new Error('The Spanner query stream closed before it finished.')),
@@ -324,7 +319,6 @@ async function runDml(
     data,
     fields: toFields(columns),
     rowCount: data?.length ?? 0,
-    ...(returned.length > SPANNER_MAX_ROWS && { truncated: true }),
   };
 }
 
@@ -358,18 +352,13 @@ async function runDdl(
 export async function testSpannerConnection(
   conn: SpannerConnection,
 ): Promise<boolean> {
-  let lease: SpannerLease | undefined;
   try {
-    lease = await acquireSpannerDatabase(conn);
-    await lease.database.run({
-      sql: 'SELECT 1 AS connection_test',
-      json: true,
-    });
+    await withSpannerDatabase(conn, ({ database }) =>
+      database.run({ sql: 'SELECT 1 AS connection_test', json: true }),
+    );
     return true;
   } catch (error) {
     throw new Error(spannerErrorText(error));
-  } finally {
-    lease?.release();
   }
 }
 
@@ -378,30 +367,27 @@ export async function executeSpannerQuery(
   sql: string,
   onCancelable?: Cancellable,
 ): Promise<QueryResponseType> {
-  let lease: SpannerLease | undefined;
   try {
-    lease = await acquireSpannerDatabase(conn);
-    const { database } = lease;
-    const statements = splitStatements(sql);
-    if (
-      statements.length > 1 &&
-      !statements.every((statement) => classify(statement) === 'DDL')
-    )
-      throw new Error(
-        'Spanner runs one statement at a time. Select a single statement.',
-      );
-    const statement = statements[0] ?? sql;
-    switch (classify(statement)) {
-      case 'DDL':
-        return await runDdl(database, statements, onCancelable);
-      case 'DML':
-        return await runDml(database, statement, onCancelable);
-      default:
-        return await runQuery(database, statement, onCancelable);
-    }
+    return await withSpannerDatabase(conn, async ({ database }) => {
+      const statements = splitStatements(sql);
+      if (
+        statements.length > 1 &&
+        !statements.every((statement) => classify(statement) === 'DDL')
+      )
+        throw new Error(
+          'Spanner runs one statement at a time. Select a single statement.',
+        );
+      const statement = statements[0] ?? sql;
+      switch (classify(statement)) {
+        case 'DDL':
+          return runDdl(database, statements, onCancelable);
+        case 'DML':
+          return runDml(database, statement, onCancelable);
+        default:
+          return runQuery(database, statement, onCancelable);
+      }
+    });
   } catch (error) {
     return { success: false, error: spannerErrorText(error) };
-  } finally {
-    lease?.release();
   }
 }

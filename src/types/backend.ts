@@ -536,8 +536,6 @@ export type QueryResponseType = {
   duration?: number;
   isCommand?: boolean;
   commandType?: string;
-  /** A connector sets this when it stopped reading at a row cap, so `data` is not the whole result. */
-  truncated?: boolean;
 };
 
 export type CliUpdateItem = {

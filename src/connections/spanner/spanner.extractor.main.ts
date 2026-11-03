@@ -1,8 +1,8 @@
 import type { Column, Table } from '../../types/backend';
 import type { SpannerConnection } from './spanner.shared';
 import {
-  acquireSpannerDatabase,
   type SpannerDialect,
+  withSpannerDatabase,
 } from './spanner.client.main';
 
 type Row = Record<string, any>;
@@ -24,6 +24,13 @@ export function schemaQueries(dialect: SpannerDialect) {
   };
 }
 
+/**
+ * GoogleSQL's default schema has no name, and SQL can't qualify its tables
+ * with one, so it stays empty: callers then write the bare table name.
+ */
+const schemaName = (name: string, dialect: SpannerDialect): string =>
+  name || (dialect === 'POSTGRESQL' ? 'public' : '');
+
 export default class SpannerExtractor {
   private readonly conn: SpannerConnection;
 
@@ -32,8 +39,7 @@ export default class SpannerExtractor {
   }
 
   async extractSchema(): Promise<{ tables: Table[] }> {
-    const lease = await acquireSpannerDatabase(this.conn);
-    try {
+    return withSpannerDatabase(this.conn, async (lease) => {
       const dialect = await lease.dialect();
       // One strong read-only snapshot: a consistent view of tables, columns and
       // keys that also includes DDL that has just finished.
@@ -43,9 +49,7 @@ export default class SpannerExtractor {
       } finally {
         snapshot.end();
       }
-    } finally {
-      lease.release();
-    }
+    });
   }
 
   private async read(
@@ -93,8 +97,7 @@ export default class SpannerExtractor {
       tables: (tableRows as Row[]).map((row) => ({
         name: row.table_name,
         type: /VIEW/i.test(row.table_type) ? 'VIEW' : 'TABLE',
-        schema:
-          row.table_schema || (dialect === 'POSTGRESQL' ? 'public' : 'default'),
+        schema: schemaName(row.table_schema, dialect),
         columns:
           columnsByTable.get(`${row.table_schema}.${row.table_name}`) ?? [],
       })),

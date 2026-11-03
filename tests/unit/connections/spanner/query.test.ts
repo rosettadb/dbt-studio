@@ -121,7 +121,6 @@ describe('spanner queries', () => {
       ],
       rowCount: 1,
     });
-    expect(result.truncated).toBeUndefined();
     expect(snapshot.runStream).toHaveBeenCalledWith(
       expect.objectContaining({ sql: 'SELECT id, name FROM t', json: false }),
     );
@@ -166,18 +165,15 @@ describe('spanner queries', () => {
     const result = await run;
     expect(result.data).toHaveLength(10_000);
     expect(result.rowCount).toBe(10_000);
-    expect(result.truncated).toBe(true);
     expect(snapshot.end).toHaveBeenCalledTimes(1);
   });
 
-  it('does not flag a result of exactly 10,000 rows', async () => {
+  it('returns every row of a result of exactly 10,000 rows', async () => {
     const { stream } = useSnapshot();
     const run = executeSpannerQuery(conn, 'SELECT id FROM t');
     await tick();
     pushRows(stream, 10_000);
-    const result = await run;
-    expect(result.data).toHaveLength(10_000);
-    expect(result.truncated).toBeUndefined();
+    expect((await run).data).toHaveLength(10_000);
   });
 
   it('settles on Stop before any data, and ends the snapshot', async () => {
@@ -460,6 +456,14 @@ describe('spanner test connection', () => {
     expect(database.run).toHaveBeenCalledWith(
       expect.objectContaining({ sql: expect.stringContaining('SELECT 1') }),
     );
+  });
+
+  it('recovers when the emulator restarted under a cached client', async () => {
+    database.run
+      .mockRejectedValueOnce({ code: 5, details: 'Session not found: s/0' })
+      .mockResolvedValueOnce([[]]);
+    await expect(testSpannerConnection(conn)).resolves.toBe(true);
+    expect(database.run).toHaveBeenCalledTimes(2);
   });
 
   it.each([

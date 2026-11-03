@@ -29,12 +29,27 @@ export type SpannerLease = {
   database: any;
   /** The database's dialect, looked up once per cached client. */
   dialect: () => Promise<SpannerDialect>;
+  /** Stops caching this client, so the next acquire builds a new one. */
+  discard: () => void;
   release: () => void;
 };
+
+/**
+ * The server no longer has the client's session, for example after an emulator
+ * restart. The client keeps failing with it until it is replaced.
+ */
+export function isSessionNotFound(error: any): boolean {
+  return (
+    (error?.code === 5 || error?.code === 'NOT_FOUND') &&
+    /session not found/i.test(String(error?.details || error?.message))
+  );
+}
 
 /** Readable text for the common gRPC failures. Never includes key contents. */
 export function spannerErrorText(error: any): string {
   const code = error?.code;
+  if (isSessionNotFound(error))
+    return 'The Spanner session ended on the server, for example because the emulator restarted. Run it again.';
   if (code === 5 || code === 'NOT_FOUND')
     return 'Spanner instance or database was not found. Check the project, instance, and database IDs.';
   if (code === 7 || code === 'PERMISSION_DENIED')
@@ -174,6 +189,9 @@ export async function acquireSpannerDatabase(
       }
       return entry.dialect;
     },
+    discard: () => {
+      if (clients.get(conn.name) === entry) clients.delete(conn.name);
+    },
     release: () => {
       if (released) return;
       released = true;
@@ -190,6 +208,34 @@ export async function acquireSpannerDatabase(
       }, IDLE_CLOSE_MS);
     },
   };
+}
+
+/**
+ * Runs `work` on a borrowed database. When the session is gone, the client is
+ * replaced and `work` runs once more; Spanner rejects an unknown session
+ * before running anything, so the retry never repeats a write.
+ */
+export async function withSpannerDatabase<T>(
+  conn: SpannerConnection,
+  work: (lease: SpannerLease) => Promise<T>,
+): Promise<T> {
+  const attempt = async () => {
+    const lease = await acquireSpannerDatabase(conn);
+    try {
+      return await work(lease);
+    } catch (error) {
+      if (isSessionNotFound(error)) lease.discard();
+      throw error;
+    } finally {
+      lease.release();
+    }
+  };
+  try {
+    return await attempt();
+  } catch (error) {
+    if (!isSessionNotFound(error)) throw error;
+    return attempt();
+  }
 }
 
 export function closeSpannerClients(): void {

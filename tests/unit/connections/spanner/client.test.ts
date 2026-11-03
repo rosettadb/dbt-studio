@@ -19,7 +19,13 @@ import {
   acquireSpannerDatabase,
   closeSpannerClients,
   spannerErrorText,
+  withSpannerDatabase,
 } from '../../../../src/connections/spanner/spanner.client.main';
+
+const SESSION_GONE = {
+  code: 5,
+  details: 'Session not found: projects/p/instances/i/databases/d/sessions/0',
+};
 
 const KEY = JSON.stringify({
   type: 'service_account',
@@ -188,7 +194,31 @@ describe('spanner client', () => {
     lease.release();
   });
 
+  it('replaces the client and runs once more when the session is gone', async () => {
+    const work = jest
+      .fn()
+      .mockRejectedValueOnce(SESSION_GONE)
+      .mockResolvedValueOnce('ok');
+    await expect(withSpannerDatabase(conn(), work)).resolves.toBe('ok');
+    expect(work).toHaveBeenCalledTimes(2);
+    expect(Spanner).toHaveBeenCalledTimes(2);
+    expect(clients[0].close).toHaveBeenCalledTimes(1);
+    expect(clients[1].close).not.toHaveBeenCalled();
+  });
+
+  it('retries a lost session only once, and never another NOT_FOUND', async () => {
+    const gone = jest.fn().mockRejectedValue(SESSION_GONE);
+    await expect(withSpannerDatabase(conn(), gone)).rejects.toBe(SESSION_GONE);
+    expect(gone).toHaveBeenCalledTimes(2);
+
+    const missing = { code: 5, details: 'Database not found: d' };
+    const work = jest.fn().mockRejectedValue(missing);
+    await expect(withSpannerDatabase(conn(), work)).rejects.toBe(missing);
+    expect(work).toHaveBeenCalledTimes(1);
+  });
+
   it('turns common gRPC codes into readable text', () => {
+    expect(spannerErrorText(SESSION_GONE)).toContain('emulator restarted');
     expect(spannerErrorText({ code: 5 })).toContain('was not found');
     expect(spannerErrorText({ code: 7 })).toContain(
       'roles/spanner.databaseReader',
