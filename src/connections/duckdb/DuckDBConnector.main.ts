@@ -118,7 +118,7 @@ export class DuckDBConnector extends ConnectionDbt<
       name: connectionName,
       database_path: dbtConnection.path,
       short_database_path:
-        dbtConnection.path.split('/').pop() || dbtConnection.path,
+        path.basename(dbtConnection.path) || dbtConnection.path,
       database: dbtConnection.database,
       schema: dbtConnection.schema,
     };
