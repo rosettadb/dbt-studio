@@ -88,6 +88,27 @@ describe('spanner statements', () => {
     ).toEqual(["SELECT 'a;b'", 'SELECT 2 -- c;d', '/* ; */ SELECT 3']);
   });
 
+  it('GoogleSQL: keeps backslash escapes and # comments in one statement', () => {
+    expect(splitStatements("SELECT 'it\\'s; ok', `a\\`;b`")).toEqual([
+      "SELECT 'it\\'s; ok', `a\\`;b`",
+    ]);
+    expect(splitStatements('# a;b\nSELECT 1; SELECT 2')).toEqual([
+      '# a;b\nSELECT 1',
+      'SELECT 2',
+    ]);
+  });
+
+  it('PostgreSQL dialect: a backslash is literal and # is no comment', () => {
+    expect(splitStatements("SELECT 'C:\\'; SELECT 2", 'POSTGRESQL')).toEqual([
+      "SELECT 'C:\\'",
+      'SELECT 2',
+    ]);
+    expect(splitStatements('SELECT 1 # 2; SELECT 3', 'POSTGRESQL')).toEqual([
+      'SELECT 1 # 2',
+      'SELECT 3',
+    ]);
+  });
+
   it('names unnamed and repeated columns', () => {
     expect(uniqueColumnNames(['id', 'id', '', undefined, 'id'])).toEqual([
       'id',
@@ -201,6 +222,39 @@ describe('spanner queries', () => {
     stop();
     expect(await run).toEqual({ success: false, error: 'Query cancelled.' });
     expect(snapshot.end).toHaveBeenCalledTimes(1);
+  });
+
+  it('splits with the database dialect', async () => {
+    const { stream, snapshot } = useSnapshot();
+    const run = executeSpannerQuery(conn, "SELECT 'it\\'s; ok'");
+    await tick();
+    stream.end();
+    expect((await run).success).toBe(true);
+    expect(snapshot.runStream).toHaveBeenCalledWith(
+      expect.objectContaining({ sql: "SELECT 'it\\'s; ok'" }),
+    );
+
+    closeSpannerClients();
+    database.getDatabaseDialect.mockResolvedValue('POSTGRESQL');
+    expect(
+      await executeSpannerQuery(conn, "SELECT 'C:\\'; SELECT 2"),
+    ).toMatchObject({ success: false, error: expect.stringContaining('one') });
+  });
+
+  it('runs nothing on a session retry after Stop', async () => {
+    let stop!: () => void;
+    database.getSnapshot.mockImplementationOnce(async () => {
+      stop();
+      throw Object.assign(new Error('gone'), {
+        code: 5,
+        details: 'Session not found: s/0',
+      });
+    });
+    const result = await executeSpannerQuery(conn, 'SELECT 1', (cancel) => {
+      stop = cancel;
+    });
+    expect(result).toEqual({ success: false, error: 'Query cancelled.' });
+    expect(database.getSnapshot).toHaveBeenCalledTimes(1);
   });
 
   it('reports a stream error as readable text', async () => {
@@ -368,6 +422,55 @@ describe('spanner DML', () => {
     await tick();
     stop();
     expect(tx.rollback).toHaveBeenCalledTimes(1);
+  });
+
+  describe('after Stop', () => {
+    // Like the SDK runner: run the work again when it fails with ABORTED.
+    beforeEach(() => {
+      database.runTransactionAsync.mockImplementation(async (work) => {
+        try {
+          return await work(tx);
+        } catch (error: any) {
+          if (error?.code === 10) return work(tx);
+          throw error;
+        }
+      });
+    });
+
+    const runStopped = (settleUpdate: (update: any) => void) => {
+      let stop!: () => void;
+      let update!: {
+        resolve: (v: unknown) => void;
+        reject: (e: unknown) => void;
+      };
+      tx.runUpdate.mockImplementationOnce(
+        () =>
+          new Promise((resolve, reject) => {
+            update = { resolve, reject };
+          }),
+      );
+      const run = executeSpannerQuery(conn, 'DELETE FROM t WHERE true', (c) => {
+        stop = c;
+      });
+      return tick().then(() => {
+        stop();
+        settleUpdate(update);
+        return run;
+      });
+    };
+
+    it('does not retry the work when the running statement aborts', async () => {
+      const result = await runStopped((u) => u.reject({ code: 10 }));
+      expect(result).toEqual({ success: false, error: 'Query cancelled.' });
+      expect(tx.runUpdate).toHaveBeenCalledTimes(1);
+      expect(tx.commit).not.toHaveBeenCalled();
+    });
+
+    it('does not commit work that finished after Stop', async () => {
+      const result = await runStopped((u) => u.resolve([1]));
+      expect(result).toEqual({ success: false, error: 'Query cancelled.' });
+      expect(tx.commit).not.toHaveBeenCalled();
+    });
   });
 });
 

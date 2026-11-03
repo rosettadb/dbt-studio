@@ -5,7 +5,11 @@ import {
   SPANNER_MAX_JSON_CHARS,
   SPANNER_MAX_ROWS,
 } from './spanner.helpers.shared';
-import { spannerErrorText, withSpannerDatabase } from './spanner.client.main';
+import {
+  spannerErrorText,
+  type SpannerDialect,
+  withSpannerDatabase,
+} from './spanner.client.main';
 
 type StatementKind = 'QUERY' | 'DML' | 'DDL';
 type Cancellable = (cancel: () => void) => void;
@@ -16,9 +20,23 @@ const asRows = (rows: Record<string, any>[]): Rows => rows as unknown as Rows;
 
 const REQUEST_TIMEOUT_MS = 10 * 60_000;
 const ABORTED = 10;
+const CANCELLED_TEXT = 'Query cancelled.';
+// A new object each time: the caller adds `duration` to the result.
+const cancelled = (): QueryResponseType => ({
+  success: false,
+  error: CANCELLED_TEXT,
+});
 
-/** Splits on `;` outside quotes and comments. */
-export function splitStatements(sql: string): string[] {
+/**
+ * Splits on `;` outside quotes and comments. GoogleSQL also escapes with `\`
+ * inside quotes and has `#` line comments; PostgreSQL standard strings have
+ * neither.
+ */
+export function splitStatements(
+  sql: string,
+  dialect: SpannerDialect = 'GOOGLE_STANDARD_SQL',
+): string[] {
+  const googleSql = dialect === 'GOOGLE_STANDARD_SQL';
   const statements: string[] = [];
   let current = '';
   let quote = '';
@@ -39,7 +57,10 @@ export function splitStatements(sql: string): string[] {
       }
     } else if (quote) {
       current += char;
-      if (char === quote && next === quote) {
+      if (googleSql && char === '\\' && next !== undefined) {
+        current += next;
+        i += 1;
+      } else if (char === quote && next === quote) {
         current += next;
         i += 1;
       } else if (char === quote) {
@@ -48,6 +69,9 @@ export function splitStatements(sql: string): string[] {
     } else if (char === '-' && next === '-') {
       current += char + next;
       i += 1;
+      lineComment = true;
+    } else if (googleSql && char === '#') {
+      current += char;
       lineComment = true;
     } else if (char === '/' && next === '*') {
       current += char + next;
@@ -215,9 +239,7 @@ async function runQuery(
           fields: toFields(columns ?? []),
           rowCount: rows.length,
         });
-      onCancelable?.(() =>
-        settle({ success: false, error: 'Query cancelled.' }),
-      );
+      onCancelable?.(() => settle(cancelled()));
       stream = snapshot.runStream({
         sql,
         json: false,
@@ -255,7 +277,9 @@ async function runQuery(
  * Runs DML in a read-write transaction and commits it. The SDK runner doesn't
  * roll back a transaction whose work fails, and an open one blocks schema
  * changes on the emulator, so roll back here, except on ABORTED: Spanner has
- * already ended that transaction and the runner retries with a new one.
+ * already ended that transaction and the runner retries with a new one. After
+ * Stop, the work never runs or commits again: the cancel error isn't ABORTED,
+ * so the runner doesn't retry it.
  */
 function runInTransaction<T>(
   database: any,
@@ -263,17 +287,27 @@ function runInTransaction<T>(
   work: (tx: any) => Promise<T>,
 ): Promise<T> {
   let current: any;
-  onCancelable?.(() => current?.rollback?.().catch(() => undefined));
+  let stopped = false;
+  onCancelable?.(() => {
+    stopped = true;
+    current?.rollback?.().catch(() => undefined);
+  });
+  const throwIfStopped = () => {
+    if (stopped) throw new Error(CANCELLED_TEXT);
+  };
   return database.runTransactionAsync(async (tx: any) => {
+    throwIfStopped();
     current = tx;
     let result: T;
     try {
       result = await work(tx);
     } catch (error: any) {
+      throwIfStopped();
       if (error?.code !== ABORTED && error?.code !== 'ABORTED')
         await tx.rollback().catch(() => undefined);
       throw error;
     }
+    throwIfStopped();
     await tx.commit();
     return result;
   });
@@ -362,14 +396,40 @@ export async function testSpannerConnection(
   }
 }
 
+/**
+ * One Stop for the whole run. The caller keeps only the latest cancel callback
+ * and drops it once called, and a session retry registers new ones, so Stop is
+ * recorded here and passed to whichever runner is active, even one that
+ * registers after Stop.
+ */
+function trackStop(onCancelable?: Cancellable) {
+  let stopped = false;
+  let cancelActive: (() => void) | undefined;
+  onCancelable?.(() => {
+    stopped = true;
+    cancelActive?.();
+  });
+  const register: Cancellable = (cancel) => {
+    cancelActive = cancel;
+    if (stopped) cancel();
+  };
+  return { isStopped: () => stopped, register };
+}
+
 export async function executeSpannerQuery(
   conn: SpannerConnection,
   sql: string,
   onCancelable?: Cancellable,
 ): Promise<QueryResponseType> {
+  const stop = trackStop(onCancelable);
   try {
-    return await withSpannerDatabase(conn, async ({ database }) => {
-      const statements = splitStatements(sql);
+    return await withSpannerDatabase(conn, async (lease) => {
+      // Splitting needs only the dialect's rules, so a failed lookup (for
+      // example without spanner.databases.get) falls back to GoogleSQL's.
+      const dialect = await lease
+        .dialect()
+        .catch((): SpannerDialect => 'GOOGLE_STANDARD_SQL');
+      const statements = splitStatements(sql, dialect);
       if (
         statements.length > 1 &&
         !statements.every((statement) => classify(statement) === 'DDL')
@@ -378,13 +438,16 @@ export async function executeSpannerQuery(
           'Spanner runs one statement at a time. Select a single statement.',
         );
       const statement = statements[0] ?? sql;
+      // Stop before this attempt started, such as while a session retry was
+      // loading its client: run nothing.
+      if (stop.isStopped()) return cancelled();
       switch (classify(statement)) {
         case 'DDL':
-          return runDdl(database, statements, onCancelable);
+          return runDdl(lease.database, statements, stop.register);
         case 'DML':
-          return runDml(database, statement, onCancelable);
+          return runDml(lease.database, statement, stop.register);
         default:
-          return runQuery(database, statement, onCancelable);
+          return runQuery(lease.database, statement, stop.register);
       }
     });
   } catch (error) {

@@ -140,6 +140,19 @@ describe('SchemaTreeViewerWithSchema', () => {
     expect(dataTransfer.getData('text/plain')).toBe('Albums');
   });
 
+  it('keeps default-schema tables when filtering for "default"', () => {
+    renderTree({
+      type: 'spanner',
+      filter: 'default',
+      schema: [{ ...tables[0], name: 'Albums', schema: '' }],
+    });
+    expandSchema();
+    expect(screen.getByTestId('schema-tree-table')).toHaveAttribute(
+      'data-table',
+      'Albums',
+    );
+  });
+
   it('does not make the database row draggable', () => {
     renderTree({ draggable: true });
     expect(screen.getByTestId('schema-tree-database')).not.toHaveAttribute(
