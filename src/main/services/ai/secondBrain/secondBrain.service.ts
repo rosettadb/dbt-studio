@@ -363,6 +363,10 @@ export default class SecondBrainService {
     await this.openTerminal(this.wikiRoot());
   }
 
+  public async rootExists(): Promise<boolean> {
+    return fs.pathExists(this.rootPath);
+  }
+
   public async clearAll(): Promise<void> {
     if (!(await fs.pathExists(this.rootPath))) return;
     await this.ensureSafeRoot();
