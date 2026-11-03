@@ -491,14 +491,16 @@ export const SecondBrainTab: React.FC = () => {
   // The tree query is disabled once memory is gone, but keeps its old data.
   const memoryPages = status?.initialized ? treeQuery.data : undefined;
 
+  // A new-page draft owns the editor, so revisions and restore must not
+  // target an auto-selected page behind it.
   React.useEffect(() => {
-    if (!selected && memoryPages?.length) {
+    if (!selected && !newPageId && memoryPages?.length) {
       setSelected(
         memoryPages.find((page) => page.pageId === AGENT_MEMORY_ENTRY_FILE) ??
           memoryPages[0],
       );
     }
-  }, [selected, memoryPages]);
+  }, [selected, newPageId, memoryPages]);
 
   // Memory can be deleted under this tab (Clear and disable, or a failed first
   // build rolling back). Drop the selection once its page is gone.
@@ -590,12 +592,35 @@ export const SecondBrainTab: React.FC = () => {
   const handleSave = async () => {
     const pageId = newPageId ?? selected?.pageId;
     if (!pageId || selected?.archived || selectedRevisionId) return;
+    const save = (expectedHash?: string) =>
+      writePage.mutateAsync({ pageId, content: draft, expectedHash });
+    // A new or recovered draft can target a page that exists again. Overwrite
+    // it only after the user agrees; otherwise keep the draft unsaved.
+    const saveNewDraft = async () => {
+      try {
+        return await save();
+      } catch (error) {
+        const { code, details } = error as Error & {
+          code?: string;
+          details?: { currentHash?: string };
+        };
+        const currentHash = details?.currentHash;
+        if (code !== 'CONFLICT' || !currentHash) throw error;
+        if (
+          !window.confirm(
+            `${pageId} already exists in Agent Memory (current hash ${currentHash.slice(0, 12)}). Overwrite it with your draft?\n\nChoose Cancel to keep your draft unsaved.`,
+          )
+        ) {
+          return null;
+        }
+        return save(currentHash);
+      }
+    };
     try {
-      const saved = await writePage.mutateAsync({
-        pageId,
-        content: draft,
-        expectedHash: newPageId ? undefined : pageQuery.data?.hash,
-      });
+      const saved = newPageId
+        ? await saveNewDraft()
+        : await save(pageQuery.data?.hash);
+      if (!saved) return;
       savedContentRef.current = saved.content;
       dirtyRef.current = false;
       setDraft(saved.content);
