@@ -301,14 +301,20 @@
       "gatekeeperAssess": false
     },
     "dmg": {
+      "background": "assets/dmg-background.png",
+      "iconSize": 128,
+      "window": {
+        "width": 540,
+        "height": 380
+      },
       "contents": [
         {
-          "x": 130,
-          "y": 220
+          "x": 127,
+          "y": 214
         },
         {
-          "x": 410,
-          "y": 220,
+          "x": 412,
+          "y": 214,
           "type": "link",
           "path": "/Applications"
         }
