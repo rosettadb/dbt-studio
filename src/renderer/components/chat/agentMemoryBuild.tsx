@@ -80,6 +80,9 @@ export const buildAgentMemoryInBackground = async ({
     await updateSecondBrainSettings(queryClient, { initialized: true });
     toast.success('Agent Memory is ready.');
   } catch (error) {
+    // A build started in Settings → Agent Memory is already running. It keeps
+    // going and owns the result, so this is not a setup failure.
+    if ((error as { code?: string }).code === 'BUSY') return;
     filesMayBeRemoved = true;
     await updateSecondBrainSettings(queryClient, { enabled: false }).catch(
       () => undefined,

@@ -165,6 +165,19 @@ const getOperationPrimaryMessage = (
   );
 };
 
+// A followed build has no local promise or error to read; its final progress
+// event decides how the dialog ends.
+const getAdoptedEndState = (
+  phase: 'succeeded' | 'cancelled' | 'failed',
+): Pick<SecondBrainOperationDialogState, 'phase' | 'progress' | 'error'> => ({
+  phase,
+  progress: undefined,
+  error:
+    phase === 'failed'
+      ? 'The Agent Memory build failed. The error notification has the reason.'
+      : undefined,
+});
+
 const getOperationResultMessage = (
   result?: SecondBrainRefreshResult,
 ): string | undefined => {
@@ -333,6 +346,11 @@ export const SecondBrainTab: React.FC = () => {
       const { data } = await statusQuery.refetch();
       const running = getRunningSecondBrainOperation(data);
       if (ignore || !running) return;
+      // The final event can land before this tab listens for progress, so
+      // the snapshot may already hold it.
+      const endedPhase = running.progress
+        ? getSecondBrainTerminalPhase(running.progress.stage)
+        : null;
       setOperationDialog(
         (current) =>
           current ?? {
@@ -340,8 +358,13 @@ export const SecondBrainTab: React.FC = () => {
             phase: 'running',
             providerName: activeProvider?.name ?? '',
             adopted: true,
+            ...(endedPhase && getAdoptedEndState(endedPhase)),
           },
       );
+      if (endedPhase) {
+        statusQuery.refetch();
+        treeQuery.refetch();
+      }
     };
     followRunningBuild().catch(() => undefined);
     return () => {
@@ -400,17 +423,7 @@ export const SecondBrainTab: React.FC = () => {
       return;
     }
     setOperationDialog((current) =>
-      current
-        ? {
-            ...current,
-            phase,
-            progress: undefined,
-            error:
-              phase === 'failed'
-                ? 'The Agent Memory build failed. The error notification has the reason.'
-                : undefined,
-          }
-        : current,
+      current ? { ...current, ...getAdoptedEndState(phase) } : current,
     );
     clearProgress();
     statusQuery.refetch();
@@ -497,6 +510,20 @@ export const SecondBrainTab: React.FC = () => {
     if (pageStillExists) return;
     setSelected(null);
     setSelectedRevisionId(undefined);
+    if (dirtyRef.current) {
+      // Keep unsaved edits as a new-page draft so saving recreates the page.
+      setNewPageId(selected.pageId);
+      savedContentRef.current = '';
+      if (model.getValue() !== draft) {
+        isApplyingExternalContentRef.current = true;
+        model.setValue(draft);
+        isApplyingExternalContentRef.current = false;
+      }
+      toast.warning(
+        `${selected.pageId} was removed from Agent Memory. Your unsaved draft is kept; save it to create the page again.`,
+      );
+      return;
+    }
     setDraft('');
     savedContentRef.current = '';
     dirtyRef.current = false;
