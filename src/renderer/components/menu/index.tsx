@@ -94,6 +94,7 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
   const isProjectSelected = Boolean(project?.id);
   const isOnHome = location.pathname === '/app';
   const isOnProjectDetails = location.pathname === '/app/dbt-project';
+  const isOnSelectProject = location.pathname.includes('select-project');
 
   return (
     <StyledToolbar variant="dense">
@@ -114,7 +115,7 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
               </IconButton>
             </Tooltip>
           )}
-        {!isOnHome && (
+        {!isOnHome && !isOnSelectProject && (
           <SimpleDropdownMenu
             items={[
               {
