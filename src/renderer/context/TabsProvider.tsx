@@ -161,7 +161,7 @@ export const TabsProvider: React.FC<TabsProviderProps> = ({ children }) => {
             path: tab.path,
             content: tab.content,
           });
-          markTabSavedByPath(tab.path);
+          markTabSavedByPath(tab.path, tab.content);
           setTabErrorByPath(tab.path, undefined);
         } catch (error: any) {
           setTabErrorByPath(tab.path, error?.message);
@@ -180,7 +180,9 @@ export const TabsProvider: React.FC<TabsProviderProps> = ({ children }) => {
           path: tab.path,
           content: tab.content,
         });
-        markTabSavedByPath(tab.path);
+        // `tab` is the snapshot that was written; the tab stays modified if
+        // it was edited while the write was in flight.
+        markTabSavedByPath(tab.path, tab.content);
         setTabErrorByPath(tab.path, undefined);
         await refreshProjectFiles();
       } catch (error: any) {

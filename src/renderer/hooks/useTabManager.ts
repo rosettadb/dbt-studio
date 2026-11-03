@@ -181,8 +181,12 @@ export interface UseTabManagerReturn {
     content: string,
     options?: UpdateTabByPathOptions,
   ) => void;
-  markTabSaved: (tabId: EditorTabId) => void;
-  markTabSavedByPath: (path: string) => void;
+  /**
+   * Mark a tab saved. Pass the content that was written to disk so edits made
+   * while the write was in flight keep the tab modified.
+   */
+  markTabSaved: (tabId: EditorTabId, writtenContent?: string) => void;
+  markTabSavedByPath: (path: string, writtenContent?: string) => void;
   setTabError: (tabId: EditorTabId, error?: string) => void;
   setTabErrorByPath: (path: string, error?: string) => void;
   reorderTabs: (fromIndex: number, toIndex: number) => void;
@@ -448,21 +452,24 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
   );
 
   const markTabSaved = React.useCallback(
-    (tabId: EditorTabId) => {
-      updateTab(tabId, (tab) => ({
-        ...tab,
-        isModified: false,
-        savedContent: tab.content,
-      }));
+    (tabId: EditorTabId, writtenContent?: string) => {
+      updateTab(tabId, (tab) => {
+        const savedContent = writtenContent ?? tab.content;
+        return {
+          ...tab,
+          isModified: tab.content !== savedContent,
+          savedContent,
+        };
+      });
     },
     [updateTab],
   );
 
   const markTabSavedByPath = React.useCallback(
-    (path: string) => {
+    (path: string, writtenContent?: string) => {
       const target = tabsRef.current.find((tab) => tab.path === path);
       if (target) {
-        markTabSaved(target.id);
+        markTabSaved(target.id, writtenContent);
       }
     },
     [markTabSaved],
