@@ -14,6 +14,7 @@ import {
   compileCommand,
   generateFilename,
   getConnectionInput,
+  generateMonacoCompletions,
 } from '../../../../src/renderer/helpers/utils';
 import {
   installIpcRendererMock,
@@ -24,6 +25,31 @@ describe('renderer/helpers/utils', () => {
   afterEach(() => {
     // Individual tests may switch the mocked platform to win32.
     installIpcRendererMock();
+  });
+
+  describe('generateMonacoCompletions', () => {
+    const labels = (schema: string) =>
+      generateMonacoCompletions([
+        {
+          name: 'Albums',
+          type: 'TABLE',
+          schema,
+          columns: [{ name: 'Title' } as any],
+        },
+      ]).map((c) => c.label);
+
+    it('qualifies tables and columns with a named schema', () => {
+      expect(labels('sales')).toEqual(
+        expect.arrayContaining(['sales', 'sales.Albums', 'sales.Albums.Title']),
+      );
+    });
+
+    it('never writes an unnamed default schema', () => {
+      const all = labels('');
+      expect(all).toEqual(expect.arrayContaining(['Albums', 'Albums.Title']));
+      expect(all).not.toContain('');
+      expect(all.filter((l) => String(l).startsWith('.'))).toEqual([]);
+    });
   });
 
   describe('capitalizeFirstLetter', () => {

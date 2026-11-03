@@ -73,6 +73,10 @@ describe('spanner statements', () => {
     expect(classify('WITH a AS (SELECT 1) SELECT * FROM a')).toBe('QUERY');
     expect(classify('-- a\n-- b\nINSERT INTO t VALUES (1)')).toBe('DML');
     expect(classify('-- a\n/* b */ UPDATE t SET a = 1')).toBe('DML');
+    expect(classify('# c\nDELETE FROM t WHERE true')).toBe('DML');
+    expect(
+      classify('# a\n-- b\nCREATE TABLE t (id INT64) PRIMARY KEY (id)'),
+    ).toBe('DDL');
     expect(classify('@{FORCE_INDEX=idx} DELETE FROM t WHERE true')).toBe('DML');
     expect(
       classify('/* x */ -- y\n CREATE TABLE t (id INT64) PRIMARY KEY (id)'),

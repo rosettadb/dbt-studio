@@ -99,6 +99,8 @@ function stripLeading(statement: string): string {
       .replace(/^\s+/, '')
       .replace(/^\/\*[\s\S]*?\*\//, '')
       .replace(/^--[^\n]*(?:\n|$)/, '')
+      // GoogleSQL line comment; no PostgreSQL statement starts with `#`.
+      .replace(/^#[^\n]*(?:\n|$)/, '')
       .replace(/^@\{[^}]*\}/, '');
     if (stripped === text) return text;
     text = stripped;
