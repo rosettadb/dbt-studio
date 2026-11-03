@@ -74,7 +74,10 @@ import {
   PythonNotebookEditorPort,
   usePythonNotebookAgentBridge,
 } from '../../../hooks/usePythonNotebookAgentBridge';
-import { insertTextAtCursor } from '../../../lib/monaco/insertText';
+import {
+  insertTextAtCursor,
+  type InsertTextOptions,
+} from '../../../lib/monaco/insertText';
 import type { SqlSchemaCompletionEntry } from '../../../lib/monaco/completions/sqlSchema';
 import {
   buildDragSelectStatement,
@@ -130,7 +133,10 @@ export type NotebookEditorHandle = {
    * selected, a new SQL cell is appended with the text instead.
    * Returns false only when the notebook is not loaded.
    */
-  insertText: (text: string) => boolean;
+  insertText: (
+    text: string,
+    options?: Pick<InsertTextOptions, 'asStatement'>,
+  ) => boolean;
   /** Append a SQL cell with `source`; optionally run it once saved. */
   addSqlCell: (source: string, run?: boolean) => Promise<string | null>;
 };
@@ -775,14 +781,15 @@ export const PythonNotebookEditor = forwardRef<
   useImperativeHandle(
     ref,
     () => ({
-      insertText: (text: string) => {
+      insertText: (text, options) => {
         if (!notebook) return false;
         const selected = cellsRef.current.find((c) => c.id === selectedCellId);
         const instance =
           selected?.cell_type === 'sql'
             ? editorsRef.current.get(selected.id)
             : undefined;
-        if (instance && insertTextAtCursor(instance, text)) return true;
+        if (instance && insertTextAtCursor(instance, text, options))
+          return true;
         addSqlCell(text);
         return true;
       },

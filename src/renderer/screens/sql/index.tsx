@@ -710,11 +710,14 @@ const Sql = () => {
   const renameDuckLakeTable = useRenameDuckLakeTable();
   const renameDuckLakeColumn = useRenameDuckLakeColumn();
 
-  const handleSchemaInsertText = useCallback((text: string) => {
-    if (!sqlEditorRef.current?.insertText(text)) {
-      toast.info('Open a SQL editor tab to insert text');
-    }
-  }, []);
+  const handleSchemaInsertText = useCallback(
+    (text: string, options: { asStatement: boolean }) => {
+      if (!sqlEditorRef.current?.insertText(text, options)) {
+        toast.info('Open a SQL editor tab to insert text');
+      }
+    },
+    [],
+  );
 
   const handleSchemaPreview = useCallback((sql: string) => {
     if (!sqlEditorRef.current) {
@@ -779,7 +782,7 @@ const Sql = () => {
             )
           : buildRenameTableStatement(ref, newName, connectionInput?.type);
 
-      if (sqlEditorRef.current?.insertText(sql)) {
+      if (sqlEditorRef.current?.insertText(sql, { asStatement: true })) {
         toast.info('Rename statement inserted. Review it, then run it.');
       } else {
         toast.info('Open a SQL editor tab to insert the rename statement');
