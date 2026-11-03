@@ -6,7 +6,6 @@ import {
   Chip,
   CircularProgress,
   Alert,
-  Backdrop,
 } from '@mui/material';
 import {
   Download,
@@ -25,6 +24,7 @@ import { UpdateSettingsInfo } from '../../../types/backend';
 import { sanitizeHtml } from '../../utils/sanitizeHtml';
 import { getPlatform } from '../../lib/path';
 import { SettingsRow, SettingsSection } from './SettingsLayout';
+import { useIsTaskTypeActive } from '../../hooks';
 
 // Error types for better error handling
 interface ErrorInfo {
@@ -183,7 +183,10 @@ const InstallationSettings: React.FC = () => {
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
   const [systemInfo, setSystemInfo] = useState<any>(null);
   const [error, setError] = useState<ErrorInfo | null>(null);
-  const [isBlocking, setIsBlocking] = useState(false);
+  // The download runs in the task manager, so it stays "downloading" after
+  // this page is closed and opened again.
+  const isUpdateTaskActive = useIsTaskTypeActive('install:app-update');
+  const isDownloadingUpdate = isUpdating || isUpdateTaskActive;
   const [showRestartButton, setShowRestartButton] = useState(false);
 
   const checkForSettingsUpdates = useCheckForSettingsUpdates();
@@ -325,12 +328,10 @@ const InstallationSettings: React.FC = () => {
   const handleUpdate = async () => {
     if (!updateInfo) return;
     setIsUpdating(true);
-    setIsBlocking(true);
     setError(null);
     try {
       const res = await downloadUpdate();
       setIsUpdating(false);
-      setIsBlocking(false);
       if (!res) {
         toast.info('No update was downloaded.');
         setShowRestartButton(false);
@@ -345,7 +346,6 @@ const InstallationSettings: React.FC = () => {
       setError(errorInfo);
       toast.error(errorInfo.message);
       setIsUpdating(false);
-      setIsBlocking(false);
     }
   };
 
@@ -384,12 +384,6 @@ const InstallationSettings: React.FC = () => {
 
   return (
     <>
-      <Backdrop
-        open={isBlocking}
-        sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, color: '#fff' }}
-      >
-        <CircularProgress color="inherit" />
-      </Backdrop>
       {error && (
         <Alert
           severity="error"
@@ -467,12 +461,16 @@ const InstallationSettings: React.FC = () => {
                 variant="contained"
                 color="primary"
                 onClick={handleUpdate}
-                disabled={isUpdating}
+                disabled={isDownloadingUpdate}
                 startIcon={
-                  isUpdating ? <CircularProgress size={14} /> : <Download />
+                  isDownloadingUpdate ? (
+                    <CircularProgress size={14} />
+                  ) : (
+                    <Download />
+                  )
                 }
               >
-                {isUpdating ? 'Downloading...' : 'Update Now'}
+                {isDownloadingUpdate ? 'Downloading...' : 'Update Now'}
               </Button>
             )}
             {isUpdateAvailable && showRestartButton && (
@@ -481,7 +479,7 @@ const InstallationSettings: React.FC = () => {
                 onClick={handleRestart}
                 color="secondary"
                 variant="outlined"
-                disabled={isUpdating}
+                disabled={isDownloadingUpdate}
               >
                 Restart Now
               </Button>

@@ -17,6 +17,8 @@ class TaskManagerServiceImpl {
 
   private lastProgressEmit = new Map<string, number>();
 
+  private lastCreatedAt = 0;
+
   private window: BrowserWindow | null = null;
 
   setWindow(window: BrowserWindow) {
@@ -40,18 +42,52 @@ class TaskManagerServiceImpl {
     type: string;
     label: string;
     cancellable?: boolean;
+    status?: 'pending' | 'running';
+    subject?: string;
+    // Placed ahead of every task still waiting (a Python switch jumping the
+    // install queue), so listing pending tasks by startedAt shows run order.
+    queueFirst?: boolean;
   }): TaskRecord {
+    // Strictly increasing, so tasks created in the same millisecond (e.g. a
+    // batch of queued installs) keep the order they were created in.
+    this.lastCreatedAt = Math.max(Date.now(), this.lastCreatedAt + 1);
+    const waitingStartedAts = Array.from(this.tasks.values())
+      .filter((task) => task.status === 'pending')
+      .map((task) => task.startedAt);
+    const startedAt =
+      params.queueFirst && waitingStartedAts.length > 0
+        ? Math.min(...waitingStartedAts) - 2
+        : this.lastCreatedAt;
     const task: TaskRecord = {
       id: params.id,
       type: params.type,
       label: params.label,
-      status: 'running',
-      startedAt: Date.now(),
+      status: params.status ?? 'running',
+      startedAt,
       cancellable: params.cancellable ?? false,
+      subject: params.subject,
     };
     this.tasks.set(task.id, task);
     this.broadcast({ type: 'created', task });
     return task;
+  }
+
+  start(id: string) {
+    const task = this.tasks.get(id);
+    if (!task) return;
+    task.status = 'running';
+    task.startedAt = Date.now();
+    this.broadcast({ type: 'updated', task });
+  }
+
+  // Turning cancelling off also drops the canceller, so cancel() and
+  // cancelAll() treat the task as one that can no longer be stopped.
+  setCancellable(id: string, cancellable: boolean) {
+    const task = this.tasks.get(id);
+    if (!task || task.cancellable === cancellable) return;
+    task.cancellable = cancellable;
+    if (!cancellable) this.cancellers.delete(id);
+    this.broadcast({ type: 'updated', task });
   }
 
   updateProgress(id: string, progress: TaskProgress) {
@@ -112,7 +148,9 @@ class TaskManagerServiceImpl {
 
     Array.from(this.tasks.keys()).forEach((id) => {
       const task = this.tasks.get(id);
-      if (!task || task.status !== 'running') return;
+      if (!task || (task.status !== 'running' && task.status !== 'pending')) {
+        return;
+      }
 
       const canceller = this.cancellers.get(id);
       if (!canceller) {

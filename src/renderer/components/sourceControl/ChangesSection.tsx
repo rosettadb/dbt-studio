@@ -7,6 +7,7 @@ import { FileStatus } from '../../../types/backend';
 
 interface ChangesSectionProps {
   fileStatuses: FileStatus[];
+  projectPath: string;
   onStage?: (filePath: string) => void;
   onUnstage?: (filePath: string) => void;
   onStageAll?: () => void;
@@ -18,6 +19,7 @@ interface ChangesSectionProps {
 
 export const ChangesSection: React.FC<ChangesSectionProps> = ({
   fileStatuses,
+  projectPath,
   onStage,
   onUnstage,
   onStageAll,
@@ -135,6 +137,7 @@ export const ChangesSection: React.FC<ChangesSectionProps> = ({
           <FileItem
             key={file.path}
             file={file}
+            projectPath={projectPath}
             onStage={onStage}
             onUnstage={onUnstage}
             onDiscard={onDiscard}
@@ -154,6 +157,7 @@ export const ChangesSection: React.FC<ChangesSectionProps> = ({
           <FileItem
             key={file.path}
             file={file}
+            projectPath={projectPath}
             onStage={onStage}
             onUnstage={onUnstage}
             onDiscard={onDiscard}

@@ -119,6 +119,7 @@
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
     "@google-cloud/bigquery": "^8.0.0",
+    "@google-cloud/spanner": "8.13.0",
     "@google-cloud/storage": "^7.16.0",
     "@google/generative-ai": "^0.24.1",
     "@hello-pangea/dnd": "^18.0.1",
@@ -301,14 +302,20 @@
       "gatekeeperAssess": false
     },
     "dmg": {
+      "background": "assets/dmg-background.png",
+      "iconSize": 128,
+      "window": {
+        "width": 540,
+        "height": 380
+      },
       "contents": [
         {
-          "x": 130,
-          "y": 220
+          "x": 127,
+          "y": 214
         },
         {
-          "x": 410,
-          "y": 220,
+          "x": 412,
+          "y": 214,
           "type": "link",
           "path": "/Applications"
         }

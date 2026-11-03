@@ -7,6 +7,7 @@ import {
   initializeDataStorage,
 } from '../utils/setupHelpers';
 import { createSetupWindow } from './setup';
+import { confirmQuitWithActiveInstalls } from '../utils/installTask';
 
 export class WindowManager {
   private splashWindow: BrowserWindow | null = null;
@@ -47,6 +48,14 @@ export class WindowManager {
       this.mainWindow = null;
       if (!this.isQuitting) {
         app.quit();
+      }
+    });
+
+    // Closing the main window quits the app, so ask first while installs
+    // are running or queued.
+    this.mainWindow.on('close', (event) => {
+      if (!confirmQuitWithActiveInstalls(this.mainWindow)) {
+        event.preventDefault();
       }
     });
 

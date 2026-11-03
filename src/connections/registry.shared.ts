@@ -48,6 +48,10 @@ import {
   type MySqlDBTConnection,
 } from './mysql/mysql.shared';
 import {
+  spannerDescriptor,
+  type SpannerConnection,
+} from './spanner/spanner.shared';
+import {
   ducklakeDescriptor,
   type DuckLakeConnectionConfig,
 } from './ducklake/ducklake.shared';
@@ -68,6 +72,7 @@ export const CONNECTION_TYPES = [
   'kinetica',
   'oracle',
   'mysql',
+  'spanner',
   'ducklake',
 ] as const;
 
@@ -84,6 +89,7 @@ export type ConnectionInput =
   | KineticaConnection
   | MySqlConnection
   | OracleConnection
+  | SpannerConnection
   | DuckLakeConnectionConfig;
 
 /** Same members as today (MySqlDBTConnection is unused but kept). */
@@ -110,6 +116,7 @@ export const connectionDescriptors: {
   kinetica: kineticaDescriptor,
   oracle: oracleDescriptor,
   mysql: mysqlDescriptor,
+  spanner: spannerDescriptor,
   ducklake: ducklakeDescriptor,
 };
 
@@ -170,5 +177,6 @@ export type {
   OracleConnection,
   MySqlConnection,
   MySqlDBTConnection,
+  SpannerConnection,
   DuckLakeConnectionConfig,
 };

@@ -99,8 +99,13 @@ const ProjectDetails: React.FC = () => {
     activeTabId,
     switchTab,
     closeTab,
+    closeTabsToLeft,
+    closeTabsToRight,
+    closeOtherTabs,
+    closeAllSaved,
     closeAll,
     saveAll,
+    saveTab,
     reorderTabs,
   } = useTabs();
 
@@ -265,8 +270,14 @@ const ProjectDetails: React.FC = () => {
                         activeTabId={activeTabId}
                         onSelect={switchTab}
                         onClose={closeTab}
+                        onCloseOthers={closeOtherTabs}
+                        onCloseToLeft={closeTabsToLeft}
+                        onCloseToRight={closeTabsToRight}
+                        onCloseSaved={closeAllSaved}
                         onCloseAll={closeAll}
                         onSaveAll={saveAll}
+                        onSaveTab={saveTab}
+                        projectPath={project?.path}
                         onReorder={reorderTabs}
                       />
                     </Box>

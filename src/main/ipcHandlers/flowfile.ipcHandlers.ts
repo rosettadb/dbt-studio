@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import { FlowfileChannels } from '../../types/ipc';
 import { FlowfileService } from '../services/flowfile.service';
+import { runInstallTask } from '../utils/installTask';
 
 const handlerChannels: FlowfileChannels[] = [
   'flowfile:install',
@@ -18,11 +19,15 @@ const registerFlowfileHandlers = () => {
   removeFlowfileHandlers();
 
   ipcMain.handle('flowfile:install', async () => {
-    return FlowfileService.install();
+    return runInstallTask('install:flowfile', 'Installing Flowfile', () =>
+      FlowfileService.install(),
+    );
   });
 
   ipcMain.handle('flowfile:uninstall', async () => {
-    return FlowfileService.uninstall();
+    return runInstallTask('install:flowfile', 'Uninstalling Flowfile', () =>
+      FlowfileService.uninstall(),
+    );
   });
 
   ipcMain.handle('flowfile:getStatus', async () => {

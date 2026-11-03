@@ -5,6 +5,7 @@ import path from 'path';
 import { app } from 'electron';
 import { execFile } from 'child_process';
 import AdmZip from 'adm-zip';
+import { downloadForInstall } from '../utils/installTask';
 import {
   InstallResult,
   RunnerVersionInfo,
@@ -208,7 +209,7 @@ export default class RunnerService {
       const binaryPath = path.join(installDir, getRunnerBinaryFileName());
 
       await fs.mkdirp(installDir);
-      const response = await axios.get(downloadUrl, {
+      const response = await downloadForInstall(downloadUrl, {
         responseType: 'arraybuffer',
       });
       await fs.writeFile(binaryPath, response.data);
@@ -279,7 +280,7 @@ export default class RunnerService {
     await fs.remove(pluginsHomeDir);
     await fs.mkdirp(pluginsHomeDir);
 
-    const response = await axios.get(pluginsZipUrl, {
+    const response = await downloadForInstall(pluginsZipUrl, {
       responseType: 'arraybuffer',
     });
     await fs.writeFile(pluginsZipPath, response.data);
@@ -485,7 +486,7 @@ export default class RunnerService {
 
       await fs.mkdirp(installDir);
 
-      const response = await axios.get(downloadUrl, {
+      const response = await downloadForInstall(downloadUrl, {
         responseType: 'arraybuffer',
       });
       await fs.writeFile(tempPath, response.data);

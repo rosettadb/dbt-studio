@@ -9,7 +9,6 @@ import {
   CircularProgress,
   IconButton,
   Tooltip,
-  Backdrop,
   Popover,
 } from '@mui/material';
 import {
@@ -30,6 +29,8 @@ import {
   RunnerPluginId,
 } from '../../../types/backend';
 import { ConfirmationModal } from '../modals';
+import { useIsTaskTypeActive } from '../../hooks';
+import { isInstallCancelledError } from '../../../shared/installTasks';
 import {
   SettingsRefreshButton,
   SettingsRow,
@@ -82,6 +83,9 @@ const MANUAL_INSTALL_HELP: Partial<
   },
 };
 
+// Versions shown before "Show older versions" is clicked.
+const LATEST_RUNNER_VERSIONS_SHOWN = 4;
+
 interface RunnerSettingsProps {
   settings: SettingsType;
 }
@@ -94,11 +98,12 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
   const [installingVersion, setInstallingVersion] = useState<string | null>(
     null,
   );
+  const [showOlderVersions, setShowOlderVersions] = useState(false);
   const [showUninstallConfirmation, setShowUninstallConfirmation] =
     useState(false);
   const [showKisqlUninstallConfirmation, setShowKisqlUninstallConfirmation] =
     useState(false);
-  const [isBlocking, setIsBlocking] = useState(false);
+  const isInstallTaskActive = useIsTaskTypeActive('install:runner');
   const [kisqlUpdateAvailable, setKisqlUpdateAvailable] = useState(false);
   const [helpAnchor, setHelpAnchor] = useState<{
     el: HTMLElement;
@@ -121,7 +126,6 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
   const installVersion = useInstallRunnerVersion({
     onSuccess: (result) => {
       setInstallingVersion(null);
-      setIsBlocking(false);
       if (result.success) {
         toast.success(`Local runner ${result.version} installed`);
         result.warnings?.forEach((warning) => toast.warning(warning));
@@ -133,19 +137,20 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
     },
     onError: (error) => {
       setInstallingVersion(null);
-      setIsBlocking(false);
+      // A cancelled install never started, so it did not fail.
+      if (isInstallCancelledError(error)) return;
       toast.error(`Installation failed: ${error.message}`);
     },
   });
 
   const uninstallRunner = useUninstallRunnerVersion({
     onSuccess: () => {
-      setIsBlocking(false);
       toast.success('Local runner uninstalled');
       setVersionInfo(null);
     },
     onError: (error) => {
-      setIsBlocking(false);
+      // A cancelled install never started, so it did not fail.
+      if (isInstallCancelledError(error)) return;
       toast.error(`Uninstall failed: ${error.message}`);
     },
   });
@@ -159,7 +164,6 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
 
   const installKisql = useInstallKisql({
     onSuccess: (result) => {
-      setIsBlocking(false);
       if (result.success) {
         toast.success('KiSQL installed successfully');
         pluginDependencies.mutate();
@@ -169,20 +173,21 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
       }
     },
     onError: (error) => {
-      setIsBlocking(false);
+      // A cancelled install never started, so it did not fail.
+      if (isInstallCancelledError(error)) return;
       toast.error(`KiSQL installation failed: ${error.message}`);
     },
   });
 
   const uninstallKisql = useUninstallKisql({
     onSuccess: () => {
-      setIsBlocking(false);
       setKisqlUpdateAvailable(false);
       toast.success('KiSQL uninstalled');
       pluginDependencies.mutate();
     },
     onError: (error) => {
-      setIsBlocking(false);
+      // A cancelled install never started, so it did not fail.
+      if (isInstallCancelledError(error)) return;
       toast.error(`KiSQL uninstall failed: ${error.message}`);
     },
   });
@@ -195,24 +200,20 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
 
   const handleInstallVersion = (version: string) => {
     setInstallingVersion(version);
-    setIsBlocking(true);
     installVersion.mutate(version);
   };
 
   const handleInstallKisql = () => {
-    setIsBlocking(true);
     installKisql.mutate();
   };
 
   const confirmUninstall = () => {
     setShowUninstallConfirmation(false);
-    setIsBlocking(true);
     uninstallRunner.mutate();
   };
 
   const confirmKisqlUninstall = () => {
     setShowKisqlUninstallConfirmation(false);
-    setIsBlocking(true);
     uninstallKisql.mutate();
   };
 
@@ -239,15 +240,15 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
     return 'Install';
   };
 
+  const availableVersions = versionInfo?.availableVersions ?? [];
+  const shownVersions = showOlderVersions
+    ? availableVersions
+    : availableVersions.slice(0, LATEST_RUNNER_VERSIONS_SHOWN);
+  const hasOlderVersions =
+    availableVersions.length > LATEST_RUNNER_VERSIONS_SHOWN;
+
   return (
     <SettingsStack>
-      <Backdrop
-        open={isBlocking}
-        sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, color: '#fff' }}
-      >
-        <CircularProgress color="inherit" />
-      </Backdrop>
-
       <SettingsSection
         title="Local Runner"
         icon={<TerminalOutlined />}
@@ -291,57 +292,78 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
             }
           />
         )}
-        {versionInfo?.availableVersions.slice(0, 10).map((version) => (
-          <SettingsRow
-            key={version.version}
-            label={
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                {version.version}
-                {version.version === versionInfo.latestStable && (
-                  <Chip label="Latest" size="small" variant="outlined" />
-                )}
-              </Box>
-            }
-            description={`Released: ${new Date(
-              version.releaseDate,
-            ).toLocaleDateString()}`}
+        {shownVersions.length > 0 && (
+          <Box
+            sx={(theme) => ({
+              maxHeight: showOlderVersions ? 320 : 'none',
+              overflowY: 'auto',
+              '& > * + *': { borderTop: `1px solid ${theme.palette.divider}` },
+            })}
           >
-            {version.releaseNotes && (
-              <Tooltip title="View release notes">
-                <IconButton
+            {shownVersions.map((version) => (
+              <SettingsRow
+                key={version.version}
+                label={
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    {version.version}
+                    {version.version === versionInfo?.latestStable && (
+                      <Chip label="Latest" size="small" variant="outlined" />
+                    )}
+                  </Box>
+                }
+                description={`Released: ${new Date(
+                  version.releaseDate,
+                ).toLocaleDateString()}`}
+              >
+                {version.releaseNotes && (
+                  <Tooltip title="View release notes">
+                    <IconButton
+                      size="small"
+                      onClick={() =>
+                        window.open(
+                          `https://github.com/rosettadb/dbt-studio/releases/tag/${version.version}`,
+                          '_blank',
+                        )
+                      }
+                    >
+                      <Info fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
+                <Button
                   size="small"
-                  onClick={() =>
-                    window.open(
-                      `https://github.com/rosettadb/dbt-studio/releases/tag/${version.version}`,
-                      '_blank',
+                  variant="outlined"
+                  onClick={() => handleInstallVersion(version.version)}
+                  disabled={
+                    version.version === versionInfo?.currentVersion ||
+                    installingVersion === version.version ||
+                    installVersion.isLoading ||
+                    isInstallTaskActive
+                  }
+                  startIcon={
+                    installingVersion === version.version ? (
+                      <CircularProgress size={14} />
+                    ) : (
+                      <Download />
                     )
                   }
                 >
-                  <Info fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            )}
+                  {getButtonText(version)}
+                </Button>
+              </SettingsRow>
+            ))}
+          </Box>
+        )}
+        {hasOlderVersions && (
+          <Box sx={{ px: 1.75, py: 0.75, textAlign: 'center' }}>
             <Button
               size="small"
-              variant="outlined"
-              onClick={() => handleInstallVersion(version.version)}
-              disabled={
-                version.version === versionInfo.currentVersion ||
-                installingVersion === version.version ||
-                installVersion.isLoading
-              }
-              startIcon={
-                installingVersion === version.version ? (
-                  <CircularProgress size={14} />
-                ) : (
-                  <Download />
-                )
-              }
+              onClick={() => setShowOlderVersions((value) => !value)}
             >
-              {getButtonText(version)}
+              {showOlderVersions ? 'Show fewer' : 'Show older versions'}
             </Button>
-          </SettingsRow>
-        ))}
+          </Box>
+        )}
       </SettingsSection>
 
       <SettingsSection
@@ -413,6 +435,7 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
                   onClick={handleInstallKisql}
                   disabled={
                     installKisql.isLoading ||
+                    isInstallTaskActive ||
                     (dep.available && !kisqlUpdateAvailable)
                   }
                   startIcon={
@@ -435,7 +458,7 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
                       size="small"
                       color="error"
                       onClick={() => setShowKisqlUninstallConfirmation(true)}
-                      disabled={uninstallKisql.isLoading}
+                      disabled={uninstallKisql.isLoading || isInstallTaskActive}
                     >
                       <Delete fontSize="small" />
                     </IconButton>
@@ -484,7 +507,7 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
               variant="outlined"
               color="error"
               onClick={() => setShowUninstallConfirmation(true)}
-              disabled={uninstallRunner.isLoading}
+              disabled={uninstallRunner.isLoading || isInstallTaskActive}
               startIcon={
                 uninstallRunner.isLoading ? (
                   <CircularProgress size={14} />

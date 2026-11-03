@@ -164,6 +164,13 @@ export interface UseTabManagerReturn {
   switchTab: (tabId: EditorTabId) => void;
   closeTab: (tabId: EditorTabId) => void;
   closeTabByPath: (path: string) => void;
+  /** Close tabs to the left; changed tabs stay open. Returns how many were kept. */
+  closeTabsToLeft: (tabId: EditorTabId) => number;
+  /** Close tabs to the right; changed tabs stay open. Returns how many were kept. */
+  closeTabsToRight: (tabId: EditorTabId) => number;
+  /** Close all other tabs; changed tabs stay open. Returns how many were kept. */
+  closeOtherTabs: (tabId: EditorTabId) => number;
+  closeAllSaved: () => void;
   updateTabContent: (
     tabId: EditorTabId,
     content: string,
@@ -174,8 +181,12 @@ export interface UseTabManagerReturn {
     content: string,
     options?: UpdateTabByPathOptions,
   ) => void;
-  markTabSaved: (tabId: EditorTabId) => void;
-  markTabSavedByPath: (path: string) => void;
+  /**
+   * Mark a tab saved. Pass the content that was written to disk so edits made
+   * while the write was in flight keep the tab modified.
+   */
+  markTabSaved: (tabId: EditorTabId, writtenContent?: string) => void;
+  markTabSavedByPath: (path: string, writtenContent?: string) => void;
   setTabError: (tabId: EditorTabId, error?: string) => void;
   setTabErrorByPath: (path: string, error?: string) => void;
   reorderTabs: (fromIndex: number, toIndex: number) => void;
@@ -329,6 +340,79 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
     [projectId],
   );
 
+  /**
+   * Closes the given tabs except ones with unsaved changes, which stay open
+   * (same rule as Close All). If the active tab closes, `fallbackActiveId`
+   * becomes active. Returns how many changed tabs were kept open.
+   */
+  const closeUnmodifiedTabs = React.useCallback(
+    (candidates: EditorTabState[], fallbackActiveId: EditorTabId): number => {
+      const toClose = candidates.filter((t) => !t.isModified);
+      if (toClose.length > 0) {
+        const closeIds = new Set(toClose.map((t) => t.id));
+        toClose.forEach((t) => {
+          disposeModelForPath(projectId, t.path);
+          clearViewState(t.id);
+        });
+        setTabs((current) => current.filter((t) => !closeIds.has(t.id)));
+        setActiveTabId((currentId) =>
+          currentId && closeIds.has(currentId) ? fallbackActiveId : currentId,
+        );
+      }
+      return candidates.length - toClose.length;
+    },
+    [projectId],
+  );
+
+  const closeTabsToLeft = React.useCallback(
+    (tabId: EditorTabId): number => {
+      const { current } = tabsRef;
+      const index = current.findIndex((t) => t.id === tabId);
+      if (index <= 0) return 0;
+      return closeUnmodifiedTabs(current.slice(0, index), tabId);
+    },
+    [closeUnmodifiedTabs],
+  );
+
+  const closeTabsToRight = React.useCallback(
+    (tabId: EditorTabId): number => {
+      const { current } = tabsRef;
+      const index = current.findIndex((t) => t.id === tabId);
+      if (index === -1 || index === current.length - 1) return 0;
+      return closeUnmodifiedTabs(current.slice(index + 1), tabId);
+    },
+    [closeUnmodifiedTabs],
+  );
+
+  const closeOtherTabs = React.useCallback(
+    (tabId: EditorTabId): number => {
+      const { current } = tabsRef;
+      if (!current.some((t) => t.id === tabId)) return 0;
+      const kept = closeUnmodifiedTabs(
+        current.filter((t) => t.id !== tabId),
+        tabId,
+      );
+      setActiveTabId(tabId);
+      return kept;
+    },
+    [closeUnmodifiedTabs],
+  );
+
+  const closeAllSaved = React.useCallback(() => {
+    setTabs((current) => {
+      const toRemove = current.filter((t) => !t.isModified);
+      toRemove.forEach((t) => {
+        disposeModelForPath(projectId, t.path);
+        clearViewState(t.id);
+      });
+      const remaining = current.filter((t) => t.isModified);
+      if (activeTabId && !remaining.some((t) => t.id === activeTabId)) {
+        setActiveTabId(remaining[0]?.id ?? null);
+      }
+      return remaining;
+    });
+  }, [activeTabId, projectId]);
+
   const updateTab = React.useCallback(
     (tabId: EditorTabId, updater: (tab: EditorTabState) => EditorTabState) => {
       setTabs((current) => {
@@ -368,21 +452,24 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
   );
 
   const markTabSaved = React.useCallback(
-    (tabId: EditorTabId) => {
-      updateTab(tabId, (tab) => ({
-        ...tab,
-        isModified: false,
-        savedContent: tab.content,
-      }));
+    (tabId: EditorTabId, writtenContent?: string) => {
+      updateTab(tabId, (tab) => {
+        const savedContent = writtenContent ?? tab.content;
+        return {
+          ...tab,
+          isModified: tab.content !== savedContent,
+          savedContent,
+        };
+      });
     },
     [updateTab],
   );
 
   const markTabSavedByPath = React.useCallback(
-    (path: string) => {
+    (path: string, writtenContent?: string) => {
       const target = tabsRef.current.find((tab) => tab.path === path);
       if (target) {
-        markTabSaved(target.id);
+        markTabSaved(target.id, writtenContent);
       }
     },
     [markTabSaved],
@@ -766,6 +853,10 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
     switchTab,
     closeTab,
     closeTabByPath,
+    closeTabsToLeft,
+    closeTabsToRight,
+    closeOtherTabs,
+    closeAllSaved,
     updateTabContent,
     updateTabContentByPath,
     markTabSaved,

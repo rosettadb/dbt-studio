@@ -1,8 +1,10 @@
 import type { SecondBrainProgressEvent } from '../../../../src/types/secondBrain';
 import {
+  getRunningSecondBrainOperation,
   getSecondBrainOperationTitle,
   getSecondBrainProgressMessage,
   getSecondBrainProviderTooltip,
+  getSecondBrainTerminalPhase,
   isCurrentSecondBrainProgress,
   isSecondBrainTerminalStage,
   SECOND_BRAIN_GENERATION_HELPERS,
@@ -100,5 +102,61 @@ describe('secondBrainOperationUi', () => {
     expect(isSecondBrainTerminalStage('cancelled')).toBe(true);
     expect(isSecondBrainTerminalStage('failed')).toBe(true);
     expect(isSecondBrainTerminalStage('generating')).toBe(false);
+  });
+
+  describe('getRunningSecondBrainOperation', () => {
+    const idleStatus = {
+      enabled: true,
+      initialized: false,
+      pageCount: 0,
+      totalBytes: 0,
+      busy: false,
+      layoutVersion: 'empty' as const,
+    };
+
+    it('returns null when no build is running', () => {
+      expect(getRunningSecondBrainOperation(undefined)).toBeNull();
+      expect(getRunningSecondBrainOperation(idleStatus)).toBeNull();
+    });
+
+    it('describes a build started elsewhere so the tab can follow it', () => {
+      const latest = progress('generating', { cancellable: true });
+      expect(
+        getRunningSecondBrainOperation({
+          ...idleStatus,
+          busy: true,
+          activeOperationId: 'operation-1',
+          activeOperationKind: 'init',
+          activeOperationStartedAt: '2026-07-28T03:00:00.000Z',
+          activeProgress: latest,
+        }),
+      ).toEqual({
+        kind: 'init',
+        operationId: 'operation-1',
+        startedAt: Date.parse('2026-07-28T03:00:00.000Z'),
+        progress: latest,
+      });
+    });
+
+    it('falls back to now when the start time is missing', () => {
+      expect(
+        getRunningSecondBrainOperation(
+          { ...idleStatus, busy: true, activeOperationId: 'operation-1' },
+          1234,
+        ),
+      ).toEqual({
+        kind: 'init',
+        operationId: 'operation-1',
+        startedAt: 1234,
+        progress: undefined,
+      });
+    });
+  });
+
+  it('maps final progress stages to dialog phases', () => {
+    expect(getSecondBrainTerminalPhase('completed')).toBe('succeeded');
+    expect(getSecondBrainTerminalPhase('cancelled')).toBe('cancelled');
+    expect(getSecondBrainTerminalPhase('failed')).toBe('failed');
+    expect(getSecondBrainTerminalPhase('generating')).toBeNull();
   });
 });

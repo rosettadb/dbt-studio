@@ -17,6 +17,8 @@ import fs from 'fs-extra';
 import path from 'path';
 import PythonRuntimesService from './pythonRuntimes.service';
 import { broadcastToRenderers } from '../utils/rendererBroadcast';
+import { runInstallTask } from '../utils/installTask';
+import { INSTALL_CANCELLED_MESSAGE } from '../../shared/installTasks';
 import type {
   NotebookEnvEvent,
   NotebookEnvPackage,
@@ -28,6 +30,9 @@ const ENV_MARKER_FILE = '.rosetta-notebook-env.json';
 const KERNEL_PACKAGES = ['ipykernel>=6.29', 'jupyter_client>=8'];
 const PIP_TIMEOUT_MS = 15 * 60 * 1000;
 const VENV_TIMEOUT_MS = 5 * 60 * 1000;
+// pip prints this before it starts replacing files; stopping after it would
+// leave a half-installed package.
+const PIP_INSTALL_PHASE_MARKER = 'Installing collected packages';
 
 // Accept "name", "name[extra]", "name==1.2", "name>=1,<2" ... Reject anything
 // that could be interpreted by pip as a flag or a path/URL.
@@ -65,6 +70,9 @@ export function runProcess(
     env?: Record<string, string | undefined>;
     timeoutMs?: number;
     onLine?: (line: string) => void;
+    // Aborting stops the process (used to stop an install while it is
+    // still downloading).
+    signal?: AbortSignal;
   } = {},
 ): Promise<RunProcessResult> {
   return new Promise((resolve, reject) => {
@@ -90,6 +98,19 @@ export function runProcess(
         ),
       );
     }, options.timeoutMs ?? PIP_TIMEOUT_MS);
+
+    if (options.signal) {
+      const stopProcess = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        child.kill('SIGKILL');
+        reject(new Error(INSTALL_CANCELLED_MESSAGE));
+      };
+      if (options.signal.aborted) stopProcess();
+      else
+        options.signal.addEventListener('abort', stopProcess, { once: true });
+    }
 
     const forward = (chunk: Buffer) => {
       if (!options.onLine) return;
@@ -218,9 +239,41 @@ export default class NotebookEnvService {
   /**
    * Create (or recreate) the notebook's venv from the given managed Python
    * version and install the kernel packages. Progress is broadcast as
-   * `pythonNotebooks:env:event`.
+   * `pythonNotebooks:env:event`. Waits in the shared install queue, so only
+   * one install runs at a time across the studio.
    */
   static async createEnv(
+    notebookId: string,
+    pythonVersion: string,
+  ): Promise<NotebookRuntime> {
+    this.creating.add(notebookId);
+    this.emit({
+      notebookId,
+      status: 'creating',
+      message: 'Waiting for other installs to finish…',
+    });
+    try {
+      return await runInstallTask(
+        'install:notebook',
+        `Setting up notebook environment (Python ${pythonVersion})`,
+        () => this.createEnvNow(notebookId, pythonVersion),
+      );
+    } catch (error) {
+      // Only a cancel while queued lands here; createEnvNow reports its own
+      // failures as an 'error' runtime.
+      this.creating.delete(notebookId);
+      const message = error instanceof Error ? error.message : String(error);
+      this.emit({ notebookId, status: 'error', error: message });
+      return {
+        pythonVersion,
+        venvPath: this.getVenvDir(notebookId),
+        status: 'error',
+        error: message,
+      };
+    }
+  }
+
+  private static async createEnvNow(
     notebookId: string,
     pythonVersion: string,
   ): Promise<NotebookRuntime> {
@@ -403,31 +456,46 @@ export default class NotebookEnvService {
       }
     });
 
-    return this.withLock(notebookId, async () => {
-      const python = await this.requireReadyPython(notebookId);
-      const result = await runProcess(
-        python,
-        [
-          '-m',
-          'pip',
-          'install',
-          '--disable-pip-version-check',
-          '--no-input',
-          '--progress-bar',
-          'off',
-          ...cleaned,
-        ],
-        {
-          onLine: (line) =>
-            this.emit({ notebookId, status: 'ready', message: line }),
-        },
-      );
-      const log = `${result.stdout}\n${result.stderr}`.trim();
-      if (result.code !== 0) {
-        throw new Error(log || `pip install exited with code ${result.code}`);
-      }
-      return log;
-    });
+    return runInstallTask(
+      'install:notebook',
+      `Installing ${cleaned.join(', ')} (notebook)`,
+      (control) =>
+        this.withLock(notebookId, async () => {
+          const python = await this.requireReadyPython(notebookId);
+          const result = await runProcess(
+            python,
+            [
+              '-m',
+              'pip',
+              'install',
+              '--disable-pip-version-check',
+              '--no-input',
+              '--progress-bar',
+              'off',
+              ...cleaned,
+            ],
+            {
+              // Unbuffered so the install-phase marker arrives right away.
+              env: { PYTHONUNBUFFERED: '1' },
+              signal: control.signal,
+              onLine: (line) => {
+                if (line.includes(PIP_INSTALL_PHASE_MARKER)) {
+                  control.markUnsafeToStop();
+                }
+                this.emit({ notebookId, status: 'ready', message: line });
+              },
+            },
+          );
+          const log = `${result.stdout}\n${result.stderr}`.trim();
+          if (result.code !== 0) {
+            throw new Error(
+              log || `pip install exited with code ${result.code}`,
+            );
+          }
+          return log;
+        }),
+      { stoppable: true },
+    );
   }
 
   static async uninstallPackage(
@@ -445,25 +513,32 @@ export default class NotebookEnvService {
       throw new Error(`"${cleaned}" is required by the notebook kernel`);
     }
 
-    return this.withLock(notebookId, async () => {
-      const python = await this.requireReadyPython(notebookId);
-      const result = await runProcess(
-        python,
-        [
-          '-m',
-          'pip',
-          'uninstall',
-          '-y',
-          '--disable-pip-version-check',
-          cleaned,
-        ],
-        { timeoutMs: 5 * 60 * 1000 },
-      );
-      const log = `${result.stdout}\n${result.stderr}`.trim();
-      if (result.code !== 0) {
-        throw new Error(log || `pip uninstall exited with code ${result.code}`);
-      }
-      return log;
-    });
+    return runInstallTask(
+      'install:notebook',
+      `Uninstalling ${cleaned} (notebook)`,
+      () =>
+        this.withLock(notebookId, async () => {
+          const python = await this.requireReadyPython(notebookId);
+          const result = await runProcess(
+            python,
+            [
+              '-m',
+              'pip',
+              'uninstall',
+              '-y',
+              '--disable-pip-version-check',
+              cleaned,
+            ],
+            { timeoutMs: 5 * 60 * 1000 },
+          );
+          const log = `${result.stdout}\n${result.stderr}`.trim();
+          if (result.code !== 0) {
+            throw new Error(
+              log || `pip uninstall exited with code ${result.code}`,
+            );
+          }
+          return log;
+        }),
+    );
   }
 }

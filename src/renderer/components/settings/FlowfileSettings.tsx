@@ -1,13 +1,5 @@
 import React from 'react';
-import {
-  Box,
-  Typography,
-  Button,
-  Alert,
-  CircularProgress,
-  Backdrop,
-  Switch,
-} from '@mui/material';
+import { Button, Alert, CircularProgress, Switch } from '@mui/material';
 import {
   CloudDownload,
   Delete,
@@ -24,6 +16,8 @@ import {
 } from '../../services/flowfile.service';
 import { ConfirmationModal } from '../modals';
 import { useInstallPython } from '../../controllers';
+import { useIsTaskTypeActive } from '../../hooks';
+import { isInstallCancelledError } from '../../../shared/installTasks';
 import {
   SettingsRefreshButton,
   SettingsRow,
@@ -46,21 +40,39 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
   const [isCheckingStatus, setIsCheckingStatus] = React.useState(false);
   const [isInstalling, setIsInstalling] = React.useState(false);
   const [installError, setInstallError] = React.useState<string | null>(null);
-  const [isLoadingDialog, setIsLoadingDialog] = React.useState(false);
-  const [loadingMessage, setLoadingMessage] = React.useState('');
   const [isUninstalling, setIsUninstalling] = React.useState(false);
   const [showUninstallConfirmation, setShowUninstallConfirmation] =
     React.useState(false);
   const [autoStart, setAutoStart] = React.useState(
     () => settings.flowfileAutoStart === 'true',
   );
+  // Flowfile installs Python first when it is missing, so a running Python
+  // install also counts as busy here.
+  const isInstallTaskActive = useIsTaskTypeActive(
+    'install:flowfile',
+    'install:python',
+  );
+
+  // Installs keep running after this page closes, and the background process
+  // saves their results itself. A closed page's settings copy is out of date,
+  // so it must not save over them.
+  const isPageOpenRef = React.useRef(true);
+  React.useEffect(() => {
+    isPageOpenRef.current = true;
+    return () => {
+      isPageOpenRef.current = false;
+    };
+  }, []);
   const checkStatus = async () => {
     setIsCheckingStatus(true);
     try {
       const s = await flowfileGetStatus();
       setStatus(s);
       const nextVersion = s.version ?? '';
-      if (nextVersion !== (settings.flowfileVersion ?? '')) {
+      if (
+        isPageOpenRef.current &&
+        nextVersion !== (settings.flowfileVersion ?? '')
+      ) {
         onSettingsChange('flowfileVersion', nextVersion);
       }
     } catch (error) {
@@ -92,22 +104,20 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
   const handleInstall = async () => {
     setIsInstalling(true);
     setInstallError(null);
-    setIsLoadingDialog(true);
-    setLoadingMessage('Installing Flowfile...');
     try {
       if (!settings.pythonPath) {
         toast.info(
           'Python is required for Flowfile and will be installed automatically.',
         );
-        setLoadingMessage('Installing Python...');
         const pythonResult = await installPython.mutateAsync();
         if (!pythonResult.success) {
           setInstallError(`Failed to install Python: ${pythonResult.error}`);
           return;
         }
-        await onSettingsChange('pythonPath', pythonResult.path);
-        await onSettingsChange('pythonVersion', pythonResult.version);
-        setLoadingMessage('Installing Flowfile...');
+        if (isPageOpenRef.current) {
+          await onSettingsChange('pythonPath', pythonResult.path);
+          await onSettingsChange('pythonVersion', pythonResult.version);
+        }
       }
 
       const result = await flowfileInstall();
@@ -118,36 +128,37 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
         setInstallError(result.error ?? 'Installation failed');
       }
     } catch (error) {
-      setInstallError(
-        error instanceof Error ? error.message : 'Installation failed',
-      );
+      if (!isInstallCancelledError(error)) {
+        setInstallError(
+          error instanceof Error ? error.message : 'Installation failed',
+        );
+      }
     } finally {
       setIsInstalling(false);
-      setIsLoadingDialog(false);
-      setLoadingMessage('');
     }
   };
 
   const handleUninstall = async () => {
     setShowUninstallConfirmation(false);
     setIsUninstalling(true);
-    setIsLoadingDialog(true);
-    setLoadingMessage('Uninstalling Flowfile...');
     try {
       const result = await flowfileUninstall();
       if (result.ok) {
         toast.success('Flowfile uninstalled successfully');
-        onSettingsChange('flowfileVersion', '');
+        if (isPageOpenRef.current) onSettingsChange('flowfileVersion', '');
         await checkStatus();
       } else {
         toast.error(result.error ?? 'Uninstall failed');
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Uninstall failed');
+      // A cancelled uninstall never started, so it did not fail.
+      if (!isInstallCancelledError(error)) {
+        toast.error(
+          error instanceof Error ? error.message : 'Uninstall failed',
+        );
+      }
     } finally {
       setIsUninstalling(false);
-      setIsLoadingDialog(false);
-      setLoadingMessage('');
     }
   };
 
@@ -213,7 +224,7 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
               )
             }
             onClick={handleInstall}
-            disabled={isInstalling}
+            disabled={isInstalling || isInstallTaskActive}
           >
             {isInstalling && 'Installing…'}
             {!isInstalling && installedVersion && 'Upgrade Flowfile'}
@@ -238,7 +249,7 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
               variant="outlined"
               color="error"
               onClick={() => setShowUninstallConfirmation(true)}
-              disabled={isUninstalling}
+              disabled={isUninstalling || isInstallTaskActive}
               startIcon={
                 isUninstalling ? <CircularProgress size={14} /> : <Delete />
               }
@@ -256,24 +267,6 @@ export const FlowfileSettings: React.FC<FlowfileSettingsProps> = ({
         title="Uninstall Flowfile"
         question="Are you sure you want to uninstall Flowfile? This will remove it from your Python environment and you will need to reinstall it to use Flowfile features."
       />
-
-      <Backdrop
-        open={isLoadingDialog}
-        sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, color: '#fff' }}
-      >
-        <Box
-          display="flex"
-          flexDirection="column"
-          alignItems="center"
-          justifyContent="center"
-          py={3}
-        >
-          <CircularProgress color="inherit" />
-          <Typography variant="body2" sx={{ mt: 2, textAlign: 'center' }}>
-            {loadingMessage || 'Loading...'}
-          </Typography>
-        </Box>
-      </Backdrop>
     </SettingsStack>
   );
 };

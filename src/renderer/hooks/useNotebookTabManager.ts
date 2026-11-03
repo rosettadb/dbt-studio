@@ -85,6 +85,10 @@ export interface UseNotebookTabManagerReturn {
   openNotebook: (notebook: Notebook, connectionId: string) => string;
   switchTab: (tabId: string) => void;
   closeTab: (tabId: string) => void;
+  closeTabsToLeft: (tabId: string) => void;
+  closeTabsToRight: (tabId: string) => void;
+  closeOtherTabs: (tabId: string) => void;
+  closeAllTabs: () => void;
   markTabModified: (tabId: string, isModified: boolean) => void;
   updateTabName: (tabId: string, newName: string) => void;
   /** Switch the editor a tab renders (e.g. after a SQL → Python conversion). */
@@ -158,6 +162,48 @@ const useNotebookTabManager = (): UseNotebookTabManagerReturn => {
     },
     [activeTabId],
   );
+
+  const closeTabsToLeft = React.useCallback(
+    (tabId: string) => {
+      setTabs((current) => {
+        const index = current.findIndex((t) => t.notebookId === tabId);
+        if (index <= 0) return current;
+        const toRemove = current.slice(0, index);
+        const remaining = current.slice(index);
+        if (activeTabId && toRemove.some((t) => t.notebookId === activeTabId)) {
+          setActiveTabId(tabId);
+        }
+        return remaining;
+      });
+    },
+    [activeTabId],
+  );
+
+  const closeTabsToRight = React.useCallback(
+    (tabId: string) => {
+      setTabs((current) => {
+        const index = current.findIndex((t) => t.notebookId === tabId);
+        if (index === -1 || index === current.length - 1) return current;
+        const toRemove = current.slice(index + 1);
+        const remaining = current.slice(0, index + 1);
+        if (activeTabId && toRemove.some((t) => t.notebookId === activeTabId)) {
+          setActiveTabId(tabId);
+        }
+        return remaining;
+      });
+    },
+    [activeTabId],
+  );
+
+  const closeOtherTabs = React.useCallback((tabId: string) => {
+    setTabs((current) => current.filter((t) => t.notebookId === tabId));
+    setActiveTabId(tabId);
+  }, []);
+
+  const closeAllTabs = React.useCallback(() => {
+    setTabs([]);
+    setActiveTabId(null);
+  }, []);
 
   const markTabModified = React.useCallback(
     (tabId: string, isModified: boolean) => {
@@ -280,6 +326,10 @@ const useNotebookTabManager = (): UseNotebookTabManagerReturn => {
     openNotebook,
     switchTab,
     closeTab,
+    closeTabsToLeft,
+    closeTabsToRight,
+    closeOtherTabs,
+    closeAllTabs,
     markTabModified,
     updateTabName,
     updateTabKind,

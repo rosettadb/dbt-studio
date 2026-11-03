@@ -44,3 +44,30 @@ describe('TaskManagerService.cancelAll', () => {
     ).toBe('running');
   });
 });
+
+describe('TaskManagerService.create', () => {
+  afterEach(() => {
+    TaskManagerService.list().forEach(({ id }) =>
+      TaskManagerService.remove(id),
+    );
+  });
+
+  it('keeps tasks created in the same millisecond in creation order', () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1000);
+    const first = TaskManagerService.create({
+      id: 'first',
+      type: 'install:dbt',
+      label: 'First',
+      status: 'pending',
+    });
+    const second = TaskManagerService.create({
+      id: 'second',
+      type: 'install:dbt',
+      label: 'Second',
+      status: 'pending',
+    });
+    now.mockRestore();
+
+    expect(second.startedAt).toBeGreaterThan(first.startedAt);
+  });
+});

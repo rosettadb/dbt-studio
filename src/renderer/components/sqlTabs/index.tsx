@@ -2,10 +2,16 @@ import React from 'react';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
+import MenuItem from '@mui/material/MenuItem';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import ListItemText from '@mui/material/ListItemText';
 import CloseIcon from '@mui/icons-material/Close';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { connectionIcon } from '../../../connections/registry.renderer';
 import { SqlTabId, SqlTabState } from '../../../types/editor';
+import { TabContextMenu } from '../tabContextMenu';
+import { copyText } from '../../lib/clipboard';
 import {
   SqlTabBar,
   TabsContainer,
@@ -22,6 +28,7 @@ interface SqlTabProps {
   isActive: boolean;
   onSelect: () => void;
   onClose: () => void;
+  onContextMenu?: (event: React.MouseEvent) => void;
 }
 
 const SqlTab: React.FC<SqlTabProps> = ({
@@ -29,6 +36,7 @@ const SqlTab: React.FC<SqlTabProps> = ({
   isActive,
   onSelect,
   onClose,
+  onContextMenu,
 }) => {
   const handleClose = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
@@ -51,6 +59,19 @@ const SqlTab: React.FC<SqlTabProps> = ({
       <SqlTabButton
         active={isActive}
         onClick={onSelect}
+        onContextMenu={(e) => {
+          if (onContextMenu) {
+            e.preventDefault();
+            onContextMenu(e);
+          }
+        }}
+        onAuxClick={(e) => {
+          if (e.button === 1) {
+            e.preventDefault();
+            e.stopPropagation();
+            onClose();
+          }
+        }}
         role="tab"
         tabIndex={0}
         aria-selected={isActive}
@@ -99,6 +120,10 @@ interface SqlTabManagerProps {
   activeTabId: SqlTabId | null;
   onSelect: (tabId: SqlTabId) => void;
   onClose: (tabId: SqlTabId) => void;
+  onCloseOthers?: (tabId: SqlTabId) => void;
+  onCloseToLeft?: (tabId: SqlTabId) => void;
+  onCloseToRight?: (tabId: SqlTabId) => void;
+  onCloseAll?: () => void;
   onReorder: (fromIndex: number, toIndex: number) => void;
   actions?: React.ReactNode;
 }
@@ -113,6 +138,10 @@ export const SqlTabManager: React.FC<SqlTabManagerProps> = ({
   activeTabId,
   onSelect,
   onClose,
+  onCloseOthers,
+  onCloseToLeft,
+  onCloseToRight,
+  onCloseAll,
   onReorder,
   actions,
 }) => {
@@ -120,6 +149,10 @@ export const SqlTabManager: React.FC<SqlTabManagerProps> = ({
     tabId: null,
     overTabId: null,
   });
+  const [contextMenu, setContextMenu] = React.useState<{
+    tabId: SqlTabId;
+    position: { top: number; left: number };
+  } | null>(null);
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const tabRefs = React.useRef<Map<SqlTabId, HTMLDivElement>>(new Map());
 
@@ -210,6 +243,12 @@ export const SqlTabManager: React.FC<SqlTabManagerProps> = ({
             isActive={tab.id === activeTabId}
             onSelect={() => onSelect(tab.id)}
             onClose={() => onClose(tab.id)}
+            onContextMenu={(event) => {
+              setContextMenu({
+                tabId: tab.id,
+                position: { top: event.clientY, left: event.clientX },
+              });
+            }}
           />
         </Box>
       </Box>
@@ -248,6 +287,12 @@ export const SqlTabManager: React.FC<SqlTabManagerProps> = ({
     }
   }, [activeTabId, tabs]);
 
+  const contextTab = tabs.find((t) => t.id === contextMenu?.tabId);
+  const contextIndex = tabs.findIndex((t) => t.id === contextMenu?.tabId);
+  const hasTabsToLeft = contextIndex > 0;
+  const hasTabsToRight = contextIndex !== -1 && contextIndex < tabs.length - 1;
+  const hasOtherTabs = tabs.length > 1;
+
   return (
     <SqlTabBar>
       {tabs.length === 0 ? (
@@ -261,6 +306,69 @@ export const SqlTabManager: React.FC<SqlTabManagerProps> = ({
         </TabsContainer>
       )}
       {actions}
+      <TabContextMenu
+        anchorPosition={contextMenu ? contextMenu.position : null}
+        onClose={() => setContextMenu(null)}
+        onCloseTab={() => {
+          if (contextMenu) onClose(contextMenu.tabId);
+        }}
+        onCloseOthers={() => {
+          if (contextMenu) onCloseOthers?.(contextMenu.tabId);
+        }}
+        onCloseToLeft={() => {
+          if (contextMenu) onCloseToLeft?.(contextMenu.tabId);
+        }}
+        onCloseToRight={() => {
+          if (contextMenu) onCloseToRight?.(contextMenu.tabId);
+        }}
+        onCloseAll={() => {
+          if (onCloseAll) {
+            onCloseAll();
+          } else {
+            tabs.forEach((tab) => onClose(tab.id));
+          }
+        }}
+        hasTabsToLeft={hasTabsToLeft}
+        hasTabsToRight={hasTabsToRight}
+        hasOtherTabs={hasOtherTabs}
+        extras={
+          contextTab && (
+            <>
+              <MenuItem
+                dense
+                onClick={() => {
+                  setContextMenu(null);
+                  copyText(contextTab.query);
+                }}
+                sx={{ py: 0.5, minHeight: 'auto', fontSize: '0.8rem' }}
+              >
+                <ListItemIcon sx={{ minWidth: 28 }}>
+                  <ContentCopyIcon fontSize="small" />
+                </ListItemIcon>
+                <ListItemText primaryTypographyProps={{ fontSize: '0.8rem' }}>
+                  Copy Query
+                </ListItemText>
+              </MenuItem>
+
+              <MenuItem
+                dense
+                onClick={() => {
+                  setContextMenu(null);
+                  copyText(contextTab.connectionName);
+                }}
+                sx={{ py: 0.5, minHeight: 'auto', fontSize: '0.8rem' }}
+              >
+                <ListItemIcon sx={{ minWidth: 28 }}>
+                  <ContentCopyIcon fontSize="small" />
+                </ListItemIcon>
+                <ListItemText primaryTypographyProps={{ fontSize: '0.8rem' }}>
+                  Copy Connection Name
+                </ListItemText>
+              </MenuItem>
+            </>
+          )
+        }
+      />
     </SqlTabBar>
   );
 };

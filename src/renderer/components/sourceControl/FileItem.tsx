@@ -4,9 +4,11 @@ import { Add, Undo, Remove } from '@mui/icons-material';
 
 import { FileIcon } from '../fileIcon';
 import { FileStatus } from '../../../types/backend';
+import { path } from '../../lib/path';
 
 interface FileItemProps {
   file: FileStatus;
+  projectPath: string;
   onStage?: (filePath: string) => void;
   onUnstage?: (filePath: string) => void;
   onDiscard?: (filePath: string) => void;
@@ -15,6 +17,7 @@ interface FileItemProps {
 
 export const FileItem: React.FC<FileItemProps> = ({
   file,
+  projectPath,
   onStage,
   onUnstage,
   onDiscard,
@@ -52,24 +55,16 @@ export const FileItem: React.FC<FileItemProps> = ({
 
   const statusLetter = getStatusLetter(file.status);
 
-  // Get relative path for display (remove leading ./ if present)
-  const displayPath = file.path.startsWith('./')
-    ? file.path.slice(2)
-    : file.path;
+  // Get path relative to the project root for display
+  const displayPath = path.relative(projectPath, file.path);
 
   // Split path into directory and filename
-  const pathParts = displayPath.split('/');
-  const fileName = pathParts.pop() || '';
+  const fileName = path.basename(displayPath);
 
-  // Create short directory path (show only parent directory if nested)
-  let shortDirectory = '';
-  if (pathParts.length > 0) {
-    if (pathParts.length > 2) {
-      shortDirectory = `.../${pathParts[pathParts.length - 1]}`;
-    } else {
-      shortDirectory = pathParts.join('/');
-    }
-  }
+  // Create short directory path (show only parent directory, none for root files)
+  const parentDir = path.dirname(displayPath);
+  const shortDirectory =
+    parentDir === '.' ? '' : `...${path.sep}${path.basename(parentDir)}`;
 
   const handleStageToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -119,67 +114,69 @@ export const FileItem: React.FC<FileItemProps> = ({
       </Box>
 
       {/* File Name and Path */}
-      <Box
-        sx={{
-          flex: 1,
-          minWidth: 0,
-          mr: 1,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 0.5,
-        }}
-      >
-        {/* File Name (Primary) */}
-        <Typography
-          variant="body2"
+      <Tooltip title={displayPath} placement="top" enterDelay={500}>
+        <Box
           sx={{
-            fontSize: '14px',
-            color: 'text.primary',
-            fontWeight: 500,
-            flexShrink: 1,
+            flex: 1,
             minWidth: 0,
-            maxWidth: '100%',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            textDecoration:
-              file.status === 'deleted' || file.status === 'staged-deleted'
-                ? 'line-through'
-                : 'none',
-            opacity:
-              file.status === 'deleted' || file.status === 'staged-deleted'
-                ? 0.6
-                : 1,
+            mr: 1,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.5,
           }}
         >
-          {fileName}
-        </Typography>
-
-        {/* Short Directory Path (Secondary) */}
-        {shortDirectory && (
+          {/* File Name (Primary) */}
           <Typography
             variant="body2"
             sx={{
-              fontSize: '11px',
-              color: 'text.secondary',
-              opacity:
-                file.status === 'deleted' || file.status === 'staged-deleted'
-                  ? 0.4
-                  : 0.7,
+              fontSize: '14px',
+              color: 'text.primary',
+              fontWeight: 500,
+              flexShrink: 1,
+              minWidth: 0,
+              maxWidth: '100%',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
-              minWidth: 0,
               textDecoration:
                 file.status === 'deleted' || file.status === 'staged-deleted'
                   ? 'line-through'
                   : 'none',
+              opacity:
+                file.status === 'deleted' || file.status === 'staged-deleted'
+                  ? 0.6
+                  : 1,
             }}
           >
-            {shortDirectory}
+            {fileName}
           </Typography>
-        )}
-      </Box>
+
+          {/* Short Directory Path (Secondary) */}
+          {shortDirectory && (
+            <Typography
+              variant="body2"
+              sx={{
+                fontSize: '11px',
+                color: 'text.secondary',
+                opacity:
+                  file.status === 'deleted' || file.status === 'staged-deleted'
+                    ? 0.4
+                    : 0.7,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                minWidth: 0,
+                textDecoration:
+                  file.status === 'deleted' || file.status === 'staged-deleted'
+                    ? 'line-through'
+                    : 'none',
+              }}
+            >
+              {shortDirectory}
+            </Typography>
+          )}
+        </Box>
+      </Tooltip>
 
       {/* Action Buttons - Show on Hover */}
       {isHovered && (

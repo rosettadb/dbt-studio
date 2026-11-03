@@ -99,6 +99,10 @@ export interface UseSqlTabManagerReturn {
   }) => Promise<SqlTabId>;
   switchTab: (tabId: SqlTabId) => void;
   closeTab: (tabId: SqlTabId) => void;
+  closeTabsToLeft: (tabId: SqlTabId) => void;
+  closeTabsToRight: (tabId: SqlTabId) => void;
+  closeOtherTabs: (tabId: SqlTabId) => void;
+  closeAllTabs: () => void;
   updateTabQuery: (tabId: SqlTabId, query: string) => void;
   updateTabResults: (tabId: SqlTabId, results: any) => void;
   setTabLoading: (tabId: SqlTabId, isLoading: boolean) => void;
@@ -187,6 +191,55 @@ const useSqlTabManager = (): UseSqlTabManagerReturn => {
     },
     [performClose],
   );
+
+  const closeTabsToLeft = React.useCallback(
+    (tabId: SqlTabId) => {
+      setTabs((current) => {
+        const index = current.findIndex((t) => t.id === tabId);
+        if (index <= 0) return current;
+        const toRemove = current.slice(0, index);
+        toRemove.forEach((t) => QueryResultStore.clear(t.id));
+        const remaining = current.slice(index);
+        if (activeTabId && toRemove.some((t) => t.id === activeTabId)) {
+          setActiveTabId(tabId);
+        }
+        return remaining;
+      });
+    },
+    [activeTabId],
+  );
+
+  const closeTabsToRight = React.useCallback(
+    (tabId: SqlTabId) => {
+      setTabs((current) => {
+        const index = current.findIndex((t) => t.id === tabId);
+        if (index === -1 || index === current.length - 1) return current;
+        const toRemove = current.slice(index + 1);
+        toRemove.forEach((t) => QueryResultStore.clear(t.id));
+        const remaining = current.slice(0, index + 1);
+        if (activeTabId && toRemove.some((t) => t.id === activeTabId)) {
+          setActiveTabId(tabId);
+        }
+        return remaining;
+      });
+    },
+    [activeTabId],
+  );
+
+  const closeOtherTabs = React.useCallback((tabId: SqlTabId) => {
+    setTabs((current) => {
+      const toRemove = current.filter((t) => t.id !== tabId);
+      toRemove.forEach((t) => QueryResultStore.clear(t.id));
+      return current.filter((t) => t.id === tabId);
+    });
+    setActiveTabId(tabId);
+  }, []);
+
+  const closeAllTabs = React.useCallback(() => {
+    tabsRef.current.forEach((t) => QueryResultStore.clear(t.id));
+    setTabs([]);
+    setActiveTabId(null);
+  }, []);
 
   const updateTab = React.useCallback(
     (tabId: SqlTabId, updater: (tab: SqlTabState) => SqlTabState) => {
@@ -385,6 +438,10 @@ const useSqlTabManager = (): UseSqlTabManagerReturn => {
     openConnectionTab,
     switchTab,
     closeTab,
+    closeTabsToLeft,
+    closeTabsToRight,
+    closeOtherTabs,
+    closeAllTabs,
     updateTabQuery,
     updateTabResults,
     setTabLoading,

@@ -118,6 +118,8 @@ import {
   getSecondBrainOperationTitle,
   getSecondBrainProgressMessage,
   getSecondBrainProviderTooltip,
+  getRunningSecondBrainOperation,
+  getSecondBrainTerminalPhase,
   isCurrentSecondBrainProgress,
   isSecondBrainTerminalStage,
   SECOND_BRAIN_GENERATION_HELPERS,
@@ -143,6 +145,8 @@ type SecondBrainOperationDialogState = {
   result?: SecondBrainRefreshResult;
   error?: string;
   stopError?: string;
+  /** Started outside this tab; this tab only follows its progress. */
+  adopted?: boolean;
 };
 
 const getOperationPrimaryMessage = (
@@ -160,6 +164,19 @@ const getOperationPrimaryMessage = (
     operation?.phase === 'stopping',
   );
 };
+
+// A followed build has no local promise or error to read; its final progress
+// event decides how the dialog ends.
+const getAdoptedEndState = (
+  phase: 'succeeded' | 'cancelled' | 'failed',
+): Pick<SecondBrainOperationDialogState, 'phase' | 'progress' | 'error'> => ({
+  phase,
+  progress: undefined,
+  error:
+    phase === 'failed'
+      ? 'The Agent Memory build failed. The error notification has the reason.'
+      : undefined,
+});
 
 const getOperationResultMessage = (
   result?: SecondBrainRefreshResult,
@@ -316,6 +333,45 @@ export const SecondBrainTab: React.FC = () => {
     operationDialog?.phase === 'running' ||
     operationDialog?.phase === 'stopping';
 
+  // Follow a build started elsewhere (the AI panel's memory prompt) so the
+  // user can watch or stop it here. Status can be stale right after a local
+  // build ends, so adopt only from a fresh read.
+  const runningElsewhere = Boolean(
+    !operationDialog && getRunningSecondBrainOperation(status),
+  );
+  React.useEffect(() => {
+    if (!runningElsewhere) return undefined;
+    let ignore = false;
+    const followRunningBuild = async () => {
+      const { data } = await statusQuery.refetch();
+      const running = getRunningSecondBrainOperation(data);
+      if (ignore || !running) return;
+      // The final event can land before this tab listens for progress, so
+      // the snapshot may already hold it.
+      const endedPhase = running.progress
+        ? getSecondBrainTerminalPhase(running.progress.stage)
+        : null;
+      setOperationDialog(
+        (current) =>
+          current ?? {
+            ...running,
+            phase: 'running',
+            providerName: activeProvider?.name ?? '',
+            adopted: true,
+            ...(endedPhase && getAdoptedEndState(endedPhase)),
+          },
+      );
+      if (endedPhase) {
+        statusQuery.refetch();
+        treeQuery.refetch();
+      }
+    };
+    followRunningBuild().catch(() => undefined);
+    return () => {
+      ignore = true;
+    };
+  }, [runningElsewhere]);
+
   React.useEffect(() => {
     if (!operationDialog || !operationActive || !progress) return;
     if (
@@ -346,6 +402,34 @@ export const SecondBrainTab: React.FC = () => {
       };
     });
   }, [
+    operationActive,
+    operationDialog?.operationId,
+    operationDialog?.startedAt,
+    progress,
+  ]);
+
+  // A followed build has no local promise; its final progress event ends it.
+  React.useEffect(() => {
+    if (!operationDialog?.adopted || !operationActive || !progress) return;
+    const phase = getSecondBrainTerminalPhase(progress.stage);
+    if (
+      !phase ||
+      !isCurrentSecondBrainProgress(
+        progress,
+        operationDialog.operationId,
+        operationDialog.startedAt,
+      )
+    ) {
+      return;
+    }
+    setOperationDialog((current) =>
+      current ? { ...current, ...getAdoptedEndState(phase) } : current,
+    );
+    clearProgress();
+    statusQuery.refetch();
+    treeQuery.refetch();
+  }, [
+    operationDialog?.adopted,
     operationActive,
     operationDialog?.operationId,
     operationDialog?.startedAt,
@@ -404,15 +488,50 @@ export const SecondBrainTab: React.FC = () => {
     isApplyingExternalContentRef.current = false;
   }, [model, revisionQuery.data, selectedRevisionId]);
 
+  // The tree query is disabled once memory is gone, but keeps its old data.
+  const memoryPages = status?.initialized ? treeQuery.data : undefined;
+
+  // A new-page draft owns the editor, so revisions and restore must not
+  // target an auto-selected page behind it.
   React.useEffect(() => {
-    if (!selected && treeQuery.data?.length) {
+    if (!selected && !newPageId && memoryPages?.length) {
       setSelected(
-        treeQuery.data.find(
-          (page) => page.pageId === AGENT_MEMORY_ENTRY_FILE,
-        ) ?? treeQuery.data[0],
+        memoryPages.find((page) => page.pageId === AGENT_MEMORY_ENTRY_FILE) ??
+          memoryPages[0],
       );
     }
-  }, [selected, treeQuery.data]);
+  }, [selected, newPageId, memoryPages]);
+
+  // Memory can be deleted under this tab (Clear and disable, or a failed first
+  // build rolling back). Drop the selection once its page is gone.
+  React.useEffect(() => {
+    if (!selected || treeQuery.isFetching || statusQuery.isFetching) return;
+    const pageStillExists = memoryPages?.some(
+      (page) => page.pageId === selected.pageId,
+    );
+    if (pageStillExists) return;
+    setSelected(null);
+    setSelectedRevisionId(undefined);
+    if (dirtyRef.current) {
+      // Keep unsaved edits as a new-page draft so saving recreates the page.
+      setNewPageId(selected.pageId);
+      savedContentRef.current = '';
+      if (model.getValue() !== draft) {
+        isApplyingExternalContentRef.current = true;
+        model.setValue(draft);
+        isApplyingExternalContentRef.current = false;
+      }
+      toast.warning(
+        `${selected.pageId} was removed from Agent Memory. Your unsaved draft is kept; save it to create the page again.`,
+      );
+      return;
+    }
+    setDraft('');
+    savedContentRef.current = '';
+    dirtyRef.current = false;
+    setDirty(false);
+    model.setValue('');
+  }, [selected, memoryPages, treeQuery.isFetching, statusQuery.isFetching]);
 
   const selectPage = (item: SecondBrainTreeItem) => {
     if (
@@ -473,12 +592,35 @@ export const SecondBrainTab: React.FC = () => {
   const handleSave = async () => {
     const pageId = newPageId ?? selected?.pageId;
     if (!pageId || selected?.archived || selectedRevisionId) return;
+    const save = (expectedHash?: string) =>
+      writePage.mutateAsync({ pageId, content: draft, expectedHash });
+    // A new or recovered draft can target a page that exists again. Overwrite
+    // it only after the user agrees; otherwise keep the draft unsaved.
+    const saveNewDraft = async () => {
+      try {
+        return await save();
+      } catch (error) {
+        const { code, details } = error as Error & {
+          code?: string;
+          details?: { currentHash?: string };
+        };
+        const currentHash = details?.currentHash;
+        if (code !== 'CONFLICT' || !currentHash) throw error;
+        if (
+          !window.confirm(
+            `${pageId} already exists in Agent Memory (current hash ${currentHash.slice(0, 12)}). Overwrite it with your draft?\n\nChoose Cancel to keep your draft unsaved.`,
+          )
+        ) {
+          return null;
+        }
+        return save(currentHash);
+      }
+    };
     try {
-      const saved = await writePage.mutateAsync({
-        pageId,
-        content: draft,
-        expectedHash: newPageId ? undefined : pageQuery.data?.hash,
-      });
+      const saved = newPageId
+        ? await saveNewDraft()
+        : await save(pageQuery.data?.hash);
+      if (!saved) return;
       savedContentRef.current = saved.content;
       dirtyRef.current = false;
       setDraft(saved.content);
