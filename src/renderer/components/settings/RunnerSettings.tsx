@@ -83,6 +83,10 @@ const MANUAL_INSTALL_HELP: Partial<
   },
 };
 
+// Versions shown before and after "Show older versions" is clicked.
+const LATEST_RUNNER_VERSIONS_SHOWN = 4;
+const RUNNER_VERSIONS_SHOWN_WITH_OLDER = 10;
+
 interface RunnerSettingsProps {
   settings: SettingsType;
 }
@@ -95,6 +99,7 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
   const [installingVersion, setInstallingVersion] = useState<string | null>(
     null,
   );
+  const [showOlderVersions, setShowOlderVersions] = useState(false);
   const [showUninstallConfirmation, setShowUninstallConfirmation] =
     useState(false);
   const [showKisqlUninstallConfirmation, setShowKisqlUninstallConfirmation] =
@@ -236,6 +241,16 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
     return 'Install';
   };
 
+  const availableVersions = versionInfo?.availableVersions ?? [];
+  const shownVersions = availableVersions.slice(
+    0,
+    showOlderVersions
+      ? RUNNER_VERSIONS_SHOWN_WITH_OLDER
+      : LATEST_RUNNER_VERSIONS_SHOWN,
+  );
+  const hasOlderVersions =
+    availableVersions.length > LATEST_RUNNER_VERSIONS_SHOWN;
+
   return (
     <SettingsStack>
       <SettingsSection
@@ -281,13 +296,13 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
             }
           />
         )}
-        {versionInfo?.availableVersions.slice(0, 10).map((version) => (
+        {shownVersions.map((version) => (
           <SettingsRow
             key={version.version}
             label={
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 {version.version}
-                {version.version === versionInfo.latestStable && (
+                {version.version === versionInfo?.latestStable && (
                   <Chip label="Latest" size="small" variant="outlined" />
                 )}
               </Box>
@@ -316,7 +331,7 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
               variant="outlined"
               onClick={() => handleInstallVersion(version.version)}
               disabled={
-                version.version === versionInfo.currentVersion ||
+                version.version === versionInfo?.currentVersion ||
                 installingVersion === version.version ||
                 installVersion.isLoading ||
                 isInstallTaskActive
@@ -333,6 +348,16 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
             </Button>
           </SettingsRow>
         ))}
+        {hasOlderVersions && (
+          <Box sx={{ px: 1.75, py: 0.75, textAlign: 'center' }}>
+            <Button
+              size="small"
+              onClick={() => setShowOlderVersions((value) => !value)}
+            >
+              {showOlderVersions ? 'Show fewer' : 'Show older versions'}
+            </Button>
+          </Box>
+        )}
       </SettingsSection>
 
       <SettingsSection
