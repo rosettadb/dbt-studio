@@ -107,7 +107,8 @@ export const generateMonacoCompletions = (
 
   const uniqueSchemas = new Set<string>();
   tables.forEach((table) => {
-    uniqueSchemas.add(table.schema);
+    // An unnamed default schema is never written in SQL.
+    if (table.schema) uniqueSchemas.add(table.schema);
   });
 
   uniqueSchemas.forEach((schema) => {
@@ -130,11 +131,12 @@ export const generateMonacoCompletions = (
         label: name,
         kind: MonacoCompletionItemKind.Struct,
         insertText: name,
-        detail: `Table in ${schema}`,
+        detail: schema ? `Table in ${schema}` : 'Table',
       });
     }
 
-    const qualifiedTableName = `${schema}.${name}`;
+    const prefix = schema ? `${schema}.` : '';
+    const qualifiedTableName = `${prefix}${name}`;
     if (!seenLabels.has(qualifiedTableName)) {
       seenLabels.add(qualifiedTableName);
       completions.push({
@@ -156,7 +158,7 @@ export const generateMonacoCompletions = (
         });
       }
 
-      const fullyQualifiedColumn = `${schema}.${name}.${column.name}`;
+      const fullyQualifiedColumn = `${prefix}${name}.${column.name}`;
       if (!seenLabels.has(fullyQualifiedColumn)) {
         seenLabels.add(fullyQualifiedColumn);
         completions.push({

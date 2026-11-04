@@ -9,7 +9,7 @@ import {
   FileStatuses,
   TreeContextMenuState,
 } from './types';
-import { TreeNode } from './TreeNode';
+import { TREE_INDENT, TreeNode } from './TreeNode';
 import { TreeContextMenu } from './TreeContextMenu';
 import { ExternalDropZone } from './ExternalDropZone';
 import { MoveConfirmDialog } from './MoveConfirmDialog';
@@ -487,7 +487,7 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
             openByDefault={false}
             width="100%"
             height={containerHeight}
-            indent={10}
+            indent={TREE_INDENT}
             rowHeight={22}
             overscanCount={10}
             onSelect={handleSelect}

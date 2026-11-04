@@ -79,7 +79,15 @@ export const PackagesDialog: React.FC<PackagesDialogProps> = ({
     >
       <DialogTitle>Packages</DialogTitle>
       <DialogContent>
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', mb: 1 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            gap: 1,
+            alignItems: 'flex-start',
+            pt: '16px',
+            mb: 1,
+          }}
+        >
           <TextField
             size="small"
             fullWidth

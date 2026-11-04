@@ -122,6 +122,37 @@ describe('SchemaTreeViewerWithSchema', () => {
     expect(dataTransfer.effectAllowed).toBe('copy');
   });
 
+  it('labels an unnamed default schema and drags its tables unqualified', () => {
+    renderTree({
+      type: 'spanner',
+      draggable: true,
+      schema: [{ ...tables[0], name: 'Albums', schema: '' }],
+    });
+    expect(screen.getByTestId('schema-tree-schema')).toHaveTextContent(
+      'default',
+    );
+    expandSchema();
+
+    const dataTransfer = new FakeDataTransfer();
+    fireEvent.dragStart(screen.getByTestId('schema-tree-table'), {
+      dataTransfer,
+    });
+    expect(dataTransfer.getData('text/plain')).toBe('Albums');
+  });
+
+  it('keeps default-schema tables when filtering for "default"', () => {
+    renderTree({
+      type: 'spanner',
+      filter: 'default',
+      schema: [{ ...tables[0], name: 'Albums', schema: '' }],
+    });
+    expandSchema();
+    expect(screen.getByTestId('schema-tree-table')).toHaveAttribute(
+      'data-table',
+      'Albums',
+    );
+  });
+
   it('does not make the database row draggable', () => {
     renderTree({ draggable: true });
     expect(screen.getByTestId('schema-tree-database')).not.toHaveAttribute(

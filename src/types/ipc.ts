@@ -110,6 +110,7 @@ export type ConnectorChannels =
   | 'connector:remove'
   | 'connector:test'
   | 'connector:oracleWalletAliases'
+  | 'connector:duckdbCreateDatabase'
   | 'connector:generateProfiles'
   | 'connector:generateRosetta'
   | 'connector:validate'

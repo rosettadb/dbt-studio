@@ -399,6 +399,19 @@ export const useRevokeSnowflakeToken = () => {
   });
 };
 
+export const useCreateDuckDBDatabase = (
+  customOptions?: UseMutationOptions<
+    { path: string; created: boolean } | null,
+    CustomError,
+    string
+  >,
+) =>
+  useMutation<{ path: string; created: boolean } | null, CustomError, string>({
+    mutationFn: (defaultFileName: string) =>
+      connectorsServices.createDuckDBDatabase(defaultFileName),
+    ...customOptions,
+  });
+
 export const useOracleWalletAliases = (walletDir?: string) =>
   useQuery({
     queryKey: ['oracle-wallet-aliases', walletDir],

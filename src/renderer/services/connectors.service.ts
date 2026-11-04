@@ -119,15 +119,16 @@ export const getConnectionById = async (
 };
 
 /**
- * Extract schema directly from a connection (not project-based)
+ * Extract schema directly from a connection (not project-based).
+ * `schemas` lists every schema, also empty ones; only DuckDB sends it.
  */
 export const extractSchemaFromConnection = async (
   connectionId: string,
-): Promise<{ tables: any[]; error?: string }> => {
-  const { data } = await client.post<string, { tables: any[]; error?: string }>(
-    'connector:extractSchema',
-    connectionId,
-  );
+): Promise<{ tables: any[]; schemas?: string[]; error?: string }> => {
+  const { data } = await client.post<
+    string,
+    { tables: any[]; schemas?: string[]; error?: string }
+  >('connector:extractSchema', connectionId);
   return data;
 };
 
@@ -241,5 +242,35 @@ export const oracleWalletAliases = async (
     'connector:oracleWalletAliases',
     walletDir,
   );
+  return data;
+};
+
+/**
+ * Asks where to save a new DuckDB database, then creates it. Resolves to
+ * null when the user cancels the dialog.
+ */
+export const createDuckDBDatabase = async (
+  defaultFileName: string,
+): Promise<{ path: string; created: boolean } | null> => {
+  const { data: dialog } = await client.post<
+    {
+      title: string;
+      defaultPath: string;
+      buttonLabel: string;
+      filters: { name: string; extensions: string[] }[];
+    },
+    { canceled: boolean; filePath?: string }
+  >('dialog:showSaveDialog', {
+    title: 'Create DuckDB Database',
+    defaultPath: defaultFileName,
+    buttonLabel: 'Create',
+    filters: [{ name: 'DuckDB Database', extensions: ['duckdb'] }],
+  });
+  if (dialog.canceled || !dialog.filePath) return null;
+
+  const { data } = await client.post<
+    string,
+    { path: string; created: boolean }
+  >('connector:duckdbCreateDatabase', dialog.filePath);
   return data;
 };

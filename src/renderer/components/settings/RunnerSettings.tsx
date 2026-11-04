@@ -83,6 +83,9 @@ const MANUAL_INSTALL_HELP: Partial<
   },
 };
 
+// Versions shown before "Show older versions" is clicked.
+const LATEST_RUNNER_VERSIONS_SHOWN = 4;
+
 interface RunnerSettingsProps {
   settings: SettingsType;
 }
@@ -95,6 +98,7 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
   const [installingVersion, setInstallingVersion] = useState<string | null>(
     null,
   );
+  const [showOlderVersions, setShowOlderVersions] = useState(false);
   const [showUninstallConfirmation, setShowUninstallConfirmation] =
     useState(false);
   const [showKisqlUninstallConfirmation, setShowKisqlUninstallConfirmation] =
@@ -236,6 +240,13 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
     return 'Install';
   };
 
+  const availableVersions = versionInfo?.availableVersions ?? [];
+  const shownVersions = showOlderVersions
+    ? availableVersions
+    : availableVersions.slice(0, LATEST_RUNNER_VERSIONS_SHOWN);
+  const hasOlderVersions =
+    availableVersions.length > LATEST_RUNNER_VERSIONS_SHOWN;
+
   return (
     <SettingsStack>
       <SettingsSection
@@ -281,58 +292,78 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
             }
           />
         )}
-        {versionInfo?.availableVersions.slice(0, 10).map((version) => (
-          <SettingsRow
-            key={version.version}
-            label={
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                {version.version}
-                {version.version === versionInfo.latestStable && (
-                  <Chip label="Latest" size="small" variant="outlined" />
-                )}
-              </Box>
-            }
-            description={`Released: ${new Date(
-              version.releaseDate,
-            ).toLocaleDateString()}`}
+        {shownVersions.length > 0 && (
+          <Box
+            sx={(theme) => ({
+              maxHeight: showOlderVersions ? 320 : 'none',
+              overflowY: 'auto',
+              '& > * + *': { borderTop: `1px solid ${theme.palette.divider}` },
+            })}
           >
-            {version.releaseNotes && (
-              <Tooltip title="View release notes">
-                <IconButton
+            {shownVersions.map((version) => (
+              <SettingsRow
+                key={version.version}
+                label={
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    {version.version}
+                    {version.version === versionInfo?.latestStable && (
+                      <Chip label="Latest" size="small" variant="outlined" />
+                    )}
+                  </Box>
+                }
+                description={`Released: ${new Date(
+                  version.releaseDate,
+                ).toLocaleDateString()}`}
+              >
+                {version.releaseNotes && (
+                  <Tooltip title="View release notes">
+                    <IconButton
+                      size="small"
+                      onClick={() =>
+                        window.open(
+                          `https://github.com/rosettadb/dbt-studio/releases/tag/${version.version}`,
+                          '_blank',
+                        )
+                      }
+                    >
+                      <Info fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
+                <Button
                   size="small"
-                  onClick={() =>
-                    window.open(
-                      `https://github.com/rosettadb/dbt-studio/releases/tag/${version.version}`,
-                      '_blank',
+                  variant="outlined"
+                  onClick={() => handleInstallVersion(version.version)}
+                  disabled={
+                    version.version === versionInfo?.currentVersion ||
+                    installingVersion === version.version ||
+                    installVersion.isLoading ||
+                    isInstallTaskActive
+                  }
+                  startIcon={
+                    installingVersion === version.version ? (
+                      <CircularProgress size={14} />
+                    ) : (
+                      <Download />
                     )
                   }
                 >
-                  <Info fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            )}
+                  {getButtonText(version)}
+                </Button>
+              </SettingsRow>
+            ))}
+          </Box>
+        )}
+        {hasOlderVersions && (
+          <Box sx={{ px: 1.75, py: 0.75, textAlign: 'center' }}>
             <Button
               size="small"
-              variant="outlined"
-              onClick={() => handleInstallVersion(version.version)}
-              disabled={
-                version.version === versionInfo.currentVersion ||
-                installingVersion === version.version ||
-                installVersion.isLoading ||
-                isInstallTaskActive
-              }
-              startIcon={
-                installingVersion === version.version ? (
-                  <CircularProgress size={14} />
-                ) : (
-                  <Download />
-                )
-              }
+              onClick={() => setShowOlderVersions((value) => !value)}
             >
-              {getButtonText(version)}
+              {showOlderVersions ? 'Show fewer' : 'Show older versions'}
             </Button>
-          </SettingsRow>
-        ))}
+          </Box>
+        )}
       </SettingsSection>
 
       <SettingsSection

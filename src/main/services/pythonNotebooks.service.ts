@@ -23,6 +23,7 @@ import ConnectorsService from './connectors.service';
 import DuckLakeService from './duckLake.service';
 import NotebookEnvService from './notebookEnv.service';
 import NotebookKernelService from './notebookKernel.service';
+import { getConnector } from '../../connections/registry.main';
 import { DATAFRAME_MIME, SQL_FALLBACK_MIME } from '../../types/pythonNotebooks';
 import type {
   DataFrameCellValue,
@@ -381,7 +382,8 @@ const SQL_DML_KEYWORD = /\b(?:insert|update|delete|merge)\b/i;
 
 /**
  * Wrap a row-returning statement so the database sends back at most
- * `maxRows` rows: `SELECT * FROM (<query>) AS rs_result LIMIT <maxRows>`.
+ * `maxRows` rows: `SELECT * FROM (<query>) AS rs_result LIMIT <maxRows>`, or
+ * the connection's own `wrap` where LIMIT doesn't apply (Oracle).
  *
  * Only single SELECT / WITH statements are wrapped. Anything else (DDL, DML,
  * SHOW, DESCRIBE, PRAGMA, several statements) is returned unchanged. The
@@ -400,7 +402,15 @@ export function isWrapperRejection(error: string | undefined): boolean {
   return !!error && WRAPPER_REJECTION.test(error);
 }
 
-export function boundSqlQuery(query: string, maxRows: number): string {
+const limitWrap = (body: string, limit: number): string =>
+  // Newlines keep a trailing `-- comment` from swallowing the closing paren.
+  `SELECT * FROM (\n${body}\n) AS rs_result LIMIT ${limit}`;
+
+export function boundSqlQuery(
+  query: string,
+  maxRows: number,
+  wrap: (body: string, limit: number) => string = limitWrap,
+): string {
   let body = query.trim();
   // Drop trailing semicolons and trailing full-line `--` comments.
   let previous = '';
@@ -418,9 +428,7 @@ export function boundSqlQuery(query: string, maxRows: number): string {
   if (/^with\b/i.test(statement) && SQL_DML_KEYWORD.test(statement)) {
     return query;
   }
-  const limit = Math.max(1, Math.floor(maxRows));
-  // Newlines keep a trailing `-- comment` from swallowing the closing paren.
-  return `SELECT * FROM (\n${body}\n) AS rs_result LIMIT ${limit}`;
+  return wrap(body, Math.max(1, Math.floor(maxRows)));
 }
 
 /** A Python string literal holding `value` (JSON escapes are valid in Python). */
@@ -608,6 +616,21 @@ async function runSqlQuery(
     connectionId,
     query,
   }) as Promise<SqlQueryResult>;
+}
+
+/**
+ * The connection's row-cap wrapper where LIMIT doesn't apply (Oracle): the
+ * first page of the same paging SQL the SQL notebook uses.
+ */
+async function rowCapWrapFor(
+  connectionId: string,
+): Promise<((body: string, limit: number) => string) | undefined> {
+  if (connectionId.startsWith('ducklake-')) return undefined;
+  const connection = await ConnectorsService.getConnectionById(connectionId);
+  const paging = getConnector(connection?.connection.type)?.notebookPaging;
+  return paging
+    ? (body, limit) => paging.pagedQuery(body, '', limit, 0)
+    : undefined;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1021,11 +1044,15 @@ export default class PythonNotebooksService {
       return fail(`"${variable}" is not a valid Python variable name`);
     }
 
-    // Fetch one row more than the cap so truncation can be detected without
-    // loading the whole result into the main process.
-    const bounded = boundSqlQuery(query, MAX_SQL_ROWS + 1);
     let result: SqlQueryResult;
     try {
+      // Fetch one row more than the cap so truncation can be detected without
+      // loading the whole result into the main process.
+      const bounded = boundSqlQuery(
+        query,
+        MAX_SQL_ROWS + 1,
+        await rowCapWrapFor(connectionId),
+      );
       result = await runSqlQuery(connectionId, bounded).catch(
         (error): SqlQueryResult => ({
           success: false,
