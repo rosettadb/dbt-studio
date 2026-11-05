@@ -42,12 +42,19 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
   onSubmit,
 }) => {
   const [focused, setFocused] = React.useState(false);
+  // Tracked in state (not read from the editor during render) so programmatic
+  // `value` changes applied in the effect below also hide the placeholder.
+  const [hasText, setHasText] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const tiptapEditor = useEditor({
     extensions: [StarterKit],
     content: value || '',
     editable: !disabled,
+    onCreate: ({ editor }) => {
+      setHasText(editor.getText().length > 0);
+    },
     onUpdate: ({ editor }) => {
+      setHasText(editor.getText().length > 0);
       onChange?.(editor.getHTML());
     },
   });
@@ -59,6 +66,7 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
       value !== tiptapEditor.getHTML()
     ) {
       tiptapEditor.commands.setContent(value);
+      setHasText(tiptapEditor.getText().length > 0);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
@@ -120,7 +128,7 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
       />
-      {placeholder && !tiptapEditor?.getText() && !focused && (
+      {placeholder && !hasText && !focused && (
         <Box
           sx={(theme) => ({
             position: 'absolute',

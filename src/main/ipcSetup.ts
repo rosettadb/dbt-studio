@@ -30,6 +30,7 @@ import {
   registerIcebergDatalakeHandlers,
   registerBackupHandlers,
   registerPythonNotebooksHandlers,
+  registerSpeechHandlers,
 } from './ipcHandlers';
 import { installIpcErrorHandling } from './utils/ipcErrorHandler';
 
@@ -52,6 +53,7 @@ const registerHandlers = (mainWindow: BrowserWindow) => {
   registerLineageHandlers();
   registerNotebooksHandlers();
   registerPythonNotebooksHandlers();
+  registerSpeechHandlers();
   registerLanguageIntelligenceHandlers();
   registerAgentHandlers();
   registerMCPHandlers();
