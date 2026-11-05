@@ -102,4 +102,31 @@ describe('git.ipcHandlers', () => {
     await expect(handler(null, '/tmp/repo')).resolves.toEqual({ ok: true });
     expect(initRepo).toHaveBeenCalledWith('/tmp/repo');
   });
+
+  it('delegates git:projectSummary to gitService.getProjectGitSummary', async () => {
+    const { ipcMain } = await import('electron');
+
+    const summary = { currentBranch: 'main', changedFileCount: 0 };
+    const getProjectGitSummary = jest.fn().mockResolvedValue(summary);
+
+    jest.doMock('../../../../src/main/services', () => ({
+      GitService: jest.fn().mockImplementation(() => ({
+        getProjectGitSummary,
+      })),
+    }));
+
+    const registerGitHandlers = (await import(
+      '../../../../src/main/ipcHandlers/git.ipcHandlers'
+    )).default;
+
+    registerGitHandlers();
+
+    const handler = getHandleHandler(ipcMain, 'git:projectSummary');
+
+    await expect(handler(null, { repoPath: '/tmp/repo' })).resolves.toEqual(
+      summary,
+    );
+    expect(getProjectGitSummary).toHaveBeenCalledWith('/tmp/repo');
+    expect(ipcMain.removeHandler).toHaveBeenCalledWith('git:projectSummary');
+  });
 });
