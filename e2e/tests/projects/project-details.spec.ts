@@ -34,9 +34,13 @@ test.describe('Project Details', () => {
     const window = await openProject(electronApp, PROJECT);
 
     await expect(window.getByRole('tab', { name: 'Explorer' })).toBeVisible();
-    await expect(window.getByRole('tab', { name: 'Search' })).toBeVisible();
     await expect(window.getByRole('tab', { name: /Git/ })).toBeVisible();
     await expect(window.getByRole('tab', { name: 'Database' })).toBeVisible();
+    // Search moved out of the panel into the top bar
+    await expect(window.getByRole('tab', { name: 'Search' })).toHaveCount(0);
+    await expect(
+      window.getByRole('button', { name: 'Search (Ctrl+K)' }),
+    ).toBeVisible();
 
     await expect(
       window.getByText('Please select a file from the explorer on the left!'),
