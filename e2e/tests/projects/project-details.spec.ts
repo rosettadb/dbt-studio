@@ -54,9 +54,10 @@ test.describe('Project Details', () => {
 
     await expect(window.getByTitle(PROJECT).first()).toBeVisible();
     await expect(window.getByTitle('rosetta').first()).toBeVisible();
+    // File search moved out of the explorer into the global search
     await expect(
       window.getByPlaceholder('Search files or folders...'),
-    ).toBeVisible();
+    ).toHaveCount(0);
   });
 
   test('should show the Database tab state for the linked connection', async ({
