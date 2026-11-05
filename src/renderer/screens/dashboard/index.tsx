@@ -25,6 +25,7 @@ import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import StorageOutlinedIcon from '@mui/icons-material/StorageOutlined';
 
 import { icons, rosettaIcon } from '../../../../assets';
+import { connectionIcon } from '../../../connections/registry.renderer';
 import { ReactComponent as RouteIcon } from '../../assets/icons/lucide/route.svg';
 import { useAppContext } from '../../hooks';
 import { QuickStartTour, hasSeenTour, markTourSeen } from '../../components';
@@ -88,6 +89,22 @@ const CloudExplorerCardIcon: React.FC = () => (
 const SqlEditorCardIcon: React.FC = () => (
   <Terminal color="primary" sx={{ fontSize: 28 }} />
 );
+
+const ProjectTypeIcon: React.FC<{ connectionType?: string }> = ({
+  connectionType,
+}) => {
+  const connectionIconSrc = connectionIcon(connectionType);
+  if (!connectionIconSrc) {
+    return <FolderSpecialIcon fontSize="small" />;
+  }
+  return (
+    <img
+      src={connectionIconSrc}
+      alt={connectionType}
+      style={{ width: 20, height: 20, objectFit: 'contain' }}
+    />
+  );
+};
 
 const features = [
   {
@@ -507,7 +524,7 @@ const Dashboard: React.FC = () => {
                     <ListItemIcon
                       sx={{ minWidth: 36, color: theme.palette.primary.main }}
                     >
-                      <FolderSpecialIcon fontSize="small" />
+                      <ProjectTypeIcon connectionType={p.connection?.type} />
                     </ListItemIcon>
                     <ListItemText
                       primary={p.name}
