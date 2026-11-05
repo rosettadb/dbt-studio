@@ -16,13 +16,13 @@ import {
   Typography,
   useTheme,
 } from '@mui/material';
-import FolderSpecialIcon from '@mui/icons-material/FolderSpecial';
 import Terminal from '@mui/icons-material/Terminal';
 import AutoStoriesIcon from '@mui/icons-material/AutoStories';
 import AddIcon from '@mui/icons-material/Add';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import StorageOutlinedIcon from '@mui/icons-material/StorageOutlined';
+import DatabaseIcon from '@mui/icons-material/Storage';
 
 import { icons, rosettaIcon } from '../../../../assets';
 import { connectionIcon } from '../../../connections/registry.renderer';
@@ -95,7 +95,7 @@ const ProjectTypeIcon: React.FC<{ connectionType?: string }> = ({
 }) => {
   const connectionIconSrc = connectionIcon(connectionType);
   if (!connectionIconSrc) {
-    return <FolderSpecialIcon fontSize="small" />;
+    return <DatabaseIcon fontSize="small" />;
   }
   return (
     <img
