@@ -2,7 +2,7 @@ import React from 'react';
 import SplitPane, { Pane } from 'split-pane-react';
 import 'split-pane-react/esm/themes/default.css';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { Badge, Box, Tab, Tabs } from '@mui/material';
+import { Badge, Box, Tab, Tabs, Tooltip } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import {
   Loader,
@@ -58,6 +58,23 @@ const VerticalSash = (_: number, active: boolean) => (
 
 // Minimum width for the chat panel — must be wide enough for the chat UI
 const CHAT_MIN_WIDTH = 280;
+
+// Fills the whole tab so its name shows when hovering anywhere on the tab
+const renderIconOnlyTabContent = (tabName: string, icon: React.ReactNode) => (
+  <Tooltip title={tabName}>
+    <Box
+      sx={{
+        width: '100%',
+        height: 34,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      {icon}
+    </Box>
+  </Tooltip>
+);
 
 // Layout only: sidebar strip, tab strip, the active file view, the bottom
 // panels and the chat pane. Which component renders a file, and which panel
@@ -143,34 +160,30 @@ const ProjectDetails: React.FC = () => {
                 minHeight: 34,
                 '& .MuiTab-root': {
                   minHeight: 34,
-                  fontSize: '0.7rem',
-                  textTransform: 'none',
                   py: 0,
                   minWidth: 0,
                   px: 0.5,
-                },
-                '& .MuiTab-iconWrapper': {
-                  marginRight: '4px !important',
-                  marginBottom: '0 !important',
                 },
               }}
             >
               <Tab
                 value="explorer"
-                icon={
+                aria-label="Explorer"
+                icon={renderIconOnlyTabContent(
+                  'Explorer',
                   <Icon
                     src={icons.folder}
                     width={15}
                     height={15}
                     color={sidebarIconColor('explorer')}
-                  />
-                }
-                iconPosition="start"
-                label="Explorer"
+                  />,
+                )}
               />
               <Tab
                 value="scm"
-                icon={
+                aria-label="Git"
+                icon={renderIconOnlyTabContent(
+                  'Git',
                   <Badge
                     badgeContent={statuses.length}
                     color="primary"
@@ -192,14 +205,14 @@ const ProjectDetails: React.FC = () => {
                       height={15}
                       color={sidebarIconColor('scm')}
                     />
-                  </Badge>
-                }
-                iconPosition="start"
-                label="Git"
+                  </Badge>,
+                )}
               />
               <Tab
                 value="connections"
-                icon={
+                aria-label="Database"
+                icon={renderIconOnlyTabContent(
+                  'Database',
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
@@ -214,10 +227,8 @@ const ProjectDetails: React.FC = () => {
                       strokeLinejoin="round"
                       d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125"
                     />
-                  </svg>
-                }
-                iconPosition="start"
-                label="Database"
+                  </svg>,
+                )}
               />
             </Tabs>
           </Box>
