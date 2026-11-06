@@ -1209,7 +1209,7 @@ export const IcebergConnectionWizard: React.FC<
         <Typography variant="subtitle1" fontWeight={600}>
           Review &amp; Confirm
         </Typography>
-        <Paper variant="outlined" sx={{ p: 2 }}>
+        <Paper variant="outlined" sx={{ borderRadius: 2, p: 2 }}>
           <List dense disablePadding>
             <ListItem disableGutters>
               <ListItemText primary="Name" secondary={data.basics.name} />

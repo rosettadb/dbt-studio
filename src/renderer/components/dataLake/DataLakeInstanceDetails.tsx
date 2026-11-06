@@ -18,13 +18,10 @@ import {
   DialogContent,
   DialogActions,
   Paper,
-  Card,
-  CardContent,
   LinearProgress,
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
   TextField,
@@ -46,13 +43,23 @@ import {
   Security,
   Speed,
   Memory,
-  Refresh,
   Search,
   Close,
+  Cable,
+  History,
+  Timeline,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import moment from 'moment';
 import { DataLakeTablesView } from './DataLakeTablesView';
+import {
+  DataLakePageHeader,
+  DataLakeTableContainer,
+  dataLakeContentSx,
+  dataLakeTabsSx,
+  dataLakeDialogSx,
+} from './DataLakeLayout';
+import { SettingsRefreshButton } from '../settings/SettingsLayout';
 import {
   databaseIcons,
   cloudStorageImages,
@@ -252,7 +259,7 @@ export const DataLakeInstanceDetails: React.FC<
   };
 
   const renderOverviewTab = () => (
-    <Box sx={{ mt: 2 }}>
+    <Box>
       <Grid container spacing={3}>
         {/* Status Card */}
         <Grid item xs={12} md={6}>
@@ -312,6 +319,7 @@ export const DataLakeInstanceDetails: React.FC<
               size="small"
               onClick={handleTestConnection}
               disabled={isLoading || testConnectionMutation.isLoading}
+              startIcon={<Cable />}
               sx={{
                 position: 'relative',
                 paddingRight: '32px',
@@ -460,7 +468,7 @@ export const DataLakeInstanceDetails: React.FC<
         {/* Statistics */}
         {instance.stats && (
           <Grid item xs={12}>
-            <Paper sx={{ p: 2 }}>
+            <Paper variant="outlined" sx={{ borderRadius: 2, p: 2 }}>
               <Typography
                 variant="h6"
                 gutterBottom
@@ -472,7 +480,11 @@ export const DataLakeInstanceDetails: React.FC<
               <Grid container spacing={2}>
                 <Grid item xs={6} sm={3}>
                   <Box sx={{ textAlign: 'center' }}>
-                    <Typography variant="h4" color="primary">
+                    <Typography
+                      variant="h6"
+                      color="primary"
+                      sx={{ fontSize: 22, fontWeight: 600 }}
+                    >
                       {instance.stats.tableCount}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
@@ -482,7 +494,11 @@ export const DataLakeInstanceDetails: React.FC<
                 </Grid>
                 <Grid item xs={6} sm={3}>
                   <Box sx={{ textAlign: 'center' }}>
-                    <Typography variant="h4" color="primary">
+                    <Typography
+                      variant="h6"
+                      color="primary"
+                      sx={{ fontSize: 22, fontWeight: 600 }}
+                    >
                       {formatBytes(instance.stats.totalSize)}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
@@ -492,7 +508,11 @@ export const DataLakeInstanceDetails: React.FC<
                 </Grid>
                 <Grid item xs={6} sm={3}>
                   <Box sx={{ textAlign: 'center' }}>
-                    <Typography variant="h4" color="primary">
+                    <Typography
+                      variant="h6"
+                      color="primary"
+                      sx={{ fontSize: 22, fontWeight: 600 }}
+                    >
                       {instance.stats.queryCount}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
@@ -676,7 +696,7 @@ export const DataLakeInstanceDetails: React.FC<
         {/* Runtime Configuration */}
         {(instance.runtime || instance.runtimeOptions) && (
           <Grid item xs={12}>
-            <Paper sx={{ p: 2 }}>
+            <Paper variant="outlined" sx={{ borderRadius: 2, p: 2 }}>
               <Typography
                 variant="h6"
                 gutterBottom
@@ -788,85 +808,67 @@ export const DataLakeInstanceDetails: React.FC<
   };
 
   return (
-    <Box sx={{ p: 2 }}>
-      {/* Header */}
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          mb: 3,
-        }}
-      >
-        <Box>
-          <Typography
-            variant="h4"
-            component="h1"
-            sx={{
-              fontWeight: 'bold',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1,
-            }}
-          >
-            {getStorageIcon(instance.dataPath)}
-            {instance.name}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            DataLake Instance • {instance.catalog.type.toUpperCase()} Catalog
-          </Typography>
-        </Box>
-
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button
-            variant="outlined"
-            startIcon={<Refresh />}
-            onClick={handleRefresh}
-            disabled={isLoading}
-          >
-            Refresh
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<Edit />}
-            onClick={handleEdit}
-            disabled={isLoading}
-          >
-            Edit
-          </Button>
-          <Button
-            variant="outlined"
-            color="error"
-            startIcon={<Delete />}
-            onClick={() => setDeleteDialogOpen(true)}
-            disabled={isLoading}
-          >
-            Delete
-          </Button>
-        </Box>
-      </Box>
+    <Box sx={dataLakeContentSx}>
+      <DataLakePageHeader
+        icon={getStorageIcon(instance.dataPath)}
+        title={instance.name}
+        description={`DataLake Instance • ${instance.catalog.type.toUpperCase()} Catalog`}
+        actions={
+          <>
+            <SettingsRefreshButton
+              title="Refresh instance"
+              onClick={handleRefresh}
+              disabled={isLoading}
+            />
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<Edit />}
+              onClick={handleEdit}
+              disabled={isLoading}
+            >
+              Edit
+            </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              color="error"
+              startIcon={<Delete />}
+              onClick={() => setDeleteDialogOpen(true)}
+              disabled={isLoading}
+            >
+              Delete
+            </Button>
+          </>
+        }
+      />
 
       {isLoading && <LinearProgress sx={{ mb: 2 }} />}
 
       {/* Tabs */}
-      <Card>
-        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs
-            value={currentTab}
-            onChange={(_, newValue) => setCurrentTab(newValue)}
-          >
-            <Tab label="Tables & Views" />
-            <Tab label="Overview" />
-            <Tab label="History" />
-            <Tab label="Activity" />
-          </Tabs>
-        </Box>
-        <CardContent>
+      <Box>
+        <Tabs
+          value={currentTab}
+          onChange={(_, newValue) => setCurrentTab(newValue)}
+          sx={dataLakeTabsSx}
+        >
+          <Tab
+            icon={<TableChart />}
+            label="Tables & Views"
+            iconPosition="start"
+          />
+          <Tab icon={<Info />} label="Overview" iconPosition="start" />
+          <Tab icon={<History />} label="History" iconPosition="start" />
+          <Tab icon={<Timeline />} label="Activity" iconPosition="start" />
+        </Tabs>
+        <Box>
           {currentTab === 0 && <DataLakeTablesView instanceId={instance.id} />}
           {currentTab === 1 && renderOverviewTab()}
           {currentTab === 2 && (
-            <Box sx={{ mt: 1 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+            <Box>
+              <Box
+                sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1.5 }}
+              >
                 <TextField
                   size="small"
                   placeholder="Search snapshots (ID or changes)..."
@@ -912,7 +914,7 @@ export const DataLakeInstanceDetails: React.FC<
                 snapshotsQuery.data &&
                 snapshotsQuery.data.data.length > 0 && (
                   <>
-                    <TableContainer>
+                    <DataLakeTableContainer>
                       <Table size="small">
                         <TableHead>
                           <TableRow>
@@ -932,7 +934,7 @@ export const DataLakeInstanceDetails: React.FC<
                                   <Chip
                                     label={safeToString(snapshot.snapshotId)}
                                     size="small"
-                                    color="primary"
+                                    variant="outlined"
                                   />
                                 </TableCell>
                                 <TableCell>
@@ -962,7 +964,7 @@ export const DataLakeInstanceDetails: React.FC<
                           )}
                         </TableBody>
                       </Table>
-                    </TableContainer>
+                    </DataLakeTableContainer>
                     <TablePagination
                       component="div"
                       count={snapshotsQuery.data.total}
@@ -984,17 +986,16 @@ export const DataLakeInstanceDetails: React.FC<
             </Box>
           )}
           {currentTab === 3 && (
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="body1" color="text.secondary">
-                Activity coming soon...
-              </Typography>
-            </Box>
+            <Typography variant="body2" color="text.secondary">
+              Activity coming soon...
+            </Typography>
           )}
-        </CardContent>
-      </Card>
+        </Box>
+      </Box>
 
       {/* Delete Confirmation Dialog */}
       <Dialog
+        slotProps={{ paper: { sx: dataLakeDialogSx } }}
         open={deleteDialogOpen}
         onClose={() => setDeleteDialogOpen(false)}
       >

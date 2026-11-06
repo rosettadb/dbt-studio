@@ -14,7 +14,7 @@ import {
   Checkbox,
   Divider,
 } from '@mui/material';
-import { Save, Folder, Cloud, CloudQueue } from '@mui/icons-material';
+import { Save, Close, Folder, Cloud, CloudQueue } from '@mui/icons-material';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -22,6 +22,7 @@ import {
   useDuckLakeInstance,
   useUpdateDuckLakeInstance,
 } from '../../controllers/duckLake.controller';
+import { DataLakePageHeader, dataLakeContentSx } from './DataLakeLayout';
 
 // Validation schema for instance editing (only editable fields)
 export const instanceEditSchema = z.object({
@@ -72,7 +73,7 @@ export const DataLakeInstanceEditForm: React.FC = () => {
 
   if (instanceQuery.isError) {
     return (
-      <Box sx={{ p: 2 }}>
+      <Box sx={dataLakeContentSx}>
         <Alert severity="error">
           Failed to load instance: {String(instanceQuery.error)}
         </Alert>
@@ -82,7 +83,7 @@ export const DataLakeInstanceEditForm: React.FC = () => {
 
   if (!instanceQuery.data) {
     return (
-      <Box sx={{ p: 2 }}>
+      <Box sx={dataLakeContentSx}>
         <Alert severity="error">Instance not found</Alert>
       </Box>
     );
@@ -134,37 +135,14 @@ export const DataLakeInstanceEditForm: React.FC = () => {
   };
 
   return (
-    <Box sx={{ p: 2 }}>
-      {/* Header */}
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          mb: 3,
-        }}
-      >
-        <Box>
-          <Typography
-            variant="h4"
-            component="h1"
-            sx={{
-              fontWeight: 'bold',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1,
-            }}
-          >
-            {getStorageIcon()}
-            Edit Instance
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {instance.name} • {instance.catalog.type.toUpperCase()} Catalog
-          </Typography>
-        </Box>
-      </Box>
+    <Box sx={dataLakeContentSx}>
+      <DataLakePageHeader
+        icon={getStorageIcon()}
+        title="Edit Instance"
+        description={`${instance.name} • ${instance.catalog.type.toUpperCase()} Catalog`}
+      />
 
-      <Card sx={{ maxWidth: 800 }}>
+      <Card variant="outlined" sx={{ maxWidth: 800, borderRadius: 2 }}>
         <CardContent sx={{ p: 3 }}>
           <form onSubmit={form.handleSubmit(handleSave)}>
             <Grid container spacing={3}>
@@ -361,6 +339,9 @@ export const DataLakeInstanceEditForm: React.FC = () => {
               }}
             >
               <Button
+                variant="outlined"
+                color="inherit"
+                startIcon={<Close />}
                 onClick={handleCancel}
                 disabled={updateMutation.isLoading}
               >
