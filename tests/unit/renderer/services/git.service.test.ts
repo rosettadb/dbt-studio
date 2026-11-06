@@ -5,6 +5,7 @@ import {
   add,
   commit,
   getFileStatusList,
+  getProjectGitSummary,
 } from '../../../../src/renderer/services/git.service';
 
 jest.mock('../../../../src/renderer/config/client', () => {
@@ -104,6 +105,26 @@ describe('renderer/services/git.service', () => {
         repoPath: '/tmp/repo',
       });
       expect(result).toEqual(statuses);
+    });
+  });
+
+  describe('getProjectGitSummary', () => {
+    it('should call client.post with git:projectSummary and repoPath and return data', async () => {
+      const summary = { currentBranch: 'main', changedFileCount: 0 };
+      client.post.mockResolvedValue({ data: summary });
+
+      const result = await getProjectGitSummary('/tmp/repo');
+
+      expect(client.post).toHaveBeenCalledWith('git:projectSummary', {
+        repoPath: '/tmp/repo',
+      });
+      expect(result).toEqual(summary);
+    });
+
+    it('should return null when the folder is not a Git repository', async () => {
+      client.post.mockResolvedValue({ data: null });
+
+      await expect(getProjectGitSummary('/tmp/repo')).resolves.toBeNull();
     });
   });
 });

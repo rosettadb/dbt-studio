@@ -1,19 +1,34 @@
 import { styled, Box, Typography } from '@mui/material';
 
+const PROJECTS_LIST_MAX_WIDTH = '800px';
+
 export const ProjectSelectionContainer = styled(Box)`
   padding: 0.5rem 2rem 2rem;
-  max-width: 1200px;
-  margin: 0 auto;
-  height: 100%;
+  flex: 1 0 auto; /* Grows with its content so the page itself scrolls */
   display: flex;
   flex-direction: column;
+`;
+
+export const ProjectsStickyHeader = styled(Box)`
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  margin-top: -0.5rem; /* Moves ProjectSelectionContainer's top padding inside, so nothing shows above the header */
+  padding-top: 0.5rem;
+  background-color: ${({ theme }) => theme.palette.background.default};
+  /* Paints upward so scrolled projects can't show in the gap above the header */
+  box-shadow: 0 -1rem 0 ${({ theme }) => theme.palette.background.default};
 `;
 
 export const HeaderContainer = styled(Box)`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.5rem;
+  width: 100%;
+  max-width: ${PROJECTS_LIST_MAX_WIDTH};
+  margin: 0 auto 1.5rem;
   gap: 1rem;
 `;
 
@@ -25,18 +40,50 @@ export const SearchContainer = styled(Box)`
 export const ProjectsContainer = styled(Box)`
   display: flex;
   flex-direction: column;
+  width: 100%;
+  max-width: ${PROJECTS_LIST_MAX_WIDTH};
+  margin: 0 auto;
   gap: 1px;
   border-top: 1px solid ${({ theme }) => theme.palette.divider};
   border-bottom: 1px solid ${({ theme }) => theme.palette.divider};
-  flex: 1;
-  overflow-y: auto;
-  min-height: 0; /* Critical for Firefox */
+`;
+
+export const ProjectsCardGrid = styled(Box)`
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  width: 100%;
+  max-width: 992px; /* Exactly 3 columns: 3 x 320px + 2 x 16px gaps */
+  margin: 0 auto;
+  align-content: start;
+  gap: 16px;
+`;
+
+export const ProjectGridCard = styled(Box)`
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 16px;
+  cursor: pointer;
+  border: 1px solid ${({ theme }) => theme.palette.divider};
+  border-radius: 8px;
+  transition: background-color 0.2s;
+
+  &:hover {
+    background-color: ${({ theme }) => theme.palette.action.hover};
+  }
+`;
+
+export const ProjectGridCardHeader = styled(Box)`
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
 `;
 
 export const ProjectCard = styled(Box)`
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
   padding: 12px 16px;
   cursor: pointer;
   transition: background-color 0.2s;
@@ -69,6 +116,18 @@ export const ProjectPath = styled(Typography)`
   text-overflow: ellipsis;
 `;
 
+export const ProjectDetailLine = styled(ProjectPath)`
+  margin-top: 2px;
+`;
+
+export const ProjectGitBranchLine = styled(Box)`
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  color: ${({ theme }) => theme.palette.text.secondary};
+`;
+
 export const ConnectionName = styled(Typography)`
   font-size: 11px;
   color: ${({ theme }) => theme.palette.primary.main};
@@ -87,8 +146,10 @@ export const ProjectActions = styled(Box)`
 
 export const EmptyStateContainer = styled(Box)`
   text-align: center;
+  width: 100%;
+  max-width: ${PROJECTS_LIST_MAX_WIDTH};
   padding: 2rem;
-  margin-top: 2rem;
+  margin: 2rem auto 0;
   border-radius: 8px;
   border: 0.5px solid ${({ theme }) => theme.palette.divider};
   overflow-y: auto;

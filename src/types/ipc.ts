@@ -239,6 +239,7 @@ export type GitChannels =
   | 'git:unstageAll'
   | 'git:discardChanges'
   | 'git:aheadBehind'
+  | 'git:projectSummary'
   | 'git:createBranch'
   | 'git:deleteBranch'
   | 'git:renameBranch';

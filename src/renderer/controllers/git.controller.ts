@@ -13,6 +13,7 @@ import {
   GitBranch,
   GitChangesRes,
   GitCredentials,
+  ProjectGitSummary,
   RepoInfoRes,
 } from '../../types/backend';
 import { QUERY_KEYS } from '../config/constants';
@@ -156,6 +157,16 @@ export const useGetRepoInfo = (
     },
     enabled: !!path,
     ...customOptions,
+  });
+};
+
+export const useGetProjectGitSummary = (path: string) => {
+  return useQuery<ProjectGitSummary | null, CustomError>({
+    queryKey: [QUERY_KEYS.GIT_PROJECT_SUMMARY, path],
+    queryFn: async () => {
+      return gitServices.getProjectGitSummary(path);
+    },
+    enabled: !!path,
   });
 };
 

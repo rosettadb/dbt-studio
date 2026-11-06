@@ -511,4 +511,173 @@ describe('Git Service Integration', () => {
       ).resolves.not.toThrow();
     });
   });
+
+  describe('getProjectGitSummary', () => {
+    // A real bare repository to push to, so tracking and ahead/behind are real
+    const pushToNewOrigin = async () => {
+      const originPath = path.join(TEST_DIR, `origin-${Date.now()}.git`);
+      fs.mkdirSync(originPath, { recursive: true });
+      await simpleGit(originPath).init(true, ['--initial-branch=main']);
+
+      const git = simpleGit(testRepoPath);
+      await git.addRemote('origin', originPath);
+      await git.push(['-u', 'origin', 'main']);
+      return { git, originPath };
+    };
+
+    const commitFile = async (fileName: string) => {
+      const git = simpleGit(testRepoPath);
+      fs.writeFileSync(path.join(testRepoPath, fileName), 'content\n');
+      await git.add('.');
+      await git.commit(`Add ${fileName}`);
+    };
+
+    it('should summarize a clean repository with no remote', async () => {
+      const summary = await gitService.getProjectGitSummary(testRepoPath);
+
+      expect(summary).toEqual({
+        currentBranch: 'main',
+        remoteDisplayAddress: null,
+        aheadBehind: null,
+        changedFileCount: 0,
+        lastCommit: {
+          message: 'Initial commit',
+          authorName: 'Test User',
+          date: expect.any(String),
+        },
+      });
+    });
+
+    it('should return a last commit date the screen can display', async () => {
+      const summary = await gitService.getProjectGitSummary(testRepoPath);
+
+      expect(Number.isNaN(Date.parse(summary!.lastCommit!.date))).toBe(false);
+    });
+
+    it('should report the branch that is checked out', async () => {
+      await simpleGit(testRepoPath).checkoutLocalBranch('feature/icons');
+
+      const summary = await gitService.getProjectGitSummary(testRepoPath);
+
+      expect(summary?.currentBranch).toBe('feature/icons');
+    });
+
+    it('should report the latest commit', async () => {
+      await commitFile('second.sql');
+
+      const summary = await gitService.getProjectGitSummary(testRepoPath);
+
+      expect(summary?.lastCommit?.message).toBe('Add second.sql');
+    });
+
+    it('should count modified and new files as changes', async () => {
+      fs.writeFileSync(path.join(testRepoPath, 'README.md'), '# Changed\n');
+      fs.writeFileSync(path.join(testRepoPath, 'new.sql'), 'select 1\n');
+
+      const summary = await gitService.getProjectGitSummary(testRepoPath);
+
+      expect(summary?.changedFileCount).toBe(2);
+    });
+
+    it('should report zero ahead and behind right after pushing', async () => {
+      await pushToNewOrigin();
+
+      const summary = await gitService.getProjectGitSummary(testRepoPath);
+
+      expect(summary?.aheadBehind).toEqual({ ahead: 0, behind: 0 });
+    });
+
+    it('should report commits that have not been pushed yet', async () => {
+      await pushToNewOrigin();
+      await commitFile('unpushed.sql');
+
+      const summary = await gitService.getProjectGitSummary(testRepoPath);
+
+      expect(summary?.aheadBehind).toEqual({ ahead: 1, behind: 0 });
+    });
+
+    it('should report commits that have not been pulled yet', async () => {
+      const { git } = await pushToNewOrigin();
+      await commitFile('pushed.sql');
+      await git.push();
+      await git.reset(['--hard', 'HEAD~1']);
+
+      const summary = await gitService.getProjectGitSummary(testRepoPath);
+
+      expect(summary?.aheadBehind).toEqual({ ahead: 0, behind: 1 });
+    });
+
+    it('should show the origin remote without saved login details', async () => {
+      await simpleGit(testRepoPath).addRemote(
+        'origin',
+        'https://user:s3cret-token@github.com/org/repo.git',
+      );
+
+      const summary = await gitService.getProjectGitSummary(testRepoPath);
+
+      expect(summary?.remoteDisplayAddress).toBe('github.com/org/repo');
+      expect(JSON.stringify(summary)).not.toContain('s3cret-token');
+    });
+
+    it('should show an SSH origin remote as host and path', async () => {
+      await simpleGit(testRepoPath).addRemote(
+        'origin',
+        'git@github.com:org/repo.git',
+      );
+
+      const summary = await gitService.getProjectGitSummary(testRepoPath);
+
+      expect(summary?.remoteDisplayAddress).toBe('github.com/org/repo');
+    });
+
+    it('should ignore remotes that are not called origin', async () => {
+      await simpleGit(testRepoPath).addRemote(
+        'upstream',
+        'https://github.com/org/repo.git',
+      );
+
+      const summary = await gitService.getProjectGitSummary(testRepoPath);
+
+      expect(summary?.remoteDisplayAddress).toBeNull();
+    });
+
+    it('should not need the network, even with an unreachable origin', async () => {
+      await simpleGit(testRepoPath).addRemote(
+        'origin',
+        'https://unreachable.invalid/org/repo.git',
+      );
+
+      const summary = await gitService.getProjectGitSummary(testRepoPath);
+
+      expect(summary?.remoteDisplayAddress).toBe(
+        'unreachable.invalid/org/repo',
+      );
+    });
+
+    it('should handle a repository with no commits yet', async () => {
+      const emptyRepoPath = path.join(TEST_DIR, `empty-${Date.now()}`);
+      fs.mkdirSync(emptyRepoPath, { recursive: true });
+      await simpleGit(emptyRepoPath).init(['--initial-branch=main']);
+
+      const summary = await gitService.getProjectGitSummary(emptyRepoPath);
+
+      expect(summary?.currentBranch).toBe('main');
+      expect(summary?.lastCommit).toBeNull();
+    });
+
+    it('should return null for a folder that is not a repository', async () => {
+      const plainFolderPath = path.join(TEST_DIR, `plain-${Date.now()}`);
+      fs.mkdirSync(plainFolderPath, { recursive: true });
+
+      await expect(
+        gitService.getProjectGitSummary(plainFolderPath),
+      ).resolves.toBeNull();
+    });
+
+    it('should return null when the project folder no longer exists', async () => {
+      await expect(
+        gitService.getProjectGitSummary(path.join(TEST_DIR, 'deleted-project')),
+      ).resolves.toBeNull();
+    });
+  });
 });
