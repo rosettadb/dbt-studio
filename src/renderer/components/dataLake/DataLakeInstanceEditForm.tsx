@@ -4,17 +4,22 @@ import {
   Box,
   CircularProgress,
   Alert,
-  Card,
-  CardContent,
-  Typography,
   Button,
   TextField,
   Grid,
   FormControlLabel,
   Checkbox,
-  Divider,
 } from '@mui/material';
-import { Save, Close, Folder, Cloud, CloudQueue } from '@mui/icons-material';
+import {
+  CheckCircle,
+  Close,
+  Folder,
+  Cloud,
+  CloudQueue,
+  InfoOutlined,
+  LockOutlined,
+  Tune,
+} from '@mui/icons-material';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -23,6 +28,7 @@ import {
   useUpdateDuckLakeInstance,
 } from '../../controllers/duckLake.controller';
 import { DataLakePageHeader, dataLakeContentSx } from './DataLakeLayout';
+import { SettingsSection, SettingsStack } from '../settings/SettingsLayout';
 
 // Validation schema for instance editing (only editable fields)
 export const instanceEditSchema = z.object({
@@ -142,223 +148,211 @@ export const DataLakeInstanceEditForm: React.FC = () => {
         description={`${instance.name} • ${instance.catalog.type.toUpperCase()} Catalog`}
       />
 
-      <Card variant="outlined" sx={{ maxWidth: 800, borderRadius: 2 }}>
-        <CardContent sx={{ p: 3 }}>
-          <form onSubmit={form.handleSubmit(handleSave)}>
-            <Grid container spacing={3}>
-              {/* Basic Information */}
-              <Grid item xs={12}>
-                <Typography variant="h6" gutterBottom>
-                  Basic Information
-                </Typography>
-              </Grid>
-
-              <Grid item xs={12}>
-                <Controller
-                  name="name"
-                  control={form.control}
-                  render={({ field, fieldState }) => (
-                    <TextField
-                      name={field.name}
-                      value={field.value}
-                      onChange={field.onChange}
-                      onBlur={field.onBlur}
-                      label="Instance Name"
-                      fullWidth
-                      error={!!fieldState.error}
-                      helperText={fieldState.error?.message}
-                      disabled={updateMutation.isLoading}
+      <Box sx={{ maxWidth: 820 }}>
+        <form onSubmit={form.handleSubmit(handleSave)}>
+          <SettingsStack>
+            <SettingsSection title="Basic Information" icon={<InfoOutlined />}>
+              <Box sx={{ p: 2 }}>
+                <Grid container spacing={2}>
+                  <Grid item xs={12}>
+                    <Controller
+                      name="name"
+                      control={form.control}
+                      render={({ field, fieldState }) => (
+                        <TextField
+                          name={field.name}
+                          value={field.value}
+                          onChange={field.onChange}
+                          onBlur={field.onBlur}
+                          label="Instance Name"
+                          fullWidth
+                          error={!!fieldState.error}
+                          helperText={fieldState.error?.message}
+                          disabled={updateMutation.isLoading}
+                        />
+                      )}
                     />
-                  )}
-                />
-              </Grid>
-
-              <Grid item xs={12}>
-                <Controller
-                  name="description"
-                  control={form.control}
-                  render={({ field }) => (
-                    <TextField
-                      name={field.name}
-                      value={field.value}
-                      onChange={field.onChange}
-                      onBlur={field.onBlur}
-                      label="Description"
-                      fullWidth
-                      rows={3}
-                      disabled={updateMutation.isLoading}
-                      placeholder="Describe the purpose of this DuckLake instance..."
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Controller
+                      name="description"
+                      control={form.control}
+                      render={({ field }) => (
+                        <TextField
+                          name={field.name}
+                          value={field.value}
+                          onChange={field.onChange}
+                          onBlur={field.onBlur}
+                          label="Description"
+                          fullWidth
+                          rows={3}
+                          disabled={updateMutation.isLoading}
+                          placeholder="Describe the purpose of this DuckLake instance..."
+                        />
+                      )}
                     />
-                  )}
-                />
-              </Grid>
+                  </Grid>
+                </Grid>
+              </Box>
+            </SettingsSection>
 
-              <Grid item xs={12}>
-                <Divider sx={{ my: 2 }} />
-              </Grid>
-
-              {/* Read-only Configuration Info */}
-              <Grid item xs={12}>
-                <Typography variant="h6" gutterBottom>
-                  Configuration (Read-only)
-                </Typography>
-                <Alert severity="info" sx={{ mb: 2 }}>
+            <SettingsSection
+              title="Configuration"
+              icon={<LockOutlined />}
+              description="Read-only"
+            >
+              <Box sx={{ p: 2 }}>
+                <Alert severity="info" sx={{ mb: 2, py: 0.25 }}>
                   Data path, catalog configuration, and temporary directory
                   cannot be modified after creation. Create a new instance if
                   you need different settings.
                 </Alert>
-              </Grid>
-
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Data Path"
-                  value={instance.dataPath}
-                  fullWidth
-                  disabled
-                  helperText="Cannot be modified after creation"
-                />
-              </Grid>
-
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Catalog Type"
-                  value={instance.catalog.type.toUpperCase()}
-                  fullWidth
-                  disabled
-                  helperText="Cannot be modified after creation"
-                />
-              </Grid>
-
-              <Grid item xs={12}>
-                <TextField
-                  label="Temporary Directory"
-                  value={instance.runtimeOptions?.tempDirectory || 'Default'}
-                  fullWidth
-                  disabled
-                  helperText="Cannot be modified after creation"
-                />
-              </Grid>
-
-              <Grid item xs={12}>
-                <Divider sx={{ my: 2 }} />
-              </Grid>
-
-              {/* Runtime Options - Editable */}
-              <Grid item xs={12}>
-                <Typography variant="h6" gutterBottom>
-                  Runtime Options
-                </Typography>
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ mb: 2 }}
-                >
-                  These settings can be modified and will take effect on the
-                  next connection.
-                </Typography>
-              </Grid>
-
-              <Grid item xs={12} sm={6}>
-                <Controller
-                  name="runtime.maxMemory"
-                  control={form.control}
-                  render={({ field, fieldState }) => (
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
                     <TextField
-                      name={field.name}
-                      value={field.value}
-                      onChange={field.onChange}
-                      onBlur={field.onBlur}
-                      label="Max Memory"
+                      label="Data Path"
+                      value={instance.dataPath}
                       fullWidth
-                      error={!!fieldState.error}
-                      helperText={
-                        fieldState.error?.message ||
-                        'Maximum memory allocation (e.g., 4GB, 8GB)'
-                      }
-                      disabled={updateMutation.isLoading}
-                      placeholder="4GB"
+                      disabled
+                      helperText="Cannot be modified after creation"
                     />
-                  )}
-                />
-              </Grid>
-
-              <Grid item xs={12} sm={6}>
-                <Controller
-                  name="runtime.threads"
-                  control={form.control}
-                  render={({ field, fieldState }) => (
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
                     <TextField
-                      name={field.name}
-                      value={field.value}
-                      onBlur={field.onBlur}
-                      label="Thread Count"
-                      type="number"
+                      label="Catalog Type"
+                      value={instance.catalog.type.toUpperCase()}
                       fullWidth
-                      error={!!fieldState.error}
-                      helperText={
-                        fieldState.error?.message ||
-                        'Number of threads for parallel processing'
-                      }
-                      disabled={updateMutation.isLoading}
-                      inputProps={{ min: 1, max: 32 }}
-                      onChange={(e) =>
-                        field.onChange(parseInt(e.target.value, 10) || 4)
-                      }
+                      disabled
+                      helperText="Cannot be modified after creation"
                     />
-                  )}
-                />
-              </Grid>
-
-              <Grid item xs={12}>
-                <Controller
-                  name="runtime.enableOptimizer"
-                  control={form.control}
-                  render={({ field }) => (
-                    <FormControlLabel
-                      control={
-                        <Checkbox
-                          checked={field.value}
-                          onChange={field.onChange}
-                          disabled={updateMutation.isLoading}
-                        />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      label="Temporary Directory"
+                      value={
+                        instance.runtimeOptions?.tempDirectory || 'Default'
                       }
-                      label="Enable Query Optimizer"
+                      fullWidth
+                      disabled
+                      helperText="Cannot be modified after creation"
                     />
-                  )}
-                />
-              </Grid>
-            </Grid>
+                  </Grid>
+                </Grid>
+              </Box>
+            </SettingsSection>
 
-            {/* Action Buttons */}
-            <Box
-              sx={{
-                display: 'flex',
-                justifyContent: 'flex-end',
-                gap: 2,
-                mt: 4,
-              }}
+            <SettingsSection
+              title="Runtime Options"
+              icon={<Tune />}
+              description="Applied on the next connection"
             >
-              <Button
-                variant="outlined"
-                color="inherit"
-                startIcon={<Close />}
-                onClick={handleCancel}
-                disabled={updateMutation.isLoading}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                variant="contained"
-                startIcon={<Save />}
-                disabled={updateMutation.isLoading}
-              >
-                {updateMutation.isLoading ? 'Saving...' : 'Save Changes'}
-              </Button>
-            </Box>
-          </form>
-        </CardContent>
-      </Card>
+              <Box sx={{ p: 2 }}>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <Controller
+                      name="runtime.maxMemory"
+                      control={form.control}
+                      render={({ field, fieldState }) => (
+                        <TextField
+                          name={field.name}
+                          value={field.value}
+                          onChange={field.onChange}
+                          onBlur={field.onBlur}
+                          label="Max Memory"
+                          fullWidth
+                          error={!!fieldState.error}
+                          helperText={
+                            fieldState.error?.message ||
+                            'Maximum memory allocation (e.g., 4GB, 8GB)'
+                          }
+                          disabled={updateMutation.isLoading}
+                          placeholder="4GB"
+                        />
+                      )}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Controller
+                      name="runtime.threads"
+                      control={form.control}
+                      render={({ field, fieldState }) => (
+                        <TextField
+                          name={field.name}
+                          value={field.value}
+                          onBlur={field.onBlur}
+                          label="Thread Count"
+                          type="number"
+                          fullWidth
+                          error={!!fieldState.error}
+                          helperText={
+                            fieldState.error?.message ||
+                            'Number of threads for parallel processing'
+                          }
+                          disabled={updateMutation.isLoading}
+                          inputProps={{ min: 1, max: 32 }}
+                          onChange={(e) =>
+                            field.onChange(parseInt(e.target.value, 10) || 4)
+                          }
+                        />
+                      )}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Controller
+                      name="runtime.enableOptimizer"
+                      control={form.control}
+                      render={({ field }) => (
+                        <FormControlLabel
+                          control={
+                            <Checkbox
+                              checked={field.value}
+                              onChange={field.onChange}
+                              disabled={updateMutation.isLoading}
+                            />
+                          }
+                          label="Enable Query Optimizer"
+                        />
+                      )}
+                    />
+                  </Grid>
+                </Grid>
+              </Box>
+            </SettingsSection>
+          </SettingsStack>
+
+          {/* Action Buttons: same footer as the create wizards */}
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              mt: 2.25,
+            }}
+          >
+            <Button
+              variant="outlined"
+              startIcon={<Close />}
+              onClick={handleCancel}
+              disabled={updateMutation.isLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="contained"
+              startIcon={
+                updateMutation.isLoading ? (
+                  <CircularProgress size={16} color="inherit" />
+                ) : (
+                  <CheckCircle />
+                )
+              }
+              disabled={updateMutation.isLoading}
+            >
+              {updateMutation.isLoading ? 'Saving\u2026' : 'Save Changes'}
+            </Button>
+          </Box>
+        </form>
+      </Box>
     </Box>
   );
 };

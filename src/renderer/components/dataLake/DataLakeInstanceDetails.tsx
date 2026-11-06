@@ -315,38 +315,25 @@ export const DataLakeInstanceDetails: React.FC<
             </Box>
             <Button
               variant="outlined"
-              color="inherit"
               size="small"
               onClick={handleTestConnection}
               disabled={isLoading || testConnectionMutation.isLoading}
               startIcon={<Cable />}
-              sx={{
-                position: 'relative',
-                paddingRight: '32px',
-                minWidth: '140px',
-                color: 'text.secondary',
-                borderColor: 'divider',
-                '&:hover': {
-                  borderColor: 'primary.main',
-                  backgroundColor: 'action.hover',
-                },
-              }}
             >
               {testConnectionMutation.isLoading
                 ? 'Testing...'
                 : 'Test Connection'}
+              {/* Last test result, after the label */}
               <Box
+                component="span"
+                aria-hidden
                 sx={{
-                  position: 'absolute',
-                  right: 10,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  width: 10,
-                  height: 10,
+                  width: 8,
+                  height: 8,
+                  ml: 0.75,
+                  flexShrink: 0,
                   borderRadius: '50%',
-                  backgroundColor: getTestIndicatorColor(),
-                  border: '1px solid',
-                  borderColor: 'background.paper',
+                  bgcolor: getTestIndicatorColor(),
                 }}
               />
             </Button>
@@ -825,6 +812,7 @@ export const DataLakeInstanceDetails: React.FC<
               variant="outlined"
               startIcon={<Edit />}
               onClick={handleEdit}
+              sx={{ height: '32px' }}
               disabled={isLoading}
             >
               Edit
@@ -835,6 +823,7 @@ export const DataLakeInstanceDetails: React.FC<
               color="error"
               startIcon={<Delete />}
               onClick={() => setDeleteDialogOpen(true)}
+              sx={{ height: '32px' }}
               disabled={isLoading}
             >
               Delete

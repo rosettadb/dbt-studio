@@ -585,7 +585,9 @@ const DataLake: React.FC = () => {
     >
       <Box
         sx={[
-          { p: 2, bgcolor: 'background.paper', minHeight: '100%' },
+          // Fills the scroll area and grows with the content. minHeight alone let
+          // the flex parent shrink it, so tall pages spilled past the background.
+          { p: 2, bgcolor: 'background.paper', flex: '1 0 auto' },
           dataLakePageSx,
         ]}
       >
@@ -605,8 +607,9 @@ const DataLake: React.FC = () => {
       </Box>
 
       {/* ── Iceberg Edit Wizard Dialog ────────────────────────────────── */}
+      {/* No compact dialog buttons here: the wizard footer matches the
+          create page (full-size Cancel / Back / Next). */}
       <Dialog
-        slotProps={{ paper: { sx: dataLakeDialogSx } }}
         open={!!icebergEditId}
         onClose={() => setIcebergEditId(null)}
         maxWidth="md"

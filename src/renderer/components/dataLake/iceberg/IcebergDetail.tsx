@@ -1465,6 +1465,7 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
               variant="outlined"
               startIcon={<Edit />}
               onClick={onEdit}
+              sx={{ height: '32px' }}
             >
               Edit
             </Button>
@@ -1474,6 +1475,7 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
               color="error"
               startIcon={<Delete />}
               onClick={onDelete}
+              sx={{ height: '32px' }}
             >
               Delete
             </Button>
@@ -1517,38 +1519,25 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
                     </Typography>
                     <Button
                       variant="outlined"
-                      color="inherit"
                       size="small"
                       onClick={testConnection}
                       disabled={testInstanceMutation.isLoading}
                       startIcon={<Cable />}
-                      sx={{
-                        position: 'relative',
-                        pr: 4,
-                        minWidth: 140,
-                        color: 'text.secondary',
-                        borderColor: 'divider',
-                        '&:hover': {
-                          borderColor: 'primary.main',
-                          backgroundColor: 'action.hover',
-                        },
-                      }}
                     >
                       {testInstanceMutation.isLoading
                         ? 'Testing…'
                         : 'Test Connection'}
+                      {/* Last test result, after the label */}
                       <Box
+                        component="span"
+                        aria-hidden
                         sx={{
-                          position: 'absolute',
-                          right: 10,
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                          width: 10,
-                          height: 10,
+                          width: 8,
+                          height: 8,
+                          ml: 0.75,
+                          flexShrink: 0,
                           borderRadius: '50%',
-                          backgroundColor: testIndicatorColor,
-                          border: '1px solid',
-                          borderColor: 'background.paper',
+                          bgcolor: testIndicatorColor,
                         }}
                       />
                     </Button>
