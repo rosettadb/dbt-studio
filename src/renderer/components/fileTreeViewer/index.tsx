@@ -1,6 +1,4 @@
 import React from 'react';
-import { CircularProgress, Tooltip, Box } from '@mui/material';
-import { Cached } from '@mui/icons-material';
 import { Container } from './styles';
 import { FileNode, FileStatus } from '../../../types/backend';
 import { NewFileModal } from '../modals';
@@ -11,7 +9,6 @@ import { FileStatuses } from './types';
 type Props = {
   node: FileNode;
   onFileSelect: (file: FileNode) => void;
-  isLoadingFiles: boolean;
   refreshFiles: () => void;
   onDeleteFileCallback: (filePath: string) => void;
   onNewFileCallback: (filePath?: string) => void;
@@ -26,7 +23,6 @@ type Props = {
 const FileTreeViewer: React.FC<Props> = ({
   node,
   onFileSelect,
-  isLoadingFiles,
   refreshFiles,
   onDeleteFileCallback,
   onNewFileCallback,
@@ -57,23 +53,6 @@ const FileTreeViewer: React.FC<Props> = ({
 
   return (
     <Container>
-      <Box
-        paddingX={0.5}
-        display="flex"
-        sx={{ alignItems: 'center', justifyContent: 'flex-end', mb: 1 }}
-      >
-        <Tooltip title="Refresh directories">
-          {isLoadingFiles ? (
-            <CircularProgress size={20} />
-          ) : (
-            <Cached
-              sx={{ color: 'primary.main', cursor: 'pointer' }}
-              onClick={() => refreshFiles()}
-            />
-          )}
-        </Tooltip>
-      </Box>
-
       <ArboristTree
         data={node}
         fileStatuses={fileStatuses}

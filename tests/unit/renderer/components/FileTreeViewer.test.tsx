@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { FileTreeViewer } from '../../../../src/renderer/components/fileTreeViewer';
 import { FileNode } from '../../../../src/types/backend';
 
@@ -34,16 +34,12 @@ const projectFolder = {
   children: [],
 } as unknown as FileNode;
 
-const renderFileTreeViewer = (
-  refreshFiles: () => void,
-  isLoadingFiles = false,
-) =>
+const renderFileTreeViewer = () =>
   render(
     <FileTreeViewer
       node={projectFolder}
       onFileSelect={jest.fn()}
-      isLoadingFiles={isLoadingFiles}
-      refreshFiles={refreshFiles}
+      refreshFiles={jest.fn()}
       onDeleteFileCallback={jest.fn()}
       onNewFileCallback={jest.fn()}
       statuses={[]}
@@ -53,29 +49,22 @@ const renderFileTreeViewer = (
 
 describe('FileTreeViewer', () => {
   it('has no search box, because file search lives in the global search', () => {
-    renderFileTreeViewer(jest.fn());
+    renderFileTreeViewer();
 
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
   });
 
+  it('has no refresh button, because it lives in the panel tab row', () => {
+    renderFileTreeViewer();
+
+    expect(
+      screen.queryByLabelText('Refresh directories'),
+    ).not.toBeInTheDocument();
+  });
+
   it('passes the whole project tree to the tree view', () => {
-    renderFileTreeViewer(jest.fn());
+    renderFileTreeViewer();
 
     expect(screen.getByTestId('tree-root')).toHaveTextContent('/projects/shop');
-  });
-
-  it('refreshes the files when the refresh icon is clicked', () => {
-    const refreshFiles = jest.fn();
-    renderFileTreeViewer(refreshFiles);
-
-    fireEvent.click(screen.getByLabelText('Refresh directories'));
-
-    expect(refreshFiles).toHaveBeenCalledTimes(1);
-  });
-
-  it('shows a spinner in place of the refresh icon while loading', () => {
-    renderFileTreeViewer(jest.fn(), true);
-
-    expect(screen.getByRole('progressbar')).toBeInTheDocument();
   });
 });

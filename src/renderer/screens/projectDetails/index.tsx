@@ -2,7 +2,15 @@ import React from 'react';
 import SplitPane, { Pane } from 'split-pane-react';
 import 'split-pane-react/esm/themes/default.css';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { Badge, Box, Tab, Tabs, Tooltip } from '@mui/material';
+import {
+  Badge,
+  Box,
+  CircularProgress,
+  Tab,
+  Tabs,
+  Tooltip,
+} from '@mui/material';
+import { Cached } from '@mui/icons-material';
 import { useTheme } from '@mui/material/styles';
 import {
   Loader,
@@ -19,12 +27,15 @@ import { TabManager } from '../../components/editor/tabManager';
 import { ActiveFileView } from '../../components/fileViews';
 import {
   useGetFileStatuses,
+  useGetProjectFiles,
   useGetSelectedProject,
   useGitIsInitialized,
 } from '../../controllers';
 import { useTabs } from '../../context/TabsProvider';
 import { Content, EditorContainer, Header, NoFileSelected } from './styles';
 import { useAppContext } from '../../hooks';
+import { useRefreshProjectFiles } from '../../hooks/useRefreshProjectFiles';
+import { Project } from '../../../types/backend';
 import { AppLayout } from '../../layouts';
 import ChatScreen from '../chat';
 
@@ -109,6 +120,10 @@ const ProjectDetails: React.FC = () => {
   const { data: statuses = [] } = useGetFileStatuses(project?.path, {
     enabled: !!project?.path && !!isInitialized,
   });
+  const refreshProjectFiles = useRefreshProjectFiles();
+  const { isLoading: isLoadingFiles } = useGetProjectFiles(project as Project, {
+    enabled: !!project?.id,
+  });
   const {
     tabs,
     activeTab,
@@ -151,12 +166,19 @@ const ProjectDetails: React.FC = () => {
             bgcolor: 'background.paper',
           }}
         >
-          <Box sx={{ borderBottom: `1px solid ${theme.palette.divider}` }}>
+          <Box
+            sx={{
+              borderBottom: `1px solid ${theme.palette.divider}`,
+              display: 'flex',
+              alignItems: 'center',
+            }}
+          >
             <Tabs
               value={sidebarTab}
               onChange={(_e, newValue) => setSidebarTab(newValue)}
               variant="fullWidth"
               sx={{
+                flex: 1,
                 minHeight: 34,
                 '& .MuiTab-root': {
                   minHeight: 34,
@@ -231,6 +253,20 @@ const ProjectDetails: React.FC = () => {
                 )}
               />
             </Tabs>
+            {sidebarTab === 'explorer' && (
+              <Box sx={{ px: 1, display: 'flex' }}>
+                <Tooltip title="Refresh directories">
+                  {isLoadingFiles ? (
+                    <CircularProgress size={20} />
+                  ) : (
+                    <Cached
+                      sx={{ color: 'primary.main', cursor: 'pointer' }}
+                      onClick={() => refreshProjectFiles()}
+                    />
+                  )}
+                </Tooltip>
+              </Box>
+            )}
           </Box>
           <Box sx={{ flex: 1, overflow: 'hidden' }}>
             <ProjectSidebar

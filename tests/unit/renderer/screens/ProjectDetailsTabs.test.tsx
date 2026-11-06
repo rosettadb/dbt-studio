@@ -5,6 +5,8 @@ import { ThemeProvider, createTheme } from '@mui/material';
 import ProjectDetails from '../../../../src/renderer/screens/projectDetails';
 
 const mockUseGetFileStatuses = jest.fn();
+const mockUseGetProjectFiles = jest.fn();
+const mockRefreshProjectFiles = jest.fn();
 
 jest.mock('../../../../src/renderer/components', () => ({
   Loader: () => null,
@@ -40,6 +42,11 @@ jest.mock('../../../../src/renderer/controllers', () => ({
   }),
   useGitIsInitialized: () => ({ data: true }),
   useGetFileStatuses: () => mockUseGetFileStatuses(),
+  useGetProjectFiles: () => mockUseGetProjectFiles(),
+}));
+
+jest.mock('../../../../src/renderer/hooks/useRefreshProjectFiles', () => ({
+  useRefreshProjectFiles: () => mockRefreshProjectFiles,
 }));
 
 jest.mock('../../../../src/renderer/context/TabsProvider', () => ({
@@ -82,6 +89,8 @@ const renderProjectDetails = () =>
 describe('ProjectDetails side panel tabs', () => {
   beforeEach(() => {
     mockUseGetFileStatuses.mockReturnValue({ data: [] });
+    mockUseGetProjectFiles.mockReturnValue({ isLoading: false });
+    mockRefreshProjectFiles.mockClear();
   });
 
   it('has Explorer, Git and Database tabs and no Search tab', () => {
@@ -145,5 +154,33 @@ describe('ProjectDetails side panel tabs', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Database' }));
     expect(screen.getByTestId('open-panel')).toHaveTextContent('connections');
+  });
+
+  it('refreshes the project files from the refresh button on the Explorer tab', () => {
+    renderProjectDetails();
+
+    fireEvent.click(screen.getByLabelText('Refresh directories'));
+
+    expect(mockRefreshProjectFiles).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['Git', 'Database'])(
+    'hides the refresh button on the %s tab',
+    (tabName) => {
+      renderProjectDetails();
+
+      fireEvent.click(screen.getByRole('tab', { name: tabName }));
+
+      expect(
+        screen.queryByLabelText('Refresh directories'),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it('shows a spinner in place of the refresh button while the files load', () => {
+    mockUseGetProjectFiles.mockReturnValue({ isLoading: true });
+    renderProjectDetails();
+
+    expect(screen.getByRole('progressbar')).toBeInTheDocument();
   });
 });

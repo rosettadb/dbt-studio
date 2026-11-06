@@ -280,8 +280,9 @@ const ExplorerTab: React.FC<{
   const { data: settings } = useGetSettings();
   const { data: connection } = useGetConnectionById(project.connectionId);
   const refreshProjectFiles = useRefreshProjectFiles();
-  const { data: directories, isLoading: isLoadingDirectories } =
-    useGetProjectFiles(project, { enabled: !!project.id });
+  const { data: directories } = useGetProjectFiles(project, {
+    enabled: !!project.id,
+  });
   const { data: isInitialized } = useGitIsInitialized(project.path, {
     enabled: !!project.path,
   });
@@ -327,7 +328,6 @@ const ExplorerTab: React.FC<{
             node={directories}
             onDeleteFileCallback={closeTabByPath}
             onFileSelect={handleFileSelect}
-            isLoadingFiles={isLoadingDirectories}
             refreshFiles={refreshProjectFiles}
             copyPath={async (source, target) => {
               await projectsServices.copyPath({ source, target });
