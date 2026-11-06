@@ -2,8 +2,17 @@ import React from 'react';
 import SplitPane, { Pane } from 'split-pane-react';
 import 'split-pane-react/esm/themes/default.css';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { Search as SearchIcon } from '@mui/icons-material';
-import { Badge, Box, Tab, Tabs } from '@mui/material';
+import {
+  Badge,
+  Box,
+  CircularProgress,
+  IconButton,
+  Tab,
+  TabProps,
+  Tabs,
+  Tooltip,
+} from '@mui/material';
+import { Cached } from '@mui/icons-material';
 import { useTheme } from '@mui/material/styles';
 import {
   Loader,
@@ -20,12 +29,15 @@ import { TabManager } from '../../components/editor/tabManager';
 import { ActiveFileView } from '../../components/fileViews';
 import {
   useGetFileStatuses,
+  useGetProjectFiles,
   useGetSelectedProject,
   useGitIsInitialized,
 } from '../../controllers';
 import { useTabs } from '../../context/TabsProvider';
 import { Content, EditorContainer, Header, NoFileSelected } from './styles';
 import { useAppContext } from '../../hooks';
+import { useRefreshProjectFiles } from '../../hooks/useRefreshProjectFiles';
+import { Project } from '../../../types/backend';
 import { AppLayout } from '../../layouts';
 import ChatScreen from '../chat';
 
@@ -60,6 +72,19 @@ const VerticalSash = (_: number, active: boolean) => (
 // Minimum width for the chat panel — must be wide enough for the chat UI
 const CHAT_MIN_WIDTH = 280;
 
+// The tooltip sits on the tab itself, so its name shows on hover and on
+// keyboard focus, and also becomes the tab's accessible name. Tabs passes
+// its props (selected, onChange, ...) through this wrapper to the Tab.
+const IconOnlyTab: React.FC<TabProps & { tabName: string }> = ({
+  tabName,
+  ...tabProps
+}) => (
+  <Tooltip title={tabName}>
+    {/* eslint-disable-next-line react/jsx-props-no-spreading */}
+    <Tab {...tabProps} />
+  </Tooltip>
+);
+
 // Layout only: sidebar strip, tab strip, the active file view, the bottom
 // panels and the chat pane. Which component renders a file, and which panel
 // a run lands in, are resolved by their registries from the stores — this
@@ -92,6 +117,10 @@ const ProjectDetails: React.FC = () => {
   });
   const { data: statuses = [] } = useGetFileStatuses(project?.path, {
     enabled: !!project?.path && !!isInitialized,
+  });
+  const refreshProjectFiles = useRefreshProjectFiles();
+  const { isLoading: isLoadingFiles } = useGetProjectFiles(project as Project, {
+    enabled: !!project?.id,
   });
   const {
     tabs,
@@ -135,28 +164,30 @@ const ProjectDetails: React.FC = () => {
             bgcolor: 'background.paper',
           }}
         >
-          <Box sx={{ borderBottom: `1px solid ${theme.palette.divider}` }}>
+          <Box
+            sx={{
+              borderBottom: `1px solid ${theme.palette.divider}`,
+              display: 'flex',
+              alignItems: 'center',
+            }}
+          >
             <Tabs
               value={sidebarTab}
               onChange={(_e, newValue) => setSidebarTab(newValue)}
               variant="fullWidth"
               sx={{
+                flex: 1,
                 minHeight: 34,
                 '& .MuiTab-root': {
                   minHeight: 34,
-                  fontSize: '0.7rem',
-                  textTransform: 'none',
                   py: 0,
                   minWidth: 0,
                   px: 0.5,
                 },
-                '& .MuiTab-iconWrapper': {
-                  marginRight: '4px !important',
-                  marginBottom: '0 !important',
-                },
               }}
             >
-              <Tab
+              <IconOnlyTab
+                tabName="Explorer"
                 value="explorer"
                 icon={
                   <Icon
@@ -166,20 +197,9 @@ const ProjectDetails: React.FC = () => {
                     color={sidebarIconColor('explorer')}
                   />
                 }
-                iconPosition="start"
-                label="Explorer"
               />
-              <Tab
-                value="search"
-                icon={
-                  <SearchIcon
-                    sx={{ fontSize: 15, color: sidebarIconColor('search') }}
-                  />
-                }
-                iconPosition="start"
-                label="Search"
-              />
-              <Tab
+              <IconOnlyTab
+                tabName="Git"
                 value="scm"
                 icon={
                   <Badge
@@ -205,10 +225,9 @@ const ProjectDetails: React.FC = () => {
                     />
                   </Badge>
                 }
-                iconPosition="start"
-                label="Git"
               />
-              <Tab
+              <IconOnlyTab
+                tabName="Database"
                 value="connections"
                 icon={
                   <svg
@@ -227,10 +246,24 @@ const ProjectDetails: React.FC = () => {
                     />
                   </svg>
                 }
-                iconPosition="start"
-                label="Database"
               />
             </Tabs>
+            {sidebarTab === 'explorer' && (
+              <Box sx={{ px: 0.5, display: 'flex' }}>
+                <Tooltip title="Refresh directories">
+                  {isLoadingFiles ? (
+                    <CircularProgress size={20} />
+                  ) : (
+                    <IconButton
+                      size="small"
+                      onClick={() => refreshProjectFiles()}
+                    >
+                      <Cached sx={{ color: 'primary.main' }} />
+                    </IconButton>
+                  )}
+                </Tooltip>
+              </Box>
+            )}
           </Box>
           <Box sx={{ flex: 1, overflow: 'hidden' }}>
             <ProjectSidebar

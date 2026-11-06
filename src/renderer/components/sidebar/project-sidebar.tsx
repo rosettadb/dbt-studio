@@ -26,8 +26,7 @@ import {
   connectionAccentColor,
 } from '../../../connections/registry.renderer';
 import { ReactComponent as RouteIcon } from '../../assets/icons/lucide/route.svg';
-import { FileTreeViewer, SearchInFilesPanel } from '../index';
-import type { SearchResultSelection } from '../searchInFiles';
+import { FileTreeViewer } from '../index';
 import { FileTreeContainer } from '../../screens/projectDetails/styles';
 import { FileNode, Project } from '../../../types/backend';
 import { SourceControlView } from '../sourceControl';
@@ -57,7 +56,7 @@ import {
   getPipelineRelativePath,
 } from '../pipelineView';
 
-export type SidebarTab = 'explorer' | 'search' | 'scm' | 'connections';
+export type SidebarTab = 'explorer' | 'scm' | 'connections';
 
 // Helper function to get connection type name
 const getConnectionTypeName = (connectionType?: string) => {
@@ -281,8 +280,9 @@ const ExplorerTab: React.FC<{
   const { data: settings } = useGetSettings();
   const { data: connection } = useGetConnectionById(project.connectionId);
   const refreshProjectFiles = useRefreshProjectFiles();
-  const { data: directories, isLoading: isLoadingDirectories } =
-    useGetProjectFiles(project, { enabled: !!project.id });
+  const { data: directories } = useGetProjectFiles(project, {
+    enabled: !!project.id,
+  });
   const { data: isInitialized } = useGitIsInitialized(project.path, {
     enabled: !!project.path,
   });
@@ -328,7 +328,6 @@ const ExplorerTab: React.FC<{
             node={directories}
             onDeleteFileCallback={closeTabByPath}
             onFileSelect={handleFileSelect}
-            isLoadingFiles={isLoadingDirectories}
             refreshFiles={refreshProjectFiles}
             copyPath={async (source, target) => {
               await projectsServices.copyPath({ source, target });
@@ -412,21 +411,6 @@ const ExplorerTab: React.FC<{
         />
       )}
     </FileTreeContainer>
-  );
-};
-
-// Search Tab Component - Global "find in files" panel
-const SearchTab: React.FC<{ project: Project }> = ({ project }) => {
-  const { openFileAt } = useTabs();
-  const handleSelect = React.useCallback(
-    (selection: SearchResultSelection) => openFileAt(selection),
-    [openFileAt],
-  );
-  return (
-    <SearchInFilesPanel
-      projectPath={project.path}
-      onResultSelect={handleSelect}
-    />
   );
 };
 
@@ -523,7 +507,6 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
             openCreatePipeline={openCreatePipeline}
           />
         )}
-        {activeTab === 'search' && <SearchTab project={project} />}
         {activeTab === 'scm' && <SourceControlTab project={project} />}
         {activeTab === 'connections' && <ConnectionsTab project={project} />}
       </Box>
