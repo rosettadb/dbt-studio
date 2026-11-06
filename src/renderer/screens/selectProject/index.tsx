@@ -99,10 +99,16 @@ const SelectProject: React.FC = () => {
     React.useState<string>('');
   const [isCloneModalOpen, setIsCloneModalOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState('');
-  const [projectsView, setProjectsView] = React.useState<'list' | 'card'>(() =>
-    localStorage.getItem(PROJECTS_VIEW_STORAGE_KEY) === 'card'
-      ? 'card'
-      : 'list',
+  const [projectsView, setProjectsView] = React.useState<'list' | 'card'>(
+    () => {
+      try {
+        return localStorage.getItem(PROJECTS_VIEW_STORAGE_KEY) === 'card'
+          ? 'card'
+          : 'list';
+      } catch {
+        return 'list';
+      }
+    },
   );
   const [isAddingProject, setIsAddingProject] = React.useState(false);
   const [newProject, setNewProject] = React.useState({
@@ -371,7 +377,11 @@ const SelectProject: React.FC = () => {
 
   const handleProjectsViewChange = (view: 'list' | 'card') => {
     setProjectsView(view);
-    localStorage.setItem(PROJECTS_VIEW_STORAGE_KEY, view);
+    try {
+      localStorage.setItem(PROJECTS_VIEW_STORAGE_KEY, view);
+    } catch {
+      // The view still switches; it just won't be remembered next time
+    }
   };
 
   const handleOpenProject = async (project: Project) => {

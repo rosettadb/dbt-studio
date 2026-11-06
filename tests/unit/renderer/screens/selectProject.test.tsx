@@ -156,6 +156,37 @@ describe('Manage Projects screen', () => {
         screen.getByTestId('project-card-beta_project'),
       ).toBeInTheDocument();
     });
+
+    describe('when browser storage fails', () => {
+      afterEach(() => {
+        jest.restoreAllMocks();
+      });
+
+      it('still shows the screen in list view when the saved view cannot be read', () => {
+        jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+          throw new Error('storage blocked');
+        });
+
+        render(<SelectProject />);
+
+        expect(screen.getByTestId('project-list')).toHaveStyle({
+          display: 'flex',
+        });
+      });
+
+      it('still switches view when the choice cannot be saved', () => {
+        jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+          throw new Error('quota exceeded');
+        });
+        render(<SelectProject />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'card view' }));
+
+        expect(screen.getByTestId('project-list')).toHaveStyle({
+          display: 'grid',
+        });
+      });
+    });
   });
 
   describe('project details', () => {
