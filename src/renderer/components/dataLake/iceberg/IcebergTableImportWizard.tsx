@@ -33,6 +33,7 @@ import {
 import { useFilePicker } from '../../../controllers/settings.controller';
 import { useListIcebergNamespaces } from '../../../controllers/icebergDatalake.controller';
 import type { IcebergImportFileFormat } from '../../../../types/iceberg';
+import { dataLakeDialogSx } from '../DataLakeLayout';
 
 interface IcebergTableImportWizardProps {
   open: boolean;
@@ -413,6 +414,7 @@ export const IcebergTableImportWizard: React.FC<
 
   return (
     <Dialog
+      slotProps={{ paper: { sx: dataLakeDialogSx } }}
       open={open}
       onClose={onClose}
       maxWidth="md"

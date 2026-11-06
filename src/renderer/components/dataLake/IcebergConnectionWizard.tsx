@@ -33,6 +33,7 @@ import {
   ArrowForward,
   ArrowBack,
   CheckCircle,
+  Close,
   FolderOpen,
   Speed,
   Visibility,
@@ -1209,7 +1210,7 @@ export const IcebergConnectionWizard: React.FC<
         <Typography variant="subtitle1" fontWeight={600}>
           Review &amp; Confirm
         </Typography>
-        <Paper variant="outlined" sx={{ p: 2 }}>
+        <Paper variant="outlined" sx={{ borderRadius: 2, p: 2 }}>
           <List dense disablePadding>
             <ListItem disableGutters>
               <ListItemText primary="Name" secondary={data.basics.name} />
@@ -1447,8 +1448,8 @@ export const IcebergConnectionWizard: React.FC<
 
   const isLastStep = activeStep === STEPS.length - 1;
 
-  const getEndIcon = () => {
-    if (isLoading) return <CircularProgress size={18} color="inherit" />;
+  const getNextIcon = () => {
+    if (isLoading) return <CircularProgress size={16} color="inherit" />;
     if (isLastStep) return <CheckCircle />;
     return <ArrowForward />;
   };
@@ -1493,25 +1494,36 @@ export const IcebergConnectionWizard: React.FC<
         </Alert>
       )}
 
-      {/* Navigation */}
+      {/* Navigation: same footer as the DuckLake create wizard */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 1 }}>
         <Button
           variant="outlined"
-          color="inherit"
-          onClick={activeStep === 0 ? onCancel : handleBack}
-          startIcon={activeStep > 0 ? <ArrowBack /> : undefined}
+          onClick={onCancel}
+          startIcon={<Close />}
           disabled={isLoading}
         >
-          {activeStep === 0 ? 'Cancel' : 'Back'}
+          Cancel
         </Button>
-        <Button
-          variant="contained"
-          onClick={isLastStep ? handleFinish : handleNext}
-          endIcon={getEndIcon()}
-          disabled={isLoading}
-        >
-          {isLastStep ? finishLabel : 'Next'}
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          {activeStep > 0 && (
+            <Button
+              variant="outlined"
+              onClick={handleBack}
+              startIcon={<ArrowBack />}
+              disabled={isLoading}
+            >
+              Back
+            </Button>
+          )}
+          <Button
+            variant="contained"
+            onClick={isLastStep ? handleFinish : handleNext}
+            startIcon={getNextIcon()}
+            disabled={isLoading}
+          >
+            {isLastStep ? finishLabel : 'Next'}
+          </Button>
+        </Box>
       </Box>
     </Box>
   );
