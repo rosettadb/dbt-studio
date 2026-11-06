@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material';
 import ProjectDetails from '../../../../src/renderer/screens/projectDetails';
@@ -117,8 +117,20 @@ describe('ProjectDetails side panel tabs', () => {
     async (tabName) => {
       renderProjectDetails();
 
+      fireEvent.mouseOver(screen.getByRole('tab', { name: tabName }));
+
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(tabName);
+    },
+  );
+
+  it.each(['Explorer', 'Git', 'Database'])(
+    'shows the name of the %s tab when reached with the keyboard',
+    async (tabName) => {
+      renderProjectDetails();
+
       const tab = screen.getByRole('tab', { name: tabName });
-      fireEvent.mouseOver(within(tab).getByLabelText(tabName));
+      fireEvent.keyDown(document.body, { key: 'Tab' });
+      act(() => tab.focus());
 
       expect(await screen.findByRole('tooltip')).toHaveTextContent(tabName);
     },
@@ -159,7 +171,9 @@ describe('ProjectDetails side panel tabs', () => {
   it('refreshes the project files from the refresh button on the Explorer tab', () => {
     renderProjectDetails();
 
-    fireEvent.click(screen.getByLabelText('Refresh directories'));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Refresh directories' }),
+    );
 
     expect(mockRefreshProjectFiles).toHaveBeenCalledTimes(1);
   });

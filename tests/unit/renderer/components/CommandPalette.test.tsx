@@ -22,9 +22,14 @@ const mockSelectProject = jest.fn();
 const mockSearchInFiles = jest.fn();
 const mockUseGetSelectedProject = jest.fn();
 const mockUseGetProjectFiles = jest.fn();
+const mockToastError = jest.fn();
 
 jest.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate,
+}));
+
+jest.mock('react-toastify', () => ({
+  toast: { error: (...args: unknown[]) => mockToastError(...args) },
 }));
 
 jest.mock('../../../../src/renderer/controllers', () => ({
@@ -77,11 +82,11 @@ const openPalette = () => {
 };
 
 const typeQuery = (query: string) => {
-  fireEvent.change(screen.getByRole('textbox'), { target: { value: query } });
+  fireEvent.change(screen.getByRole('combobox'), { target: { value: query } });
 };
 
 const pressKey = (key: string) => {
-  fireEvent.keyDown(screen.getByRole('textbox'), { key });
+  fireEvent.keyDown(screen.getByRole('combobox'), { key });
 };
 
 const sectionHeader = (title: string) =>
@@ -147,7 +152,7 @@ describe('CommandPalette', () => {
       await dialogIsClosed();
       fireEvent.click(screen.getByRole('button', { name: 'Search (Ctrl+K)' }));
 
-      expect(screen.getByRole('textbox')).toHaveValue('');
+      expect(screen.getByRole('combobox')).toHaveValue('');
     });
   });
 
@@ -381,6 +386,66 @@ describe('CommandPalette', () => {
       expect(screen.queryByText('old.sql · line 1')).not.toBeInTheDocument();
       expect(screen.getByText('new.sql · line 1')).toBeInTheDocument();
     });
+
+    it('drops the previous matches as soon as the search changes', async () => {
+      mockSearchInFiles.mockResolvedValueOnce({
+        results: [
+          {
+            path: `${PROJECT_PATH}/old.sql`,
+            matches: [textMatch(1, 'select')],
+          },
+        ],
+        truncated: false,
+      });
+      openPalette();
+      typeQuery('select');
+      await screen.findByText('old.sql · line 1');
+
+      typeQuery('selects');
+
+      // Gone before the next search has even started
+      expect(screen.queryByText('old.sql · line 1')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('screen readers', () => {
+    it('links the search box to the results list', () => {
+      openPalette();
+
+      expect(screen.getByRole('combobox')).toHaveAttribute(
+        'aria-controls',
+        screen.getByRole('listbox', { name: 'Search results' }).id,
+      );
+    });
+
+    it('points the search box at the highlighted row', () => {
+      openPalette();
+      typeQuery('finance');
+
+      const row = screen.getByRole('option', { name: /Finance/ });
+
+      expect(row).toHaveAttribute('aria-selected', 'true');
+      expect(screen.getByRole('combobox')).toHaveAttribute(
+        'aria-activedescendant',
+        row.id,
+      );
+    });
+
+    it('announces how many results there are once the search finishes', async () => {
+      openPalette();
+
+      typeQuery('finance');
+      await waitFor(() =>
+        expect(screen.getByRole('status')).toHaveTextContent('1 result'),
+      );
+
+      typeQuery('nothing-matches-this');
+      // Silent while the text search is still running, then the count
+      expect(screen.getByRole('status')).toHaveTextContent('');
+      await waitFor(() =>
+        expect(screen.getByRole('status')).toHaveTextContent('0 results'),
+      );
+    });
   });
 
   describe('without a selected project', () => {
@@ -502,6 +567,38 @@ describe('CommandPalette', () => {
 
       await waitFor(() =>
         expect(mockSelectProject).toHaveBeenCalledWith({ projectId: 'p2' }),
+      );
+    });
+
+    it('shows an error when switching project fails', async () => {
+      mockSelectProject.mockRejectedValue(new Error('Project folder missing'));
+      openPalette();
+
+      fireEvent.click(screen.getByText('Finance'));
+
+      await waitFor(() =>
+        expect(mockToastError).toHaveBeenCalledWith('Project folder missing'),
+      );
+      expect(mockNavigate).not.toHaveBeenCalled();
+    });
+
+    it('still highlights the first row when results arrive after pressing down on none', async () => {
+      mockSearchInFiles.mockResolvedValue({
+        results: [
+          { path: `${PROJECT_PATH}/a.sql`, matches: [textMatch(4, 'zzword')] },
+        ],
+        truncated: false,
+      });
+      openPalette();
+      typeQuery('zzword');
+
+      // Nothing is listed until the text search answers
+      pressKey('ArrowDown');
+      await screen.findByText('a.sql · line 4');
+      pressKey('Enter');
+
+      expect(mockOpenFileAt).toHaveBeenCalledWith(
+        expect.objectContaining({ path: `${PROJECT_PATH}/a.sql`, line: 4 }),
       );
     });
 

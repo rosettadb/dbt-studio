@@ -15,6 +15,7 @@ import {
   Search as SearchIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import {
   useGetProjectFiles,
   useGetProjects,
@@ -34,7 +35,7 @@ type PaletteItem = {
   label: React.ReactNode;
   description: string;
   icon: React.ReactNode;
-  run: () => void;
+  run: () => void | Promise<void>;
 };
 
 type PaletteSection = {
@@ -82,6 +83,8 @@ export const CommandPalette: React.FC = () => {
     React.useState(false);
   const [isSearchingText, setIsSearchingText] = React.useState(false);
   const itemRefs = React.useRef<(HTMLDivElement | null)[]>([]);
+  const listboxId = React.useId();
+  const getOptionId = (index: number) => `${listboxId}-option-${index}`;
 
   const projectPath = selectedProject?.path ?? '';
   const trimmedQuery = query.trim();
@@ -113,6 +116,9 @@ export const CommandPalette: React.FC = () => {
       return undefined;
     }
     let isCurrent = true;
+    // Drop the previous query's matches so they can't be opened while waiting
+    setTextResults([]);
+    setIsTextSearchTruncated(false);
     setIsSearchingText(true);
     const timeout = setTimeout(async () => {
       try {
@@ -275,13 +281,17 @@ export const CommandPalette: React.FC = () => {
   const runItem = (item: PaletteItem | undefined) => {
     if (!item) return;
     close();
-    item.run();
+    Promise.resolve(item.run()).catch((error: Error) => {
+      toast.error(error?.message || 'Could not open the selected item');
+    });
   };
 
   const handleInputKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === 'ArrowDown') {
       event.preventDefault();
-      setActiveIndex((index) => Math.min(index + 1, items.length - 1));
+      setActiveIndex((index) =>
+        Math.max(0, Math.min(index + 1, items.length - 1)),
+      );
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
       setActiveIndex((index) => Math.max(index - 1, 0));
@@ -328,23 +338,56 @@ export const CommandPalette: React.FC = () => {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={handleInputKeyDown}
+            inputProps={{
+              role: 'combobox',
+              'aria-label': 'Search',
+              'aria-autocomplete': 'list',
+              'aria-expanded': items.length > 0,
+              'aria-controls': listboxId,
+              'aria-activedescendant': items[activeIndex]
+                ? getOptionId(activeIndex)
+                : undefined,
+            }}
             sx={{ fontSize: 14 }}
           />
           {isSearchingText && <CircularProgress size={14} />}
         </Box>
-        <Box sx={{ maxHeight: 420, overflowY: 'auto', pb: 1 }}>
-          {items.length === 0 && !isSearchingText && (
-            <Typography
-              variant="body2"
-              color="text.secondary"
-              sx={{ px: 2, py: 3, textAlign: 'center' }}
-            >
-              No results found.
-            </Typography>
-          )}
+        {/* Read out by screen readers whenever the number of results changes */}
+        <Box
+          role="status"
+          sx={{
+            position: 'absolute',
+            width: 1,
+            height: 1,
+            overflow: 'hidden',
+            clip: 'rect(0 0 0 0)',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {isSearchingText && items.length === 0
+            ? ''
+            : `${items.length} result${items.length === 1 ? '' : 's'}`}
+        </Box>
+        {items.length === 0 && !isSearchingText && (
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            aria-hidden
+            sx={{ px: 2, py: 3, textAlign: 'center' }}
+          >
+            No results found.
+          </Typography>
+        )}
+        <Box
+          id={listboxId}
+          role="listbox"
+          aria-label="Search results"
+          sx={{ maxHeight: 420, overflowY: 'auto', pb: 1 }}
+        >
           {sections.map((section) => (
-            <Box key={section.title}>
+            <Box key={section.title} role="group" aria-label={section.title}>
               <Box
+                aria-hidden
                 sx={{
                   position: 'sticky',
                   top: 0,
@@ -383,6 +426,9 @@ export const CommandPalette: React.FC = () => {
                 return (
                   <Box
                     key={item.id}
+                    id={getOptionId(index)}
+                    role="option"
+                    aria-selected={index === activeIndex}
                     ref={(element: HTMLDivElement | null) => {
                       itemRefs.current[index] = element;
                     }}

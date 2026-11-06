@@ -6,7 +6,9 @@ import {
   Badge,
   Box,
   CircularProgress,
+  IconButton,
   Tab,
+  TabProps,
   Tabs,
   Tooltip,
 } from '@mui/material';
@@ -70,20 +72,16 @@ const VerticalSash = (_: number, active: boolean) => (
 // Minimum width for the chat panel — must be wide enough for the chat UI
 const CHAT_MIN_WIDTH = 280;
 
-// Fills the whole tab so its name shows when hovering anywhere on the tab
-const renderIconOnlyTabContent = (tabName: string, icon: React.ReactNode) => (
+// The tooltip sits on the tab itself, so its name shows on hover and on
+// keyboard focus, and also becomes the tab's accessible name. Tabs passes
+// its props (selected, onChange, ...) through this wrapper to the Tab.
+const IconOnlyTab: React.FC<TabProps & { tabName: string }> = ({
+  tabName,
+  ...tabProps
+}) => (
   <Tooltip title={tabName}>
-    <Box
-      sx={{
-        width: '100%',
-        height: 34,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      {icon}
-    </Box>
+    {/* eslint-disable-next-line react/jsx-props-no-spreading */}
+    <Tab {...tabProps} />
   </Tooltip>
 );
 
@@ -188,24 +186,22 @@ const ProjectDetails: React.FC = () => {
                 },
               }}
             >
-              <Tab
+              <IconOnlyTab
+                tabName="Explorer"
                 value="explorer"
-                aria-label="Explorer"
-                icon={renderIconOnlyTabContent(
-                  'Explorer',
+                icon={
                   <Icon
                     src={icons.folder}
                     width={15}
                     height={15}
                     color={sidebarIconColor('explorer')}
-                  />,
-                )}
+                  />
+                }
               />
-              <Tab
+              <IconOnlyTab
+                tabName="Git"
                 value="scm"
-                aria-label="Git"
-                icon={renderIconOnlyTabContent(
-                  'Git',
+                icon={
                   <Badge
                     badgeContent={statuses.length}
                     color="primary"
@@ -227,14 +223,13 @@ const ProjectDetails: React.FC = () => {
                       height={15}
                       color={sidebarIconColor('scm')}
                     />
-                  </Badge>,
-                )}
+                  </Badge>
+                }
               />
-              <Tab
+              <IconOnlyTab
+                tabName="Database"
                 value="connections"
-                aria-label="Database"
-                icon={renderIconOnlyTabContent(
-                  'Database',
+                icon={
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
@@ -249,20 +244,22 @@ const ProjectDetails: React.FC = () => {
                       strokeLinejoin="round"
                       d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125"
                     />
-                  </svg>,
-                )}
+                  </svg>
+                }
               />
             </Tabs>
             {sidebarTab === 'explorer' && (
-              <Box sx={{ px: 1, display: 'flex' }}>
+              <Box sx={{ px: 0.5, display: 'flex' }}>
                 <Tooltip title="Refresh directories">
                   {isLoadingFiles ? (
                     <CircularProgress size={20} />
                   ) : (
-                    <Cached
-                      sx={{ color: 'primary.main', cursor: 'pointer' }}
+                    <IconButton
+                      size="small"
                       onClick={() => refreshProjectFiles()}
-                    />
+                    >
+                      <Cached sx={{ color: 'primary.main' }} />
+                    </IconButton>
                   )}
                 </Tooltip>
               </Box>
