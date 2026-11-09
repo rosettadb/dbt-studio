@@ -209,6 +209,18 @@ const Dashboard: React.FC = () => {
     }
   }, [projects.length]);
 
+  const outlinedButtonSx = {
+    borderColor: theme.palette.divider,
+    color: theme.palette.text.primary,
+    fontWeight: 600,
+    textTransform: 'none',
+    borderRadius: 2,
+    '&:hover': {
+      borderColor: theme.palette.primary.main,
+      color: theme.palette.primary.main,
+    },
+  };
+
   return (
     <Box
       sx={{
@@ -472,11 +484,9 @@ const Dashboard: React.FC = () => {
               </Typography>
               <Button
                 size="small"
+                variant="outlined"
                 onClick={() => navigate('/app/select-project')}
-                sx={{
-                  textTransform: 'none',
-                  color: theme.palette.primary.main,
-                }}
+                sx={outlinedButtonSx}
               >
                 View All
               </Button>
@@ -567,11 +577,9 @@ const Dashboard: React.FC = () => {
               </Typography>
               <Button
                 size="small"
+                variant="outlined"
                 onClick={() => handleFeatureClick('/app/connections')}
-                sx={{
-                  textTransform: 'none',
-                  color: theme.palette.primary.main,
-                }}
+                sx={outlinedButtonSx}
               >
                 Manage
               </Button>
