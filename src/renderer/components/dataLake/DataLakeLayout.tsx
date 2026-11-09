@@ -196,6 +196,12 @@ export const dataLakeTableSx = {
   '& .MuiTableBody-root .MuiTableRow-root:last-of-type > .MuiTableCell-root': {
     borderBottom: 0,
   },
+  // Touchscreens (finger or pen): 4px more padding above and below body
+  // cells, so a row with the row-actions trigger is ~45px tall and the
+  // trigger's 44x44 tap area fits inside its own row. Mouse-only: unchanged.
+  '@media (any-pointer: coarse)': {
+    '& .MuiTableBody-root .MuiTableCell-root': { py: 1.375 },
+  },
 } as const;
 
 interface DataLakeTableContainerProps {
@@ -283,10 +289,10 @@ export const DataLakeRowActions: React.FC<DataLakeRowActionsProps> = ({
             sx={{
               // Keep the full click target without making the row taller.
               my: -0.5,
-              // Touchscreens (finger or pen): an invisible 44px-wide tap area
-              // around the 30px button; the icon stays the same. It is 36px
-              // tall, not 44: rows are ~37px apart, so a taller area would
-              // overlap the next row's button and open the wrong row's menu.
+              // Touchscreens (finger or pen): an invisible 44x44 tap area
+              // around the 30px button; the icon stays the same. Table rows
+              // are taller on touch screens (dataLakeTableSx), so the area
+              // stays inside its own row and never reaches the next row's.
               '@media (any-pointer: coarse)': {
                 '&::after': {
                   content: '""',
@@ -294,7 +300,7 @@ export const DataLakeRowActions: React.FC<DataLakeRowActionsProps> = ({
                   top: '50%',
                   left: '50%',
                   width: 44,
-                  height: 36,
+                  height: 44,
                   transform: 'translate(-50%, -50%)',
                 },
               },
