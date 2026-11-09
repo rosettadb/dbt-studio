@@ -26,12 +26,15 @@ import {
 
 // Compact small buttons, same values as the Settings pages
 // (screens/settings/styles.ts). Put it on the root of a DataLake page.
+// minHeight keeps the target at the WCAG 2.2 AA minimum (24px, SC 2.5.8):
+// 12px text x 1.6 plus the padding is only 23.2px on its own.
 export const dataLakePageSx = {
   '& .MuiButton-sizeSmall': {
     fontSize: 12,
     lineHeight: 1.6,
     padding: '2px 8px',
     minWidth: 0,
+    minHeight: 24,
     '& .MuiButton-startIcon': {
       marginRight: '4px',
       marginLeft: '-2px',
@@ -52,6 +55,7 @@ export const dataLakeDialogSx = {
     lineHeight: 1.6,
     padding: '2px 8px',
     minWidth: 0,
+    minHeight: 24, // WCAG 2.2 AA target size, as above
     '& .MuiButton-startIcon': {
       marginRight: '4px',
       marginLeft: '-2px',
