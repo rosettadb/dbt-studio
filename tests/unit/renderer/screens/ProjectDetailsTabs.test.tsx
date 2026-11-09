@@ -165,6 +165,21 @@ describe('ProjectDetails side panel tabs', () => {
     },
   );
 
+  it('moves between tabs with the left and right arrow keys', () => {
+    renderProjectDetails();
+    const explorerTab = screen.getByRole('tab', { name: 'Explorer' });
+    act(() => explorerTab.focus());
+
+    fireEvent.keyDown(explorerTab, { key: 'ArrowRight' });
+    expect(screen.getByRole('tab', { name: 'Git' })).toHaveFocus();
+
+    fireEvent.keyDown(document.activeElement as Element, { key: 'ArrowRight' });
+    expect(screen.getByRole('tab', { name: 'Database' })).toHaveFocus();
+
+    fireEvent.keyDown(document.activeElement as Element, { key: 'ArrowLeft' });
+    expect(screen.getByRole('tab', { name: 'Git' })).toHaveFocus();
+  });
+
   it('shows the number of uncommitted files on the Git tab', () => {
     mockUseGetFileStatuses.mockReturnValue({
       data: [{ path: 'a.sql' }, { path: 'b.sql' }, { path: 'c.sql' }],

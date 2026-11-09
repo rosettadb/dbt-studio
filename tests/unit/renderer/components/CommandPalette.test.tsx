@@ -222,6 +222,30 @@ describe('CommandPalette', () => {
       });
     });
 
+    it('stacks the titles of later sections at the bottom, nearest first', () => {
+      openPalette();
+
+      // Go to is followed by Projects, so it sits one title above the bottom
+      expect(sectionHeader('Go to')).toHaveStyle({ bottom: '32px' });
+      expect(sectionHeader('Projects')).toHaveStyle({ bottom: '0px' });
+    });
+
+    it('lets a later title cover an earlier one at the top', () => {
+      openPalette();
+
+      expect(Number(getComputedStyle(sectionHeader('Projects')).zIndex)).toBe(
+        Number(getComputedStyle(sectionHeader('Go to')).zIndex) + 1,
+      );
+    });
+
+    it('lets the titles pin across the whole list, not just their section', () => {
+      openPalette();
+
+      expect(screen.getByRole('group', { name: 'Go to' })).toHaveStyle({
+        display: 'contents',
+      });
+    });
+
     it('hides sections with no results', () => {
       openPalette();
       typeQuery('finance');
@@ -451,6 +475,68 @@ describe('CommandPalette', () => {
     });
   });
 
+  describe('scrolling with the arrow keys', () => {
+    // jsdom has no layout, so give the list and rows sizes by hand. The list
+    // is 200px tall, and "Go to" rows have the Projects title (32px) pinned
+    // under them, so they are visible from 32px to 168px.
+    const fakeListLayout = (initialScrollTop: number) => {
+      const list = screen.getByRole('listbox');
+      let scrollTop = initialScrollTop;
+      Object.defineProperty(list, 'scrollTop', {
+        configurable: true,
+        get: () => scrollTop,
+        set: (value: number) => {
+          scrollTop = value;
+        },
+      });
+      Object.defineProperty(list, 'clientHeight', {
+        configurable: true,
+        value: 200,
+      });
+      list.getBoundingClientRect = () => ({ top: 0, bottom: 200 }) as DOMRect;
+      return list;
+    };
+
+    const placeRow = (index: number, top: number) => {
+      screen.getAllByRole('option')[index].getBoundingClientRect = () =>
+        ({ top, bottom: top + 40 }) as DOMRect;
+    };
+
+    it('scrolls down until the row clears the titles pinned at the bottom', () => {
+      openPalette();
+      const list = fakeListLayout(0);
+      placeRow(1, 150);
+
+      pressKey('ArrowDown');
+
+      // The row ends at 190 but must end by 168
+      expect(list.scrollTop).toBe(22);
+    });
+
+    it('scrolls up until the row clears the title pinned at the top', () => {
+      openPalette();
+      const list = fakeListLayout(100);
+      placeRow(1, 60);
+      pressKey('ArrowDown');
+      placeRow(0, 10);
+
+      pressKey('ArrowUp');
+
+      // The row starts at 10 but must start at 32 or lower
+      expect(list.scrollTop).toBe(78);
+    });
+
+    it('leaves the scroll alone when the row is already in view', () => {
+      openPalette();
+      const list = fakeListLayout(40);
+      placeRow(1, 60);
+
+      pressKey('ArrowDown');
+
+      expect(list.scrollTop).toBe(40);
+    });
+  });
+
   describe('screen readers', () => {
     it('links the search box to the results list', () => {
       openPalette();
@@ -578,6 +664,16 @@ describe('CommandPalette', () => {
       const folders = within(screen.getByRole('group', { name: 'Folders' }));
       expect(folders.getByText('staging')).toBeInTheDocument();
       expect(folders.getByText('models')).toBeInTheDocument();
+    });
+
+    it('lists folders before the files inside them', () => {
+      openPalette();
+      typeQuery('staging');
+
+      const sectionNames = screen
+        .getAllByRole('group')
+        .map((group) => group.getAttribute('aria-label'));
+      expect(sectionNames).toEqual(['Folders', 'Files']);
     });
 
     it('shows the folder in the file tree when chosen', async () => {

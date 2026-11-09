@@ -64,8 +64,9 @@ const MAX_FILES = 20;
 const MAX_FOLDERS = 20;
 const TEXT_SEARCH_MIN_LENGTH = 2;
 const TEXT_SEARCH_DEBOUNCE_MS = 300;
-// Keeps a row clear of the pinned section title when the arrow keys scroll to it.
-const SECTION_HEADER_HEIGHT = '32px';
+// In pixels. Also keeps a row clear of the pinned section titles when the
+// arrow keys scroll to it.
+const SECTION_HEADER_HEIGHT = 32;
 const GIT_INTERNALS_FOLDER = '.git';
 
 const flattenProjectEntries = (
@@ -147,6 +148,7 @@ export const CommandPalette: React.FC = () => {
     Set<string>
   >(new Set());
   const itemRefs = React.useRef<(HTMLDivElement | null)[]>([]);
+  const listboxRef = React.useRef<HTMLDivElement>(null);
   // Left and right only fold files once the list is being walked with up and
   // down. Until then they keep moving the text cursor in the search box.
   const isWalkingListRef = React.useRef(false);
@@ -371,17 +373,19 @@ export const CommandPalette: React.FC = () => {
         resultCount: projectItems.length,
         items: projectItems,
       },
-      {
-        title: 'Files',
-        countLabel: getCountLabel(fileItems.length, matchingFiles.length),
-        resultCount: fileItems.length,
-        items: fileItems,
-      },
+      // Folders come before Files: a folder name also matches every file
+      // inside it, which would push the folder itself out of view
       {
         title: 'Folders',
         countLabel: getCountLabel(folderItems.length, matchingFolders.length),
         resultCount: folderItems.length,
         items: folderItems,
+      },
+      {
+        title: 'Files',
+        countLabel: getCountLabel(fileItems.length, matchingFiles.length),
+        resultCount: fileItems.length,
+        items: fileItems,
       },
       {
         title: 'Text in files',
@@ -431,8 +435,24 @@ export const CommandPalette: React.FC = () => {
     }
   }, [items.length, activeIndex]);
 
+  // Scrolls by hand so the highlighted row clears the section titles pinned
+  // over the top and bottom of the list. The browser's own scrollIntoView
+  // left rows hidden behind the bottom titles.
   const scrollActiveItemIntoView = () => {
-    itemRefs.current[activeIndex]?.scrollIntoView({ block: 'nearest' });
+    const list = listboxRef.current;
+    const row = itemRefs.current[activeIndex];
+    if (!list || !row) return;
+    const listRect = list.getBoundingClientRect();
+    const rowRect = row.getBoundingClientRect();
+    const pinnedBelowHeight = Number(row.dataset.pinnedBelowHeight ?? 0);
+    const hiddenAbove = listRect.top + SECTION_HEADER_HEIGHT - rowRect.top;
+    const hiddenBelow =
+      rowRect.bottom - (listRect.top + list.clientHeight - pinnedBelowHeight);
+    if (hiddenAbove > 0) {
+      list.scrollTop -= hiddenAbove;
+    } else if (hiddenBelow > 0) {
+      list.scrollTop += hiddenBelow;
+    }
   };
 
   React.useEffect(scrollActiveItemIntoView, [activeIndex]);
@@ -564,128 +584,144 @@ export const CommandPalette: React.FC = () => {
           </Typography>
         )}
         <Box
+          ref={listboxRef}
           id={listboxId}
           role="listbox"
           aria-label="Search results"
-          sx={{ maxHeight: 420, overflowY: 'auto', pb: 1 }}
+          sx={{ maxHeight: 420, overflowY: 'auto' }}
         >
-          {sections.map((section) => (
-            <Box key={section.title} role="group" aria-label={section.title}>
+          {sections.map((section, sectionIndex) => {
+            // Titles of sections still below the visible rows stack at the
+            // bottom, so it's always clear what comes next. Scrolled past,
+            // a title pins to the top, and the later one covers the earlier.
+            const pinnedBelowHeight =
+              (sections.length - 1 - sectionIndex) * SECTION_HEADER_HEIGHT;
+            return (
+              // `display: contents` lets the titles pin across the whole list
+              // instead of only inside their own section
               <Box
-                aria-hidden
-                sx={{
-                  position: 'sticky',
-                  top: 0,
-                  zIndex: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  height: SECTION_HEADER_HEIGHT,
-                  px: 2,
-                  bgcolor: 'background.paper',
-                  backgroundImage: `linear-gradient(${theme.palette.action.selected}, ${theme.palette.action.selected})`,
-                  borderTop: `1px solid ${theme.palette.divider}`,
-                  borderBottom: `1px solid ${theme.palette.divider}`,
-                }}
+                key={section.title}
+                role="group"
+                aria-label={section.title}
+                sx={{ display: 'contents' }}
               >
-                <Typography
-                  component="span"
+                <Box
+                  aria-hidden
                   sx={{
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
+                    position: 'sticky',
+                    top: 0,
+                    bottom: pinnedBelowHeight,
+                    zIndex: sectionIndex + 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    height: SECTION_HEADER_HEIGHT,
+                    px: 2,
+                    bgcolor: 'background.paper',
+                    backgroundImage: `linear-gradient(${theme.palette.action.selected}, ${theme.palette.action.selected})`,
+                    borderTop: `1px solid ${theme.palette.divider}`,
+                    borderBottom: `1px solid ${theme.palette.divider}`,
                   }}
                 >
-                  {section.title}
-                </Typography>
-                <Typography
-                  component="span"
-                  sx={{ fontSize: '0.75rem', color: 'text.secondary' }}
-                >
-                  {section.countLabel}
-                </Typography>
-              </Box>
-              {section.items.map((item) => {
-                const index = items.indexOf(item);
-                const { fileGroup } = item;
-                return (
-                  <Box
-                    key={item.id}
-                    id={getOptionId(index)}
-                    role="option"
-                    aria-selected={index === activeIndex}
-                    aria-label={
-                      fileGroup
-                        ? `${item.label}, ${fileGroup.matchCount} match${fileGroup.matchCount === 1 ? '' : 'es'}, ${fileGroup.isCollapsed ? 'collapsed' : 'expanded'}`
-                        : undefined
-                    }
-                    ref={(element: HTMLDivElement | null) => {
-                      itemRefs.current[index] = element;
-                    }}
-                    onMouseMove={() => setActiveIndex(index)}
-                    onClick={() => runItem(item)}
+                  <Typography
+                    component="span"
                     sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 1,
-                      pl: item.fileGroupItemId ? 5 : 2,
-                      pr: 2,
-                      py: 0.625,
-                      cursor: 'pointer',
-                      scrollMarginTop: SECTION_HEADER_HEIGHT,
-                      bgcolor:
-                        index === activeIndex
-                          ? theme.palette.action.selected
-                          : 'transparent',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em',
                     }}
                   >
+                    {section.title}
+                  </Typography>
+                  <Typography
+                    component="span"
+                    sx={{ fontSize: '0.75rem', color: 'text.secondary' }}
+                  >
+                    {section.countLabel}
+                  </Typography>
+                </Box>
+                {section.items.map((item) => {
+                  const index = items.indexOf(item);
+                  const { fileGroup } = item;
+                  return (
                     <Box
+                      key={item.id}
+                      id={getOptionId(index)}
+                      role="option"
+                      aria-selected={index === activeIndex}
+                      aria-label={
+                        fileGroup
+                          ? `${item.label}, ${fileGroup.matchCount} match${fileGroup.matchCount === 1 ? '' : 'es'}, ${fileGroup.isCollapsed ? 'collapsed' : 'expanded'}`
+                          : undefined
+                      }
+                      ref={(element: HTMLDivElement | null) => {
+                        itemRefs.current[index] = element;
+                      }}
+                      data-pinned-below-height={pinnedBelowHeight}
+                      onMouseMove={() => setActiveIndex(index)}
+                      onClick={() => runItem(item)}
                       sx={{
                         display: 'flex',
                         alignItems: 'center',
-                        color: 'text.secondary',
-                        flexShrink: 0,
+                        gap: 1,
+                        pl: item.fileGroupItemId ? 5 : 2,
+                        pr: 2,
+                        py: 0.625,
+                        cursor: 'pointer',
+                        bgcolor:
+                          index === activeIndex
+                            ? theme.palette.action.selected
+                            : 'transparent',
                       }}
                     >
-                      {item.icon}
-                    </Box>
-                    <Box sx={{ minWidth: 0, flex: 1 }}>
-                      <Typography
+                      <Box
                         sx={{
-                          fontSize: 13,
-                          fontWeight: fileGroup ? 600 : undefined,
+                          display: 'flex',
+                          alignItems: 'center',
+                          color: 'text.secondary',
+                          flexShrink: 0,
                         }}
-                        noWrap
                       >
-                        {item.label}
-                      </Typography>
-                      {item.description && (
+                        {item.icon}
+                      </Box>
+                      <Box sx={{ minWidth: 0, flex: 1 }}>
+                        <Typography
+                          sx={{
+                            fontSize: 13,
+                            fontWeight: fileGroup ? 600 : undefined,
+                          }}
+                          noWrap
+                        >
+                          {item.label}
+                        </Typography>
+                        {item.description && (
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            component="div"
+                            noWrap
+                            title={item.description}
+                          >
+                            {item.description}
+                          </Typography>
+                        )}
+                      </Box>
+                      {fileGroup && (
                         <Typography
                           variant="caption"
                           color="text.secondary"
-                          component="div"
-                          noWrap
-                          title={item.description}
+                          sx={{ flexShrink: 0 }}
                         >
-                          {item.description}
+                          {fileGroup.matchCount}
                         </Typography>
                       )}
                     </Box>
-                    {fileGroup && (
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ flexShrink: 0 }}
-                      >
-                        {fileGroup.matchCount}
-                      </Typography>
-                    )}
-                  </Box>
-                );
-              })}
-            </Box>
-          ))}
+                  );
+                })}
+              </Box>
+            );
+          })}
         </Box>
       </Dialog>
     </>
