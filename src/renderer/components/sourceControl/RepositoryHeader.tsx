@@ -21,6 +21,7 @@ import {
   useGitDeleteBranch,
   useGitRenameBranch,
   useGitCheckout,
+  refreshGitQueries,
 } from '../../controllers';
 import { BranchDialog } from './BranchDialog';
 import { Icon } from '../icon';
@@ -187,13 +188,13 @@ export const RepositoryHeader: React.FC<RepositoryHeaderProps> = ({
 
   const invalidateGitQueries = React.useCallback(async () => {
     if (!projectPath) return;
-    await Promise.all([
-      queryClient.invalidateQueries([QUERY_KEYS.GIT_BRANCHES, projectPath]),
-      queryClient.invalidateQueries([QUERY_KEYS.GIT_STATUSES, projectPath]),
-      queryClient.invalidateQueries([QUERY_KEYS.GIT_REMOTES, projectPath]),
+    await refreshGitQueries(queryClient, [
+      [QUERY_KEYS.GIT_BRANCHES, projectPath],
+      [QUERY_KEYS.GIT_STATUSES, projectPath],
+      [QUERY_KEYS.GIT_REMOTES, projectPath],
       // Status bar branch + ahead/behind counters
-      queryClient.invalidateQueries([QUERY_KEYS.GIT_REPO_INFO, projectPath]),
-      queryClient.invalidateQueries([QUERY_KEYS.GIT_AHEAD_BEHIND, projectPath]),
+      [QUERY_KEYS.GIT_REPO_INFO, projectPath],
+      [QUERY_KEYS.GIT_AHEAD_BEHIND, projectPath],
     ]);
   }, [projectPath, queryClient]);
 
