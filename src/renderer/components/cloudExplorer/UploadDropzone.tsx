@@ -48,9 +48,12 @@ export interface DroppedUploadEntry {
 export const getDroppedUploadEntries = (
   transfer: DataTransfer,
 ): DroppedUploadEntry[] =>
-  Array.from(transfer.files).flatMap((file, index) => {
+  Array.from(transfer.items).flatMap((item) => {
+    if (item.kind !== 'file') return [];
+    const file = item.getAsFile();
+    if (!file) return [];
     const localPath = (file as File & { path?: string }).path;
-    const entry = transfer.items[index]?.webkitGetAsEntry?.();
+    const entry = item.webkitGetAsEntry?.();
     return localPath
       ? [
           {
@@ -224,11 +227,18 @@ const UploadDropzone: React.FC<UploadDropzoneProps> = ({
   const dropBusyRef = useRef(false);
   const initialEntriesHandled = useRef(false);
   const uploadDroppedEntries = async (entries: DroppedUploadEntry[]) => {
-    if (dropBusyRef.current || activeItemIdRef.current) return;
+    if (dropBusyRef.current || activeItemIdRef.current) {
+      toast.warning(
+        'An upload is in progress. Drop these files again when it finishes.',
+      );
+      return;
+    }
     dropBusyRef.current = true;
     try {
-      if (!entries.length)
+      if (!entries.length) {
         toast.warning('No local files found. Use Upload Files instead.');
+        return;
+      }
       await entries.reduce(async (previous, entry) => {
         await previous;
         const id = `${Date.now()}-${entry.name}`;

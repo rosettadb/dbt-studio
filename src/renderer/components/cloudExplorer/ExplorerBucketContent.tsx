@@ -593,8 +593,12 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
       });
       toast.success(`Folder downloaded to ${result.filePath}`);
     } catch (error) {
-      if (getTask(taskId)?.status !== 'cancelled')
-        toast.error('Failed to download folder. Please try again.');
+      if (getTask(taskId)?.status !== 'cancelled') {
+        // eslint-disable-next-line no-console
+        console.error('Error downloading folder:', error);
+        const message = error instanceof Error ? error.message : String(error);
+        toast.error(`Failed to download folder: ${message}`);
+      }
     } finally {
       setLoadingUrls((previous) => ({ ...previous, [objectName]: false }));
     }

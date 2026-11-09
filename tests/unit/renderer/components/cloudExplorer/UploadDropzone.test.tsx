@@ -1,4 +1,6 @@
+/* eslint-disable react/jsx-props-no-spreading */
 import React from 'react';
+import { toast } from 'react-toastify';
 import {
   act,
   fireEvent,
@@ -85,17 +87,20 @@ it('captures every file during the drop event before asynchronous uploads begin'
     'Drag & drop files or folders here',
   ).parentElement!;
   const transfer = {
-    files: [
-      { name: 'one.txt', path: '/local/one.txt' },
-      { name: 'two.txt', path: '/local/two.txt' },
-    ],
     items: [
-      { webkitGetAsEntry: () => ({ isDirectory: false }) },
-      { webkitGetAsEntry: () => ({ isDirectory: false }) },
+      {
+        kind: 'file',
+        getAsFile: () => ({ name: 'one.txt', path: '/local/one.txt' }),
+        webkitGetAsEntry: () => ({ isDirectory: false }),
+      },
+      {
+        kind: 'file',
+        getAsFile: () => ({ name: 'two.txt', path: '/local/two.txt' }),
+        webkitGetAsEntry: () => ({ isDirectory: false }),
+      },
     ],
   };
   fireEvent.drop(dropArea, { dataTransfer: transfer });
-  transfer.files = [];
   transfer.items = [];
   await waitFor(() => expect(mockFileMutate).toHaveBeenCalledTimes(1));
   await act(async () => {
@@ -107,5 +112,48 @@ it('captures every file during the drop event before asynchronous uploads begin'
   await act(async () => {
     mockFileCallbacks.onSuccess();
     mockFileMutate.mock.calls[1][1].onSettled();
+  });
+});
+
+it('pairs a folder with its file item when a text item comes first', async () => {
+  render(<UploadDropzone {...props} />);
+  const dropArea = screen.getByText(
+    'Drag & drop files or folders here',
+  ).parentElement!;
+  fireEvent.drop(dropArea, {
+    dataTransfer: {
+      items: [
+        { kind: 'string', getAsFile: () => null },
+        {
+          kind: 'file',
+          getAsFile: () => ({ name: 'folder', path: '/local/folder' }),
+          webkitGetAsEntry: () => ({ isDirectory: true }),
+        },
+      ],
+    },
+  });
+  await waitFor(() => expect(mockFolderMutate).toHaveBeenCalledTimes(1));
+  expect(mockFileMutate).not.toHaveBeenCalled();
+  expect(mockFolderMutate.mock.calls[0][0].localFolderPath).toBe(
+    '/local/folder',
+  );
+  fireEvent.drop(dropArea, {
+    dataTransfer: {
+      items: [
+        {
+          kind: 'file',
+          getAsFile: () => ({ name: 'later.txt', path: '/local/later.txt' }),
+          webkitGetAsEntry: () => ({ isDirectory: false }),
+        },
+      ],
+    },
+  });
+  expect(toast.warning).toHaveBeenCalledWith(
+    'An upload is in progress. Drop these files again when it finishes.',
+  );
+  expect(mockFileMutate).not.toHaveBeenCalled();
+  await act(async () => {
+    mockFolderCallbacks.onSuccess({ failedCount: 0, uploadedCount: 1 });
+    mockFolderMutate.mock.calls[0][1].onSettled();
   });
 });
