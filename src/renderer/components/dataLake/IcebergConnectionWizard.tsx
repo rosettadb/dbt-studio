@@ -38,8 +38,12 @@ import {
   Speed,
   Visibility,
   VisibilityOff,
+  InfoOutlined,
+  MenuBookOutlined,
+  StorageOutlined,
 } from '@mui/icons-material';
 import { IcebergIcon } from './iceberg/IcebergIcon';
+import { SettingsSection, SettingsStack } from '../settings/SettingsLayout';
 import type {
   IcebergCatalogType,
   IcebergCloudProvider,
@@ -102,6 +106,15 @@ export interface IcebergConnectionWizardProps {
   /** Pre-fill the form from an existing instance (edit mode) */
   initialData?: IcebergInstanceConfig;
   mode?: 'create' | 'edit';
+  /** Hide the wizard's own title, when the page already shows one */
+  hideHeader?: boolean;
+  /**
+   * 'wizard' (default): one step at a time with a stepper.
+   * 'sections': every step on one page as Settings-style section cards
+   * (Basic Information, Catalog, Storage) with Cancel / Save, like the
+   * DuckLake edit form. Used by the Iceberg edit page.
+   */
+  layout?: 'wizard' | 'sections';
 }
 
 // ─── Step labels ─────────────────────────────────────────────────────────────
@@ -264,6 +277,8 @@ export const IcebergConnectionWizard: React.FC<
   isLoading = false,
   initialData,
   mode = 'create',
+  hideHeader = false,
+  layout = 'wizard',
 }) => {
   const [activeStep, setActiveStep] = useState(0);
   const [data, setData] = useState<IcebergWizardData>(() =>
@@ -427,6 +442,22 @@ export const IcebergConnectionWizard: React.FC<
     await onComplete(data);
   };
 
+  // Sections layout: one Save for every step. Run each step's checks in
+  // order and show the first problem.
+  const handleSaveSections = async () => {
+    const hasSecret = mode === 'edit' && !!initialData?.oauthClientSecretKey;
+    const err =
+      [0, 1, 2]
+        .map((step) => validateStep(step, data, hasSecret))
+        .find((message) => !!message) ?? null;
+    if (err) {
+      setStepError(err);
+      return;
+    }
+    setStepError(null);
+    await onComplete(data);
+  };
+
   // ── Partial update helpers ──────────────────────────────────────────────
 
   const patchBasics = (patch: Partial<IcebergWizardData['basics']>) =>
@@ -575,11 +606,18 @@ export const IcebergConnectionWizard: React.FC<
 
   // ── Step content renderers ──────────────────────────────────────────────
 
+  // Step titles are hidden in the one-page (sections) layout, where each
+  // step sits in a section card that already shows its title.
+  const stepTitle = (title: string) =>
+    layout === 'sections' ? null : (
+      <Typography variant="subtitle1" fontWeight={600}>
+        {title}
+      </Typography>
+    );
+
   const renderBasicsStep = () => (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Typography variant="subtitle1" fontWeight={600}>
-        Instance Details
-      </Typography>
+      {stepTitle('Instance Details')}
       <TextField
         label="Instance Name"
         placeholder="my-iceberg-lake"
@@ -596,8 +634,6 @@ export const IcebergConnectionWizard: React.FC<
         value={data.basics.description ?? ''}
         onChange={(e) => patchBasics({ description: e.target.value })}
         fullWidth
-        multiline
-        rows={2}
         helperText="Optional human-readable description"
       />
     </Box>
@@ -605,9 +641,7 @@ export const IcebergConnectionWizard: React.FC<
 
   const renderCatalogStep = () => (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Typography variant="subtitle1" fontWeight={600}>
-        Catalog Configuration
-      </Typography>
+      {stepTitle('Catalog Configuration')}
 
       <FormControl fullWidth>
         <InputLabel>Catalog Type</InputLabel>
@@ -1030,9 +1064,7 @@ export const IcebergConnectionWizard: React.FC<
     if (isRestCatalog) {
       return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <Typography variant="subtitle1" fontWeight={600}>
-            Storage Configuration
-          </Typography>
+          {stepTitle('Storage Configuration')}
           {data.catalog.catalogType === 'polaris' && (
             <Alert severity="info">
               Storage is managed by Polaris for this catalog. Polaris provides
@@ -1088,9 +1120,7 @@ export const IcebergConnectionWizard: React.FC<
 
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <Typography variant="subtitle1" fontWeight={600}>
-          Storage Configuration
-        </Typography>
+        {stepTitle('Storage Configuration')}
 
         {data.catalog.catalogType === 'hive' && (
           <Alert severity="info">
@@ -1454,6 +1484,62 @@ export const IcebergConnectionWizard: React.FC<
     return <ArrowForward />;
   };
 
+  if (layout === 'sections') {
+    return (
+      <Box sx={{ width: '100%', maxWidth: 820 }}>
+        <SettingsStack>
+          <SettingsSection title="Basic Information" icon={<InfoOutlined />}>
+            <Box sx={{ p: 2 }}>{renderBasicsStep()}</Box>
+          </SettingsSection>
+          <SettingsSection title="Catalog" icon={<MenuBookOutlined />}>
+            <Box sx={{ p: 2 }}>{renderCatalogStep()}</Box>
+          </SettingsSection>
+          <SettingsSection title="Storage" icon={<StorageOutlined />}>
+            <Box sx={{ p: 2 }}>{renderStorageStep()}</Box>
+          </SettingsSection>
+        </SettingsStack>
+
+        {stepError && (
+          <Alert
+            severity="error"
+            onClose={() => setStepError(null)}
+            sx={{ mt: 2.25 }}
+          >
+            {stepError}
+          </Alert>
+        )}
+
+        {/* Same footer as the DuckLake edit form */}
+        <Box
+          sx={{ display: 'flex', justifyContent: 'space-between', mt: 2.25 }}
+        >
+          <Button
+            variant="outlined"
+            onClick={onCancel}
+            startIcon={<Close />}
+            disabled={isLoading}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleSaveSections}
+            startIcon={
+              isLoading ? (
+                <CircularProgress size={16} color="inherit" />
+              ) : (
+                <CheckCircle />
+              )
+            }
+            disabled={isLoading}
+          >
+            {finishLabel}
+          </Button>
+        </Box>
+      </Box>
+    );
+  }
+
   return (
     <Box
       sx={{
@@ -1466,14 +1552,16 @@ export const IcebergConnectionWizard: React.FC<
       }}
     >
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <IcebergIcon size={24} />
-        <Typography variant="h6" fontWeight={700}>
-          {mode === 'edit'
-            ? 'Edit Iceberg Instance'
-            : 'New Apache Iceberg Instance'}
-        </Typography>
-      </Box>
+      {!hideHeader && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <IcebergIcon size={24} />
+          <Typography variant="h6" fontWeight={700}>
+            {mode === 'edit'
+              ? 'Edit Iceberg Instance'
+              : 'New Apache Iceberg Instance'}
+          </Typography>
+        </Box>
+      )}
 
       {/* Stepper */}
       <Stepper activeStep={activeStep} alternativeLabel>
