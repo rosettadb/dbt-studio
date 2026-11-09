@@ -168,6 +168,10 @@ const features = [
   },
 ];
 
+// How many recent projects the Dashboard lists; View All only shows when
+// there are more than this.
+const recentProjectsShownCount = 4;
+
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const theme = useTheme();
@@ -530,6 +534,8 @@ const Dashboard: React.FC = () => {
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 mb: 1.5,
+                // Same height as the Connections header when View All is hidden
+                minHeight: 31,
               }}
             >
               <Typography
@@ -544,14 +550,16 @@ const Dashboard: React.FC = () => {
                 <FolderOpenIcon sx={{ color: theme.palette.primary.main }} />
                 Recent Projects ({projects.length})
               </Typography>
-              <Button
-                size="small"
-                variant="outlined"
-                onClick={() => navigate('/app/select-project')}
-                sx={outlinedButtonSx}
-              >
-                View All
-              </Button>
+              {projects.length > recentProjectsShownCount && (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => navigate('/app/select-project')}
+                  sx={outlinedButtonSx}
+                >
+                  View All
+                </Button>
+              )}
             </Box>
             <Divider sx={{ mb: 1 }} />
             {projects.length === 0 ? (
@@ -564,7 +572,7 @@ const Dashboard: React.FC = () => {
               </Typography>
             ) : (
               <List disablePadding>
-                {projects.slice(0, 4).map((p: any) => (
+                {projects.slice(0, recentProjectsShownCount).map((p: any) => (
                   <ListItemButton
                     key={p.id || p.path}
                     onClick={() => handleOpenProject(String(p.id))}
