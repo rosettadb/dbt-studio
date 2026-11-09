@@ -191,6 +191,9 @@ export const RepositoryHeader: React.FC<RepositoryHeaderProps> = ({
       queryClient.invalidateQueries([QUERY_KEYS.GIT_BRANCHES, projectPath]),
       queryClient.invalidateQueries([QUERY_KEYS.GIT_STATUSES, projectPath]),
       queryClient.invalidateQueries([QUERY_KEYS.GIT_REMOTES, projectPath]),
+      // Status bar branch + ahead/behind counters
+      queryClient.invalidateQueries([QUERY_KEYS.GIT_REPO_INFO, projectPath]),
+      queryClient.invalidateQueries([QUERY_KEYS.GIT_AHEAD_BEHIND, projectPath]),
     ]);
   }, [projectPath, queryClient]);
 
@@ -286,7 +289,9 @@ export const RepositoryHeader: React.FC<RepositoryHeaderProps> = ({
 
   const handleSynchronize = async () => {
     try {
-      await onSynchronize?.();
+      // Refetch branch info too: the repo may have changed outside the UI
+      // (e.g. `git checkout -b` in the terminal).
+      await Promise.all([invalidateGitQueries(), onSynchronize?.()]);
     } catch (error) {
       emitGitError({
         title: 'Synchronize failed',

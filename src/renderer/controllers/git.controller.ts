@@ -174,6 +174,13 @@ export const useGitInit = (
         QUERY_KEYS.GIT_IS_INITIALIZED,
         args[1].path,
       ]);
+      // Anything cached before init came from a non-repo; refetch it so the
+      // branch shows up right away.
+      await Promise.all([
+        queryClient.invalidateQueries([QUERY_KEYS.GIT_BRANCHES, args[1].path]),
+        queryClient.invalidateQueries([QUERY_KEYS.GIT_REPO_INFO, args[1].path]),
+        queryClient.invalidateQueries([QUERY_KEYS.GIT_STATUSES, args[1].path]),
+      ]);
       onCustomSuccess?.(...args);
     },
     onError: (...args) => {
@@ -270,6 +277,11 @@ export const useGitCommit = (
       await queryClient.invalidateQueries([
         QUERY_KEYS.GIT_HEAD_CONTENT,
         args[1].path,
+      ]);
+      // The first commit creates the branch; refresh branch name and list.
+      await Promise.all([
+        queryClient.invalidateQueries([QUERY_KEYS.GIT_BRANCHES, args[1].path]),
+        queryClient.invalidateQueries([QUERY_KEYS.GIT_REPO_INFO, args[1].path]),
       ]);
 
       onCustomSuccess?.(...args);
