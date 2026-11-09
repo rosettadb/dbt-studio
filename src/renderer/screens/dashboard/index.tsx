@@ -6,6 +6,7 @@ import {
   Card,
   CardActionArea,
   Chip,
+  CircularProgress,
   Divider,
   Grid,
   List,
@@ -16,6 +17,7 @@ import {
   Typography,
   useTheme,
 } from '@mui/material';
+import { toast } from 'react-toastify';
 import FolderSpecialIcon from '@mui/icons-material/FolderSpecial';
 import Terminal from '@mui/icons-material/Terminal';
 import AutoStoriesIcon from '@mui/icons-material/AutoStories';
@@ -23,15 +25,20 @@ import AddIcon from '@mui/icons-material/Add';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import StorageOutlinedIcon from '@mui/icons-material/StorageOutlined';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 
 import { icons, rosettaIcon } from '../../../../assets';
 import { ReactComponent as RouteIcon } from '../../assets/icons/lucide/route.svg';
 import { useAppContext } from '../../hooks';
+import { utils } from '../../helpers';
+import { ROSETTA_CLOUD_BASE_URL } from '../../../main/utils/constants';
 import { QuickStartTour, hasSeenTour, markTourSeen } from '../../components';
 import {
   useGetProjects,
   useGetConnections,
   useSelectProject,
+  useApiKey,
+  useAuthLogin,
 } from '../../controllers';
 
 const DbtCardIcon: React.FC = () => (
@@ -168,6 +175,17 @@ const Dashboard: React.FC = () => {
   const { data: projects = [] } = useGetProjects();
   const { data: connections = [] } = useGetConnections();
   const { mutateAsync: selectProject } = useSelectProject();
+  const { data: apiKey, isLoading: apiKeyLoading } = useApiKey();
+  const { mutate: login, isLoading: loginLoading } = useAuthLogin({
+    onSuccess: () => {
+      toast.success(
+        'Login initiated! Please complete authentication in your browser.',
+      );
+    },
+    onError: (error) => {
+      toast.error(`Login failed: ${error.message || 'Unknown error'}`);
+    },
+  });
 
   const handleFeatureClick = (path: string) => {
     setIsSidebarOpen(true);
@@ -326,6 +344,50 @@ const Dashboard: React.FC = () => {
           >
             Settings
           </Button>
+          {apiKey ? (
+            <Button
+              variant="outlined"
+              startIcon={
+                <Box
+                  component="img"
+                  src={rosettaIcon}
+                  alt="Rosetta"
+                  sx={{ width: 18, height: 18 }}
+                />
+              }
+              endIcon={<OpenInNewIcon />}
+              onClick={(e) =>
+                utils.handleExternalLink(
+                  e as any,
+                  `${ROSETTA_CLOUD_BASE_URL}/dashboard`,
+                )
+              }
+              sx={outlinedButtonSx}
+            >
+              Cloud Dashboard
+            </Button>
+          ) : (
+            <Button
+              variant="outlined"
+              disabled={apiKeyLoading || loginLoading}
+              startIcon={
+                apiKeyLoading || loginLoading ? (
+                  <CircularProgress size={16} />
+                ) : (
+                  <Box
+                    component="img"
+                    src={rosettaIcon}
+                    alt="Rosetta"
+                    sx={{ width: 18, height: 18 }}
+                  />
+                )
+              }
+              onClick={() => login()}
+              sx={outlinedButtonSx}
+            >
+              Connect to Cloud
+            </Button>
+          )}
         </Box>
       </Paper>
 

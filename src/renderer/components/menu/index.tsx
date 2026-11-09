@@ -166,8 +166,8 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
       </IconsContainer>
       <IconsContainer sx={{ gap: 2 }}>
         {isProjectSelected && !isOnHome && actions}
-        {/* Authentication - Only show when not logged in */}
-        {!apiKey && (
+        {/* Authentication - Only show when not logged in (on Home it's in the Dashboard header) */}
+        {!isOnHome && !apiKey && (
           <Tooltip
             title="Run your DBT Studio pipelines on Google Cloud Run, AWS, or Azure with ease."
             enterDelay={800}
@@ -203,8 +203,8 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
           </Tooltip>
         )}
 
-        {/* Link to Rosetta Cloud Dashboard - Only show when logged in */}
-        {apiKey && (
+        {/* Link to Rosetta Cloud Dashboard - Only show when logged in (on Home it's in the Dashboard header) */}
+        {!isOnHome && apiKey && (
           <Tooltip
             title="Open Rosetta Cloud Dashboard"
             enterDelay={800}
