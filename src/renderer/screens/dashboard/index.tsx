@@ -172,6 +172,14 @@ const features = [
 // more than this.
 const panelRowsShownCount = 3;
 
+// Scales the page up on big monitors so it fills the screen like it does on a
+// laptop. Not used while the quick start tour can show (no projects), because
+// the tour's highlight lands in the wrong place on a scaled page.
+const bigMonitorPageScale = {
+  '@media (min-width: 1800px) and (min-height: 980px)': { zoom: 1.25 },
+  '@media (min-width: 2400px) and (min-height: 1350px)': { zoom: 1.75 },
+};
+
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const theme = useTheme();
@@ -263,6 +271,7 @@ const Dashboard: React.FC = () => {
         overflowY: 'auto',
         boxSizing: 'border-box',
         backgroundColor: theme.palette.background.default,
+        ...(projects.length > 0 ? bigMonitorPageScale : {}),
       }}
     >
       {/* Hero / Welcome Header */}
@@ -534,7 +543,7 @@ const Dashboard: React.FC = () => {
                 Manage Projects
               </Button>
             </Box>
-            <Divider sx={{ mb: 0.5 }} />
+            <Divider sx={{ mb: 0.125 }} />
             {projects.length === 0 ? (
               <Typography
                 variant="body2"
@@ -581,7 +590,7 @@ const Dashboard: React.FC = () => {
             )}
             {projects.length > panelRowsShownCount && (
               <>
-                <Divider sx={{ mt: 0.25, mb: 1.125 }} />
+                <Divider sx={{ mt: 0.625, mb: 1.125 }} />
                 <Box sx={{ display: 'flex', justifyContent: 'center' }}>
                   <Button
                     size="small"
@@ -646,7 +655,7 @@ const Dashboard: React.FC = () => {
                 New Connection
               </Button>
             </Box>
-            <Divider sx={{ mb: 0.5 }} />
+            <Divider sx={{ mb: 0.125 }} />
             {connections.length === 0 ? (
               <Typography
                 variant="body2"
@@ -692,7 +701,7 @@ const Dashboard: React.FC = () => {
             )}
             {connections.length > panelRowsShownCount && (
               <>
-                <Divider sx={{ mt: 0.25, mb: 1.125 }} />
+                <Divider sx={{ mt: 0.625, mb: 1.125 }} />
                 <Box sx={{ display: 'flex', justifyContent: 'center' }}>
                   <Button
                     size="small"
