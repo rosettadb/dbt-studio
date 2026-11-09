@@ -225,7 +225,7 @@ const UploadDropzone: React.FC<UploadDropzoneProps> = ({
   const handleDragLeave = useCallback(() => setIsDragOver(false), []);
 
   const dropBusyRef = useRef(false);
-  const initialEntriesHandled = useRef(false);
+  const handledInitialEntriesRef = useRef<DroppedUploadEntry[] | undefined>();
   const uploadDroppedEntries = async (entries: DroppedUploadEntry[]) => {
     if (dropBusyRef.current || activeItemIdRef.current) {
       toast.warning(
@@ -286,11 +286,14 @@ const UploadDropzone: React.FC<UploadDropzoneProps> = ({
   };
 
   useEffect(() => {
-    if (initialEntries?.length && !initialEntriesHandled.current) {
-      initialEntriesHandled.current = true;
+    if (
+      initialEntries?.length &&
+      initialEntries !== handledInitialEntriesRef.current
+    ) {
+      handledInitialEntriesRef.current = initialEntries;
       uploadDroppedEntries(initialEntries);
     }
-    // Initial drops are consumed once when the upload dialog mounts.
+    // Each initial drop batch is consumed once, including dialog reopenings.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialEntries]);
 

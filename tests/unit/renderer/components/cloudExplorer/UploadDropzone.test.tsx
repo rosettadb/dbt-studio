@@ -157,3 +157,31 @@ it('pairs a folder with its file item when a text item comes first', async () =>
     mockFolderMutate.mock.calls[0][1].onSettled();
   });
 });
+
+it('uploads a new initial batch when the dialog reopens without remounting', async () => {
+  const firstBatch = [
+    { localPath: '/local/first.txt', name: 'first.txt', isDirectory: false },
+  ];
+  const secondBatch = [
+    { localPath: '/local/second.txt', name: 'second.txt', isDirectory: false },
+  ];
+  const { rerender } = render(
+    <UploadDropzone {...props} initialEntries={firstBatch} />,
+  );
+  await waitFor(() => expect(mockFileMutate).toHaveBeenCalledTimes(1));
+  await act(async () => {
+    mockFileCallbacks.onSuccess();
+    mockFileMutate.mock.calls[0][1].onSettled();
+  });
+  rerender(<UploadDropzone {...props} initialEntries={firstBatch} />);
+  expect(mockFileMutate).toHaveBeenCalledTimes(1);
+  rerender(<UploadDropzone {...props} initialEntries={secondBatch} />);
+  await waitFor(() => expect(mockFileMutate).toHaveBeenCalledTimes(2));
+  expect(mockFileMutate.mock.calls[1][0].localFilePath).toBe(
+    '/local/second.txt',
+  );
+  await act(async () => {
+    mockFileCallbacks.onSuccess();
+    mockFileMutate.mock.calls[1][1].onSettled();
+  });
+});
