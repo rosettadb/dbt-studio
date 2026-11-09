@@ -110,7 +110,7 @@ const ProjectDetails: React.FC = () => {
   );
   const [sidebarTab, setSidebarTab] = React.useState<SidebarTab>('explorer');
 
-  const { isChatOpen } = useAppContext();
+  const { isChatOpen, setIsSidebarOpen } = useAppContext();
   const { data: project, isLoading } = useGetSelectedProject();
   const { data: isInitialized } = useGitIsInitialized(project?.path, {
     enabled: !!project?.path,
@@ -136,7 +136,16 @@ const ProjectDetails: React.FC = () => {
     saveAll,
     saveTab,
     reorderTabs,
+    revealedFolderPath,
   } = useTabs();
+
+  // The file tree only exists on the Explorer tab of an open side panel
+  React.useEffect(() => {
+    if (revealedFolderPath) {
+      setSidebarTab('explorer');
+      setIsSidebarOpen(true);
+    }
+  }, [revealedFolderPath, setIsSidebarOpen]);
 
   if (isLoading) {
     return <Loader />;

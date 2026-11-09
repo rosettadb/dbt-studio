@@ -23,6 +23,7 @@ const mockSearchInFiles = jest.fn();
 const mockUseGetSelectedProject = jest.fn();
 const mockUseGetProjectFiles = jest.fn();
 const mockToastError = jest.fn();
+const mockRevealFolderInTree = jest.fn();
 
 jest.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate,
@@ -45,7 +46,11 @@ jest.mock('../../../../src/renderer/controllers', () => ({
 }));
 
 jest.mock('../../../../src/renderer/context/TabsProvider', () => ({
-  useTabs: () => ({ openFile: mockOpenFile, openFileAt: mockOpenFileAt }),
+  useTabs: () => ({
+    openFile: mockOpenFile,
+    openFileAt: mockOpenFileAt,
+    revealFolderInTree: mockRevealFolderInTree,
+  }),
 }));
 
 jest.mock('../../../../src/renderer/services', () => ({
@@ -67,6 +72,20 @@ const projectTreeWith = (...relativePaths: string[]) => ({
   path: PROJECT_PATH,
   type: 'directory',
   children: relativePaths.map(fileNode),
+});
+
+const folderNode = (relativePath: string, children: unknown[] = []) => ({
+  name: relativePath.split('/').pop(),
+  path: `${PROJECT_PATH}/${relativePath}`,
+  type: 'folder',
+  children,
+});
+
+const projectTreeOf = (...children: unknown[]) => ({
+  name: 'shop',
+  path: PROJECT_PATH,
+  type: 'folder',
+  children,
 });
 
 const textMatch = (line: number, lineText: string, column = 1, length = 6) => ({
@@ -94,6 +113,31 @@ const sectionHeader = (title: string) =>
 
 const dialogIsClosed = () =>
   waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+const reopenPalette = async () => {
+  await dialogIsClosed();
+  fireEvent.click(screen.getByRole('button', { name: 'Search (Ctrl+K)' }));
+};
+
+const optionLabels = () =>
+  screen
+    .getAllByRole('option')
+    .map((option) => option.getAttribute('aria-label') ?? option.textContent);
+
+const highlightedOption = () => screen.getByRole('option', { selected: true });
+
+const searchFinishesWith = (...fileNames: string[]) => {
+  mockSearchInFiles.mockResolvedValue({
+    results: fileNames.map((fileName) => ({
+      path: `${PROJECT_PATH}/${fileName}`,
+      matches: [
+        textMatch(1, `zzword one in ${fileName}`),
+        textMatch(2, `zzword two in ${fileName}`),
+      ],
+    })),
+    truncated: false,
+  });
+};
 
 describe('CommandPalette', () => {
   beforeEach(() => {
@@ -144,15 +188,14 @@ describe('CommandPalette', () => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
-    it('clears the search when closed with Escape', async () => {
+    it('keeps the search when closed with Escape', async () => {
       openPalette();
       typeQuery('sql');
 
       fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
-      await dialogIsClosed();
-      fireEvent.click(screen.getByRole('button', { name: 'Search (Ctrl+K)' }));
+      await reopenPalette();
 
-      expect(screen.getByRole('combobox')).toHaveValue('');
+      expect(screen.getByRole('combobox')).toHaveValue('sql');
     });
   });
 
@@ -239,9 +282,8 @@ describe('CommandPalette', () => {
       openPalette();
       typeQuery('select');
 
-      expect(
-        await screen.findByText('models/orders.sql · line 9'),
-      ).toBeInTheDocument();
+      expect(await screen.findByText('models/orders.sql')).toBeInTheDocument();
+      expect(screen.getByText('Line 9')).toBeInTheDocument();
       expect(document.querySelector('mark')).toHaveTextContent('select');
     });
 
@@ -293,7 +335,8 @@ describe('CommandPalette', () => {
       expect(
         within(sectionHeader('Text in files')).getByText('60'),
       ).toBeInTheDocument();
-      expect(screen.getByText('b.sql · line 10')).toBeInTheDocument();
+      expect(screen.getByText('b.sql')).toBeInTheDocument();
+      expect(screen.getAllByText('Line 10')).toHaveLength(2);
     });
 
     it('marks the text count when the search itself stopped early', async () => {
@@ -370,7 +413,7 @@ describe('CommandPalette', () => {
       await waitFor(() => expect(mockSearchInFiles).toHaveBeenCalledTimes(1));
 
       typeQuery('newer');
-      await screen.findByText('new.sql · line 1');
+      await screen.findByText('new.sql');
       await act(async () => {
         finishOlderSearch({
           results: [
@@ -383,8 +426,8 @@ describe('CommandPalette', () => {
         });
       });
 
-      expect(screen.queryByText('old.sql · line 1')).not.toBeInTheDocument();
-      expect(screen.getByText('new.sql · line 1')).toBeInTheDocument();
+      expect(screen.queryByText('old.sql')).not.toBeInTheDocument();
+      expect(screen.getByText('new.sql')).toBeInTheDocument();
     });
 
     it('drops the previous matches as soon as the search changes', async () => {
@@ -399,12 +442,12 @@ describe('CommandPalette', () => {
       });
       openPalette();
       typeQuery('select');
-      await screen.findByText('old.sql · line 1');
+      await screen.findByText('old.sql');
 
       typeQuery('selects');
 
       // Gone before the next search has even started
-      expect(screen.queryByText('old.sql · line 1')).not.toBeInTheDocument();
+      expect(screen.queryByText('old.sql')).not.toBeInTheDocument();
     });
   });
 
@@ -445,6 +488,340 @@ describe('CommandPalette', () => {
       await waitFor(() =>
         expect(screen.getByRole('status')).toHaveTextContent('0 results'),
       );
+    });
+  });
+
+  describe('matching on the folder path', () => {
+    beforeEach(() => {
+      mockUseGetProjectFiles.mockReturnValue({
+        data: projectTreeWith('models/staging/orders.sql', 'seeds/people.csv'),
+      });
+    });
+
+    it('finds files inside a folder by the name of the folder', () => {
+      openPalette();
+      typeQuery('staging');
+
+      expect(screen.getByText('orders.sql')).toBeInTheDocument();
+      expect(screen.queryByText('people.csv')).not.toBeInTheDocument();
+    });
+
+    it('finds a file by a part of its path', () => {
+      openPalette();
+      typeQuery('staging/ord');
+
+      expect(screen.getByText('orders.sql')).toBeInTheDocument();
+    });
+
+    it('treats back slashes in the search like forward slashes', () => {
+      openPalette();
+      typeQuery('STAGING\\ord');
+
+      expect(screen.getByText('orders.sql')).toBeInTheDocument();
+    });
+
+    it('does not match on where the project itself is stored', () => {
+      openPalette();
+      typeQuery('projects/shop');
+
+      expect(screen.queryByText('orders.sql')).not.toBeInTheDocument();
+    });
+
+    it('lists files matched by name before files matched by folder', () => {
+      mockUseGetProjectFiles.mockReturnValue({
+        data: projectTreeWith('orders/items.sql', 'zzz/orders.sql'),
+      });
+      openPalette();
+      typeQuery('orders');
+
+      const files = within(
+        screen.getByRole('group', { name: 'Files' }),
+      ).getAllByRole('option');
+      expect(files[0]).toHaveTextContent('orders.sql');
+      expect(files[1]).toHaveTextContent('items.sql');
+    });
+
+    it('leaves out what is inside the .git folder', () => {
+      mockUseGetProjectFiles.mockReturnValue({
+        data: projectTreeOf(
+          folderNode('.git', [
+            fileNode('.git/refs/orders'),
+            folderNode('.git/orders'),
+          ]),
+          fileNode('orders.sql'),
+        ),
+      });
+      openPalette();
+      typeQuery('orders');
+
+      expect(screen.getByText('orders.sql')).toBeInTheDocument();
+      expect(screen.queryByText('Folders')).not.toBeInTheDocument();
+      expect(within(sectionHeader('Files')).getByText('1')).toBeInTheDocument();
+    });
+  });
+
+  describe('folders', () => {
+    const stagingFolder = folderNode('models/staging', [
+      fileNode('models/staging/orders.sql'),
+    ]);
+
+    beforeEach(() => {
+      mockUseGetProjectFiles.mockReturnValue({
+        data: projectTreeOf(folderNode('models', [stagingFolder])),
+      });
+    });
+
+    it('lists a matching folder and where it is', () => {
+      openPalette();
+      typeQuery('staging');
+
+      const folders = within(screen.getByRole('group', { name: 'Folders' }));
+      expect(folders.getByText('staging')).toBeInTheDocument();
+      expect(folders.getByText('models')).toBeInTheDocument();
+    });
+
+    it('shows the folder in the file tree when chosen', async () => {
+      openPalette();
+      typeQuery('staging');
+
+      fireEvent.click(
+        within(screen.getByRole('group', { name: 'Folders' })).getByText(
+          'staging',
+        ),
+      );
+
+      expect(mockNavigate).toHaveBeenCalledWith('/app/dbt-project');
+      expect(mockRevealFolderInTree).toHaveBeenCalledWith(
+        `${PROJECT_PATH}/models/staging`,
+      );
+      expect(mockOpenFile).not.toHaveBeenCalled();
+      await dialogIsClosed();
+    });
+
+    it('does not list the project folder itself', () => {
+      openPalette();
+      typeQuery('shop');
+
+      expect(screen.queryByText('Folders')).not.toBeInTheDocument();
+    });
+
+    it('says how many folders are hidden when there are too many to list', () => {
+      mockUseGetProjectFiles.mockReturnValue({
+        data: projectTreeOf(
+          ...Array.from({ length: 25 }, (_, index) =>
+            folderNode(`area_${index}`),
+          ),
+        ),
+      });
+      openPalette();
+      typeQuery('area_');
+
+      expect(
+        within(sectionHeader('Folders')).getByText('20 of 25'),
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe('remembering the last search', () => {
+    it('brings back the search with its text selected after choosing a result', async () => {
+      openPalette();
+      typeQuery('sql editor');
+
+      fireEvent.click(screen.getByText('SQL Editor'));
+      await reopenPalette();
+
+      const searchBox = screen.getByRole('combobox') as HTMLInputElement;
+      expect(searchBox).toHaveValue('sql editor');
+      expect(searchBox.selectionStart).toBe(0);
+      expect(searchBox.selectionEnd).toBe('sql editor'.length);
+    });
+
+    it('goes on to the next match without retyping', async () => {
+      searchFinishesWith('a.sql');
+      openPalette();
+      typeQuery('zzword');
+      fireEvent.click(await screen.findByText('Line 1'));
+      expect(mockOpenFileAt).toHaveBeenLastCalledWith(
+        expect.objectContaining({ line: 1 }),
+      );
+
+      await reopenPalette();
+      await screen.findByText('Line 1');
+      pressKey('ArrowDown');
+      pressKey('ArrowDown');
+      pressKey('Enter');
+
+      expect(mockOpenFileAt).toHaveBeenLastCalledWith(
+        expect.objectContaining({ line: 2 }),
+      );
+    });
+
+    it('stays on the chosen row when reopened', async () => {
+      searchFinishesWith('a.sql');
+      openPalette();
+      typeQuery('zzword');
+      await screen.findByText('Line 2');
+      pressKey('ArrowDown');
+      pressKey('ArrowDown');
+      pressKey('Enter');
+
+      await reopenPalette();
+
+      expect(highlightedOption()).toHaveTextContent('Line 2');
+    });
+
+    it('forgets the search when the project changes', async () => {
+      const { rerender } = render(<CommandPalette />);
+      fireEvent.click(screen.getByRole('button', { name: 'Search (Ctrl+K)' }));
+      typeQuery('sql');
+      fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+      await dialogIsClosed();
+
+      mockUseGetSelectedProject.mockReturnValue({
+        data: { id: 'p2', name: 'Finance', path: '/projects/finance' },
+      });
+      rerender(<CommandPalette />);
+      fireEvent.click(screen.getByRole('button', { name: 'Search (Ctrl+K)' }));
+
+      expect(screen.getByRole('combobox')).toHaveValue('');
+    });
+  });
+
+  describe('text matches grouped by file', () => {
+    beforeEach(() => {
+      searchFinishesWith('a.sql', 'b.sql');
+    });
+
+    const openWithMatches = async () => {
+      openPalette();
+      typeQuery('zzword');
+      await screen.findByText('a.sql');
+    };
+
+    it('lists each file with its match count, followed by its matches', async () => {
+      await openWithMatches();
+
+      expect(optionLabels()).toEqual([
+        'a.sql, 2 matches, expanded',
+        'zzword one in a.sqlLine 1',
+        'zzword two in a.sqlLine 2',
+        'b.sql, 2 matches, expanded',
+        'zzword one in b.sqlLine 1',
+        'zzword two in b.sqlLine 2',
+      ]);
+    });
+
+    it('counts all matches in the section title and the announcement, even when folded', async () => {
+      await openWithMatches();
+
+      fireEvent.click(screen.getByText('a.sql'));
+
+      expect(
+        within(sectionHeader('Text in files')).getByText('4'),
+      ).toBeInTheDocument();
+      await waitFor(() =>
+        expect(screen.getByRole('status')).toHaveTextContent('4 results'),
+      );
+    });
+
+    it('folds and unfolds a file when it is clicked, and stays open', async () => {
+      await openWithMatches();
+
+      fireEvent.click(screen.getByText('a.sql'));
+
+      expect(optionLabels()).toEqual([
+        'a.sql, 2 matches, collapsed',
+        'b.sql, 2 matches, expanded',
+        'zzword one in b.sqlLine 1',
+        'zzword two in b.sqlLine 2',
+      ]);
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+      expect(mockOpenFileAt).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByText('a.sql'));
+
+      expect(optionLabels()).toHaveLength(6);
+    });
+
+    it('folds a file with Enter', async () => {
+      await openWithMatches();
+
+      pressKey('Enter');
+
+      expect(highlightedOption()).toHaveAccessibleName(
+        'a.sql, 2 matches, collapsed',
+      );
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+
+    it('skips folded rows with the arrow keys', async () => {
+      await openWithMatches();
+      fireEvent.click(screen.getByText('a.sql'));
+
+      pressKey('ArrowDown');
+
+      expect(highlightedOption()).toHaveAccessibleName(
+        'b.sql, 2 matches, expanded',
+      );
+    });
+
+    it('folds with left and unfolds with right on a file row', async () => {
+      await openWithMatches();
+      pressKey('ArrowDown');
+      pressKey('ArrowUp');
+
+      pressKey('ArrowLeft');
+      expect(highlightedOption()).toHaveAccessibleName(
+        'a.sql, 2 matches, collapsed',
+      );
+
+      pressKey('ArrowRight');
+      expect(highlightedOption()).toHaveAccessibleName(
+        'a.sql, 2 matches, expanded',
+      );
+    });
+
+    it('folds the file and moves up to it with left on a match', async () => {
+      await openWithMatches();
+      pressKey('ArrowDown');
+      pressKey('ArrowDown');
+      expect(highlightedOption()).toHaveTextContent('Line 2');
+
+      pressKey('ArrowLeft');
+
+      expect(highlightedOption()).toHaveAccessibleName(
+        'a.sql, 2 matches, collapsed',
+      );
+    });
+
+    it('leaves left and right to the text cursor until the list is walked', async () => {
+      await openWithMatches();
+      const searchBox = screen.getByRole('combobox');
+
+      // fireEvent returns false when the key's default action was prevented
+      expect(fireEvent.keyDown(searchBox, { key: 'ArrowLeft' })).toBe(true);
+      expect(fireEvent.keyDown(searchBox, { key: 'ArrowRight' })).toBe(true);
+      expect(optionLabels()).toHaveLength(6);
+    });
+
+    it('unfolds everything for a new search', async () => {
+      await openWithMatches();
+      fireEvent.click(screen.getByText('a.sql'));
+
+      typeQuery('zzwords');
+      await screen.findByText('a.sql');
+
+      expect(optionLabels()).toHaveLength(6);
+    });
+
+    it('keeps the rows inside the pinned section for screen readers', async () => {
+      await openWithMatches();
+
+      const textSection = screen.getByRole('group', { name: 'Text in files' });
+      expect(within(textSection).getAllByRole('option')).toHaveLength(6);
+      expect(sectionHeader('Text in files')).toHaveStyle({
+        position: 'sticky',
+      });
     });
   });
 
@@ -531,7 +908,7 @@ describe('CommandPalette', () => {
       openPalette();
       typeQuery('select');
 
-      fireEvent.click(await screen.findByText('a.sql · line 9'));
+      fireEvent.click(await screen.findByText('Line 9'));
 
       expect(mockNavigate).toHaveBeenCalledWith('/app/dbt-project');
       expect(mockOpenFileAt).toHaveBeenCalledWith({
@@ -594,7 +971,9 @@ describe('CommandPalette', () => {
 
       // Nothing is listed until the text search answers
       pressKey('ArrowDown');
-      await screen.findByText('a.sql · line 4');
+      await screen.findByText('Line 4');
+      // The file's row comes first, then its match
+      pressKey('ArrowDown');
       pressKey('Enter');
 
       expect(mockOpenFileAt).toHaveBeenCalledWith(

@@ -276,7 +276,14 @@ const ExplorerTab: React.FC<{
   openCreatePipeline?: boolean;
 }> = ({ project, openCreatePipeline }) => {
   const theme = useTheme();
-  const { activeFilePath, openFile, closeTabByPath, renameTab } = useTabs();
+  const {
+    activeFilePath,
+    openFile,
+    closeTabByPath,
+    renameTab,
+    revealedFolderPath,
+    clearRevealedFolder,
+  } = useTabs();
   const { data: settings } = useGetSettings();
   const { data: connection } = useGetConnectionById(project.connectionId);
   const refreshProjectFiles = useRefreshProjectFiles();
@@ -337,6 +344,8 @@ const ExplorerTab: React.FC<{
               if (filePath) openFile(filePath);
             }}
             selectedPath={activeFilePath}
+            revealFolderPath={revealedFolderPath}
+            onFolderRevealed={clearRevealedFolder}
             onRenameCallback={renameTab}
             onRunPipeline={(filePath) =>
               setCloudRunArgs(

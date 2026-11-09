@@ -37,6 +37,8 @@ interface ArboristTreeProps {
   copyPath: (source: string, target: string) => Promise<void>;
   onRunPipeline?: (filePath: string) => void;
   onRunPipelineLocal?: (filePath: string) => void;
+  revealFolderPath?: string | null;
+  onFolderRevealed?: () => void;
 }
 
 const buildTreeStructure = (node: FileNode): FileNode => {
@@ -72,6 +74,8 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
   copyPath,
   onRunPipeline,
   onRunPipelineLocal,
+  revealFolderPath,
+  onFolderRevealed,
 }) => {
   const treeRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -345,6 +349,14 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
       }
     }
   }, [data]);
+
+  // select() also opens the parent folders and scrolls the folder into view
+  React.useEffect(() => {
+    if (!revealFolderPath || !treeRef.current) return;
+    treeRef.current.open(revealFolderPath);
+    treeRef.current.select(revealFolderPath);
+    onFolderRevealed?.();
+  }, [revealFolderPath, onFolderRevealed]);
 
   const handleExternalFilesDropped = useCallback(
     async (files: File[], targetPath: string) => {

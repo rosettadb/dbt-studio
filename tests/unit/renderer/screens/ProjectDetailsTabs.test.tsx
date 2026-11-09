@@ -7,6 +7,8 @@ import ProjectDetails from '../../../../src/renderer/screens/projectDetails';
 const mockUseGetFileStatuses = jest.fn();
 const mockUseGetProjectFiles = jest.fn();
 const mockRefreshProjectFiles = jest.fn();
+const mockSetIsSidebarOpen = jest.fn();
+let mockRevealedFolderPath: string | null = null;
 
 jest.mock('../../../../src/renderer/components', () => ({
   Loader: () => null,
@@ -50,11 +52,18 @@ jest.mock('../../../../src/renderer/hooks/useRefreshProjectFiles', () => ({
 }));
 
 jest.mock('../../../../src/renderer/context/TabsProvider', () => ({
-  useTabs: () => ({ tabs: [], activeTab: undefined }),
+  useTabs: () => ({
+    tabs: [],
+    activeTab: undefined,
+    revealedFolderPath: mockRevealedFolderPath,
+  }),
 }));
 
 jest.mock('../../../../src/renderer/hooks', () => ({
-  useAppContext: () => ({ isChatOpen: false }),
+  useAppContext: () => ({
+    isChatOpen: false,
+    setIsSidebarOpen: mockSetIsSidebarOpen,
+  }),
 }));
 
 jest.mock('../../../../src/renderer/layouts', () => ({
@@ -91,6 +100,26 @@ describe('ProjectDetails side panel tabs', () => {
     mockUseGetFileStatuses.mockReturnValue({ data: [] });
     mockUseGetProjectFiles.mockReturnValue({ isLoading: false });
     mockRefreshProjectFiles.mockClear();
+    mockSetIsSidebarOpen.mockClear();
+    mockRevealedFolderPath = null;
+  });
+
+  it('goes to the Explorer tab and opens the panel when a folder is to be shown', () => {
+    const view = renderProjectDetails();
+    fireEvent.click(screen.getByRole('tab', { name: 'Git' }));
+    expect(screen.getByTestId('open-panel')).toHaveTextContent('scm');
+
+    mockRevealedFolderPath = '/projects/shop/models';
+    view.rerender(
+      <ThemeProvider theme={createTheme()}>
+        <MemoryRouter>
+          <ProjectDetails />
+        </MemoryRouter>
+      </ThemeProvider>,
+    );
+
+    expect(screen.getByTestId('open-panel')).toHaveTextContent('explorer');
+    expect(mockSetIsSidebarOpen).toHaveBeenCalledWith(true);
   });
 
   it('has Explorer, Git and Database tabs and no Search tab', () => {

@@ -18,6 +18,8 @@ type Props = {
   onRenameCallback?: (oldPath: string, newPath: string) => void;
   onRunPipeline?: (filePath: string) => void;
   onRunPipelineLocal?: (filePath: string) => void;
+  revealFolderPath?: string | null;
+  onFolderRevealed?: () => void;
 };
 
 const FileTreeViewer: React.FC<Props> = ({
@@ -32,6 +34,8 @@ const FileTreeViewer: React.FC<Props> = ({
   onRenameCallback,
   onRunPipeline,
   onRunPipelineLocal,
+  revealFolderPath,
+  onFolderRevealed,
 }) => {
   const { data: project } = useGetSelectedProject();
   const { data: settings } = useGetSettings();
@@ -65,6 +69,8 @@ const FileTreeViewer: React.FC<Props> = ({
         selectedPath={selectedPath}
         projectPath={project.path}
         copyPath={copyPath}
+        revealFolderPath={revealFolderPath}
+        onFolderRevealed={onFolderRevealed}
         onRunPipeline={
           settings?.env === 'cloud' && !settings?.dbtVersion?.startsWith('2.')
             ? onRunPipeline
