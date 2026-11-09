@@ -24,6 +24,24 @@ import {
 // one-line description, compact small buttons, bordered cards, dense
 // tables, and row actions behind one three-dot menu.
 
+// On a touchscreen (finger or pen), give each compact button an invisible
+// 44px-high hit area (at least 44px wide) centred on it, so the buttons keep
+// their compact look but are easy to tap. Mouse-only setups don't get it.
+const touchHitAreaSx = {
+  '@media (any-pointer: coarse)': {
+    '&::after': {
+      content: '""',
+      position: 'absolute',
+      top: '50%',
+      left: '50%',
+      width: '100%',
+      minWidth: 44,
+      height: 44,
+      transform: 'translate(-50%, -50%)',
+    },
+  },
+} as const;
+
 // Compact small buttons, same values as the Settings pages
 // (screens/settings/styles.ts). Put it on the root of a DataLake page.
 // minHeight keeps the target at the WCAG 2.2 AA minimum (24px, SC 2.5.8):
@@ -35,6 +53,7 @@ export const dataLakePageSx = {
     padding: '2px 8px',
     minWidth: 0,
     minHeight: 24,
+    ...touchHitAreaSx,
     '& .MuiButton-startIcon': {
       marginRight: '4px',
       marginLeft: '-2px',
@@ -56,6 +75,7 @@ export const dataLakeDialogSx = {
     padding: '2px 8px',
     minWidth: 0,
     minHeight: 24, // WCAG 2.2 AA target size, as above
+    ...touchHitAreaSx,
     '& .MuiButton-startIcon': {
       marginRight: '4px',
       marginLeft: '-2px',
@@ -260,8 +280,25 @@ export const DataLakeRowActions: React.FC<DataLakeRowActionsProps> = ({
               event.stopPropagation();
               setAnchorEl(event.currentTarget);
             }}
-            // Keep the full click target without making the row taller.
-            sx={{ my: -0.5 }}
+            sx={{
+              // Keep the full click target without making the row taller.
+              my: -0.5,
+              // Touchscreens (finger or pen): an invisible 44px-wide tap area
+              // around the 30px button; the icon stays the same. It is 36px
+              // tall, not 44: rows are ~37px apart, so a taller area would
+              // overlap the next row's button and open the wrong row's menu.
+              '@media (any-pointer: coarse)': {
+                '&::after': {
+                  content: '""',
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  width: 44,
+                  height: 36,
+                  transform: 'translate(-50%, -50%)',
+                },
+              },
+            }}
           >
             <MoreVert fontSize="small" />
           </IconButton>
