@@ -195,6 +195,8 @@ export const RepositoryHeader: React.FC<RepositoryHeaderProps> = ({
       // Status bar branch + ahead/behind counters
       [QUERY_KEYS.GIT_REPO_INFO, projectPath],
       [QUERY_KEYS.GIT_AHEAD_BEHIND, projectPath],
+      // Editor gutter baselines (every file of this project)
+      [QUERY_KEYS.GIT_HEAD_CONTENT, projectPath],
     ]);
   }, [projectPath, queryClient]);
 

@@ -132,7 +132,9 @@ export const useGetFileHeadContent = (
     staleTime: Infinity,
     cacheTime: Infinity,
     refetchOnWindowFocus: false,
-    refetchOnMount: false,
+    // Only refetches when stale: with staleTime Infinity that means invalidated
+    // (e.g. after a checkout), so inactive files refresh when reopened.
+    refetchOnMount: true,
     refetchOnReconnect: false,
     ...customOptions,
   });
