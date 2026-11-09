@@ -53,6 +53,15 @@ type PaletteSection = {
   items: PaletteItem[];
 };
 
+type TextSearchOutcome = {
+  projectPath: string;
+  query: string;
+  results: FileSearchResult[];
+  truncated: boolean;
+};
+
+const NO_TEXT_RESULTS: FileSearchResult[] = [];
+
 type ProjectEntry = {
   node: FileNode;
   // Lower case, with forward slashes, relative to the project. Matching the
@@ -140,9 +149,9 @@ export const CommandPalette: React.FC = () => {
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState('');
   const [activeIndex, setActiveIndex] = React.useState(0);
-  const [textResults, setTextResults] = React.useState<FileSearchResult[]>([]);
-  const [isTextSearchTruncated, setIsTextSearchTruncated] =
-    React.useState(false);
+  const [textSearch, setTextSearch] = React.useState<TextSearchOutcome | null>(
+    null,
+  );
   const [isSearchingText, setIsSearchingText] = React.useState(false);
   const [collapsedFilePaths, setCollapsedFilePaths] = React.useState<
     Set<string>
@@ -158,6 +167,18 @@ export const CommandPalette: React.FC = () => {
   const projectPath = selectedProject?.path ?? '';
   const trimmedQuery = query.trim();
   const lowerQuery = trimmedQuery.toLowerCase();
+
+  // Text matches only show for the project and search they were found for,
+  // so an older search never shows, not even for a moment, after either
+  // changes. Reopening the same search keeps them, so its rows don't jump.
+  const isTextSearchCurrent =
+    textSearch !== null &&
+    textSearch.projectPath === projectPath &&
+    textSearch.query === trimmedQuery;
+  const textResults = isTextSearchCurrent
+    ? textSearch.results
+    : NO_TEXT_RESULTS;
+  const isTextSearchTruncated = isTextSearchCurrent && textSearch.truncated;
 
   const { data: projectTree } = useGetProjectFiles(selectedProject as Project, {
     enabled: open && !!selectedProject?.id,
@@ -183,13 +204,6 @@ export const CommandPalette: React.FC = () => {
     setActiveIndex(0);
   }, [selectedProject?.id]);
 
-  // Drop the previous query's matches so they can't be opened while waiting.
-  // Reopening the same search keeps them, so its rows don't jump around.
-  React.useEffect(() => {
-    setTextResults([]);
-    setIsTextSearchTruncated(false);
-  }, [projectPath, trimmedQuery]);
-
   React.useEffect(() => {
     if (!open || !projectPath || trimmedQuery.length < TEXT_SEARCH_MIN_LENGTH) {
       setIsSearchingText(false);
@@ -204,13 +218,21 @@ export const CommandPalette: React.FC = () => {
           query: trimmedQuery,
         });
         if (isCurrent) {
-          setTextResults(response.results);
-          setIsTextSearchTruncated(response.truncated);
+          setTextSearch({
+            projectPath,
+            query: trimmedQuery,
+            results: response.results,
+            truncated: response.truncated,
+          });
         }
       } catch {
         if (isCurrent) {
-          setTextResults([]);
-          setIsTextSearchTruncated(false);
+          setTextSearch({
+            projectPath,
+            query: trimmedQuery,
+            results: NO_TEXT_RESULTS,
+            truncated: false,
+          });
         }
       } finally {
         if (isCurrent) setIsSearchingText(false);

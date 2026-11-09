@@ -781,6 +781,34 @@ describe('CommandPalette', () => {
 
       expect(screen.getByRole('combobox')).toHaveValue('');
     });
+
+    it('shows text matches only for the project folder they were found in', async () => {
+      mockSearchInFiles.mockImplementation(({ path }: { path: string }) =>
+        Promise.resolve({
+          results: [
+            {
+              path: `${path}/${path === PROJECT_PATH ? 'old' : 'new'}.sql`,
+              matches: [textMatch(1, 'zzword')],
+            },
+          ],
+          truncated: false,
+        }),
+      );
+      const { rerender } = render(<CommandPalette />);
+      fireEvent.click(screen.getByRole('button', { name: 'Search (Ctrl+K)' }));
+      typeQuery('zzword');
+      await screen.findByText('old.sql');
+
+      // Same project, moved to another folder, so the search is kept
+      mockUseGetSelectedProject.mockReturnValue({
+        data: { id: 'p1', name: 'Shop', path: '/projects/moved-shop' },
+      });
+      rerender(<CommandPalette />);
+
+      expect(screen.queryByText('old.sql')).not.toBeInTheDocument();
+      expect(await screen.findByText('new.sql')).toBeInTheDocument();
+      expect(screen.queryByText('old.sql')).not.toBeInTheDocument();
+    });
   });
 
   describe('text matches grouped by file', () => {
