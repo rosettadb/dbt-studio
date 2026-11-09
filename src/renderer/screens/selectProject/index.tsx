@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Button,
   TextField,
@@ -89,7 +89,21 @@ const SelectProject: React.FC = () => {
     React.useState<string>('');
   const [isCloneModalOpen, setIsCloneModalOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState('');
-  const [isAddingProject, setIsAddingProject] = React.useState(false);
+  const location = useLocation();
+  const openNewProjectFormOnArrival =
+    (location.state as { openNewProject?: boolean } | null)?.openNewProject ===
+    true;
+  const [isAddingProject, setIsAddingProject] = React.useState(
+    openNewProjectFormOnArrival,
+  );
+
+  // Clear the nav state so a back-navigation doesn't reopen the form
+  React.useEffect(() => {
+    if (openNewProjectFormOnArrival) {
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, []);
+
   const [newProject, setNewProject] = React.useState({
     name: '',
     createTemplateFolders: true,

@@ -168,8 +168,8 @@ const features = [
   },
 ];
 
-// How many rows each bottom panel lists; View All only shows when there are
-// more than this.
+// How many rows each bottom panel lists; its Manage All button only shows when
+// there are more than this.
 const panelRowsShownCount = 3;
 
 // Scales the page up on big monitors so it fills the screen like it does on a
@@ -251,7 +251,7 @@ const Dashboard: React.FC = () => {
     },
   };
 
-  const viewAllButtonSx = {
+  const manageAllButtonSx = {
     ...outlinedButtonSx,
     height: 26,
     fontSize: '0.75rem',
@@ -535,12 +535,17 @@ const Dashboard: React.FC = () => {
               <Button
                 size="small"
                 variant="outlined"
-                startIcon={<FolderOpenIcon />}
-                onClick={() => handleFeatureClick('/app/select-project')}
+                startIcon={<AddIcon />}
+                onClick={() => {
+                  setIsSidebarOpen(true);
+                  navigate('/app/select-project', {
+                    state: { openNewProject: true },
+                  });
+                }}
                 data-tour="tour-open-project-btn"
                 sx={outlinedButtonSx}
               >
-                Manage Projects
+                New Project
               </Button>
             </Box>
             <Divider sx={{ mb: 0.125 }} />
@@ -596,9 +601,9 @@ const Dashboard: React.FC = () => {
                     size="small"
                     variant="outlined"
                     onClick={() => navigate('/app/select-project')}
-                    sx={viewAllButtonSx}
+                    sx={manageAllButtonSx}
                   >
-                    View All
+                    Manage All Projects
                   </Button>
                 </Box>
               </>
@@ -707,9 +712,9 @@ const Dashboard: React.FC = () => {
                     size="small"
                     variant="outlined"
                     onClick={() => handleFeatureClick('/app/connections')}
-                    sx={viewAllButtonSx}
+                    sx={manageAllButtonSx}
                   >
-                    View All
+                    Manage All Connections
                   </Button>
                 </Box>
               </>
