@@ -168,9 +168,9 @@ const features = [
   },
 ];
 
-// How many recent projects the Dashboard lists; View All only shows when
-// there are more than this.
-const recentProjectsShownCount = 4;
+// How many rows each bottom panel lists; View All only shows when there are
+// more than this.
+const panelRowsShownCount = 3;
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -243,10 +243,21 @@ const Dashboard: React.FC = () => {
     },
   };
 
+  const viewAllButtonSx = {
+    ...outlinedButtonSx,
+    height: 26,
+    fontSize: '0.75rem',
+  };
+
+  const mostRecentlyOpenedProjects = [...projects]
+    .sort((a, b) => (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0))
+    .slice(0, panelRowsShownCount);
+
   return (
     <Box
       sx={{
-        p: { xs: 2.5, md: 4 },
+        px: { xs: 2.5, md: 4 },
+        py: 1.5,
         height: '100%',
         width: '100%',
         overflowY: 'auto',
@@ -259,8 +270,9 @@ const Dashboard: React.FC = () => {
         elevation={0}
         data-tour="tour-workspace-overview"
         sx={{
-          p: 3,
-          mb: 4,
+          px: 3,
+          py: 1.5,
+          mb: 2,
           borderRadius: 3,
           border: `1px solid ${theme.palette.divider}`,
           backgroundColor: theme.palette.background.paper,
@@ -280,7 +292,7 @@ const Dashboard: React.FC = () => {
           />
           <Box>
             <Typography
-              variant="h4"
+              variant="h5"
               sx={{
                 fontWeight: 800,
                 color: theme.palette.text.primary,
@@ -298,56 +310,6 @@ const Dashboard: React.FC = () => {
 
         {/* Quick Header Actions */}
         <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<AddIcon />}
-            onClick={() => handleFeatureClick('/app/add-connection')}
-            sx={{
-              fontWeight: 600,
-              textTransform: 'none',
-              borderRadius: 2,
-            }}
-          >
-            New Connection
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<FolderOpenIcon />}
-            onClick={() => handleFeatureClick('/app/select-project')}
-            data-tour="tour-open-project-btn"
-            sx={{
-              borderColor: theme.palette.divider,
-              color: theme.palette.text.primary,
-              fontWeight: 600,
-              textTransform: 'none',
-              borderRadius: 2,
-              '&:hover': {
-                borderColor: theme.palette.primary.main,
-                color: theme.palette.primary.main,
-              },
-            }}
-          >
-            Open Project
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<SettingsOutlinedIcon />}
-            onClick={() => handleFeatureClick('/app/settings')}
-            sx={{
-              borderColor: theme.palette.divider,
-              color: theme.palette.text.primary,
-              fontWeight: 600,
-              textTransform: 'none',
-              borderRadius: 2,
-              '&:hover': {
-                borderColor: theme.palette.primary.main,
-                color: theme.palette.primary.main,
-              },
-            }}
-          >
-            Settings
-          </Button>
           {apiKey ? (
             <Button
               variant="outlined"
@@ -392,15 +354,26 @@ const Dashboard: React.FC = () => {
               Connect to Cloud
             </Button>
           )}
+          <Button
+            variant="outlined"
+            startIcon={<SettingsOutlinedIcon />}
+            onClick={() => handleFeatureClick('/app/settings')}
+            sx={outlinedButtonSx}
+          >
+            Settings
+          </Button>
         </Box>
       </Paper>
 
       {/* Main Studio Modules (7 Cards) */}
       <Box data-tour="tour-modules-area">
-        <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
+        <Typography
+          variant="h6"
+          sx={{ fontWeight: 700, mb: 1, textAlign: 'center' }}
+        >
           Studio Modules
         </Typography>
-        <Grid container spacing={2.5} sx={{ mb: 4 }}>
+        <Grid container rowSpacing={2} columnSpacing={2.5} sx={{ mb: 2 }}>
           {features.map((feature) => {
             const IconComponent = feature.icon;
             return (
@@ -433,7 +406,7 @@ const Dashboard: React.FC = () => {
                     onClick={() => handleCardClick(feature)}
                     sx={{
                       height: '100%',
-                      p: 2.5,
+                      p: 2,
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'flex-start',
@@ -446,14 +419,14 @@ const Dashboard: React.FC = () => {
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
-                          mb: 2,
+                          mb: 1,
                         }}
                       >
                         <Box
                           className="icon-box"
                           sx={{
-                            width: 48,
-                            height: 48,
+                            width: 40,
+                            height: 40,
                             borderRadius: 2,
                             display: 'flex',
                             alignItems: 'center',
@@ -521,7 +494,9 @@ const Dashboard: React.FC = () => {
             elevation={0}
             data-tour="tour-recent-projects"
             sx={{
-              p: 2.5,
+              px: 2.5,
+              pt: 1.5,
+              pb: 1.125,
               borderRadius: 2.5,
               border: `1px solid ${theme.palette.divider}`,
               backgroundColor: theme.palette.background.paper,
@@ -533,9 +508,7 @@ const Dashboard: React.FC = () => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                mb: 1.5,
-                // Same height as the Connections header when View All is hidden
-                minHeight: 31,
+                mb: 0.5,
               }}
             >
               <Typography
@@ -550,18 +523,18 @@ const Dashboard: React.FC = () => {
                 <FolderOpenIcon sx={{ color: theme.palette.primary.main }} />
                 Recent Projects ({projects.length})
               </Typography>
-              {projects.length > recentProjectsShownCount && (
-                <Button
-                  size="small"
-                  variant="outlined"
-                  onClick={() => navigate('/app/select-project')}
-                  sx={outlinedButtonSx}
-                >
-                  View All
-                </Button>
-              )}
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<FolderOpenIcon />}
+                onClick={() => handleFeatureClick('/app/select-project')}
+                data-tour="tour-open-project-btn"
+                sx={outlinedButtonSx}
+              >
+                Manage Projects
+              </Button>
             </Box>
-            <Divider sx={{ mb: 1 }} />
+            <Divider sx={{ mb: 0.5 }} />
             {projects.length === 0 ? (
               <Typography
                 variant="body2"
@@ -572,13 +545,13 @@ const Dashboard: React.FC = () => {
               </Typography>
             ) : (
               <List disablePadding>
-                {projects.slice(0, recentProjectsShownCount).map((p: any) => (
+                {mostRecentlyOpenedProjects.map((p: any) => (
                   <ListItemButton
                     key={p.id || p.path}
                     onClick={() => handleOpenProject(String(p.id))}
                     sx={{
                       borderRadius: 1.5,
-                      mb: 0.5,
+                      py: 0.25,
                       '&:hover': {
                         backgroundColor: theme.palette.action.hover,
                       },
@@ -590,6 +563,7 @@ const Dashboard: React.FC = () => {
                       <FolderSpecialIcon fontSize="small" />
                     </ListItemIcon>
                     <ListItemText
+                      sx={{ my: 0 }}
                       primary={p.name}
                       secondary={p.path}
                       primaryTypographyProps={{
@@ -605,6 +579,21 @@ const Dashboard: React.FC = () => {
                 ))}
               </List>
             )}
+            {projects.length > panelRowsShownCount && (
+              <>
+                <Divider sx={{ mt: 0.25, mb: 1.125 }} />
+                <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => navigate('/app/select-project')}
+                    sx={viewAllButtonSx}
+                  >
+                    View All
+                  </Button>
+                </Box>
+              </>
+            )}
           </Paper>
         </Grid>
 
@@ -614,7 +603,9 @@ const Dashboard: React.FC = () => {
             elevation={0}
             data-tour="tour-configured-connections"
             sx={{
-              p: 2.5,
+              px: 2.5,
+              pt: 1.5,
+              pb: 1.125,
               borderRadius: 2.5,
               border: `1px solid ${theme.palette.divider}`,
               backgroundColor: theme.palette.background.paper,
@@ -626,7 +617,7 @@ const Dashboard: React.FC = () => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                mb: 1.5,
+                mb: 0.5,
               }}
             >
               <Typography
@@ -648,13 +639,14 @@ const Dashboard: React.FC = () => {
               <Button
                 size="small"
                 variant="outlined"
-                onClick={() => handleFeatureClick('/app/connections')}
+                startIcon={<AddIcon />}
+                onClick={() => handleFeatureClick('/app/add-connection')}
                 sx={outlinedButtonSx}
               >
-                Manage
+                New Connection
               </Button>
             </Box>
-            <Divider sx={{ mb: 1 }} />
+            <Divider sx={{ mb: 0.5 }} />
             {connections.length === 0 ? (
               <Typography
                 variant="body2"
@@ -665,13 +657,13 @@ const Dashboard: React.FC = () => {
               </Typography>
             ) : (
               <List disablePadding>
-                {connections.slice(0, 4).map((c: any) => (
+                {connections.slice(0, panelRowsShownCount).map((c: any) => (
                   <ListItemButton
                     key={c.id}
                     onClick={() => handleFeatureClick('/app/connections')}
                     sx={{
                       borderRadius: 1.5,
-                      mb: 0.5,
+                      py: 0.25,
                       '&:hover': {
                         backgroundColor: theme.palette.action.hover,
                       },
@@ -683,6 +675,7 @@ const Dashboard: React.FC = () => {
                       <StorageOutlinedIcon fontSize="small" />
                     </ListItemIcon>
                     <ListItemText
+                      sx={{ my: 0 }}
                       primary={c.connection?.name || c.name || 'Connection'}
                       secondary={c.connection?.type || 'Database'}
                       primaryTypographyProps={{
@@ -696,6 +689,21 @@ const Dashboard: React.FC = () => {
                   </ListItemButton>
                 ))}
               </List>
+            )}
+            {connections.length > panelRowsShownCount && (
+              <>
+                <Divider sx={{ mt: 0.25, mb: 1.125 }} />
+                <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => handleFeatureClick('/app/connections')}
+                    sx={viewAllButtonSx}
+                  >
+                    View All
+                  </Button>
+                </Box>
+              </>
             )}
           </Paper>
         </Grid>
