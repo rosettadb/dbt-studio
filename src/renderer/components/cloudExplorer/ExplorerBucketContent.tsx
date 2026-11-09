@@ -24,6 +24,7 @@ import {
   Alert,
   Tooltip,
   Select,
+  Menu,
   MenuItem,
   FormControl,
   InputLabel,
@@ -49,7 +50,9 @@ import {
   Delete,
   CreateNewFolder,
   CloudUpload,
+  ContentCopy,
 } from '@mui/icons-material';
+import { cloudExplorerDialogSx } from './styles';
 import {
   useConnection,
   useListObjects,
@@ -71,9 +74,12 @@ import useSecureStorage from '../../hooks/useSecureStorage';
 import { formatFileSize, isPreviewSupported } from '../../utils/fileUtils';
 import { DBTProjects } from '../sidebar/icons';
 import { useGetSelectedProject } from '../../controllers';
-import { projectsServices } from '../../services';
+import { projectsServices, cloudExplorerService } from '../../services';
 import bucketIcon from '../../../../assets/icons/bucket-blue.png';
-import UploadDropzone from './UploadDropzone';
+import UploadDropzone, {
+  getDroppedUploadEntries,
+  DroppedUploadEntry,
+} from './UploadDropzone';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import CreateFolderDialog from './CreateFolderDialog';
 
@@ -116,9 +122,13 @@ const DownloadProgressIndicator: React.FC<{
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
       <Box sx={{ width: 60 }}>
         <LinearProgress
-          variant="determinate"
+          variant={task.progress?.total ? 'determinate' : 'indeterminate'}
           value={percentage}
-          aria-label={`Download progress: ${percentage}%`}
+          aria-label={
+            task.progress?.total
+              ? `Download progress: ${percentage}%`
+              : 'Downloading'
+          }
         />
       </Box>
       <Tooltip title="Cancel download">
@@ -165,7 +175,15 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
 
   // Upload dialog state
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [droppedEntries, setDroppedEntries] = useState<DroppedUploadEntry[]>(
+    [],
+  );
+  const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [copyMenu, setCopyMenu] = useState<{
+    anchor: HTMLElement;
+    objectName: string;
+  } | null>(null);
 
   const connectionQuery = useConnection(connectionId);
   const connection = connectionQuery.data;
@@ -552,6 +570,64 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
     navigate(`/app/cloud-explorer/buckets/${connectionId}`);
   };
 
+  const handleFolderDownload = async (objectName: string) => {
+    if (!connection || !secureConfig) return;
+    const taskId = buildDownloadTaskId(connectionId, bucketName, objectName);
+    try {
+      setLoadingUrls((previous) => ({ ...previous, [objectName]: true }));
+      const result = await window.electron.ipcRenderer.invoke(
+        'dialog:showSaveDialog',
+        {
+          defaultPath: `${objectName.replace(/\/$/, '').split('/').pop() || 'folder'}.zip`,
+          filters: [{ name: 'ZIP archive', extensions: ['zip'] }],
+        },
+      );
+      if (result.canceled || !result.filePath) return;
+      await cloudExplorerService.downloadFolder({
+        provider: connection.provider,
+        config: secureConfig,
+        bucketName,
+        prefix: objectName,
+        destinationPath: result.filePath,
+        taskId,
+      });
+      toast.success(`Folder downloaded to ${result.filePath}`);
+    } catch (error) {
+      if (getTask(taskId)?.status !== 'cancelled')
+        toast.error('Failed to download folder. Please try again.');
+    } finally {
+      setLoadingUrls((previous) => ({ ...previous, [objectName]: false }));
+    }
+  };
+
+  const handleCopy = async (kind: 'URI' | 'path' | 'name') => {
+    if (!copyMenu || !connection) return;
+    const { objectName } = copyMenu;
+    setCopyMenu(null);
+    let value = objectName;
+    if (kind === 'name') {
+      value = objectName.replace(/\/$/, '').split('/').pop() || objectName;
+    } else if (kind === 'URI') {
+      if (connection.provider === 'azure') {
+        const { accountName } = connection.config as { accountName: string };
+        const encodedPath = objectName
+          .split('/')
+          .map(encodeURIComponent)
+          .join('/');
+        value = `https://${accountName}.blob.core.windows.net/${encodeURIComponent(bucketName)}/${encodedPath}`;
+      } else {
+        const scheme = connection.provider === 'gcs' ? 'gs' : 's3';
+        value = `${scheme}://${bucketName}/${objectName}`;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`Copied ${kind}`);
+    } catch {
+      toast.error(`Failed to copy ${kind}. Please try again.`);
+    }
+  };
+
   const handleBackToFiles = () => {
     setPreviewFile(null);
     previewData.reset();
@@ -682,6 +758,42 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
                       alignItems: 'center',
                     }}
                   >
+                    {object.isDirectory && (
+                      <>
+                        <Tooltip title="Download folder as ZIP">
+                          <span>
+                            <IconButton
+                              size="small"
+                              aria-label={`Download ${displayName} as ZIP`}
+                              disabled={
+                                loadingUrls[object.name] ||
+                                getTask(
+                                  buildDownloadTaskId(
+                                    connectionId,
+                                    bucketName,
+                                    object.name,
+                                  ),
+                                )?.status === 'running'
+                              }
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleFolderDownload(object.name);
+                              }}
+                            >
+                              <Download fontSize="small" />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                        <DownloadProgressIndicator
+                          taskId={buildDownloadTaskId(
+                            connectionId,
+                            bucketName,
+                            object.name,
+                          )}
+                          onCancel={cancelTask}
+                        />
+                      </>
+                    )}
                     {!object.isDirectory && isPreviewSupported(object.name) && (
                       <Tooltip title="Preview Data">
                         <IconButton
@@ -752,6 +864,22 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
                           </IconButton>
                         </Tooltip>
                       )}
+                    <Tooltip title="Copy">
+                      <IconButton
+                        size="small"
+                        aria-label={`Copy details for ${displayName}`}
+                        aria-haspopup="menu"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCopyMenu({
+                            anchor: e.currentTarget,
+                            objectName: object.name,
+                          });
+                        }}
+                      >
+                        <ContentCopy fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
                     <Tooltip
                       title={`Delete ${object.isDirectory ? 'folder' : 'file'}`}
                     >
@@ -821,7 +949,57 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
   }
 
   return (
-    <Box sx={{ p: 2 }}>
+    <Box
+      onDragOver={(e) => {
+        if (
+          !e.dataTransfer.types.includes('Files') ||
+          !secureConfig ||
+          uploadOpen
+        )
+          return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        setIsDragOver(true);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node))
+          setIsDragOver(false);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setIsDragOver(false);
+        if (!secureConfig || uploadOpen) return;
+        const entries = getDroppedUploadEntries(e.dataTransfer);
+        if (!entries.length) {
+          toast.warning('Use Upload Files to select local files.');
+          return;
+        }
+        setDroppedEntries(entries);
+        setUploadOpen(true);
+      }}
+      sx={{ p: 2, position: 'relative' }}
+    >
+      {isDragOver && (
+        <Box
+          sx={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 10,
+            border: '2px dashed',
+            borderColor: 'primary.main',
+            bgcolor: 'background.paper',
+            opacity: 0.95,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            pointerEvents: 'none',
+          }}
+        >
+          <Typography>
+            Drop to upload to {bucketName}/{prefix}
+          </Typography>
+        </Box>
+      )}
       {/* Page Header */}
       <Box
         sx={{
@@ -856,7 +1034,10 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
               <IconButton
                 size="small"
                 aria-label="Upload"
-                onClick={() => setUploadOpen(true)}
+                onClick={() => {
+                  setDroppedEntries([]);
+                  setUploadOpen(true);
+                }}
               >
                 <CloudUpload fontSize="small" />
               </IconButton>
@@ -1058,6 +1239,16 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
         </CardContent>
       </Card>
 
+      <Menu
+        anchorEl={copyMenu?.anchor}
+        open={Boolean(copyMenu)}
+        onClose={() => setCopyMenu(null)}
+      >
+        <MenuItem onClick={() => handleCopy('URI')}>Copy URI</MenuItem>
+        <MenuItem onClick={() => handleCopy('path')}>Copy path</MenuItem>
+        <MenuItem onClick={() => handleCopy('name')}>Copy name</MenuItem>
+      </Menu>
+
       {/* Delete Object/Folder Dialog */}
       {secureConfig && connection && deleteTarget && (
         <DeleteConfirmDialog
@@ -1091,6 +1282,7 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
       {/* Upload Dialog */}
       {secureConfig && connection && (
         <Dialog
+          sx={cloudExplorerDialogSx}
           open={uploadOpen}
           onClose={isUploading ? undefined : () => setUploadOpen(false)}
           disableEscapeKeyDown={isUploading}
@@ -1116,6 +1308,7 @@ export const ExplorerBucketContent: React.FC<ExplorerBucketContentProps> = ({
           </DialogTitle>
           <DialogContent sx={{ pb: 3 }}>
             <UploadDropzone
+              initialEntries={droppedEntries}
               provider={connection.provider}
               config={secureConfig as CloudStorageConfig}
               bucketName={bucketName}

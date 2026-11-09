@@ -38,11 +38,36 @@ interface UploadItem {
   fileCount?: number;
 }
 
+export interface DroppedUploadEntry {
+  localPath: string;
+  name: string;
+  isDirectory: boolean;
+}
+
+// Capture paths during the drop event; DataTransfer is cleared afterwards.
+export const getDroppedUploadEntries = (
+  transfer: DataTransfer,
+): DroppedUploadEntry[] =>
+  Array.from(transfer.files).flatMap((file, index) => {
+    const localPath = (file as File & { path?: string }).path;
+    const entry = transfer.items[index]?.webkitGetAsEntry?.();
+    return localPath
+      ? [
+          {
+            localPath,
+            name: file.name,
+            isDirectory: entry?.isDirectory || false,
+          },
+        ]
+      : [];
+  });
+
 interface UploadDropzoneProps {
   provider: CloudProvider;
   config: CloudStorageConfig;
   bucketName: string;
   prefix: string;
+  initialEntries?: DroppedUploadEntry[];
   onUploaded?: () => void;
   onUploadingChange?: (uploading: boolean) => void;
 }
@@ -52,6 +77,7 @@ const UploadDropzone: React.FC<UploadDropzoneProps> = ({
   config,
   bucketName,
   prefix,
+  initialEntries,
   onUploaded,
   onUploadingChange,
 }) => {
@@ -195,90 +221,75 @@ const UploadDropzone: React.FC<UploadDropzoneProps> = ({
 
   const handleDragLeave = useCallback(() => setIsDragOver(false), []);
 
-  const handleDrop = useCallback(
-    async (e: React.DragEvent) => {
-      e.preventDefault();
-      setIsDragOver(false);
-
-      await Array.from(e.dataTransfer.items).reduce(
-        async (prev, droppedItem) => {
-          await prev;
-          const entry = droppedItem.webkitGetAsEntry?.();
-          if (!entry) return;
-
-          if (entry.isFile) {
-            const file = droppedItem.getAsFile();
-            if (!file) return;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const localFilePath = (file as any).path as string;
-            if (!localFilePath) return;
-            const fileName = file.name;
-            const id = `${Date.now()}-${fileName}`;
-            setItems((p) => [
-              ...p,
+  const dropBusyRef = useRef(false);
+  const initialEntriesHandled = useRef(false);
+  const uploadDroppedEntries = async (entries: DroppedUploadEntry[]) => {
+    if (dropBusyRef.current || activeItemIdRef.current) return;
+    dropBusyRef.current = true;
+    try {
+      if (!entries.length)
+        toast.warning('No local files found. Use Upload Files instead.');
+      await entries.reduce(async (previous, entry) => {
+        await previous;
+        const id = `${Date.now()}-${entry.name}`;
+        setItems((previousItems) => [
+          ...previousItems,
+          {
+            id,
+            name: entry.name,
+            type: entry.isDirectory ? 'folder' : 'file',
+            status: 'uploading',
+            progress: 0,
+          },
+        ]);
+        activeItemIdRef.current = id;
+        await new Promise<void>((resolve) => {
+          if (entry.isDirectory) {
+            folderMutation.mutate(
               {
-                id,
-                name: fileName,
-                type: 'file',
-                status: 'uploading',
-                progress: 0,
+                provider,
+                config,
+                bucketName,
+                prefix,
+                localFolderPath: entry.localPath,
               },
-            ]);
-            activeItemIdRef.current = id;
-            await new Promise<void>((resolve) => {
-              fileMutation.mutate(
-                {
-                  provider,
-                  config,
-                  bucketName,
-                  prefix,
-                  localFilePath,
-                  fileName,
-                },
-                { onSettled: () => resolve() },
-              );
-            });
-          } else if (entry.isDirectory) {
-            const file = droppedItem.getAsFile();
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const droppedPath = file ? ((file as any).path as string) : null;
-            const localFolderPath = droppedPath
-              ? path.dirname(droppedPath)
-              : null;
-            if (!localFolderPath) {
-              toast.warning(
-                'Drag-and-drop folder upload requires selecting via the "Upload Folder" button on some systems.',
-              );
-              return;
-            }
-            const folderName = entry.name;
-            const id = `${Date.now()}-${folderName}`;
-            setItems((p) => [
-              ...p,
+              { onSettled: () => resolve() },
+            );
+          } else {
+            fileMutation.mutate(
               {
-                id,
-                name: folderName,
-                type: 'folder',
-                status: 'uploading',
-                progress: 0,
+                provider,
+                config,
+                bucketName,
+                prefix,
+                localFilePath: entry.localPath,
+                fileName: entry.name,
               },
-            ]);
-            activeItemIdRef.current = id;
-            folderMutation.mutate({
-              provider,
-              config,
-              bucketName,
-              prefix,
-              localFolderPath,
-            });
+              { onSettled: () => resolve() },
+            );
           }
-        },
-        Promise.resolve(),
-      );
-    },
-    [provider, config, bucketName, prefix, fileMutation, folderMutation],
-  );
+        });
+      }, Promise.resolve());
+    } finally {
+      dropBusyRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    if (initialEntries?.length && !initialEntriesHandled.current) {
+      initialEntriesHandled.current = true;
+      uploadDroppedEntries(initialEntries);
+    }
+    // Initial drops are consumed once when the upload dialog mounts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialEntries]);
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+    uploadDroppedEntries(getDroppedUploadEntries(e.dataTransfer));
+  };
 
   const isUploading =
     items.some((it) => it.status === 'uploading') ||

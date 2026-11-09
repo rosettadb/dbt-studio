@@ -1,5 +1,8 @@
 import fs from 'fs';
 import path from 'path';
+import archiver from 'archiver';
+import { pipeline, finished } from 'stream/promises';
+import { Readable } from 'stream';
 import { Storage } from '@google-cloud/storage';
 import {
   S3Client,
@@ -58,6 +61,7 @@ import {
   DeleteBucketRequest,
   DeleteBucketResponse,
   DownloadObjectRequest,
+  DownloadFolderRequest,
   DownloadObjectResponse,
   UPLOAD_SIZE_LIMIT_BYTES,
   MULTIPART_THRESHOLD_BYTES,
@@ -1816,6 +1820,162 @@ class CloudExplorerService {
         );
       default:
         throw new Error(`Unsupported provider: ${provider}`);
+    }
+  }
+
+  static async downloadFolder({
+    provider,
+    config,
+    bucketName,
+    prefix,
+    destinationPath,
+    taskId,
+  }: DownloadFolderRequest): Promise<DownloadObjectResponse> {
+    if (!prefix || !prefix.endsWith('/'))
+      throw new Error('A folder prefix ending in / is required.');
+    const rootName = prefix.slice(0, -1).split('/').pop() || 'folder';
+    const archive = archiver('zip', { zlib: { level: 6 } });
+    let cancelled = false;
+    const controller = new AbortController();
+    let archiveError: Error | undefined;
+    let temporaryPath: string | undefined;
+    let completed = 0;
+    TaskManagerService.create({
+      id: taskId,
+      type: 'cloudExplorer:download',
+      label: `${rootName}.zip`,
+      cancellable: true,
+    });
+    const checkActive = () => {
+      if (cancelled) throw new Error('Download cancelled');
+      if (archiveError) throw archiveError;
+    };
+    TaskManagerService.registerCanceller(taskId, () => {
+      cancelled = true;
+      controller.abort();
+      archive.destroy(new Error('Download cancelled'));
+    });
+    // Reject ambiguous archive paths rather than silently renaming object keys.
+    const archiveName = (key: string) => {
+      if (!key.startsWith(prefix))
+        throw new Error('Object outside requested folder.');
+      const name = `${rootName}/${key.slice(prefix.length)}`;
+      if (
+        name.includes('\\') ||
+        name
+          .split('/')
+          .some((part) => part === '.' || part === '..' || part.includes(':'))
+      )
+        throw new Error('Unsafe object path in folder.');
+      return name;
+    };
+    let outputDone: Promise<void> | undefined;
+    try {
+      archiveName(prefix);
+      await fs.promises.mkdir(path.dirname(destinationPath), {
+        recursive: true,
+      });
+      // Exclusive temporary output preserves an existing destination on failure.
+      const temporaryDirectory = await fs.promises.mkdtemp(
+        path.join(path.dirname(destinationPath), '.cloud-zip-'),
+      );
+      temporaryPath = path.join(temporaryDirectory, 'download.zip');
+      outputDone = pipeline(archive, fs.createWriteStream(temporaryPath)).catch(
+        (error: Error) => {
+          archiveError = error;
+          controller.abort();
+        },
+      );
+      archive.on('warning', (error) => archive.destroy(error));
+      archive.append('', { name: `${rootName}/` });
+      const visited = new Set<string>();
+      const visit = async (folder: string): Promise<void> => {
+        if (visited.has(folder)) return;
+        visited.add(folder);
+        let token: string | undefined;
+        const pageTokens = new Set<string>();
+        do {
+          checkActive();
+          // Pages and their streams must finish before starting the next page.
+          // eslint-disable-next-line no-await-in-loop
+          const page = await CloudExplorerService.listObjects(
+            provider,
+            config,
+            bucketName,
+            token,
+            folder,
+          );
+          checkActive();
+          // The awaited reduction serializes streams and progress updates.
+          // eslint-disable-next-line no-await-in-loop, no-loop-func
+          await page.objects.reduce(async (previous, object) => {
+            await previous;
+            checkActive();
+            const name = archiveName(object.name);
+            if (object.isDirectory) {
+              archive.append('', {
+                name: name.endsWith('/') ? name : `${name}/`,
+              });
+              await visit(
+                object.name.endsWith('/') ? object.name : `${object.name}/`,
+              );
+            } else {
+              const url = await CloudExplorerService.getDownloadUrl(
+                provider,
+                config,
+                bucketName,
+                object.name,
+              );
+              checkActive();
+              const response = await net.fetch(url, {
+                signal: controller.signal,
+              });
+              if (!response.ok || !response.body)
+                throw new Error(`Download error ${response.status}`);
+              const source = Readable.fromWeb(
+                response.body as import('stream/web').ReadableStream,
+              );
+              const sourceDone = finished(source);
+              archive.append(source, { name });
+              await sourceDone;
+              completed += 1;
+              TaskManagerService.updateProgress(taskId, {
+                loaded: completed,
+                total: 0,
+                percentage: 0,
+              });
+            }
+          }, Promise.resolve());
+          token = page.nextPageToken;
+          if (token && pageTokens.has(token))
+            throw new Error('Repeated folder listing page.');
+          if (token) pageTokens.add(token);
+        } while (token);
+      };
+      await visit(prefix);
+      checkActive();
+      // The output pipeline also settles when cancellation destroys the archive.
+      archive.finalize().catch((error: Error) => archive.destroy(error));
+      await outputDone;
+      checkActive();
+      await fs.promises.rename(temporaryPath, destinationPath);
+      TaskManagerService.complete(taskId);
+      return { success: true, filePath: destinationPath };
+    } catch (error) {
+      archive.destroy();
+      await outputDone;
+      if (!cancelled)
+        TaskManagerService.fail(
+          taskId,
+          error instanceof Error ? error.message : String(error),
+        );
+      throw error;
+    } finally {
+      if (temporaryPath)
+        await fs.promises.rm(path.dirname(temporaryPath), {
+          recursive: true,
+          force: true,
+        });
     }
   }
 
