@@ -54,7 +54,7 @@ describe('FileTreeViewer', () => {
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
   });
 
-  it('has no refresh button, because it lives in the panel tab row', () => {
+  it('has no refresh row above the tree, because refresh is on the project folder row', () => {
     renderFileTreeViewer();
 
     expect(
