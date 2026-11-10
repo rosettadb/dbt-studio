@@ -1,6 +1,7 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
+  Alert,
   Button,
   TextField,
   Box,
@@ -78,6 +79,31 @@ import { path } from '../../lib/path';
 
 const SelectProject: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  // Set by the Dashboard Pipeline card: the project picked or created here
+  // opens with the Create Pipeline dialog.
+  const [pipelineNavigationState] = React.useState(() => {
+    const state = location.state as {
+      forPipeline?: boolean;
+      startNewProject?: boolean;
+    } | null;
+    return {
+      forPipeline: state?.forPipeline === true,
+      startNewProject: state?.startNewProject === true,
+    };
+  });
+  const { forPipeline } = pipelineNavigationState;
+  const projectScreenState = forPipeline
+    ? { openCreatePipeline: true }
+    : undefined;
+
+  // Clear the nav state so a back-navigation doesn't re-enter pipeline mode
+  React.useEffect(() => {
+    if (forPipeline) {
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, []);
+
   const { mutateAsync: selectProject } = useSelectProject();
   const { data: settings } = useGetSettings();
   const { data: projects = [] } = useGetProjects();
@@ -89,7 +115,9 @@ const SelectProject: React.FC = () => {
     React.useState<string>('');
   const [isCloneModalOpen, setIsCloneModalOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState('');
-  const [isAddingProject, setIsAddingProject] = React.useState(false);
+  const [isAddingProject, setIsAddingProject] = React.useState(
+    pipelineNavigationState.startNewProject,
+  );
   const [newProject, setNewProject] = React.useState({
     name: '',
     createTemplateFolders: true,
@@ -318,7 +346,7 @@ const SelectProject: React.FC = () => {
       setNewProject({ name: '', createTemplateFolders: true });
       setSelectedConnection('');
       setConnectionType('standard');
-      navigate('/app/dbt-project');
+      navigate('/app/dbt-project', { state: projectScreenState });
     } catch (error) {
       toast.error(
         `Failed to create project: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -426,7 +454,7 @@ const SelectProject: React.FC = () => {
             data-project-name={project.name}
             onClick={async () => {
               await selectProject({ projectId: project.id });
-              navigate('/app/dbt-project');
+              navigate('/app/dbt-project', { state: projectScreenState });
             }}
           >
             <ProjectCardContent>
@@ -606,6 +634,12 @@ const SelectProject: React.FC = () => {
               <TaglineText>Manage your projects</TaglineText>
             </TaglineContainer>
 
+            {forPipeline && (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                Pick the project to add a pipeline to, or create a new one.
+              </Alert>
+            )}
+
             <HeaderContainer>
               <SearchContainer>
                 <TextField
@@ -691,7 +725,9 @@ const SelectProject: React.FC = () => {
                             );
                           }
 
-                          navigate('/app/dbt-project');
+                          navigate('/app/dbt-project', {
+                            state: projectScreenState,
+                          });
                         } else {
                           toast.error('Failed to import project.');
                         }

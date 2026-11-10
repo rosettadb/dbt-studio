@@ -6,6 +6,10 @@ import {
   Card,
   CardActionArea,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   Grid,
   List,
@@ -164,24 +168,34 @@ const features = [
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const theme = useTheme();
-  const { setIsSidebarOpen, selectedProject } = useAppContext();
+  const { setIsSidebarOpen } = useAppContext();
   const { data: projects = [] } = useGetProjects();
   const { data: connections = [] } = useGetConnections();
   const { mutateAsync: selectProject } = useSelectProject();
+  const [isPipelineChoiceOpen, setIsPipelineChoiceOpen] = React.useState(false);
 
   const handleFeatureClick = (path: string) => {
     setIsSidebarOpen(true);
     navigate(path);
   };
 
+  // The project list opens the chosen (or newly created) project with the
+  // Create Pipeline dialog already open.
+  const openProjectListForPipeline = (startNewProject: boolean) => {
+    setIsPipelineChoiceOpen(false);
+    setIsSidebarOpen(true);
+    navigate('/app/select-project', {
+      state: { forPipeline: true, startNewProject },
+    });
+  };
+
   const handleCardClick = (feature: (typeof features)[number]) => {
     if (feature.id === 'pipeline') {
-      if (!selectedProject) {
-        navigate('/app/select-project');
+      if (projects.length === 0) {
+        openProjectListForPipeline(true);
         return;
       }
-      setIsSidebarOpen(true);
-      navigate('/app/dbt-project', { state: { openCreatePipeline: true } });
+      setIsPipelineChoiceOpen(true);
       return;
     }
     if (feature.id === 'analytics') {
@@ -622,6 +636,47 @@ const Dashboard: React.FC = () => {
           </Paper>
         </Grid>
       </Grid>
+      <Dialog
+        open={isPipelineChoiceOpen}
+        onClose={() => setIsPipelineChoiceOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Where should the pipeline go?</DialogTitle>
+        <DialogContent>
+          <List disablePadding>
+            <ListItemButton
+              onClick={() => openProjectListForPipeline(true)}
+              sx={{ borderRadius: 1.5, mb: 0.5 }}
+            >
+              <ListItemIcon sx={{ minWidth: 36 }}>
+                <AddIcon color="primary" />
+              </ListItemIcon>
+              <ListItemText
+                primary="New project"
+                secondary="Create a new project, then add a pipeline to it"
+                primaryTypographyProps={{ fontWeight: 600 }}
+              />
+            </ListItemButton>
+            <ListItemButton
+              onClick={() => openProjectListForPipeline(false)}
+              sx={{ borderRadius: 1.5 }}
+            >
+              <ListItemIcon sx={{ minWidth: 36 }}>
+                <FolderOpenIcon color="primary" />
+              </ListItemIcon>
+              <ListItemText
+                primary="Existing project"
+                secondary="Pick one of your projects to add a pipeline to"
+                primaryTypographyProps={{ fontWeight: 600 }}
+              />
+            </ListItemButton>
+          </List>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setIsPipelineChoiceOpen(false)}>Cancel</Button>
+        </DialogActions>
+      </Dialog>
       {/* Only show the quick start tour for brand-new users with no projects */}
       {projects.length === 0 && <QuickStartTour />}
     </Box>
