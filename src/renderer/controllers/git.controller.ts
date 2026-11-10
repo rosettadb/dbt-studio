@@ -1,4 +1,6 @@
 import {
+  QueryClient,
+  QueryKey,
   useMutation,
   UseMutationOptions,
   UseMutationResult,
@@ -18,6 +20,19 @@ import {
 } from '../../types/backend';
 import { QUERY_KEYS } from '../config/constants';
 import { gitServices } from '../services';
+
+/**
+ * Refetch git queries from scratch. react-query v3 reuses a fetch that is
+ * already in flight, so one started before the repo changed (e.g. a terminal
+ * checkout) could hand back the old branch. Cancel those fetches first.
+ */
+export const refreshGitQueries = async (
+  queryClient: QueryClient,
+  queryKeys: QueryKey[],
+) => {
+  await Promise.all(queryKeys.map((key) => queryClient.cancelQueries(key)));
+  await Promise.all(queryKeys.map((key) => queryClient.invalidateQueries(key)));
+};
 
 export const useGitIsInitialized = (
   path?: string,
@@ -118,7 +133,9 @@ export const useGetFileHeadContent = (
     staleTime: Infinity,
     cacheTime: Infinity,
     refetchOnWindowFocus: false,
-    refetchOnMount: false,
+    // Only refetches when stale: with staleTime Infinity that means invalidated
+    // (e.g. after a checkout), so inactive files refresh when reopened.
+    refetchOnMount: true,
     refetchOnReconnect: false,
     ...customOptions,
   });
@@ -184,6 +201,13 @@ export const useGitInit = (
       await queryClient.invalidateQueries([
         QUERY_KEYS.GIT_IS_INITIALIZED,
         args[1].path,
+      ]);
+      // Anything cached before init came from a non-repo; refetch it so the
+      // branch shows up right away.
+      await refreshGitQueries(queryClient, [
+        [QUERY_KEYS.GIT_BRANCHES, args[1].path],
+        [QUERY_KEYS.GIT_REPO_INFO, args[1].path],
+        [QUERY_KEYS.GIT_STATUSES, args[1].path],
       ]);
       onCustomSuccess?.(...args);
     },
@@ -281,6 +305,11 @@ export const useGitCommit = (
       await queryClient.invalidateQueries([
         QUERY_KEYS.GIT_HEAD_CONTENT,
         args[1].path,
+      ]);
+      // The first commit creates the branch; refresh branch name and list.
+      await refreshGitQueries(queryClient, [
+        [QUERY_KEYS.GIT_BRANCHES, args[1].path],
+        [QUERY_KEYS.GIT_REPO_INFO, args[1].path],
       ]);
 
       onCustomSuccess?.(...args);
