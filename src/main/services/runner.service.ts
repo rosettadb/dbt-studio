@@ -135,6 +135,15 @@ const PLUGIN_DEFINITIONS: {
     downloadUrl: 'https://aws.amazon.com/cli/',
   },
   {
+    id: 'pyspark',
+    label: 'PySpark (spark-submit)',
+    plugin: 'pyspark@v1',
+    command: 'spark-submit',
+    versionArgs: ['--version'],
+    downloadUrl:
+      'https://spark.apache.org/docs/latest/api/python/getting_started/install.html',
+  },
+  {
     id: 'kinetica_cli',
     label: 'Kinetica CLI (KiSQL)',
     plugin: 'kinetica_cli@v1',
@@ -144,6 +153,57 @@ const PLUGIN_DEFINITIONS: {
 ];
 
 export default class RunnerService {
+  static async checkJavaRuntime(): Promise<{
+    available: boolean;
+    version?: string;
+    requiredVersion: number;
+  }> {
+    const requiredVersion = 17;
+    const javaHomes =
+      process.platform === 'darwin'
+        ? ['/opt/homebrew', '/usr/local'].map((prefix) =>
+            path.join(
+              prefix,
+              'opt',
+              'openjdk@17',
+              'libexec',
+              'openjdk.jdk',
+              'Contents',
+              'Home',
+              'bin',
+              'java',
+            ),
+          )
+        : [];
+    const installed = await Promise.all(javaHomes.map((p) => fs.pathExists(p)));
+    const java = javaHomes.find((_, i) => installed[i]) || 'java';
+
+    return new Promise((resolve) => {
+      execFile(
+        java,
+        ['-version'],
+        { timeout: 5000 },
+        (error, stdout, stderr) => {
+          if (error) {
+            resolve({ available: false, requiredVersion });
+            return;
+          }
+          const version = `${stdout}${stderr}`.match(/version "([\d.]+)/)?.[1];
+          const major = Number(
+            version?.split('.')[0] === '1'
+              ? version?.split('.')[1]
+              : version?.split('.')[0],
+          );
+          resolve({
+            available: Number.isFinite(major) && major >= requiredVersion,
+            version,
+            requiredVersion,
+          });
+        },
+      );
+    });
+  }
+
   static async checkRunnerVersions(): Promise<RunnerVersionInfo> {
     const settings = await SettingsService.loadSettings();
     const currentVersion = settings.runnerVersion || null;
@@ -365,6 +425,29 @@ export default class RunnerService {
             managedInStudio: true,
           };
         }
+        if (def.id === 'pyspark') {
+          const java = await this.checkJavaRuntime();
+          const managedSparkSubmit = settings.pythonPath
+            ? path.join(
+                path.dirname(settings.pythonPath),
+                process.platform === 'win32'
+                  ? 'spark-submit.cmd'
+                  : 'spark-submit',
+              )
+            : '';
+          if (managedSparkSubmit && (await fs.pathExists(managedSparkSubmit))) {
+            return {
+              id: def.id,
+              label: def.label,
+              plugin: def.plugin,
+              available: true,
+              path: managedSparkSubmit,
+              managedInStudio: true,
+              downloadUrl: def.downloadUrl,
+              java,
+            };
+          }
+        }
         if (!def.command) {
           // command@v1: no external dependency, always usable
           return {
@@ -383,6 +466,9 @@ export default class RunnerService {
           version: detected.version,
           path: detected.path,
           downloadUrl: def.downloadUrl,
+          ...(def.id === 'pyspark'
+            ? { java: await this.checkJavaRuntime() }
+            : {}),
         };
       }),
     );
