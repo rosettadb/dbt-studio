@@ -106,7 +106,7 @@ describe('git.ipcHandlers', () => {
   it('delegates git:projectSummary to gitService.getProjectGitSummary', async () => {
     const { ipcMain } = await import('electron');
 
-    const summary = { currentBranch: 'main', changedFileCount: 0 };
+    const summary = { currentBranch: 'main' };
     const getProjectGitSummary = jest.fn().mockResolvedValue(summary);
 
     jest.doMock('../../../../src/main/services', () => ({

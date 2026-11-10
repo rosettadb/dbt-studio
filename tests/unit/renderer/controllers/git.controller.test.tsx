@@ -138,7 +138,7 @@ describe('useGetProjectGitSummary', () => {
   });
 
   it('loads the summary for the given project path', async () => {
-    const summary = { currentBranch: 'main', changedFileCount: 0 };
+    const summary = { currentBranch: 'main' };
     getProjectGitSummaryMock.mockResolvedValue(summary);
 
     const { result } = renderSummaryHook('/repo');
@@ -148,7 +148,7 @@ describe('useGetProjectGitSummary', () => {
   });
 
   it('keeps a separate cached summary per project path', async () => {
-    const summary = { currentBranch: 'main', changedFileCount: 0 };
+    const summary = { currentBranch: 'main' };
     getProjectGitSummaryMock.mockResolvedValue(summary);
 
     const { result, queryClient } = renderSummaryHook('/repo');

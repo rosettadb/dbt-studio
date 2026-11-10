@@ -54,6 +54,17 @@ jest.mock('../../../../assets', () => ({
   icons: {},
 }));
 
+jest.mock(
+  '../../../../src/renderer/components/icon/DatabaseCylinderIcon',
+  () => {
+    const { createElement } = jest.requireActual('react');
+    return {
+      DatabaseCylinderIcon: () =>
+        createElement('span', { 'data-testid': 'database-cylinder-icon' }),
+    };
+  },
+);
+
 const projects = [
   {
     id: '1',
@@ -227,6 +238,67 @@ describe('Manage Projects screen', () => {
         screen.getByText(/^Added Nov \d, 2026 · Last active /),
       ).toBeInTheDocument();
     });
+  });
+
+  describe('connection icons', () => {
+    const connectedProject = {
+      ...projects[0],
+      connection: { type: 'postgres', name: 'Local-Postgres' },
+    };
+
+    it.each(['list', 'card'])(
+      'shows the database cylinder on a named connection chip in %s view',
+      (view) => {
+        localStorage.setItem(VIEW_STORAGE_KEY, view);
+        (useGetProjects as jest.Mock).mockReturnValue({
+          data: [connectedProject],
+        });
+
+        render(<SelectProject />);
+
+        const chip = screen.getByTitle('Connection Name');
+        expect(chip).toHaveTextContent('Local-Postgres');
+        expect(
+          within(chip).getByTestId('database-cylinder-icon'),
+        ).toBeInTheDocument();
+        expect(within(chip).queryByTestId('CableIcon')).not.toBeInTheDocument();
+      },
+    );
+
+    it.each(['list', 'card'])(
+      'shows the database cylinder on the No connection chip in %s view',
+      (view) => {
+        localStorage.setItem(VIEW_STORAGE_KEY, view);
+
+        render(<SelectProject />);
+
+        const chip = within(
+          screen.getByTestId('project-card-alpha_project'),
+        ).getByTitle('Click to add database connection');
+        expect(chip).toHaveTextContent('No connection');
+        expect(
+          within(chip).getByTestId('database-cylinder-icon'),
+        ).toBeInTheDocument();
+      },
+    );
+
+    it.each(['list', 'card'])(
+      'keeps the stacked database icon for projects without a logo in %s view',
+      (view) => {
+        localStorage.setItem(VIEW_STORAGE_KEY, view);
+        (useGetProjects as jest.Mock).mockReturnValue({
+          data: [connectedProject],
+        });
+
+        render(<SelectProject />);
+
+        const card = screen.getByTestId('project-card-alpha_project');
+        expect(within(card).getByTestId('StorageIcon')).toBeInTheDocument();
+        expect(
+          within(card).getAllByTestId('database-cylinder-icon'),
+        ).toHaveLength(1);
+      },
+    );
   });
 
   describe('header', () => {

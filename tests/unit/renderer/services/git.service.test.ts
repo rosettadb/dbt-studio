@@ -110,7 +110,7 @@ describe('renderer/services/git.service', () => {
 
   describe('getProjectGitSummary', () => {
     it('should call client.post with git:projectSummary and repoPath and return data', async () => {
-      const summary = { currentBranch: 'main', changedFileCount: 0 };
+      const summary = { currentBranch: 'main' };
       client.post.mockResolvedValue({ data: summary });
 
       const result = await getProjectGitSummary('/tmp/repo');
