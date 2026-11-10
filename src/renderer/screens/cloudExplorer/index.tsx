@@ -2,6 +2,7 @@ import React from 'react';
 import { Typography, Box } from '@mui/material';
 import { useLocation } from 'react-router-dom';
 import { AppLayout } from '../../layouts';
+import { cloudExplorerSx } from '../../components/cloudExplorer/styles';
 import {
   ExplorerSidebar,
   ExplorerDashboard,
@@ -62,9 +63,7 @@ const CloudExplorer: React.FC = () => {
       sidebarContent={<ExplorerSidebar />}
       panelTitle="Object Explorer"
     >
-      <Box sx={{ p: 2 }}>
-        <Box>{renderContent()}</Box>
-      </Box>
+      <Box sx={cloudExplorerSx}>{renderContent()}</Box>
     </AppLayout>
   );
 };
