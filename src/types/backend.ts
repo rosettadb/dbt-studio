@@ -854,13 +854,6 @@ export type RepoInfoRes = {
 
 export type ProjectGitSummary = {
   currentBranch: string | null;
-  /** Remote as "host/org/repo", with any saved login details removed. */
-  remoteDisplayAddress: string | null;
-  /** Null when the branch doesn't track a remote branch. */
-  aheadBehind: { ahead: number; behind: number } | null;
-  changedFileCount: number;
-  /** Null when the repository has no commits yet. */
-  lastCommit: { message: string; authorName: string; date: string } | null;
 };
 
 export type Secret = {

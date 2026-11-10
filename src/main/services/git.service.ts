@@ -51,17 +51,6 @@ function isSshUrl(url: string): boolean {
   return url.startsWith('git@') || url.startsWith('ssh://');
 }
 
-// Turns a remote URL into "host/org/repo" for showing on screen. Cloning with
-// credentials leaves them in the origin URL, so everything up to the last "@"
-// is dropped here, before the value can reach the renderer.
-function formatRemoteForDisplay(remoteUrl: string): string {
-  return remoteUrl
-    .replace(/^[a-z][a-z0-9+.-]*:\/\//i, '')
-    .replace(/^.*@/, '')
-    .replace(/^([^/:]{2,}):(?!\d+\/)/, '$1/')
-    .replace(/(\.git)?\/?$/, '');
-}
-
 async function getOrCreateAskpassScript(): Promise<string> {
   const isWindows = process.platform === 'win32';
   const ext = isWindows ? '.bat' : '.sh';
@@ -1324,43 +1313,14 @@ export default class GitService {
     }
   }
 
-  // Local reads only, no fetch: the Manage Projects screen runs this for every
+  // Local read only, no fetch: the Manage Projects screen runs this for every
   // project, so it must stay fast and never trigger a login prompt.
   async getProjectGitSummary(
     repoPath: string,
   ): Promise<ProjectGitSummary | null> {
     try {
-      const git = this.getGitInstance(repoPath);
-      const status = await git.status();
-      const remotes = await git.getRemotes(true);
-      const originFetchUrl = remotes.find((r) => r.name === 'origin')?.refs
-        ?.fetch;
-
-      let lastCommit: ProjectGitSummary['lastCommit'] = null;
-      try {
-        const { latest } = await git.log({ maxCount: 1 });
-        if (latest) {
-          lastCommit = {
-            message: latest.message,
-            authorName: latest.author_name,
-            date: latest.date,
-          };
-        }
-      } catch {
-        // git log fails on a repository with no commits yet
-      }
-
-      return {
-        currentBranch: status.current,
-        remoteDisplayAddress: originFetchUrl
-          ? formatRemoteForDisplay(originFetchUrl)
-          : null,
-        aheadBehind: status.tracking
-          ? { ahead: status.ahead, behind: status.behind }
-          : null,
-        changedFileCount: status.files.length,
-        lastCommit,
-      };
+      const status = await this.getGitInstance(repoPath).status();
+      return { currentBranch: status.current };
     } catch {
       // Not a Git repository, or the project folder no longer exists
       return null;

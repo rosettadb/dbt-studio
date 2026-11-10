@@ -52,6 +52,7 @@ import {
   NewProject,
 } from '../../components';
 import { ViewToggle } from '../../components/cloudExplorer/ViewToggle';
+import { DatabaseCylinderIcon } from '../../components/icon/DatabaseCylinderIcon';
 import { icons } from '../../../../assets';
 import { AppLayout } from '../../layouts';
 import { Project, canUseAsDbtConnection } from '../../../types/backend';
@@ -405,7 +406,7 @@ const SelectProject: React.FC = () => {
         <Chip
           label={
             <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <Cable sx={{ fontSize: 12, mr: 0.5 }} />
+              <DatabaseCylinderIcon sx={{ fontSize: 12, mr: 0.5 }} />
               {project.connection.name}
             </Box>
           }
@@ -428,7 +429,7 @@ const SelectProject: React.FC = () => {
       <Chip
         label={
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <DatabaseIcon sx={{ fontSize: 12, mr: 0.5 }} />
+            <DatabaseCylinderIcon sx={{ fontSize: 12, mr: 0.5 }} />
             No connection
           </Box>
         }
@@ -478,7 +479,7 @@ const SelectProject: React.FC = () => {
         <ProjectInfo>
           <ProjectTitle variant="body1">{project.name}</ProjectTitle>
           <ProjectPath>{project.path || 'No path specified'}</ProjectPath>
-          <ProjectGitDetails projectPath={project.path} isCardView={false} />
+          <ProjectGitDetails projectPath={project.path} />
           <ProjectDetailLine>{getProjectDatesLine(project)}</ProjectDetailLine>
         </ProjectInfo>
       </ProjectCardContent>
@@ -511,7 +512,7 @@ const SelectProject: React.FC = () => {
       <ProjectPath title={project.path}>
         {project.path || 'No path specified'}
       </ProjectPath>
-      <ProjectGitDetails projectPath={project.path} isCardView />
+      <ProjectGitDetails projectPath={project.path} />
       <Box sx={{ mt: 'auto', pt: 1 }}>{renderConnectionChip(project)}</Box>
       <ProjectDetailLine sx={{ mt: 1 }}>
         {getProjectDatesLine(project)}
