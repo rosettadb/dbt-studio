@@ -9,6 +9,7 @@ import {
   SettingsService,
   RunnerService,
 } from '../services';
+import { getRunnerToolEnvironment } from '../services/runnerEnvironment';
 
 // Separate ProcessAdapter instance (own 'runner:*' channels) so a pipeline
 // run never collides with the shared 'process:*' slot used by "Serve Docs".
@@ -99,13 +100,14 @@ const registerRunnerHandlers = (mainWindow: BrowserWindow) => {
         };
       }
 
+      const toolEnv = await getRunnerToolEnvironment(settings);
       try {
         const content = await fs.readFile(
           path.resolve(workspaceDir, pipelineFile),
           'utf8',
         );
         if (/\bplugin:\s*["']?pyspark@v1\b/.test(content)) {
-          const java = await RunnerService.checkJavaRuntime();
+          const java = await RunnerService.checkJavaRuntime(toolEnv);
           if (!java.available) {
             return {
               success: false,
@@ -127,6 +129,7 @@ const registerRunnerHandlers = (mainWindow: BrowserWindow) => {
       const logFile = path.join(logDir, `${safeLogName}.log`);
 
       const env: Record<string, string> = {
+        ...toolEnv,
         RUN_MODE: 'studio',
         WORKSPACE_DIR: workspaceDir,
         EXECUTION_MODE: 'pipeline',
@@ -136,64 +139,6 @@ const registerRunnerHandlers = (mainWindow: BrowserWindow) => {
       };
       if (settings.runnerHome) {
         env.RUNNER_HOME = settings.runnerHome;
-      }
-
-      // In studio mode the dbt@v1/rosetta@v1 plugin scripts just call the
-      // bare `dbt`/`rosetta` commands (no auto-install, no absolute-path
-      // support) - so Studio's own managed installs, which live in a venv /
-      // app-data dir rather than the system PATH, need to be put on PATH for
-      // the runner's child process to find them.
-      const toolDirs = [
-        settings.pythonPath,
-        settings.dbtPath,
-        settings.rosettaPath,
-        settings.kisqlPath,
-      ]
-        .filter((toolPath): toolPath is string => Boolean(toolPath))
-        .map((toolPath) => path.dirname(toolPath));
-
-      // On macOS, Electron's PATH often omits Homebrew directories because
-      // the app is launched via launchd rather than a login shell. Add the
-      // standard Homebrew prefixes so tools like terraform, git, and aws
-      // that are installed via Homebrew are visible to the runner.
-      const homebrewDirs =
-        process.platform === 'darwin'
-          ? [
-              '/opt/homebrew/bin', // Apple Silicon
-              '/usr/local/bin', // Intel
-            ]
-          : [];
-
-      // Homebrew's versioned JDK is keg-only, so a system Java 11 can appear
-      // first on PATH even when Java 17 is installed. Spark 4 requires 17+.
-      if (process.platform === 'darwin') {
-        const javaHomes = ['/opt/homebrew', '/usr/local'].map((prefix) =>
-          path.join(
-            prefix,
-            'opt',
-            'openjdk@17',
-            'libexec',
-            'openjdk.jdk',
-            'Contents',
-            'Home',
-          ),
-        );
-        const installed = await Promise.all(
-          javaHomes.map((javaHome) =>
-            fs.pathExists(path.join(javaHome, 'bin', 'java')),
-          ),
-        );
-        const javaHome = javaHomes.find((_, index) => installed[index]);
-        if (javaHome) {
-          env.JAVA_HOME = javaHome;
-          toolDirs.unshift(path.join(javaHome, 'bin'));
-        }
-      }
-
-      const basePath = process.env.PATH ?? '';
-      const allDirs = [...toolDirs, ...homebrewDirs];
-      if (allDirs.length) {
-        env.PATH = [...allDirs, basePath].join(path.delimiter);
       }
 
       // The pip-installed spark-submit launcher calls find-spark-home, which

@@ -13,6 +13,10 @@ import {
   RunnerPluginStatus,
 } from '../../types/backend';
 import SettingsService from './settings.service';
+import {
+  getRunnerJavaCommand,
+  getRunnerToolEnvironment,
+} from './runnerEnvironment';
 
 const KISQL_GITHUB_REPO = 'kineticadb/kisql';
 const KISQL_UNIX_ASSET = 'kisql';
@@ -153,36 +157,24 @@ const PLUGIN_DEFINITIONS: {
 ];
 
 export default class RunnerService {
-  static async checkJavaRuntime(): Promise<{
+  static async checkJavaRuntime(
+    runnerEnv?: Record<string, string | undefined>,
+  ): Promise<{
     available: boolean;
     version?: string;
     requiredVersion: number;
   }> {
     const requiredVersion = 17;
-    const javaHomes =
-      process.platform === 'darwin'
-        ? ['/opt/homebrew', '/usr/local'].map((prefix) =>
-            path.join(
-              prefix,
-              'opt',
-              'openjdk@17',
-              'libexec',
-              'openjdk.jdk',
-              'Contents',
-              'Home',
-              'bin',
-              'java',
-            ),
-          )
-        : [];
-    const installed = await Promise.all(javaHomes.map((p) => fs.pathExists(p)));
-    const java = javaHomes.find((_, i) => installed[i]) || 'java';
+    const env =
+      runnerEnv ||
+      (await getRunnerToolEnvironment(await SettingsService.loadSettings()));
+    const java = getRunnerJavaCommand(env);
 
     return new Promise((resolve) => {
       execFile(
         java,
         ['-version'],
-        { timeout: 5000 },
+        { timeout: 5000, env },
         (error, stdout, stderr) => {
           if (error) {
             resolve({ available: false, requiredVersion });
