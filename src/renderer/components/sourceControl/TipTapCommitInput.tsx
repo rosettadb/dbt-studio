@@ -1,6 +1,21 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Box, Button, CircularProgress, useTheme } from '@mui/material';
-import { Check, Sync, ArrowUpward } from '@mui/icons-material';
+import {
+  alpha,
+  Box,
+  Button,
+  CircularProgress,
+  Menu,
+  MenuItem,
+  Tooltip,
+  Typography,
+  useTheme,
+} from '@mui/material';
+import {
+  Check,
+  Sync,
+  CloudUploadOutlined,
+  KeyboardArrowDown,
+} from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import {
   useGitCommit,
@@ -30,12 +45,16 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
   onGitError,
 }) => {
   const [message, setMessage] = useState('');
-  const [height, setHeight] = useState(36);
+  // 26px for one line, like VS Code: 18px line + 3px padding each side + border
+  const [height, setHeight] = useState(26);
   const [isFocused, setIsFocused] = useState(false);
   const [lastActionTime, setLastActionTime] = useState(0);
   const [pendingAction, setPendingAction] = useState<
-    'commit' | 'push' | 'publish' | null
+    'commit' | 'commitPush' | 'push' | 'publish' | null
   >(null);
+  const [commitMenuAnchor, setCommitMenuAnchor] = useState<HTMLElement | null>(
+    null,
+  );
   const theme = useTheme();
   const textareaRef = useRef<HTMLDivElement>(null);
 
@@ -51,7 +70,7 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
     onSuccess: () => {
       setPendingAction(null);
       setMessage('');
-      setHeight(36);
+      setHeight(26);
       if (textareaRef.current) {
         textareaRef.current.textContent = '';
       }
@@ -149,10 +168,8 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
         return total + Math.max(1, Math.ceil(line.length / 60));
       }, 0);
       const totalLines = Math.max(lines, wrappedLines);
-      const calculatedHeight = Math.min(
-        Math.max(totalLines * 20 + 16, 36),
-        160,
-      ); // 20px per line + padding
+      // 18px per line + 6px padding + 2px border
+      const calculatedHeight = Math.min(Math.max(totalLines * 18 + 8, 26), 160);
       setHeight(calculatedHeight);
     }
   };
@@ -186,6 +203,19 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
 
     setPendingAction('push');
     pushFiles({ path: projectPath });
+  };
+
+  const handleCommitAndPush = () => {
+    if (stagedFilesCount === 0 || !projectPath) {
+      return;
+    }
+    setPendingAction('commitPush');
+    commitFiles(
+      { path: projectPath, message: message.trim() || 'Update files' },
+      // Runs after the hook's own onSuccess (message cleared, state reset).
+      // handlePush publishes the branch first when there is no remote yet.
+      { onSuccess: () => handlePush() },
+    );
   };
 
   const handleSshPassphraseSubmit = (sshPassphrase: string) => {
@@ -288,7 +318,11 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
       if (pendingAction === 'push' || effectivePrimaryAction === 'push') {
         return 'Pushing...';
       }
-      if (pendingAction === 'commit' || effectivePrimaryAction === 'commit') {
+      if (
+        pendingAction === 'commit' ||
+        pendingAction === 'commitPush' ||
+        effectivePrimaryAction === 'commit'
+      ) {
         return 'Committing...';
       }
       return 'Publishing...';
@@ -312,13 +346,40 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
       return <CircularProgress size={16} thickness={5} color="inherit" />;
     }
     if (effectivePrimaryAction === 'push') {
-      return <Sync sx={{ fontSize: 16, mr: 0.5 }} />;
+      return <Sync sx={{ fontSize: 16 }} />;
     }
     if (effectivePrimaryAction === 'publish') {
-      return <ArrowUpward sx={{ fontSize: 16, mr: 0.5 }} />;
+      return <CloudUploadOutlined sx={{ fontSize: 16 }} />;
     }
-    return <Check sx={{ fontSize: 16, mr: 0.5 }} />;
+    return <Check sx={{ fontSize: 16 }} />;
   })();
+
+  // Theme primary colours for the action button
+  const accent = theme.palette.primary.main;
+  const accentHover = theme.palette.primary.dark;
+  const accentText = theme.palette.primary.contrastText;
+  const actionButtonSx = {
+    minWidth: 0,
+    height: '100%',
+    py: 0,
+    borderRadius: 0,
+    boxShadow: 'none',
+    textTransform: 'none',
+    fontSize: '13px',
+    fontWeight: 500,
+    backgroundColor: accent,
+    color: accentText,
+    '& .MuiButton-startIcon': { mr: 0.75 },
+    '&:hover': { backgroundColor: accentHover, boxShadow: 'none' },
+    // Dimmed via the wrapper's opacity instead of turning grey
+    '&.Mui-disabled': { backgroundColor: accent, color: accentText },
+    '&.Mui-focusVisible': {
+      boxShadow: `inset 0 0 0 1px ${alpha(accentText, 0.85)}`,
+    },
+  } as const;
+
+  // Split button (Commit ▾) only for commit; Push/Publish stay single.
+  const showCommitMenu = effectivePrimaryAction === 'commit';
 
   const handlePrimaryAction = () => {
     // Prevent rapid successive actions (debounce 1 second)
@@ -350,6 +411,18 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
     handleCommit();
   };
 
+  const handleCommitMenuAction = (pushAfterCommit: boolean) => {
+    setCommitMenuAnchor(null);
+    if (isLoading) {
+      return;
+    }
+    if (pushAfterCommit) {
+      handleCommitAndPush();
+    } else {
+      handleCommit();
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.metaKey && e.key === 'Enter') {
       e.preventDefault();
@@ -377,7 +450,11 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
           sx={{
             position: 'relative',
             border: 1,
-            borderColor: 'divider',
+            // MUI's outlined-input border; the theme divider (6-8%) was too faint
+            borderColor:
+              theme.palette.mode === 'dark'
+                ? alpha(theme.palette.common.white, 0.23)
+                : alpha(theme.palette.common.black, 0.23),
             borderRadius: theme.shape.borderRadius / 8, // Use theme border radius
             backgroundColor: 'background.paper',
             mb: 0.75,
@@ -404,11 +481,11 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
             onBlur={() => setIsFocused(false)}
             data-placeholder="Message (⌘+Enter to commit)"
             sx={{
-              p: theme.spacing(0.75, 1),
+              p: theme.spacing(0.375, 1),
               fontSize: '13px',
-              lineHeight: 1.4,
+              lineHeight: '18px',
               fontFamily: theme.typography.fontFamily,
-              minHeight: 20,
+              minHeight: 18,
               outline: 'none',
               color: 'text.primary',
               wordWrap: 'break-word',
@@ -420,46 +497,96 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
                 opacity: isFocused ? 0.4 : 0.6,
                 pointerEvents: 'none',
                 position: 'absolute',
-                top: theme.spacing(0.75),
+                top: theme.spacing(0.375),
                 left: theme.spacing(1),
               },
             }}
           />
         </Box>
 
-        {/* Dynamic Commit/Push/Sync Button */}
-        <Button
-          fullWidth
-          variant="contained"
-          disabled={buttonDisabled}
-          onClick={handlePrimaryAction}
-          startIcon={buttonIcon}
+        {/* Dynamic Commit/Push/Sync Button (split button for Commit) */}
+        <Box
           sx={{
-            textTransform: 'none',
-            fontSize: '13px',
-            fontWeight: 500,
-            py: 0.75,
-            minHeight: 32,
+            display: 'flex',
+            height: 28,
             borderRadius: theme.shape.borderRadius / 8,
-            backgroundColor: buttonDisabled
-              ? theme.palette.action.disabled
-              : theme.palette.primary.main,
-            color: buttonDisabled
-              ? theme.palette.action.disabledBackground
-              : theme.palette.getContrastText(theme.palette.primary.main),
-            '&:hover': {
-              backgroundColor: buttonDisabled
-                ? theme.palette.action.disabled
-                : theme.palette.primary.dark,
-            },
-            '&.Mui-disabled': {
-              color: theme.palette.action.disabledBackground,
-              backgroundColor: theme.palette.action.disabled,
+            overflow: 'hidden',
+            opacity: buttonDisabled ? 0.45 : 1,
+            transition: 'opacity 0.15s ease',
+          }}
+        >
+          <Button
+            fullWidth
+            variant="contained"
+            disableElevation
+            disabled={buttonDisabled}
+            onClick={handlePrimaryAction}
+            startIcon={buttonIcon}
+            sx={{ ...actionButtonSx, flex: 1 }}
+          >
+            {buttonLabel}
+          </Button>
+          {showCommitMenu && (
+            <Tooltip title="More commit actions" placement="top">
+              <Box component="span" sx={{ display: 'flex' }}>
+                <Button
+                  variant="contained"
+                  disableElevation
+                  disabled={buttonDisabled}
+                  onClick={(e) => setCommitMenuAnchor(e.currentTarget)}
+                  aria-label="More commit actions"
+                  aria-haspopup="menu"
+                  aria-expanded={Boolean(commitMenuAnchor)}
+                  sx={{
+                    ...actionButtonSx,
+                    width: 28,
+                    borderLeft: `1px solid ${alpha(accentText, 0.3)}`,
+                  }}
+                >
+                  <KeyboardArrowDown sx={{ fontSize: 18 }} />
+                </Button>
+              </Box>
+            </Tooltip>
+          )}
+        </Box>
+
+        <Menu
+          anchorEl={commitMenuAnchor}
+          open={Boolean(commitMenuAnchor)}
+          onClose={() => setCommitMenuAnchor(null)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+          PaperProps={{
+            sx: {
+              minWidth: 200,
+              mt: 0.5,
+              '& .MuiMenuItem-root': { fontSize: '13px', py: 0.75, gap: 1 },
             },
           }}
         >
-          {buttonLabel}
-        </Button>
+          <MenuItem
+            onClick={() => handleCommitMenuAction(false)}
+            disabled={isCommitDisabled}
+          >
+            <Check sx={{ fontSize: 16 }} />
+            Commit
+            <Typography
+              variant="caption"
+              sx={{ ml: 'auto', pl: 2, color: 'text.secondary' }}
+            >
+              ⌘ Enter
+            </Typography>
+          </MenuItem>
+          <MenuItem
+            onClick={() => handleCommitMenuAction(true)}
+            disabled={isCommitDisabled}
+          >
+            <CloudUploadOutlined sx={{ fontSize: 16 }} />
+            {hasRemote && hasTrackingBranch
+              ? 'Commit & Push'
+              : 'Commit & Publish Branch'}
+          </MenuItem>
+        </Menu>
       </Box>
 
       {projectPath ? (

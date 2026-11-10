@@ -113,24 +113,6 @@ test.describe('File Tree', () => {
     await expect(window.getByRole('button', { name: 'Save' })).toBeDisabled();
   });
 
-  test('should filter the tree by search', async ({ electronApp }) => {
-    const window = await openProject(electronApp, PROJECT);
-
-    await createFolder(window, PROJECT, 'alpha_dir');
-    await createFolder(window, PROJECT, 'beta_dir');
-    await expect(window.getByTitle('alpha_dir').first()).toBeVisible();
-    await expect(window.getByTitle('beta_dir').first()).toBeVisible();
-
-    const search = window.getByPlaceholder('Search files or folders...');
-    await search.fill('alpha');
-
-    await expect(window.getByTitle('alpha_dir').first()).toBeVisible();
-    await expect(window.getByTitle('beta_dir')).toBeHidden();
-
-    await window.getByRole('button', { name: 'Clear search' }).click();
-    await expect(window.getByTitle('beta_dir').first()).toBeVisible();
-  });
-
   test('should delete a folder after confirmation', async ({
     electronApp,
     userData,

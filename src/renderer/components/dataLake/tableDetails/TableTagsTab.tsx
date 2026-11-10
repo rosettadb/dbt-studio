@@ -1,104 +1,105 @@
 import React from 'react';
 import {
   Grid,
-  Card,
-  CardContent,
-  Typography,
-  TableContainer,
   Table,
   TableHead,
   TableRow,
   TableCell,
   TableBody,
-  Alert,
 } from '@mui/material';
+import { Label, ViewColumn } from '@mui/icons-material';
 import { DuckLakeTag, DuckLakeColumnTag } from '../../../../types/duckLake';
 import { safeToString } from '../../../helpers/utils';
+import {
+  DataLakeSectionEmpty,
+  DataLakeTableContainer,
+} from '../DataLakeLayout';
+import { SettingsSection } from '../../settings/SettingsLayout';
 
 interface TableTagsTabProps {
   tableDetails: any;
 }
 
 export const TableTagsTab: React.FC<TableTagsTabProps> = ({ tableDetails }) => {
+  const tagCount = tableDetails.tags.length;
+  const columnTagCount = tableDetails.columnTags.length;
   return (
-    <Grid container spacing={3}>
+    <Grid container spacing={1.5}>
       <Grid item xs={12} md={6}>
-        <Card>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>
-              Table Tags ({tableDetails.tags.length})
-            </Typography>
-            {tableDetails.tags.length > 0 ? (
-              <TableContainer>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Key</TableCell>
-                      <TableCell>Value</TableCell>
-                      <TableCell>Snapshot Range</TableCell>
+        <SettingsSection
+          title="Table Tags"
+          icon={<Label />}
+          description={`${tagCount} ${tagCount === 1 ? 'tag' : 'tags'}`}
+        >
+          {tagCount > 0 ? (
+            <DataLakeTableContainer bordered={false}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Key</TableCell>
+                    <TableCell>Value</TableCell>
+                    <TableCell>Snapshot Range</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {tableDetails.tags.map((tag: DuckLakeTag, idx: number) => (
+                    // eslint-disable-next-line react/no-array-index-key
+                    <TableRow key={idx}>
+                      <TableCell sx={{ fontWeight: 500 }}>{tag.key}</TableCell>
+                      <TableCell>{tag.value}</TableCell>
+                      <TableCell>
+                        {safeToString(tag.beginSnapshot)}
+                        {tag.endSnapshot
+                          ? ` - ${safeToString(tag.endSnapshot)}`
+                          : ' (current)'}
+                      </TableCell>
                     </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {tableDetails.tags.map((tag: DuckLakeTag, idx: number) => (
-                      <TableRow key={idx}>
-                        <TableCell>
-                          <strong>{tag.key}</strong>
-                        </TableCell>
-                        <TableCell>{tag.value}</TableCell>
-                        <TableCell>
-                          {safeToString(tag.beginSnapshot)}
-                          {tag.endSnapshot
-                            ? ` - ${safeToString(tag.endSnapshot)}`
-                            : ' (current)'}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            ) : (
-              <Alert severity="info">No table tags</Alert>
-            )}
-          </CardContent>
-        </Card>
+                  ))}
+                </TableBody>
+              </Table>
+            </DataLakeTableContainer>
+          ) : (
+            <DataLakeSectionEmpty>No table tags</DataLakeSectionEmpty>
+          )}
+        </SettingsSection>
       </Grid>
 
       <Grid item xs={12} md={6}>
-        <Card>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>
-              Column Tags ({tableDetails.columnTags.length})
-            </Typography>
-            {tableDetails.columnTags.length > 0 ? (
-              <TableContainer>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Column</TableCell>
-                      <TableCell>Key</TableCell>
-                      <TableCell>Value</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {tableDetails.columnTags.map(
-                      (tag: DuckLakeColumnTag, idx: number) => (
-                        <TableRow key={idx}>
-                          <TableCell>
-                            <strong>{tag.columnName}</strong>
-                          </TableCell>
-                          <TableCell>{tag.key}</TableCell>
-                          <TableCell>{tag.value}</TableCell>
-                        </TableRow>
-                      ),
-                    )}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            ) : (
-              <Alert severity="info">No column tags</Alert>
-            )}
-          </CardContent>
-        </Card>
+        <SettingsSection
+          title="Column Tags"
+          icon={<ViewColumn />}
+          description={`${columnTagCount} ${columnTagCount === 1 ? 'tag' : 'tags'}`}
+        >
+          {columnTagCount > 0 ? (
+            <DataLakeTableContainer bordered={false}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Column</TableCell>
+                    <TableCell>Key</TableCell>
+                    <TableCell>Value</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {tableDetails.columnTags.map(
+                    (tag: DuckLakeColumnTag, idx: number) => (
+                      // eslint-disable-next-line react/no-array-index-key
+                      <TableRow key={idx}>
+                        <TableCell sx={{ fontWeight: 500 }}>
+                          {tag.columnName}
+                        </TableCell>
+                        <TableCell>{tag.key}</TableCell>
+                        <TableCell>{tag.value}</TableCell>
+                      </TableRow>
+                    ),
+                  )}
+                </TableBody>
+              </Table>
+            </DataLakeTableContainer>
+          ) : (
+            <DataLakeSectionEmpty>No column tags</DataLakeSectionEmpty>
+          )}
+        </SettingsSection>
       </Grid>
     </Grid>
   );

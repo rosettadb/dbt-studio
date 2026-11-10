@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Typography, IconButton, useTheme } from '@mui/material';
+import { alpha, Box, Typography, IconButton, useTheme } from '@mui/material';
 import { ExpandMore, ExpandLess } from '@mui/icons-material';
 
 interface CollapsibleSectionProps {
@@ -26,7 +26,7 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
   };
 
   return (
-    <Box sx={{ mb: 0.5 }}>
+    <Box>
       {/* Section Header */}
       <Box
         sx={{
@@ -34,9 +34,8 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
           alignItems: 'center',
           justifyContent: 'space-between',
           px: 1,
-          py: 0.25,
           cursor: 'pointer',
-          minHeight: '24px',
+          minHeight: '22px', // VS Code row height
           '&:hover': {
             backgroundColor: 'action.hover',
           },
@@ -66,11 +65,10 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
           <Typography
             variant="body2"
             sx={{
-              fontSize: '11px',
-              fontWeight: 600,
-              color: 'text.secondary',
-              textTransform: 'uppercase',
-              letterSpacing: '0.5px',
+              // Title case like VS Code ("Staged Changes", "Changes")
+              fontSize: '13px',
+              fontWeight: 500,
+              color: 'text.primary',
             }}
           >
             {title}
@@ -104,20 +102,30 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
           {/* Count Badge - Always visible as badge, shows 0 when no files */}
           <Box
             sx={{
-              fontSize: '9px',
+              // VS Code badge sizing (18px / 11px): a 9-10px digit in a 16px
+              // badge always ends up half a pixel off-centre.
+              fontSize: '11px',
               fontWeight: 500,
-              color: theme.palette.primary.contrastText,
-              backgroundColor: theme.palette.primary.main,
-              borderRadius: '50%',
-              minWidth: '16px',
-              width: '16px',
-              height: '16px',
+              // Neutral VS Code-style count badge (#444 / white in dark mode)
+              color:
+                theme.palette.mode === 'dark'
+                  ? theme.palette.common.white
+                  : theme.palette.text.primary,
+              backgroundColor:
+                theme.palette.mode === 'dark'
+                  ? alpha(theme.palette.common.white, 0.16)
+                  : theme.palette.grey[400],
+              borderRadius: '9px', // circle for 1 digit, pill for more
+              minWidth: '18px',
+              height: '18px',
+              px: '4px',
+              boxSizing: 'border-box',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
               lineHeight: 1,
-              paddingTop: '1px', // Fine-tune vertical centering
+              fontVariantNumeric: 'tabular-nums',
             }}
           >
             {count}

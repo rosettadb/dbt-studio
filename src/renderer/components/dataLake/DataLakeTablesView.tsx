@@ -8,14 +8,10 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
   TableSortLabel,
-  Paper,
-  Chip,
   IconButton,
-  Tooltip,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -33,6 +29,7 @@ import {
   DriveFileRenameOutline,
   Search,
   TableChart,
+  TableView,
   Visibility,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
@@ -50,6 +47,11 @@ import {
   useExecuteDuckLakeQuery,
 } from '../../controllers/duckLake.controller';
 import { DuckLakeViewInfo } from '../../../types/duckLake';
+import {
+  DataLakeRowActions,
+  DataLakeTableContainer,
+  dataLakeDialogSx,
+} from './DataLakeLayout';
 
 // ─── ViewDataPreview ──────────────────────────────────────────────────────────
 
@@ -116,28 +118,18 @@ const ViewDataPreview: React.FC<{
         </Typography>
         {isLoading && <CircularProgress size={14} />}
       </Box>
-      <TableContainer
-        component={Paper}
-        variant="outlined"
-        sx={{ maxHeight: 400 }}
-      >
+      <DataLakeTableContainer maxHeight={400}>
         <Table stickyHeader size="small">
           <TableHead>
             <TableRow>
               {result?.fields?.map((f) => (
-                <TableCell key={f.name} sx={{ py: 1.5 }}>
-                  <Typography
-                    variant="subtitle2"
-                    sx={{ fontWeight: 'bold', lineHeight: 1.2 }}
-                  >
+                <TableCell key={f.name}>
+                  <Box sx={{ color: 'text.primary', lineHeight: 1.3 }}>
                     {f.name}
-                  </Typography>
-                  <Typography
-                    variant="caption"
-                    sx={{ color: 'text.secondary', fontSize: '0.7rem' }}
-                  >
+                  </Box>
+                  <Box sx={{ fontSize: 11, fontWeight: 400, lineHeight: 1.3 }}>
                     {f.type}
-                  </Typography>
+                  </Box>
                 </TableCell>
               ))}
             </TableRow>
@@ -167,7 +159,7 @@ const ViewDataPreview: React.FC<{
             )}
           </TableBody>
         </Table>
-      </TableContainer>
+      </DataLakeTableContainer>
       <TablePagination
         component="div"
         count={allRows.length}
@@ -191,18 +183,20 @@ const ViewPreviewModal: React.FC<{
   if (!view) return null;
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
+    <Dialog
+      slotProps={{ paper: { sx: dataLakeDialogSx } }}
+      open={open}
+      onClose={onClose}
+      maxWidth="lg"
+      fullWidth
+    >
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <TableChart color="success" />
+        <TableView fontSize="small" color="action" />
         <Typography variant="h6" component="span" sx={{ flexGrow: 1 }}>
           {view.name}
         </Typography>
-        <IconButton
-          aria-label="close"
-          onClick={onClose}
-          sx={{ color: (theme) => theme.palette.grey[500] }}
-        >
-          <Close />
+        <IconButton aria-label="Close" size="small" onClick={onClose}>
+          <Close fontSize="small" />
         </IconButton>
       </DialogTitle>
       <DialogContent dividers>
@@ -213,7 +207,12 @@ const ViewPreviewModal: React.FC<{
         />
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} variant="contained" color="inherit">
+        <Button
+          onClick={onClose}
+          variant="outlined"
+          color="inherit"
+          startIcon={<Close />}
+        >
           Close
         </Button>
       </DialogActions>
@@ -525,7 +524,8 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
           <Typography variant="body2">{errorMsg}</Typography>
         </Alert>
         <Button
-          variant="contained"
+          size="small"
+          variant="outlined"
           onClick={() => {
             tablesQuery.refetch();
             viewsQuery.refetch();
@@ -544,8 +544,7 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
       {/* Toolbar */}
       <Box
         sx={{
-          p: 2,
-          pb: 1,
+          pb: 1.5,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -595,34 +594,42 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
 
       {/* Refetching indicator */}
       {(tablesQuery.isFetching || viewsQuery.isFetching) && (
-        <LinearProgress sx={{ mx: 2, borderRadius: 1 }} />
+        <LinearProgress sx={{ mb: 1, borderRadius: 1 }} />
       )}
 
       {/* Empty state */}
       {sorted.length === 0 ? (
-        <Box sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}>
-          <TableChart sx={{ fontSize: 56, opacity: 0.25, mb: 2 }} />
-          <Typography variant="body1" sx={{ mb: 0.5 }}>
+        <Box
+          sx={{
+            textAlign: 'center',
+            py: 5,
+            color: 'text.secondary',
+            border: 1,
+            borderColor: 'divider',
+            borderRadius: 2,
+            bgcolor: 'background.default',
+          }}
+        >
+          <TableChart sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
+          <Typography variant="body2">
             {search
               ? 'No tables or views match your search.'
               : 'No tables or views found in this DuckLake instance.'}
           </Typography>
           {search && (
-            <Button size="small" onClick={() => setSearch('')} sx={{ mt: 1 }}>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<Close />}
+              onClick={() => setSearch('')}
+              sx={{ mt: 1.5 }}
+            >
               Clear search
             </Button>
           )}
         </Box>
       ) : (
-        <TableContainer
-          component={Paper}
-          sx={{
-            m: 2,
-            mt: 1,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-            borderRadius: 2,
-          }}
-        >
+        <DataLakeTableContainer>
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -669,7 +676,11 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
                   direction={sortDirection}
                   onSort={handleSort}
                 />
-                <TableCell align="center">Actions</TableCell>
+                <TableCell
+                  align="right"
+                  aria-label="Actions"
+                  sx={{ width: 48 }}
+                />
               </TableRow>
             </TableHead>
             <TableBody>
@@ -698,85 +709,53 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
                           </Typography>
                         </Box>
                       </TableCell>
-                      <TableCell>
-                        <Chip
-                          label="TABLE"
-                          size="small"
-                          sx={{
-                            bgcolor: 'primary.dark',
-                            color: 'white',
-                            fontWeight: 700,
-                            fontSize: '0.65rem',
-                            height: 20,
-                          }}
+                      <TableCell sx={{ color: 'text.secondary' }}>
+                        Table
+                      </TableCell>
+                      <TableCell>{row.schema}</TableCell>
+                      <TableCell>{formatRowCount(row.rowCount)}</TableCell>
+                      <TableCell>{formatBytes(row.sizeBytes)}</TableCell>
+                      <TableCell sx={{ color: 'text.secondary' }}>
+                        {row.updatedAt
+                          ? moment(row.updatedAt).fromNow()
+                          : 'Never'}
+                      </TableCell>
+                      <TableCell sx={{ color: 'text.secondary' }}>
+                        {moment(row.createdAt).fromNow()}
+                      </TableCell>
+                      <TableCell align="right">
+                        <DataLakeRowActions
+                          label={`Actions for ${row.name}`}
+                          actions={[
+                            {
+                              key: 'open',
+                              label: 'View details',
+                              icon: <Visibility fontSize="small" />,
+                              onClick: () =>
+                                navigate(
+                                  `/app/data-lake/duck-lake/instances/${row.instanceId}/tables/${row.name}`,
+                                ),
+                            },
+                            {
+                              key: 'rename',
+                              label: 'Rename',
+                              icon: <DriveFileRenameOutline fontSize="small" />,
+                              onClick: () => {
+                                setTableToRename(row);
+                                setNewTableName(row.name);
+                              },
+                              disabled: renameTableMutation.isLoading,
+                            },
+                            {
+                              key: 'delete',
+                              label: 'Delete',
+                              icon: <Delete fontSize="small" />,
+                              onClick: () => setTableToDelete(row),
+                              disabled: deleteTableMutation.isLoading,
+                              danger: true,
+                            },
+                          ]}
                         />
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">{row.schema}</Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
-                          {formatRowCount(row.rowCount)}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
-                          {formatBytes(row.sizeBytes)}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2" color="text.secondary">
-                          {row.updatedAt
-                            ? moment(row.updatedAt).fromNow()
-                            : 'Never'}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2" color="text.secondary">
-                          {moment(row.createdAt).fromNow()}
-                        </Typography>
-                      </TableCell>
-                      <TableCell align="center">
-                        <Box
-                          sx={{
-                            display: 'flex',
-                            gap: 0.5,
-                            justifyContent: 'center',
-                          }}
-                        >
-                          <Tooltip title="Delete Table">
-                            <span>
-                              <IconButton
-                                size="small"
-                                color="error"
-                                aria-label="Delete Table"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setTableToDelete(row);
-                                }}
-                                disabled={deleteTableMutation.isLoading}
-                              >
-                                <Delete fontSize="small" />
-                              </IconButton>
-                            </span>
-                          </Tooltip>
-                          <Tooltip title="Rename Table">
-                            <span>
-                              <IconButton
-                                size="small"
-                                aria-label="Rename Table"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setTableToRename(row);
-                                  setNewTableName(row.name);
-                                }}
-                                disabled={renameTableMutation.isLoading}
-                              >
-                                <DriveFileRenameOutline fontSize="small" />
-                              </IconButton>
-                            </span>
-                          </Tooltip>
-                        </Box>
                       </TableCell>
                     </TableRow>
                   );
@@ -784,73 +763,49 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
 
                 // VIEW row
                 return (
-                  <TableRow key={`view-${row.schema}-${row.name}`} hover>
+                  <TableRow
+                    key={`view-${row.schema}-${row.name}`}
+                    hover
+                    sx={{ cursor: 'pointer' }}
+                    onClick={() => setPreviewView(row.viewInfo)}
+                  >
                     <TableCell>
                       <Box
                         sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
                       >
-                        <TableChart sx={{ fontSize: 16, color: '#4db6ac' }} />
+                        <TableView
+                          sx={{ fontSize: 16, color: 'text.secondary' }}
+                        />
                         <Typography variant="body2" sx={{ fontWeight: 500 }}>
                           {row.name}
                         </Typography>
                       </Box>
                     </TableCell>
-                    <TableCell>
-                      <Chip
-                        label="VIEW"
-                        size="small"
-                        sx={{
-                          bgcolor: '#4db6ac',
-                          color: 'white',
-                          fontWeight: 700,
-                          fontSize: '0.65rem',
-                          height: 20,
-                        }}
+                    <TableCell sx={{ color: 'text.secondary' }}>View</TableCell>
+                    <TableCell>{row.schema}</TableCell>
+                    <TableCell sx={{ color: 'text.secondary' }}>—</TableCell>
+                    <TableCell sx={{ color: 'text.secondary' }}>—</TableCell>
+                    <TableCell sx={{ color: 'text.secondary' }}>—</TableCell>
+                    <TableCell sx={{ color: 'text.secondary' }}>—</TableCell>
+                    <TableCell align="right">
+                      <DataLakeRowActions
+                        label={`Actions for ${row.name}`}
+                        actions={[
+                          {
+                            key: 'preview',
+                            label: 'Preview data',
+                            icon: <Visibility fontSize="small" />,
+                            onClick: () => setPreviewView(row.viewInfo),
+                          },
+                        ]}
                       />
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2">{row.schema}</Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" color="text.secondary">
-                        —
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" color="text.secondary">
-                        —
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" color="text.secondary">
-                        —
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" color="text.secondary">
-                        —
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="center">
-                      <Tooltip title="Inspect View">
-                        <IconButton
-                          size="small"
-                          aria-label="Inspect View"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPreviewView(row.viewInfo);
-                          }}
-                        >
-                          <Visibility fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
                     </TableCell>
                   </TableRow>
                 );
               })}
             </TableBody>
           </Table>
-        </TableContainer>
+        </DataLakeTableContainer>
       )}
 
       {/* Pagination (only show if we have data) */}
@@ -890,6 +845,7 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
 
       {/* Delete confirmation dialog */}
       <Dialog
+        slotProps={{ paper: { sx: dataLakeDialogSx } }}
         open={!!tableToDelete}
         onClose={() => setTableToDelete(null)}
         maxWidth="sm"
@@ -926,6 +882,7 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
 
       {/* Rename dialog */}
       <Dialog
+        slotProps={{ paper: { sx: dataLakeDialogSx } }}
         open={!!tableToRename}
         onClose={() => {
           setTableToRename(null);

@@ -852,6 +852,10 @@ export type RepoInfoRes = {
   branchExistsOnRemote: boolean;
 };
 
+export type ProjectGitSummary = {
+  currentBranch: string | null;
+};
+
 export type Secret = {
   id: string;
   name: string;

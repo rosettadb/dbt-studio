@@ -12,6 +12,7 @@ import {
   Alert,
   CircularProgress,
 } from '@mui/material';
+import { ArrowBack, Close, Delete } from '@mui/icons-material';
 import { useLocation, useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { AppLayout } from '../../layouts';
@@ -26,11 +27,18 @@ import {
   DataLakeTableDetails,
 } from '../../components/dataLake';
 import { IcebergConnectionWizard } from '../../components/dataLake/IcebergConnectionWizard';
+import { IcebergIcon } from '../../components/dataLake/iceberg/IcebergIcon';
 import {
   IcebergDetail,
   IcebergTableDetails,
 } from '../../components/dataLake/iceberg/IcebergDetail';
 import { DataLakeCard } from '../../components/dataLakeCards';
+import {
+  DataLakePageHeader,
+  dataLakeContentSx,
+  dataLakePageSx,
+  dataLakeDialogSx,
+} from '../../components/dataLake/DataLakeLayout';
 import {
   useDuckLakeInstances,
   useCreateDuckLakeInstance,
@@ -70,7 +78,6 @@ const DataLake: React.FC = () => {
   const [selectedType, setSelectedType] = useState<string>();
 
   // ── Iceberg UI state ───────────────────────────────────────────────────
-  const [icebergEditId, setIcebergEditId] = useState<string | null>(null);
   const [icebergDeleteTarget, setIcebergDeleteTarget] = useState<{
     id: string;
     name: string;
@@ -90,11 +97,6 @@ const DataLake: React.FC = () => {
   const createIcebergMutation = useCreateIcebergInstance();
   const updateIcebergMutation = useUpdateIcebergInstance();
   const deleteIcebergMutation = useDeleteIcebergInstance();
-  const {
-    data: editInstanceData,
-    isLoading: editInstanceLoading,
-    error: editInstanceError,
-  } = useGetIcebergInstance(icebergEditId ?? '');
   const activeIcebergId = type === 'iceberg' ? (instanceId ?? '') : '';
   const {
     data: icebergInstance,
@@ -277,7 +279,7 @@ const DataLake: React.FC = () => {
   };
 
   const handleIcebergEditComplete = async (wizardData: IcebergWizardData) => {
-    if (!icebergEditId) return;
+    if (!instanceId) return;
     const dto: Partial<CreateIcebergInstanceDTO> = {
       name: wizardData.basics.name,
       description: wizardData.basics.description,
@@ -312,8 +314,8 @@ const DataLake: React.FC = () => {
       storagePrefix: wizardData.storage.prefix,
     };
     try {
-      await updateIcebergMutation.mutateAsync({ id: icebergEditId, data: dto });
-      setIcebergEditId(null);
+      await updateIcebergMutation.mutateAsync({ id: instanceId, data: dto });
+      navigate(`/app/data-lake/iceberg/instances/${instanceId}`);
       toast.success('Iceberg instance updated.');
     } catch (err: any) {
       // eslint-disable-next-line no-console
@@ -343,7 +345,9 @@ const DataLake: React.FC = () => {
   const renderIcebergInstanceDetail = (inst: IcebergInstanceConfig) => (
     <IcebergDetail
       instance={inst}
-      onEdit={() => setIcebergEditId(inst.id)}
+      onEdit={() =>
+        navigate(`/app/data-lake/iceberg/instances/${inst.id}/edit`)
+      }
       onDelete={() => setIcebergDeleteTarget({ id: inst.id, name: inst.name })}
     />
   );
@@ -360,7 +364,11 @@ const DataLake: React.FC = () => {
 
       case 'instances':
         return (
-          <DataLakeInstances onEditIceberg={(id) => setIcebergEditId(id)} />
+          <DataLakeInstances
+            onEditIceberg={(id) =>
+              navigate(`/app/data-lake/iceberg/instances/${id}/edit`)
+            }
+          />
         );
 
       case 'instance-tables':
@@ -371,17 +379,11 @@ const DataLake: React.FC = () => {
           return <DataLakeTablesView instanceId={instanceId} />;
         }
         return (
-          <Box sx={{ p: 2 }}>
-            <Typography
-              variant="h4"
-              component="h1"
-              sx={{ fontWeight: 'bold', mb: 3 }}
-            >
-              Tables
-            </Typography>
-            <Typography variant="body1" color="text.secondary">
-              Please select an instance from the sidebar to view its tables.
-            </Typography>
+          <Box sx={dataLakeContentSx}>
+            <DataLakePageHeader
+              title="Tables"
+              description="Please select an instance from the sidebar to view its tables."
+            />
           </Box>
         );
 
@@ -389,13 +391,11 @@ const DataLake: React.FC = () => {
         // Step 1: type selection cards
         if (!selectedType) {
           return (
-            <Box sx={{ p: 2 }}>
-              <Typography variant="h6" component="h6" gutterBottom>
-                Create New DataLake
-              </Typography>
-              <Typography variant="body2" color="text.secondary" gutterBottom>
-                Select a data lake type to create a new instance
-              </Typography>
+            <Box sx={dataLakeContentSx}>
+              <DataLakePageHeader
+                title="Create New DataLake"
+                description="Select a data lake type to create a new instance"
+              />
               <ConnectionCardsContainer>
                 {dataLakeTypes.map((lakeType, index) => (
                   <DataLakeCard
@@ -460,18 +460,75 @@ const DataLake: React.FC = () => {
 
         // Other types not yet implemented
         return (
-          <Box sx={{ p: 2 }}>
-            <Typography variant="h6">Coming Soon</Typography>
-            <Typography variant="body2" color="text.secondary">
-              {selectedType} support is coming in a future release.
-            </Typography>
-            <Button onClick={() => setSelectedType(undefined)} sx={{ mt: 2 }}>
+          <Box sx={dataLakeContentSx}>
+            <DataLakePageHeader
+              title="Coming Soon"
+              description={`${selectedType} support is coming in a future release.`}
+            />
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<ArrowBack />}
+              onClick={() => setSelectedType(undefined)}
+            >
               Back to Type Selection
             </Button>
           </Box>
         );
 
       case 'edit-instance':
+        // Iceberg edit is a page like DuckLake edit (was a dialog): the page
+        // header, then the same wizard as the create page.
+        if (type === 'iceberg') {
+          if (icebergDetailLoading) {
+            return (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                <CircularProgress />
+              </Box>
+            );
+          }
+          if (icebergDetailError || !icebergInstance) {
+            return (
+              <Box sx={dataLakeContentSx}>
+                <DataLakePageHeader
+                  title="Iceberg Instance Not Found"
+                  description="The requested Iceberg instance could not be found."
+                />
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<ArrowBack />}
+                  onClick={() => navigate('/app/data-lake/instances')}
+                >
+                  Back to Instances
+                </Button>
+              </Box>
+            );
+          }
+          return (
+            <Box sx={dataLakeContentSx}>
+              <DataLakePageHeader
+                icon={<IcebergIcon size={20} />}
+                title="Edit Instance"
+                description={`${icebergInstance.name} • ${icebergInstance.catalogType.toUpperCase()} Catalog`}
+              />
+              <IcebergConnectionWizard
+                key={icebergInstance.id}
+                mode="edit"
+                layout="sections"
+                hideHeader
+                initialData={icebergInstance}
+                onComplete={handleIcebergEditComplete}
+                onCancel={() =>
+                  navigate(
+                    `/app/data-lake/iceberg/instances/${icebergInstance.id}`,
+                  )
+                }
+                isLoading={updateIcebergMutation.isLoading}
+              />
+            </Box>
+          );
+        }
         return <DataLakeInstanceEditForm key={instanceId} />;
 
       case 'instance-detail':
@@ -486,20 +543,15 @@ const DataLake: React.FC = () => {
 
           if (icebergDetailError || !icebergInstance) {
             return (
-              <Box sx={{ p: 2 }}>
-                <Typography
-                  variant="h4"
-                  component="h1"
-                  sx={{ fontWeight: 'bold', mb: 3 }}
-                >
-                  Iceberg Instance Not Found
-                </Typography>
-                <Typography variant="body1" color="text.secondary">
-                  The requested Iceberg instance could not be found.
-                </Typography>
+              <Box sx={dataLakeContentSx}>
+                <DataLakePageHeader
+                  title="Iceberg Instance Not Found"
+                  description="The requested Iceberg instance could not be found."
+                />
                 <Button
-                  variant="contained"
-                  sx={{ mt: 2 }}
+                  size="small"
+                  variant="outlined"
+                  startIcon={<ArrowBack />}
                   onClick={() => navigate('/app/data-lake/instances')}
                 >
                   Back to Instances
@@ -521,20 +573,15 @@ const DataLake: React.FC = () => {
 
         if (instanceQuery.error || !currentInstance) {
           return (
-            <Box sx={{ p: 2 }}>
-              <Typography
-                variant="h4"
-                component="h1"
-                sx={{ fontWeight: 'bold', mb: 3 }}
-              >
-                Instance Not Found
-              </Typography>
-              <Typography variant="body1" color="text.secondary">
-                The requested instance could not be found.
-              </Typography>
+            <Box sx={dataLakeContentSx}>
+              <DataLakePageHeader
+                title="Instance Not Found"
+                description="The requested instance could not be found."
+              />
               <Button
-                variant="contained"
-                sx={{ mt: 2 }}
+                size="small"
+                variant="outlined"
+                startIcon={<ArrowBack />}
                 onClick={() => navigate('/app/data-lake/instances')}
               >
                 Back to Instances
@@ -569,17 +616,11 @@ const DataLake: React.FC = () => {
 
       default:
         return (
-          <Box sx={{ p: 2 }}>
-            <Typography
-              variant="h4"
-              component="h1"
-              sx={{ fontWeight: 'bold', mb: 3 }}
-            >
-              DuckLake
-            </Typography>
-            <Typography variant="body1" color="text.secondary">
-              Section not found: {currentSection}
-            </Typography>
+          <Box sx={dataLakeContentSx}>
+            <DataLakePageHeader
+              title="DuckLake"
+              description={`Section not found: ${currentSection}`}
+            />
           </Box>
         );
     }
@@ -595,7 +636,14 @@ const DataLake: React.FC = () => {
       }
       panelTitle="DataLake"
     >
-      <Box sx={{ p: 2 }}>
+      <Box
+        sx={[
+          // Fills the scroll area and grows with the content. minHeight alone let
+          // the flex parent shrink it, so tall pages spilled past the background.
+          { p: 2, bgcolor: 'background.paper', flex: '1 0 auto' },
+          dataLakePageSx,
+        ]}
+      >
         {/* pyiceberg install banner */}
         {isInstalling && (
           <Alert
@@ -611,44 +659,9 @@ const DataLake: React.FC = () => {
         <Box>{renderContent()}</Box>
       </Box>
 
-      {/* ── Iceberg Edit Wizard Dialog ────────────────────────────────── */}
-      <Dialog
-        open={!!icebergEditId}
-        onClose={() => setIcebergEditId(null)}
-        maxWidth="md"
-        fullWidth
-      >
-        <DialogContent sx={{ pt: 3 }}>
-          {editInstanceLoading && (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
-              <CircularProgress />
-            </Box>
-          )}
-          {!editInstanceLoading && (editInstanceError || !editInstanceData) && (
-            <Box sx={{ py: 2 }}>
-              <Alert severity="error" sx={{ mb: 2 }}>
-                {editInstanceError instanceof Error
-                  ? editInstanceError.message
-                  : 'Failed to load the Iceberg instance.'}
-              </Alert>
-              <Button onClick={() => setIcebergEditId(null)}>Close</Button>
-            </Box>
-          )}
-          {!editInstanceLoading && !editInstanceError && editInstanceData && (
-            <IcebergConnectionWizard
-              key={icebergEditId}
-              onComplete={handleIcebergEditComplete}
-              onCancel={() => setIcebergEditId(null)}
-              isLoading={updateIcebergMutation.isLoading}
-              mode="edit"
-              initialData={editInstanceData}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
-
       {/* ── Iceberg Delete Confirmation Dialog ───────────────────────── */}
       <Dialog
+        slotProps={{ paper: { sx: dataLakeDialogSx } }}
         open={!!icebergDeleteTarget}
         onClose={() => setIcebergDeleteTarget(null)}
         maxWidth="xs"
@@ -664,8 +677,10 @@ const DataLake: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button
+            variant="outlined"
             onClick={() => setIcebergDeleteTarget(null)}
             color="inherit"
+            startIcon={<Close />}
             disabled={deleteIcebergMutation.isLoading}
           >
             Cancel
@@ -678,7 +693,9 @@ const DataLake: React.FC = () => {
             startIcon={
               deleteIcebergMutation.isLoading ? (
                 <CircularProgress size={16} color="inherit" />
-              ) : undefined
+              ) : (
+                <Delete />
+              )
             }
           >
             {deleteIcebergMutation.isLoading ? 'Deleting…' : 'Delete'}

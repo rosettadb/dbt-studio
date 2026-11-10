@@ -50,6 +50,7 @@ jest.mock('../../../../src/renderer/controllers', () => ({
   useSelectProject: () => ({ mutateAsync: mockSelectProject }),
   useUpdateProject: () => ({ mutate: jest.fn() }),
   useDuckLakeInstances: () => ({ data: [], isLoading: false }),
+  useGetProjectGitSummary: () => ({ data: undefined, isLoading: false }),
 }));
 
 jest.mock('../../../../src/renderer/components', () => ({

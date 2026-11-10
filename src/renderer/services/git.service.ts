@@ -6,6 +6,7 @@ import {
   GitBranch,
   GitChangesRes,
   GitCredentials,
+  ProjectGitSummary,
   RepoInfoRes,
   RosettaConnection,
 } from '../../types/backend';
@@ -201,6 +202,14 @@ export const getAheadBehindCount = async (repoPath: string) => {
     { repoPath: string },
     { ahead: number; behind: number } | null
   >('git:aheadBehind', { repoPath });
+  return data;
+};
+
+export const getProjectGitSummary = async (repoPath: string) => {
+  const { data } = await client.post<
+    { repoPath: string },
+    ProjectGitSummary | null
+  >('git:projectSummary', { repoPath });
   return data;
 };
 

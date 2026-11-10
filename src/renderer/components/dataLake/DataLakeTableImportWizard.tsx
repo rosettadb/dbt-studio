@@ -28,6 +28,7 @@ import {
   CloudDownload,
 } from '@mui/icons-material';
 import { useFilePicker } from '../../controllers';
+import { dataLakeDialogSx } from './DataLakeLayout';
 
 interface DataLakeTableImportWizardProps {
   open: boolean;
@@ -434,6 +435,7 @@ export const DataLakeTableImportWizard: React.FC<
 
   return (
     <Dialog
+      slotProps={{ paper: { sx: dataLakeDialogSx } }}
       open={open}
       onClose={handleClose}
       maxWidth="md"

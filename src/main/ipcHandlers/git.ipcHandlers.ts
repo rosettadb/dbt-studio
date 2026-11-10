@@ -5,6 +5,7 @@ import {
   FileStatus,
   GitChangesRes,
   GitCredentials,
+  ProjectGitSummary,
   RepoInfoRes,
 } from '../../types/backend';
 
@@ -31,6 +32,7 @@ const handlerChannels = [
   'git:fileStatusList',
   'git:isFileUnpushed',
   'git:aheadBehind',
+  'git:projectSummary',
   'git:createBranch',
   'git:deleteBranch',
   'git:renameBranch',
@@ -287,6 +289,16 @@ const registerGitHandlers = () => {
     'git:aheadBehind',
     async (_event, { repoPath }: { repoPath: string }) => {
       return gitService.getAheadBehindCount(repoPath);
+    },
+  );
+
+  ipcMain.handle(
+    'git:projectSummary',
+    async (
+      _event,
+      { repoPath }: { repoPath: string },
+    ): Promise<ProjectGitSummary | null> => {
+      return gitService.getProjectGitSummary(repoPath);
     },
   );
 
