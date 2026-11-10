@@ -103,3 +103,62 @@ describe('TipTapEditor paste (#634)', () => {
     );
   });
 });
+
+describe('TipTapEditor pasted value round trip', () => {
+  // Paste into a fresh editor and return the HTML value it emits.
+  const pastedValue = async (text: string) => {
+    const onChange = jest.fn();
+    const { container, unmount } = render(
+      <TipTapEditor value="" onChange={onChange} />,
+    );
+    paste(await getProseMirror(container), { 'text/plain': text });
+    const value = onChange.mock.lastCall?.[0] as string;
+    unmount();
+    return value;
+  };
+
+  it('keeps pasted line breaks when the value is loaded on mount', async () => {
+    const value = await pastedValue('line one\r\nline two\n\nline four');
+
+    const { container } = render(<TipTapEditor value={value} />);
+    const editorDom = await getProseMirror(container);
+
+    expect(editorDom.textContent).toBe('line one\nline two\n\nline four');
+  });
+
+  it('keeps pasted line breaks when the value is set after mount', async () => {
+    const value = await pastedValue('line one\nline two');
+    const onChange = jest.fn();
+
+    const { container, rerender } = render(
+      <TipTapEditor value="" onChange={onChange} />,
+    );
+    const editorDom = await getProseMirror(container);
+    act(() => {
+      rerender(<TipTapEditor value={value} onChange={onChange} />);
+    });
+
+    expect(editorDom.textContent).toBe('line one\nline two');
+    expect(onChange).toHaveBeenLastCalledWith(value);
+  });
+
+  it('still clears when the value is reset after a paste', async () => {
+    const onChange = jest.fn();
+    const { container, rerender } = render(
+      <TipTapEditor value="" onChange={onChange} />,
+    );
+    const editorDom = await getProseMirror(container);
+    paste(editorDom, { 'text/plain': 'line one\nline two' });
+    const value = onChange.mock.lastCall?.[0] as string;
+    act(() => {
+      rerender(<TipTapEditor value={value} onChange={onChange} />);
+    });
+
+    act(() => {
+      rerender(<TipTapEditor value="" onChange={onChange} />);
+    });
+
+    expect(editorDom.textContent).toBe('');
+    expect(onChange).toHaveBeenLastCalledWith('<p></p>');
+  });
+});

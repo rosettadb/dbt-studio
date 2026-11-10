@@ -34,6 +34,11 @@ interface TipTapEditorProps {
   onSubmit?: () => void; // Enter to send (Shift+Enter for newline)
 }
 
+// Pasted line breaks are stored as "\n" inside the text (see handlePaste).
+// Parse HTML coming back in through `value` with whitespace preserved, or
+// those line breaks would collapse into spaces.
+const VALUE_PARSE_OPTIONS = { preserveWhitespace: 'full' } as const;
+
 export const TipTapEditor: React.FC<TipTapEditorProps> = ({
   value,
   onChange,
@@ -45,6 +50,7 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
   const tiptapEditor = useEditor({
     extensions: [StarterKit],
     content: value || '',
+    parseOptions: VALUE_PARSE_OPTIONS,
     editable: !disabled,
     editorProps: {
       // Paste as plain text (strip formatting). This has to run inside
@@ -76,7 +82,9 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
       value !== undefined &&
       value !== tiptapEditor.getHTML()
     ) {
-      tiptapEditor.commands.setContent(value);
+      tiptapEditor.commands.setContent(value, {
+        parseOptions: VALUE_PARSE_OPTIONS,
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
