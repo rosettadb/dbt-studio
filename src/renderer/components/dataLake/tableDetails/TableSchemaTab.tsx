@@ -1,19 +1,13 @@
 import React, { useState } from 'react';
 import {
-  Card,
-  CardContent,
-  Box,
   Typography,
   Button,
-  TableContainer,
   Table,
   TableHead,
   TableRow,
   TableCell,
   TableBody,
   Chip,
-  Tooltip,
-  IconButton,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -28,6 +22,7 @@ import {
   DriveFileRenameOutline,
   SwapHoriz,
   Close,
+  Schema,
 } from '@mui/icons-material';
 import {
   useAddDuckLakeColumn,
@@ -38,6 +33,12 @@ import {
 import { DuckLakeColumnDetail } from '../../../../types/duckLake';
 import { DUCKLAKE_SUPPORTED_COLUMN_TYPES } from '../../../config/ducklake';
 import { safeToString } from '../../../helpers/utils';
+import {
+  DataLakeRowActions,
+  DataLakeTableContainer,
+  dataLakeDialogSx,
+} from '../DataLakeLayout';
+import { SettingsSection } from '../../settings/SettingsLayout';
 
 interface TableSchemaTabProps {
   tableDetails: any;
@@ -179,37 +180,33 @@ export const TableSchemaTab: React.FC<TableSchemaTabProps> = ({
     setColumnToAlterType(null);
   };
 
+  const isAnyColumnMutationLoading =
+    addColumnMutation.isLoading ||
+    dropColumnMutation.isLoading ||
+    renameColumnMutation.isLoading ||
+    alterColumnTypeMutation.isLoading;
+  const columnCount = tableDetails?.columns?.length ?? 0;
+
   return (
-    <Card>
-      <CardContent>
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            mb: 2,
-            gap: 2,
-          }}
-        >
-          <Typography variant="h6">
-            Column Schema ({tableDetails?.columns?.length ?? 0} columns)
-          </Typography>
+    <>
+      <SettingsSection
+        title="Column Schema"
+        icon={<Schema />}
+        description={`${columnCount} ${columnCount === 1 ? 'column' : 'columns'}`}
+        action={
           <Button
+            size="small"
             variant="contained"
             startIcon={<Add />}
             onClick={handleOpenAddColumnDialog}
-            disabled={
-              addColumnMutation.isLoading ||
-              dropColumnMutation.isLoading ||
-              renameColumnMutation.isLoading ||
-              alterColumnTypeMutation.isLoading
-            }
+            disabled={isAnyColumnMutationLoading}
           >
             Add column
           </Button>
-        </Box>
-        <TableContainer>
-          <Table>
+        }
+      >
+        <DataLakeTableContainer bordered={false}>
+          <Table size="small">
             <TableHead>
               <TableRow>
                 <TableCell>Order</TableCell>
@@ -218,361 +215,338 @@ export const TableSchemaTab: React.FC<TableSchemaTabProps> = ({
                 <TableCell>Nullable</TableCell>
                 <TableCell>Default Value</TableCell>
                 <TableCell>Snapshot Range</TableCell>
-                <TableCell align="right">Actions</TableCell>
+                <TableCell
+                  align="right"
+                  aria-label="Actions"
+                  sx={{ width: 48 }}
+                />
               </TableRow>
             </TableHead>
             <TableBody>
               {(tableDetails?.columns || []).map(
-                (column: DuckLakeColumnDetail) => (
-                  <TableRow key={column.columnId}>
-                    <TableCell>{safeToString(column.columnOrder)}</TableCell>
-                    <TableCell>
-                      <strong>{column.columnName}</strong>
-                      {column.parentColumn && (
-                        <Chip label="Nested" size="small" sx={{ ml: 1 }} />
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={column.columnType}
-                        size="small"
-                        variant="outlined"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      {column.nullsAllowed ? (
-                        <Chip label="Yes" size="small" color="default" />
-                      ) : (
-                        <Chip label="No" size="small" color="primary" />
-                      )}
-                    </TableCell>
-                    <TableCell>{column.defaultValue || '-'}</TableCell>
-                    <TableCell>
-                      {safeToString(column.beginSnapshot)}
-                      {column.endSnapshot
-                        ? ` - ${safeToString(column.endSnapshot)}`
-                        : ' (current)'}
-                    </TableCell>
-                    <TableCell align="right">
-                      <Tooltip
-                        title={
-                          isPartitionColumnId(column.columnId)
-                            ? 'Partition columns cannot be renamed'
-                            : 'Rename column'
-                        }
-                      >
-                        <span>
-                          <IconButton
+                (column: DuckLakeColumnDetail) => {
+                  const isPartitionColumn = isPartitionColumnId(
+                    column.columnId,
+                  );
+                  return (
+                    <TableRow key={column.columnId} hover>
+                      <TableCell>{safeToString(column.columnOrder)}</TableCell>
+                      <TableCell sx={{ fontWeight: 500 }}>
+                        {column.columnName}
+                        {column.parentColumn && (
+                          <Chip
+                            label="Nested"
                             size="small"
-                            onClick={() => handleRequestRenameColumn(column)}
-                            disabled={
-                              renameColumnMutation.isLoading ||
-                              alterColumnTypeMutation.isLoading ||
-                              dropColumnMutation.isLoading ||
-                              addColumnMutation.isLoading ||
-                              isPartitionColumnId(column.columnId)
-                            }
-                          >
-                            <DriveFileRenameOutline fontSize="small" />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                      <Tooltip
-                        title={
-                          isPartitionColumnId(column.columnId)
-                            ? 'Partition columns cannot be altered'
-                            : 'Alter column type'
-                        }
-                      >
-                        <span>
-                          <IconButton
-                            size="small"
-                            onClick={() => handleRequestAlterColumnType(column)}
-                            disabled={
-                              alterColumnTypeMutation.isLoading ||
-                              renameColumnMutation.isLoading ||
-                              dropColumnMutation.isLoading ||
-                              addColumnMutation.isLoading ||
-                              isPartitionColumnId(column.columnId)
-                            }
-                          >
-                            <SwapHoriz fontSize="small" />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                      <Tooltip
-                        title={
-                          isPartitionColumnId(column.columnId)
-                            ? 'Partition columns cannot be dropped'
-                            : 'Drop column'
-                        }
-                      >
-                        <span>
-                          <IconButton
-                            size="small"
-                            color="error"
-                            onClick={() => handleRequestDropColumn(column)}
-                            disabled={
-                              dropColumnMutation.isLoading ||
-                              addColumnMutation.isLoading ||
-                              renameColumnMutation.isLoading ||
-                              alterColumnTypeMutation.isLoading ||
-                              isPartitionColumnId(column.columnId)
-                            }
-                          >
-                            <Delete fontSize="small" />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                    </TableCell>
-                  </TableRow>
-                ),
+                            variant="outlined"
+                            sx={{ ml: 1, height: 20 }}
+                          />
+                        )}
+                      </TableCell>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                        {column.columnType}
+                      </TableCell>
+                      <TableCell>
+                        {column.nullsAllowed ? 'Yes' : 'No'}
+                      </TableCell>
+                      <TableCell>{column.defaultValue || '-'}</TableCell>
+                      <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                        {safeToString(column.beginSnapshot)}
+                        {column.endSnapshot
+                          ? ` - ${safeToString(column.endSnapshot)}`
+                          : ' (current)'}
+                      </TableCell>
+                      <TableCell align="right">
+                        <DataLakeRowActions
+                          label={`Actions for column ${column.columnName}`}
+                          actions={[
+                            {
+                              key: 'rename',
+                              label: 'Rename column',
+                              icon: <DriveFileRenameOutline fontSize="small" />,
+                              onClick: () => handleRequestRenameColumn(column),
+                              disabled:
+                                isAnyColumnMutationLoading || isPartitionColumn,
+                              disabledReason: isPartitionColumn
+                                ? 'Partition columns cannot be renamed'
+                                : undefined,
+                            },
+                            {
+                              key: 'alter-type',
+                              label: 'Alter column type',
+                              icon: <SwapHoriz fontSize="small" />,
+                              onClick: () =>
+                                handleRequestAlterColumnType(column),
+                              disabled:
+                                isAnyColumnMutationLoading || isPartitionColumn,
+                              disabledReason: isPartitionColumn
+                                ? 'Partition columns cannot be altered'
+                                : undefined,
+                            },
+                            {
+                              key: 'drop',
+                              label: 'Drop column',
+                              icon: <Delete fontSize="small" />,
+                              onClick: () => handleRequestDropColumn(column),
+                              disabled:
+                                isAnyColumnMutationLoading || isPartitionColumn,
+                              disabledReason: isPartitionColumn
+                                ? 'Partition columns cannot be dropped'
+                                : undefined,
+                              danger: true,
+                            },
+                          ]}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  );
+                },
               )}
             </TableBody>
           </Table>
-        </TableContainer>
+        </DataLakeTableContainer>
+      </SettingsSection>
 
-        <Dialog
-          open={addColumnDialogOpen}
-          onClose={() => setAddColumnDialogOpen(false)}
-          maxWidth="sm"
-          fullWidth
-        >
-          <DialogTitle>Add column</DialogTitle>
-          <DialogContent>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Default value is treated as a raw SQL expression (e.g.{' '}
-              <strong>0</strong>,<strong> &apos;x&apos;</strong>,{' '}
-              <strong>current_timestamp</strong>).
-            </Typography>
-            <TextField
-              fullWidth
-              label="Column name"
-              value={newColumnName}
-              onChange={(e) => setNewColumnName(e.target.value)}
-              sx={{ mb: 2 }}
-              disabled={addColumnMutation.isLoading}
-              autoFocus
-            />
-            <Autocomplete
-              freeSolo
-              options={DUCKLAKE_SUPPORTED_COLUMN_TYPES}
-              value={newColumnType}
-              onInputChange={(_event, newValue) => setNewColumnType(newValue)}
-              disabled={addColumnMutation.isLoading}
-              renderInput={(params) => (
-                <TextField
-                  // eslint-disable-next-line react/jsx-props-no-spreading
-                  {...params}
-                  label="Column type"
-                  fullWidth
-                  sx={{ mb: 1 }}
-                  helperText="For nested types: INT[], LIST(INT), STRUCT(a INT, b VARCHAR), MAP(Key, Value)"
-                />
-              )}
-            />
-            <TextField
-              fullWidth
-              label="Default (optional)"
-              value={newColumnDefault}
-              onChange={(e) => setNewColumnDefault(e.target.value)}
-              disabled={addColumnMutation.isLoading}
-            />
-          </DialogContent>
-          <DialogActions>
-            <Button
-              variant="outlined"
-              color="inherit"
-              onClick={() => setAddColumnDialogOpen(false)}
-              startIcon={<Close />}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="contained"
-              onClick={handleConfirmAddColumn}
-              startIcon={<Add />}
-              disabled={
-                addColumnMutation.isLoading ||
-                newColumnName.trim() === '' ||
-                newColumnType.trim() === ''
-              }
-            >
-              Add
-            </Button>
-          </DialogActions>
-        </Dialog>
+      <Dialog
+        slotProps={{ paper: { sx: dataLakeDialogSx } }}
+        open={addColumnDialogOpen}
+        onClose={() => setAddColumnDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Add column</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Default value is treated as a raw SQL expression (e.g.{' '}
+            <strong>0</strong>,<strong> &apos;x&apos;</strong>,{' '}
+            <strong>current_timestamp</strong>).
+          </Typography>
+          <TextField
+            fullWidth
+            label="Column name"
+            value={newColumnName}
+            onChange={(e) => setNewColumnName(e.target.value)}
+            sx={{ mb: 2 }}
+            disabled={addColumnMutation.isLoading}
+            autoFocus
+          />
+          <Autocomplete
+            freeSolo
+            options={DUCKLAKE_SUPPORTED_COLUMN_TYPES}
+            value={newColumnType}
+            onInputChange={(_event, newValue) => setNewColumnType(newValue)}
+            disabled={addColumnMutation.isLoading}
+            renderInput={(params) => (
+              <TextField
+                // eslint-disable-next-line react/jsx-props-no-spreading
+                {...params}
+                label="Column type"
+                fullWidth
+                sx={{ mb: 1 }}
+                helperText="For nested types: INT[], LIST(INT), STRUCT(a INT, b VARCHAR), MAP(Key, Value)"
+              />
+            )}
+          />
+          <TextField
+            fullWidth
+            label="Default (optional)"
+            value={newColumnDefault}
+            onChange={(e) => setNewColumnDefault(e.target.value)}
+            disabled={addColumnMutation.isLoading}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button
+            variant="outlined"
+            color="inherit"
+            onClick={() => setAddColumnDialogOpen(false)}
+            startIcon={<Close />}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleConfirmAddColumn}
+            startIcon={<Add />}
+            disabled={
+              addColumnMutation.isLoading ||
+              newColumnName.trim() === '' ||
+              newColumnType.trim() === ''
+            }
+          >
+            Add
+          </Button>
+        </DialogActions>
+      </Dialog>
 
-        <Dialog
-          open={dropColumnDialogOpen}
-          onClose={() => {
-            setDropColumnDialogOpen(false);
-            setColumnToDrop(null);
-          }}
-          maxWidth="sm"
-          fullWidth
-        >
-          <DialogTitle>Drop column</DialogTitle>
-          <DialogContent>
-            <Typography variant="body2" color="text.secondary">
-              Are you sure you want to drop{' '}
-              <strong>{columnToDrop?.columnName}</strong>?
-            </Typography>
-          </DialogContent>
-          <DialogActions>
-            <Button
-              variant="outlined"
-              color="inherit"
-              onClick={() => {
-                setDropColumnDialogOpen(false);
-                setColumnToDrop(null);
-              }}
-              startIcon={<Close />}
-            >
-              Cancel
-            </Button>
-            <Button
-              color="error"
-              variant="contained"
-              onClick={handleConfirmDropColumn}
-              startIcon={<Delete />}
-              disabled={!columnToDrop || dropColumnMutation.isLoading}
-            >
-              Drop
-            </Button>
-          </DialogActions>
-        </Dialog>
+      <Dialog
+        slotProps={{ paper: { sx: dataLakeDialogSx } }}
+        open={dropColumnDialogOpen}
+        onClose={() => {
+          setDropColumnDialogOpen(false);
+          setColumnToDrop(null);
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Drop column</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            Are you sure you want to drop{' '}
+            <strong>{columnToDrop?.columnName}</strong>?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            variant="outlined"
+            color="inherit"
+            onClick={() => {
+              setDropColumnDialogOpen(false);
+              setColumnToDrop(null);
+            }}
+            startIcon={<Close />}
+          >
+            Cancel
+          </Button>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={handleConfirmDropColumn}
+            startIcon={<Delete />}
+            disabled={!columnToDrop || dropColumnMutation.isLoading}
+          >
+            Drop
+          </Button>
+        </DialogActions>
+      </Dialog>
 
-        <Dialog
-          open={renameColumnDialogOpen}
-          onClose={() => {
-            setRenameColumnDialogOpen(false);
-            setColumnToRename(null);
-          }}
-          maxWidth="sm"
-          fullWidth
-        >
-          <DialogTitle>Rename column</DialogTitle>
-          <DialogContent>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Renaming <strong>{columnToRename?.columnName}</strong>
-            </Typography>
-            <TextField
-              fullWidth
-              label="New column name"
-              value={renameColumnNewName}
-              onChange={(e) => setRenameColumnNewName(e.target.value)}
-              disabled={renameColumnMutation.isLoading}
-              autoFocus
-            />
-          </DialogContent>
-          <DialogActions>
-            <Button
-              variant="outlined"
-              color="inherit"
-              onClick={() => {
-                setRenameColumnDialogOpen(false);
-                setColumnToRename(null);
-              }}
-              startIcon={<Close />}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="contained"
-              onClick={handleConfirmRenameColumn}
-              startIcon={<DriveFileRenameOutline />}
-              disabled={
-                !columnToRename ||
-                renameColumnMutation.isLoading ||
-                renameColumnNewName.trim() === '' ||
-                renameColumnNewName.trim() === columnToRename?.columnName.trim()
-              }
-            >
-              Rename
-            </Button>
-          </DialogActions>
-        </Dialog>
+      <Dialog
+        slotProps={{ paper: { sx: dataLakeDialogSx } }}
+        open={renameColumnDialogOpen}
+        onClose={() => {
+          setRenameColumnDialogOpen(false);
+          setColumnToRename(null);
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Rename column</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Renaming <strong>{columnToRename?.columnName}</strong>
+          </Typography>
+          <TextField
+            fullWidth
+            label="New column name"
+            value={renameColumnNewName}
+            onChange={(e) => setRenameColumnNewName(e.target.value)}
+            disabled={renameColumnMutation.isLoading}
+            autoFocus
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button
+            variant="outlined"
+            color="inherit"
+            onClick={() => {
+              setRenameColumnDialogOpen(false);
+              setColumnToRename(null);
+            }}
+            startIcon={<Close />}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleConfirmRenameColumn}
+            startIcon={<DriveFileRenameOutline />}
+            disabled={
+              !columnToRename ||
+              renameColumnMutation.isLoading ||
+              renameColumnNewName.trim() === '' ||
+              renameColumnNewName.trim() === columnToRename?.columnName.trim()
+            }
+          >
+            Rename
+          </Button>
+        </DialogActions>
+      </Dialog>
 
-        <Dialog
-          open={alterTypeDialogOpen}
-          onClose={() => {
-            setAlterTypeDialogOpen(false);
-            setColumnToAlterType(null);
-          }}
-          maxWidth="sm"
-          fullWidth
-        >
-          <DialogTitle>Alter column type</DialogTitle>
-          <DialogContent>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Changing type for <strong>{columnToAlterType?.columnName}</strong>
+      <Dialog
+        slotProps={{ paper: { sx: dataLakeDialogSx } }}
+        open={alterTypeDialogOpen}
+        onClose={() => {
+          setAlterTypeDialogOpen(false);
+          setColumnToAlterType(null);
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Alter column type</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Changing type for <strong>{columnToAlterType?.columnName}</strong>
+          </Typography>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+              DuckLake Type Restrictions
             </Typography>
-            <Alert severity="info" sx={{ mb: 2 }}>
-              <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
-                DuckLake Type Restrictions
-              </Typography>
-              <Typography variant="body2" sx={{ mb: 1 }}>
-                Only widening promotions within the same type family are
-                allowed:
-              </Typography>
-              <Typography variant="body2" component="div" sx={{ ml: 1 }}>
-                • Integers: TINYINT → SMALLINT → INTEGER → BIGINT → HUGEINT
-                <br />
-                • Floats: REAL/FLOAT4 → DOUBLE/FLOAT8
-                <br />
-                • Strings: VARCHAR(n) → VARCHAR(m) where m &gt; n, or → TEXT
-                <br />• Cross-family conversions need table recreation
-              </Typography>
-            </Alert>
-            <Autocomplete
-              freeSolo
-              options={DUCKLAKE_SUPPORTED_COLUMN_TYPES}
-              value={alterTypeNewType}
-              onInputChange={(_event, newValue) =>
-                setAlterTypeNewType(newValue)
-              }
-              disabled={alterColumnTypeMutation.isLoading}
-              renderInput={(params) => (
-                <TextField
-                  // eslint-disable-next-line react/jsx-props-no-spreading
-                  {...params}
-                  label="New type"
-                  fullWidth
-                  autoFocus
-                  helperText="For nested types: INT[], LIST(INT), STRUCT(a INT), MAP(K,V)"
-                />
-              )}
-            />
-          </DialogContent>
-          <DialogActions>
-            <Button
-              variant="outlined"
-              color="inherit"
-              onClick={() => {
-                setAlterTypeDialogOpen(false);
-                setColumnToAlterType(null);
-              }}
-              startIcon={<Close />}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="contained"
-              onClick={handleConfirmAlterColumnType}
-              startIcon={<SwapHoriz />}
-              disabled={
-                !columnToAlterType ||
-                alterColumnTypeMutation.isLoading ||
-                alterTypeNewType.trim() === '' ||
-                alterTypeNewType.trim() === columnToAlterType?.columnType.trim()
-              }
-            >
-              Update
-            </Button>
-          </DialogActions>
-        </Dialog>
-      </CardContent>
-    </Card>
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              Only widening promotions within the same type family are allowed:
+            </Typography>
+            <Typography variant="body2" component="div" sx={{ ml: 1 }}>
+              • Integers: TINYINT → SMALLINT → INTEGER → BIGINT → HUGEINT
+              <br />
+              • Floats: REAL/FLOAT4 → DOUBLE/FLOAT8
+              <br />
+              • Strings: VARCHAR(n) → VARCHAR(m) where m &gt; n, or → TEXT
+              <br />• Cross-family conversions need table recreation
+            </Typography>
+          </Alert>
+          <Autocomplete
+            freeSolo
+            options={DUCKLAKE_SUPPORTED_COLUMN_TYPES}
+            value={alterTypeNewType}
+            onInputChange={(_event, newValue) => setAlterTypeNewType(newValue)}
+            disabled={alterColumnTypeMutation.isLoading}
+            renderInput={(params) => (
+              <TextField
+                // eslint-disable-next-line react/jsx-props-no-spreading
+                {...params}
+                label="New type"
+                fullWidth
+                autoFocus
+                helperText="For nested types: INT[], LIST(INT), STRUCT(a INT), MAP(K,V)"
+              />
+            )}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button
+            variant="outlined"
+            color="inherit"
+            onClick={() => {
+              setAlterTypeDialogOpen(false);
+              setColumnToAlterType(null);
+            }}
+            startIcon={<Close />}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleConfirmAlterColumnType}
+            startIcon={<SwapHoriz />}
+            disabled={
+              !columnToAlterType ||
+              alterColumnTypeMutation.isLoading ||
+              alterTypeNewType.trim() === '' ||
+              alterTypeNewType.trim() === columnToAlterType?.columnType.trim()
+            }
+          >
+            Update
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 };

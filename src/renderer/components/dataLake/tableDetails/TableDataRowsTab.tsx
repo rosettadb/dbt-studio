@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Card,
-  CardContent,
   Box,
   Typography,
   Button,
@@ -14,11 +12,9 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
   TablePagination,
-  CircularProgress,
   IconButton,
   Tooltip,
   Menu,
@@ -32,7 +28,6 @@ import {
   Divider,
 } from '@mui/material';
 import {
-  Refresh as RefreshIcon,
   Download as DownloadIcon,
   ArrowDropDown as ArrowDropDownIcon,
   DeleteOutline as DeleteIcon,
@@ -41,6 +36,7 @@ import {
   Publish as PublishIcon,
   Close,
   PlayArrow,
+  TableChart,
 } from '@mui/icons-material';
 import {
   useDeleteDuckLakeRows,
@@ -53,6 +49,11 @@ import {
   DuckLakeQueryResult,
   DuckLakeColumnDetail,
 } from '../../../../types/duckLake';
+import {
+  SettingsRefreshButton,
+  SettingsSection,
+} from '../../settings/SettingsLayout';
+import { DataLakeTableContainer, dataLakeDialogSx } from '../DataLakeLayout';
 
 interface TableDataRowsTabProps {
   instanceId: string;
@@ -519,20 +520,515 @@ WHERE NOT (${whereClause});`;
   };
 
   return (
-    <Card sx={{ mt: 2, overflow: 'hidden', maxWidth: 'calc(100vw - 430px)' }}>
-      <CardContent sx={{ overflow: 'hidden' }}>
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            my: 1,
-            gap: 2,
-          }}
-        >
-          <Typography variant="body1">Data / Rows (SQL Builder)</Typography>
-          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+    <Box sx={{ maxWidth: 'calc(100vw - 430px)' }}>
+      <Dialog
+        slotProps={{ paper: { sx: dataLakeDialogSx } }}
+        open={updateRowsDialogOpen}
+        onClose={() => setUpdateRowsDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Update rows</DialogTitle>
+        <DialogContent>
+          <Stack spacing={3} sx={{ mt: 1 }}>
+            {/* SET Section */}
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>
+                SET (Fields to update)
+              </Typography>
+              <Stack spacing={2}>
+                {updateFields.map((field, index) => (
+                  <Box key={field.id} sx={{ display: 'flex', gap: 2 }}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Column</InputLabel>
+                      <Select
+                        value={field.column}
+                        label="Column"
+                        onChange={(e) => {
+                          const newFields = [...updateFields];
+                          newFields[index].column = e.target.value;
+                          setUpdateFields(newFields);
+                        }}
+                      >
+                        {tableDetails?.columns.map(
+                          (col: DuckLakeColumnDetail) => (
+                            <MenuItem key={col.columnId} value={col.columnName}>
+                              {col.columnName}
+                              <Typography
+                                component="span"
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ ml: 1 }}
+                              >
+                                ({col.columnType})
+                              </Typography>
+                            </MenuItem>
+                          ),
+                        )}
+                      </Select>
+                    </FormControl>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label="Value"
+                      value={field.value}
+                      onChange={(e) => {
+                        const newFields = [...updateFields];
+                        newFields[index].value = e.target.value;
+                        setUpdateFields(newFields);
+                      }}
+                    />
+                    <IconButton
+                      color="error"
+                      onClick={() => {
+                        if (updateFields.length > 1) {
+                          setUpdateFields(
+                            updateFields.filter((f) => f.id !== field.id),
+                          );
+                        } else {
+                          // If it's the last one, just clear it
+                          setUpdateFields([
+                            {
+                              id: Date.now().toString(),
+                              column: '',
+                              value: '',
+                            },
+                          ]);
+                        }
+                      }}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </Box>
+                ))}
+                <Button
+                  startIcon={<AddIcon />}
+                  onClick={() =>
+                    setUpdateFields([
+                      ...updateFields,
+                      {
+                        id: Date.now().toString(),
+                        column: '',
+                        value: '',
+                      },
+                    ])
+                  }
+                  sx={{ alignSelf: 'start' }}
+                >
+                  Add Field
+                </Button>
+              </Stack>
+            </Box>
+
+            <Divider />
+
+            {/* Lakehouse Strategy Section */}
+            <Alert severity="info" sx={{ mb: 1 }}>
+              DuckLake uses a <strong>Safe Rewrite (CTAS)</strong> pattern to
+              ensure data integrity in an append-only lakehouse.
+            </Alert>
+
+            <Divider />
+
+            {/* WHERE Section */}
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>
+                WHERE (Conditions)
+              </Typography>
+              <Stack spacing={2}>
+                {whereConditions.map((condition, index) => (
+                  <Box key={condition.id} sx={{ display: 'flex', gap: 2 }}>
+                    <FormControl fullWidth size="small" sx={{ flex: 2 }}>
+                      <InputLabel>Column</InputLabel>
+                      <Select
+                        value={condition.column}
+                        label="Column"
+                        onChange={(e) => {
+                          const newConditions = [...whereConditions];
+                          newConditions[index].column = e.target.value;
+                          setWhereConditions(newConditions);
+                        }}
+                      >
+                        {tableDetails?.columns.map(
+                          (col: DuckLakeColumnDetail) => (
+                            <MenuItem key={col.columnId} value={col.columnName}>
+                              {col.columnName}
+                              <Typography
+                                component="span"
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ ml: 1 }}
+                              >
+                                ({col.columnType})
+                              </Typography>
+                            </MenuItem>
+                          ),
+                        )}
+                      </Select>
+                    </FormControl>
+                    <FormControl size="small" sx={{ flex: 1, minWidth: 80 }}>
+                      <InputLabel>Op</InputLabel>
+                      <Select
+                        value={condition.operator}
+                        label="Op"
+                        onChange={(e) => {
+                          const newConditions = [...whereConditions];
+                          newConditions[index].operator = e.target.value;
+                          setWhereConditions(newConditions);
+                        }}
+                      >
+                        <MenuItem value="=">=</MenuItem>
+                        <MenuItem value="!=">!=</MenuItem>
+                        <MenuItem value=">">&gt;</MenuItem>
+                        <MenuItem value=">=">&gt;=</MenuItem>
+                        <MenuItem value="<">&lt;</MenuItem>
+                        <MenuItem value="<=">&lt;=</MenuItem>
+                        <MenuItem value="LIKE">LIKE</MenuItem>
+                      </Select>
+                    </FormControl>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label="Value"
+                      value={condition.value}
+                      onChange={(e) => {
+                        const newConditions = [...whereConditions];
+                        newConditions[index].value = e.target.value;
+                        setWhereConditions(newConditions);
+                      }}
+                      sx={{ flex: 2 }}
+                    />
+                    <IconButton
+                      color="error"
+                      onClick={() => {
+                        if (whereConditions.length > 1) {
+                          setWhereConditions(
+                            whereConditions.filter(
+                              (c) => c.id !== condition.id,
+                            ),
+                          );
+                        } else {
+                          // If it's the last one, just clear it
+                          setWhereConditions([
+                            {
+                              id: Date.now().toString(),
+                              column: '',
+                              operator: '=',
+                              value: '',
+                            },
+                          ]);
+                        }
+                      }}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </Box>
+                ))}
+                <Button
+                  startIcon={<AddIcon />}
+                  onClick={() =>
+                    setWhereConditions([
+                      ...whereConditions,
+                      {
+                        id: Date.now().toString(),
+                        column: '',
+                        operator: '=',
+                        value: '',
+                      },
+                    ])
+                  }
+                  sx={{ alignSelf: 'start' }}
+                >
+                  Add Condition
+                </Button>
+              </Stack>
+            </Box>
+
+            {/* Preview Section */}
+            <Box
+              sx={{
+                p: 2,
+                bgcolor: 'action.hover',
+                borderRadius: 1,
+                fontFamily: 'monospace',
+                fontSize: '0.875rem',
+              }}
+            >
+              <Typography variant="caption" color="text.secondary">
+                Generated Query Preview:
+              </Typography>
+              <pre style={{ margin: '8px 0 0', whiteSpace: 'pre-wrap' }}>
+                {generatedUpdateQuery || '(Complete the form to see SQL)'}
+              </pre>
+            </Box>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            variant="outlined"
+            color="inherit"
+            onClick={() => setUpdateRowsDialogOpen(false)}
+            startIcon={<Close />}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleConfirmUpdateRows}
+            startIcon={<PlayArrow />}
+            disabled={
+              updateRowsMutation.isLoading ||
+              generatedUpdateQuery.trim() === '' ||
+              generatedUpdateQuery.startsWith('Refusing')
+            }
+          >
+            Run
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        slotProps={{ paper: { sx: dataLakeDialogSx } }}
+        open={deleteRowsDialogOpen}
+        onClose={() => setDeleteRowsDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Delete rows</DialogTitle>
+        <DialogContent>
+          <Stack spacing={3} sx={{ mt: 1 }}>
+            {/* Lakehouse Strategy Section */}
+            <Alert severity="info" sx={{ mb: 1 }}>
+              DuckLake uses a <strong>Safe Rewrite (CTAS)</strong> pattern to
+              ensure data integrity in an append-only lakehouse.
+            </Alert>
+
+            <Divider />
+
+            {/* WHERE Section */}
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>
+                WHERE (Conditions)
+              </Typography>
+              <Stack spacing={2}>
+                {deleteConditions.map((condition, index) => (
+                  <Box key={condition.id} sx={{ display: 'flex', gap: 2 }}>
+                    <FormControl fullWidth size="small" sx={{ flex: 2 }}>
+                      <InputLabel>Column</InputLabel>
+                      <Select
+                        value={condition.column}
+                        label="Column"
+                        onChange={(e) => {
+                          const newConditions = [...deleteConditions];
+                          newConditions[index].column = e.target.value;
+                          setDeleteConditions(newConditions);
+                        }}
+                      >
+                        {tableDetails?.columns.map(
+                          (col: DuckLakeColumnDetail) => (
+                            <MenuItem key={col.columnId} value={col.columnName}>
+                              {col.columnName}
+                              <Typography
+                                component="span"
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ ml: 1 }}
+                              >
+                                ({col.columnType})
+                              </Typography>
+                            </MenuItem>
+                          ),
+                        )}
+                      </Select>
+                    </FormControl>
+                    <FormControl size="small" sx={{ flex: 1, minWidth: 80 }}>
+                      <InputLabel>Op</InputLabel>
+                      <Select
+                        value={condition.operator}
+                        label="Op"
+                        onChange={(e) => {
+                          const newConditions = [...deleteConditions];
+                          newConditions[index].operator = e.target.value;
+                          setDeleteConditions(newConditions);
+                        }}
+                      >
+                        <MenuItem value="=">=</MenuItem>
+                        <MenuItem value="!=">!=</MenuItem>
+                        <MenuItem value=">">&gt;</MenuItem>
+                        <MenuItem value=">=">&gt;=</MenuItem>
+                        <MenuItem value="<">&lt;</MenuItem>
+                        <MenuItem value="<=">&lt;=</MenuItem>
+                        <MenuItem value="LIKE">LIKE</MenuItem>
+                      </Select>
+                    </FormControl>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label="Value"
+                      value={condition.value}
+                      onChange={(e) => {
+                        const newConditions = [...deleteConditions];
+                        newConditions[index].value = e.target.value;
+                        setDeleteConditions(newConditions);
+                      }}
+                      sx={{ flex: 2 }}
+                    />
+                    <IconButton
+                      color="error"
+                      onClick={() => {
+                        if (deleteConditions.length > 1) {
+                          setDeleteConditions(
+                            deleteConditions.filter(
+                              (c) => c.id !== condition.id,
+                            ),
+                          );
+                        } else {
+                          // If it's the last one, just clear it
+                          setDeleteConditions([
+                            {
+                              id: Date.now().toString(),
+                              column: '',
+                              operator: '=',
+                              value: '',
+                            },
+                          ]);
+                        }
+                      }}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </Box>
+                ))}
+                <Button
+                  startIcon={<AddIcon />}
+                  onClick={() =>
+                    setDeleteConditions([
+                      ...deleteConditions,
+                      {
+                        id: Date.now().toString(),
+                        column: '',
+                        operator: '=',
+                        value: '',
+                      },
+                    ])
+                  }
+                  sx={{ alignSelf: 'start' }}
+                >
+                  Add Condition
+                </Button>
+              </Stack>
+            </Box>
+
+            {/* Preview Section */}
+            <Box
+              sx={{
+                p: 2,
+                bgcolor: 'action.hover',
+                borderRadius: 1,
+                fontFamily: 'monospace',
+                fontSize: '0.875rem',
+              }}
+            >
+              <Typography variant="caption" color="text.secondary">
+                Generated Query Preview:
+              </Typography>
+              <pre style={{ margin: '8px 0 0', whiteSpace: 'pre-wrap' }}>
+                {generatedDeleteQuery || '(Select columns to see SQL)'}
+              </pre>
+            </Box>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            variant="outlined"
+            color="inherit"
+            onClick={() => setDeleteRowsDialogOpen(false)}
+            startIcon={<Close />}
+          >
+            Cancel
+          </Button>
+          <Button
+            startIcon={<PlayArrow />}
+            color="error"
+            variant="contained"
+            onClick={handleConfirmDeleteRows}
+            disabled={
+              deleteRowsMutation.isLoading ||
+              generatedDeleteQuery.trim() === '' ||
+              generatedDeleteQuery.startsWith('Refusing')
+            }
+          >
+            Run
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        slotProps={{ paper: { sx: dataLakeDialogSx } }}
+        open={upsertRowsDialogOpen}
+        onClose={() => setUpsertRowsDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Upsert rows</DialogTitle>
+        <DialogContent>
+          <TextField
+            fullWidth
+            multiline
+            minRows={8}
+            label="UPSERT SQL"
+            value={upsertRowsQuery}
+            onChange={(e) => setUpsertRowsQuery(e.target.value)}
+            disabled={upsertRowsMutation.isLoading}
+            autoFocus
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button
+            variant="outlined"
+            color="inherit"
+            onClick={() => setUpsertRowsDialogOpen(false)}
+            startIcon={<Close />}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleConfirmUpsertRows}
+            startIcon={<PlayArrow />}
+            disabled={
+              upsertRowsMutation.isLoading || upsertRowsQuery.trim() === ''
+            }
+          >
+            Run
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <SettingsSection
+        title="Table Data"
+        icon={<TableChart />}
+        description={
+          <>
+            {actualRowCount !== null && (
+              <Tooltip title="Actual row count after applying deletes">
+                <span>{actualRowCount.toLocaleString()} rows</span>
+              </Tooltip>
+            )}
+            {actualRowCount === null &&
+              tableDetails?.stats?.recordCount !== undefined && (
+                <Tooltip title="Upper bound from metadata (may include deleted rows)">
+                  <span>
+                    ~{tableDetails?.stats?.recordCount?.toLocaleString()} rows
+                  </span>
+                </Tooltip>
+              )}
+          </>
+        }
+        action={
+          <>
             <Button
+              size="small"
               variant="outlined"
               startIcon={<EditIcon />}
               onClick={handleOpenUpdateRowsDialog}
@@ -545,6 +1041,7 @@ WHERE NOT (${whereClause});`;
               Update
             </Button>
             <Button
+              size="small"
               variant="outlined"
               color="error"
               startIcon={<DeleteIcon />}
@@ -560,6 +1057,7 @@ WHERE NOT (${whereClause});`;
             <Tooltip title="Coming soon in future releases">
               <span>
                 <Button
+                  size="small"
                   variant="outlined"
                   startIcon={<PublishIcon />}
                   onClick={handleOpenUpsertRowsDialog}
@@ -569,538 +1067,6 @@ WHERE NOT (${whereClause});`;
                 </Button>
               </span>
             </Tooltip>
-          </Box>
-        </Box>
-
-        <Dialog
-          open={updateRowsDialogOpen}
-          onClose={() => setUpdateRowsDialogOpen(false)}
-          maxWidth="md"
-          fullWidth
-        >
-          <DialogTitle>Update rows</DialogTitle>
-          <DialogContent>
-            <Stack spacing={3} sx={{ mt: 1 }}>
-              {/* SET Section */}
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  SET (Fields to update)
-                </Typography>
-                <Stack spacing={2}>
-                  {updateFields.map((field, index) => (
-                    <Box key={field.id} sx={{ display: 'flex', gap: 2 }}>
-                      <FormControl fullWidth size="small">
-                        <InputLabel>Column</InputLabel>
-                        <Select
-                          value={field.column}
-                          label="Column"
-                          onChange={(e) => {
-                            const newFields = [...updateFields];
-                            newFields[index].column = e.target.value;
-                            setUpdateFields(newFields);
-                          }}
-                        >
-                          {tableDetails?.columns.map(
-                            (col: DuckLakeColumnDetail) => (
-                              <MenuItem
-                                key={col.columnId}
-                                value={col.columnName}
-                              >
-                                {col.columnName}
-                                <Typography
-                                  component="span"
-                                  variant="caption"
-                                  color="text.secondary"
-                                  sx={{ ml: 1 }}
-                                >
-                                  ({col.columnType})
-                                </Typography>
-                              </MenuItem>
-                            ),
-                          )}
-                        </Select>
-                      </FormControl>
-                      <TextField
-                        fullWidth
-                        size="small"
-                        label="Value"
-                        value={field.value}
-                        onChange={(e) => {
-                          const newFields = [...updateFields];
-                          newFields[index].value = e.target.value;
-                          setUpdateFields(newFields);
-                        }}
-                      />
-                      <IconButton
-                        color="error"
-                        onClick={() => {
-                          if (updateFields.length > 1) {
-                            setUpdateFields(
-                              updateFields.filter((f) => f.id !== field.id),
-                            );
-                          } else {
-                            // If it's the last one, just clear it
-                            setUpdateFields([
-                              {
-                                id: Date.now().toString(),
-                                column: '',
-                                value: '',
-                              },
-                            ]);
-                          }
-                        }}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </Box>
-                  ))}
-                  <Button
-                    startIcon={<AddIcon />}
-                    onClick={() =>
-                      setUpdateFields([
-                        ...updateFields,
-                        {
-                          id: Date.now().toString(),
-                          column: '',
-                          value: '',
-                        },
-                      ])
-                    }
-                    sx={{ alignSelf: 'start' }}
-                  >
-                    Add Field
-                  </Button>
-                </Stack>
-              </Box>
-
-              <Divider />
-
-              {/* Lakehouse Strategy Section */}
-              <Alert severity="info" sx={{ mb: 1 }}>
-                DuckLake uses a <strong>Safe Rewrite (CTAS)</strong> pattern to
-                ensure data integrity in an append-only lakehouse.
-              </Alert>
-
-              <Divider />
-
-              {/* WHERE Section */}
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  WHERE (Conditions)
-                </Typography>
-                <Stack spacing={2}>
-                  {whereConditions.map((condition, index) => (
-                    <Box key={condition.id} sx={{ display: 'flex', gap: 2 }}>
-                      <FormControl fullWidth size="small" sx={{ flex: 2 }}>
-                        <InputLabel>Column</InputLabel>
-                        <Select
-                          value={condition.column}
-                          label="Column"
-                          onChange={(e) => {
-                            const newConditions = [...whereConditions];
-                            newConditions[index].column = e.target.value;
-                            setWhereConditions(newConditions);
-                          }}
-                        >
-                          {tableDetails?.columns.map(
-                            (col: DuckLakeColumnDetail) => (
-                              <MenuItem
-                                key={col.columnId}
-                                value={col.columnName}
-                              >
-                                {col.columnName}
-                                <Typography
-                                  component="span"
-                                  variant="caption"
-                                  color="text.secondary"
-                                  sx={{ ml: 1 }}
-                                >
-                                  ({col.columnType})
-                                </Typography>
-                              </MenuItem>
-                            ),
-                          )}
-                        </Select>
-                      </FormControl>
-                      <FormControl size="small" sx={{ flex: 1, minWidth: 80 }}>
-                        <InputLabel>Op</InputLabel>
-                        <Select
-                          value={condition.operator}
-                          label="Op"
-                          onChange={(e) => {
-                            const newConditions = [...whereConditions];
-                            newConditions[index].operator = e.target.value;
-                            setWhereConditions(newConditions);
-                          }}
-                        >
-                          <MenuItem value="=">=</MenuItem>
-                          <MenuItem value="!=">!=</MenuItem>
-                          <MenuItem value=">">&gt;</MenuItem>
-                          <MenuItem value=">=">&gt;=</MenuItem>
-                          <MenuItem value="<">&lt;</MenuItem>
-                          <MenuItem value="<=">&lt;=</MenuItem>
-                          <MenuItem value="LIKE">LIKE</MenuItem>
-                        </Select>
-                      </FormControl>
-                      <TextField
-                        fullWidth
-                        size="small"
-                        label="Value"
-                        value={condition.value}
-                        onChange={(e) => {
-                          const newConditions = [...whereConditions];
-                          newConditions[index].value = e.target.value;
-                          setWhereConditions(newConditions);
-                        }}
-                        sx={{ flex: 2 }}
-                      />
-                      <IconButton
-                        color="error"
-                        onClick={() => {
-                          if (whereConditions.length > 1) {
-                            setWhereConditions(
-                              whereConditions.filter(
-                                (c) => c.id !== condition.id,
-                              ),
-                            );
-                          } else {
-                            // If it's the last one, just clear it
-                            setWhereConditions([
-                              {
-                                id: Date.now().toString(),
-                                column: '',
-                                operator: '=',
-                                value: '',
-                              },
-                            ]);
-                          }
-                        }}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </Box>
-                  ))}
-                  <Button
-                    startIcon={<AddIcon />}
-                    onClick={() =>
-                      setWhereConditions([
-                        ...whereConditions,
-                        {
-                          id: Date.now().toString(),
-                          column: '',
-                          operator: '=',
-                          value: '',
-                        },
-                      ])
-                    }
-                    sx={{ alignSelf: 'start' }}
-                  >
-                    Add Condition
-                  </Button>
-                </Stack>
-              </Box>
-
-              {/* Preview Section */}
-              <Box
-                sx={{
-                  p: 2,
-                  bgcolor: 'action.hover',
-                  borderRadius: 1,
-                  fontFamily: 'monospace',
-                  fontSize: '0.875rem',
-                }}
-              >
-                <Typography variant="caption" color="text.secondary">
-                  Generated Query Preview:
-                </Typography>
-                <pre style={{ margin: '8px 0 0', whiteSpace: 'pre-wrap' }}>
-                  {generatedUpdateQuery || '(Complete the form to see SQL)'}
-                </pre>
-              </Box>
-            </Stack>
-          </DialogContent>
-          <DialogActions>
-            <Button
-              variant="outlined"
-              color="inherit"
-              onClick={() => setUpdateRowsDialogOpen(false)}
-              startIcon={<Close />}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="contained"
-              onClick={handleConfirmUpdateRows}
-              startIcon={<PlayArrow />}
-              disabled={
-                updateRowsMutation.isLoading ||
-                generatedUpdateQuery.trim() === '' ||
-                generatedUpdateQuery.startsWith('Refusing')
-              }
-            >
-              Run
-            </Button>
-          </DialogActions>
-        </Dialog>
-
-        <Dialog
-          open={deleteRowsDialogOpen}
-          onClose={() => setDeleteRowsDialogOpen(false)}
-          maxWidth="md"
-          fullWidth
-        >
-          <DialogTitle>Delete rows</DialogTitle>
-          <DialogContent>
-            <Stack spacing={3} sx={{ mt: 1 }}>
-              {/* Lakehouse Strategy Section */}
-              <Alert severity="info" sx={{ mb: 1 }}>
-                DuckLake uses a <strong>Safe Rewrite (CTAS)</strong> pattern to
-                ensure data integrity in an append-only lakehouse.
-              </Alert>
-
-              <Divider />
-
-              {/* WHERE Section */}
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  WHERE (Conditions)
-                </Typography>
-                <Stack spacing={2}>
-                  {deleteConditions.map((condition, index) => (
-                    <Box key={condition.id} sx={{ display: 'flex', gap: 2 }}>
-                      <FormControl fullWidth size="small" sx={{ flex: 2 }}>
-                        <InputLabel>Column</InputLabel>
-                        <Select
-                          value={condition.column}
-                          label="Column"
-                          onChange={(e) => {
-                            const newConditions = [...deleteConditions];
-                            newConditions[index].column = e.target.value;
-                            setDeleteConditions(newConditions);
-                          }}
-                        >
-                          {tableDetails?.columns.map(
-                            (col: DuckLakeColumnDetail) => (
-                              <MenuItem
-                                key={col.columnId}
-                                value={col.columnName}
-                              >
-                                {col.columnName}
-                                <Typography
-                                  component="span"
-                                  variant="caption"
-                                  color="text.secondary"
-                                  sx={{ ml: 1 }}
-                                >
-                                  ({col.columnType})
-                                </Typography>
-                              </MenuItem>
-                            ),
-                          )}
-                        </Select>
-                      </FormControl>
-                      <FormControl size="small" sx={{ flex: 1, minWidth: 80 }}>
-                        <InputLabel>Op</InputLabel>
-                        <Select
-                          value={condition.operator}
-                          label="Op"
-                          onChange={(e) => {
-                            const newConditions = [...deleteConditions];
-                            newConditions[index].operator = e.target.value;
-                            setDeleteConditions(newConditions);
-                          }}
-                        >
-                          <MenuItem value="=">=</MenuItem>
-                          <MenuItem value="!=">!=</MenuItem>
-                          <MenuItem value=">">&gt;</MenuItem>
-                          <MenuItem value=">=">&gt;=</MenuItem>
-                          <MenuItem value="<">&lt;</MenuItem>
-                          <MenuItem value="<=">&lt;=</MenuItem>
-                          <MenuItem value="LIKE">LIKE</MenuItem>
-                        </Select>
-                      </FormControl>
-                      <TextField
-                        fullWidth
-                        size="small"
-                        label="Value"
-                        value={condition.value}
-                        onChange={(e) => {
-                          const newConditions = [...deleteConditions];
-                          newConditions[index].value = e.target.value;
-                          setDeleteConditions(newConditions);
-                        }}
-                        sx={{ flex: 2 }}
-                      />
-                      <IconButton
-                        color="error"
-                        onClick={() => {
-                          if (deleteConditions.length > 1) {
-                            setDeleteConditions(
-                              deleteConditions.filter(
-                                (c) => c.id !== condition.id,
-                              ),
-                            );
-                          } else {
-                            // If it's the last one, just clear it
-                            setDeleteConditions([
-                              {
-                                id: Date.now().toString(),
-                                column: '',
-                                operator: '=',
-                                value: '',
-                              },
-                            ]);
-                          }
-                        }}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </Box>
-                  ))}
-                  <Button
-                    startIcon={<AddIcon />}
-                    onClick={() =>
-                      setDeleteConditions([
-                        ...deleteConditions,
-                        {
-                          id: Date.now().toString(),
-                          column: '',
-                          operator: '=',
-                          value: '',
-                        },
-                      ])
-                    }
-                    sx={{ alignSelf: 'start' }}
-                  >
-                    Add Condition
-                  </Button>
-                </Stack>
-              </Box>
-
-              {/* Preview Section */}
-              <Box
-                sx={{
-                  p: 2,
-                  bgcolor: 'action.hover',
-                  borderRadius: 1,
-                  fontFamily: 'monospace',
-                  fontSize: '0.875rem',
-                }}
-              >
-                <Typography variant="caption" color="text.secondary">
-                  Generated Query Preview:
-                </Typography>
-                <pre style={{ margin: '8px 0 0', whiteSpace: 'pre-wrap' }}>
-                  {generatedDeleteQuery || '(Select columns to see SQL)'}
-                </pre>
-              </Box>
-            </Stack>
-          </DialogContent>
-          <DialogActions>
-            <Button
-              variant="outlined"
-              color="inherit"
-              onClick={() => setDeleteRowsDialogOpen(false)}
-              startIcon={<Close />}
-            >
-              Cancel
-            </Button>
-            <Button
-              startIcon={<PlayArrow />}
-              color="error"
-              variant="contained"
-              onClick={handleConfirmDeleteRows}
-              disabled={
-                deleteRowsMutation.isLoading ||
-                generatedDeleteQuery.trim() === '' ||
-                generatedDeleteQuery.startsWith('Refusing')
-              }
-            >
-              Run
-            </Button>
-          </DialogActions>
-        </Dialog>
-
-        <Dialog
-          open={upsertRowsDialogOpen}
-          onClose={() => setUpsertRowsDialogOpen(false)}
-          maxWidth="md"
-          fullWidth
-        >
-          <DialogTitle>Upsert rows</DialogTitle>
-          <DialogContent>
-            <TextField
-              fullWidth
-              multiline
-              minRows={8}
-              label="UPSERT SQL"
-              value={upsertRowsQuery}
-              onChange={(e) => setUpsertRowsQuery(e.target.value)}
-              disabled={upsertRowsMutation.isLoading}
-              autoFocus
-            />
-          </DialogContent>
-          <DialogActions>
-            <Button
-              variant="outlined"
-              color="inherit"
-              onClick={() => setUpsertRowsDialogOpen(false)}
-              startIcon={<Close />}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="contained"
-              onClick={handleConfirmUpsertRows}
-              startIcon={<PlayArrow />}
-              disabled={
-                upsertRowsMutation.isLoading || upsertRowsQuery.trim() === ''
-              }
-            >
-              Run
-            </Button>
-          </DialogActions>
-        </Dialog>
-      </CardContent>
-      <Divider />
-      <CardContent sx={{ overflow: 'hidden' }}>
-        <Box
-          sx={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            mb: 2,
-          }}
-        >
-          <Typography variant="body1">
-            Table Data
-            {actualRowCount !== null && (
-              <Tooltip title="Actual row count after applying deletes">
-                <Typography
-                  component="span"
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ ml: 1 }}
-                >
-                  ({actualRowCount.toLocaleString()} rows)
-                </Typography>
-              </Tooltip>
-            )}
-            {actualRowCount === null &&
-              tableDetails?.stats?.recordCount !== undefined && (
-                <Tooltip title="Upper bound from metadata (may include deleted rows)">
-                  <Typography
-                    component="span"
-                    variant="body2"
-                    color="text.secondary"
-                    sx={{ ml: 1 }}
-                  >
-                    (~{tableDetails?.stats?.recordCount?.toLocaleString()} rows)
-                  </Typography>
-                </Tooltip>
-              )}
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 1 }}>
             <Button
               variant="outlined"
               size="small"
@@ -1148,146 +1114,84 @@ WHERE NOT (${whereClause});`;
                 <ListItemText>Export as Parquet</ListItemText>
               </MenuItem>
             </Menu>
-            <Tooltip title="Refresh Data">
-              <IconButton onClick={fetchData} disabled={loadingData}>
-                {loadingData ? <CircularProgress size={24} /> : <RefreshIcon />}
-              </IconButton>
-            </Tooltip>
-          </Box>
-        </Box>
-
+            <SettingsRefreshButton
+              title="Refresh data"
+              onClick={fetchData}
+              loading={loadingData}
+            />
+          </>
+        }
+      >
         {fetchError && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            Error fetching data: {fetchError}
-          </Alert>
+          <Box sx={{ px: 1.75, py: 1.25 }}>
+            <Alert severity="error">Error fetching data: {fetchError}</Alert>
+          </Box>
         )}
-
-        <Box
-          sx={{
-            border: '1px solid',
-            borderColor: 'divider',
-            borderRadius: 1,
-            overflowX: 'hidden',
-          }}
-        >
-          <TableContainer>
-            <Table stickyHeader size="small">
-              <TableHead>
-                <TableRow>
-                  {queryResult?.fields?.map((col) => (
+        <DataLakeTableContainer bordered={false}>
+          <Table stickyHeader size="small">
+            <TableHead>
+              <TableRow>
+                {queryResult?.fields?.map((col) => (
+                  <TableCell key={col.name} sx={{ minWidth: 120 }}>
+                    <Box sx={{ color: 'text.primary', lineHeight: 1.3 }}>
+                      {col.name}
+                    </Box>
+                    <Box
+                      sx={{ fontSize: 11, fontWeight: 400, lineHeight: 1.3 }}
+                    >
+                      {col.type}
+                    </Box>
+                  </TableCell>
+                ))}
+                {!queryResult && loadingData && (
+                  <TableCell>Loading columns...</TableCell>
+                )}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {queryResult?.data?.map((row, rowIndex) => (
+                <TableRow key={rowIndex} hover>
+                  {Object.values(row).map((cell: any, cellIndex: number) => (
                     <TableCell
-                      key={col.name}
+                      key={cellIndex}
                       sx={{
-                        fontWeight: 600,
-                        backgroundColor: (theme) =>
-                          theme.palette.mode === 'dark'
-                            ? theme.palette.grey[900]
-                            : theme.palette.grey[50],
-                        borderBottom: '2px solid',
-                        borderBottomColor: 'divider',
-                        py: 1.5,
-                        px: 2,
-                        minWidth: 120,
+                        maxWidth: 300,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
                       }}
                     >
-                      <Box>
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            fontWeight: 600,
-                            mb: 0.25,
-                            color: 'text.primary',
-                          }}
-                        >
-                          {col.name}
-                        </Typography>
+                      {cell === null ? (
                         <Typography
                           variant="caption"
-                          sx={{
-                            fontSize: '0.7rem',
-                            color: 'text.secondary',
-                          }}
+                          color="text.secondary"
+                          sx={{ fontStyle: 'italic' }}
                         >
-                          {col.type}
+                          NULL
                         </Typography>
-                      </Box>
+                      ) : (
+                        String(cell)
+                      )}
                     </TableCell>
                   ))}
-                  {!queryResult && loadingData && (
-                    <TableCell
-                      sx={{
-                        fontWeight: 600,
-                        backgroundColor: (theme) =>
-                          theme.palette.mode === 'dark'
-                            ? theme.palette.grey[900]
-                            : theme.palette.grey[50],
-                        borderBottom: '2px solid',
-                        borderBottomColor: 'divider',
-                      }}
-                    >
-                      Loading columns...
-                    </TableCell>
-                  )}
                 </TableRow>
-              </TableHead>
-              <TableBody>
-                {queryResult?.data?.map((row, rowIndex) => (
-                  <TableRow
-                    key={rowIndex}
-                    hover
-                    sx={{
-                      '&:hover': {
-                        backgroundColor: 'action.hover',
-                      },
-                    }}
+              ))}
+              {!loadingData && (!queryResult || !queryResult.data?.length) && (
+                <TableRow>
+                  <TableCell
+                    colSpan={queryResult?.fields?.length ?? 1}
+                    align="center"
+                    sx={{ py: 4 }}
                   >
-                    {Object.values(row).map((cell: any, cellIndex: number) => (
-                      <TableCell
-                        key={cellIndex}
-                        sx={{
-                          maxWidth: 300,
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          py: 1.5,
-                          px: 2,
-                          fontSize: '0.875rem',
-                        }}
-                      >
-                        {cell === null ? (
-                          <Typography
-                            variant="caption"
-                            color="text.secondary"
-                            sx={{ fontStyle: 'italic', fontSize: '0.8rem' }}
-                          >
-                            NULL
-                          </Typography>
-                        ) : (
-                          String(cell)
-                        )}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))}
-                {!loadingData &&
-                  (!queryResult || !queryResult.data?.length) && (
-                    <TableRow>
-                      <TableCell
-                        colSpan={queryResult?.fields?.length ?? 1}
-                        align="center"
-                        sx={{ py: 4 }}
-                      >
-                        <Typography color="text.secondary" variant="body2">
-                          No data returned
-                        </Typography>
-                      </TableCell>
-                    </TableRow>
-                  )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Box>
-
+                    <Typography color="text.secondary" variant="body2">
+                      No data returned
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </DataLakeTableContainer>
         <TablePagination
           component="div"
           count={actualRowCount ?? tableDetails?.stats?.recordCount ?? -1}
@@ -1300,7 +1204,7 @@ WHERE NOT (${whereClause});`;
             return `${from}-${to} of ${count !== -1 ? count : `more than ${to}`}`;
           }}
         />
-      </CardContent>
-    </Card>
+      </SettingsSection>
+    </Box>
   );
 };

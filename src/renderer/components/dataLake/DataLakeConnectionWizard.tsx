@@ -50,6 +50,7 @@ import { DuckLakeService } from '../../services/duckLake.service';
 import { useFilePicker } from '../../controllers';
 import { isWindows } from '../../lib/path';
 import { DataLakeConnectionSelector } from './DataLakeConnectionSelector';
+import { DataLakePageHeader, dataLakeContentSx } from './DataLakeLayout';
 
 // Database icons mapping - import from assets
 const getDatabaseIcon = (type: string) => {
@@ -575,7 +576,7 @@ export const DataLakeConnectionWizard: React.FC<
       case 'failed':
         return theme.palette.error.main;
       default:
-        return '#9e9e9e';
+        return theme.palette.text.disabled;
     }
   };
 
@@ -1219,7 +1220,7 @@ export const DataLakeConnectionWizard: React.FC<
 
                   {/* Show selected catalog details */}
                   {/* {field.value && (
-                    <Paper sx={{ p: 2, mt: 3, bgcolor: 'background.default' }}>
+                    <Paper variant="outlined" sx={{ borderRadius: 2, p: 2, mt: 3, bgcolor: 'background.default' }}>
                       <Typography
                         variant="subtitle2"
                         gutterBottom
@@ -1602,7 +1603,7 @@ export const DataLakeConnectionWizard: React.FC<
                       <Box
                         sx={{
                           p: 2,
-                          backgroundColor: 'rgba(0, 0, 0, 0.05)',
+                          backgroundColor: 'action.hover',
                           borderRadius: 1,
                           border: '1px solid',
                           borderColor: 'divider',
@@ -1790,7 +1791,7 @@ export const DataLakeConnectionWizard: React.FC<
 
             <Grid container spacing={3}>
               <Grid item xs={12} md={6}>
-                <Paper sx={{ p: 2 }}>
+                <Paper variant="outlined" sx={{ borderRadius: 2, p: 2 }}>
                   <Typography
                     variant="subtitle1"
                     gutterBottom
@@ -1837,7 +1838,7 @@ export const DataLakeConnectionWizard: React.FC<
               </Grid>
 
               <Grid item xs={12} md={6}>
-                <Paper sx={{ p: 2 }}>
+                <Paper variant="outlined" sx={{ borderRadius: 2, p: 2 }}>
                   <Typography
                     variant="subtitle1"
                     gutterBottom
@@ -1889,7 +1890,7 @@ export const DataLakeConnectionWizard: React.FC<
               </Grid>
 
               <Grid item xs={12}>
-                <Paper sx={{ p: 2 }}>
+                <Paper variant="outlined" sx={{ borderRadius: 2, p: 2 }}>
                   <Typography
                     variant="subtitle1"
                     gutterBottom
@@ -1941,14 +1942,8 @@ export const DataLakeConnectionWizard: React.FC<
   };
 
   return (
-    <Box sx={{ p: 2 }}>
-      <Typography
-        variant="h4"
-        component="h1"
-        sx={{ fontWeight: 'bold', mb: 3 }}
-      >
-        Create DuckLake Instance
-      </Typography>
+    <Box sx={dataLakeContentSx}>
+      <DataLakePageHeader title="Create DuckLake Instance" />
 
       <Card sx={{ maxWidth: 800, mx: 'auto' }}>
         <CardContent sx={{ p: 3 }}>
