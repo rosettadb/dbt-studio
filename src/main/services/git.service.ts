@@ -8,6 +8,7 @@ import {
   FileStatus,
   GitChangesRes,
   GitCredentials,
+  ProjectGitSummary,
   RepoInfoRes,
 } from '../../types/backend';
 import SettingsService from './settings.service';
@@ -1308,6 +1309,20 @@ export default class GitService {
         branchExistsOnRemote,
       };
     } catch (err: any) {
+      return null;
+    }
+  }
+
+  // Local read only, no fetch: the Manage Projects screen runs this for every
+  // project, so it must stay fast and never trigger a login prompt.
+  async getProjectGitSummary(
+    repoPath: string,
+  ): Promise<ProjectGitSummary | null> {
+    try {
+      const status = await this.getGitInstance(repoPath).status();
+      return { currentBranch: status.current };
+    } catch {
+      // Not a Git repository, or the project folder no longer exists
       return null;
     }
   }

@@ -30,6 +30,7 @@ import DatabaseIcon from '@mui/icons-material/Storage';
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
 import { toast } from 'react-toastify';
 import { Cable } from '@mui/icons-material';
+import moment from 'moment';
 import { connectionIcon } from '../../../connections/registry.renderer';
 import { projectsServices, connectorsServices } from '../../services';
 import {
@@ -50,6 +51,8 @@ import {
   GetStartedModal,
   NewProject,
 } from '../../components';
+import { ViewToggle } from '../../components/cloudExplorer/ViewToggle';
+import { DatabaseCylinderIcon } from '../../components/icon/DatabaseCylinderIcon';
 import { icons } from '../../../../assets';
 import { AppLayout } from '../../layouts';
 import { Project, canUseAsDbtConnection } from '../../../types/backend';
@@ -63,18 +66,26 @@ import {
   ProjectActions,
   ProjectCard,
   ProjectCardContent,
+  ProjectDetailLine,
+  ProjectGridCard,
+  ProjectGridCardHeader,
   ProjectIcon,
   ProjectInfo,
   ProjectMuiIcon,
   ProjectPath,
+  ProjectsCardGrid,
   ProjectsContainer,
   ProjectSelectionContainer,
+  ProjectsStickyHeader,
   ProjectTitle,
   SearchContainer,
   TaglineContainer,
   TaglineText,
 } from './styles';
+import ProjectGitDetails from './ProjectGitDetails';
 import { path } from '../../lib/path';
+
+const PROJECTS_VIEW_STORAGE_KEY = 'selectProject.view';
 
 const SelectProject: React.FC = () => {
   const navigate = useNavigate();
@@ -89,6 +100,17 @@ const SelectProject: React.FC = () => {
     React.useState<string>('');
   const [isCloneModalOpen, setIsCloneModalOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState('');
+  const [projectsView, setProjectsView] = React.useState<'list' | 'card'>(
+    () => {
+      try {
+        return localStorage.getItem(PROJECTS_VIEW_STORAGE_KEY) === 'card'
+          ? 'card'
+          : 'list';
+      } catch {
+        return 'list';
+      }
+    },
+  );
   const [isAddingProject, setIsAddingProject] = React.useState(false);
   const [newProject, setNewProject] = React.useState({
     name: '',
@@ -354,6 +376,150 @@ const SelectProject: React.FC = () => {
     project.name.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
+  const handleProjectsViewChange = (view: 'list' | 'card') => {
+    setProjectsView(view);
+    try {
+      localStorage.setItem(PROJECTS_VIEW_STORAGE_KEY, view);
+    } catch {
+      // The view still switches; it just won't be remembered next time
+    }
+  };
+
+  const handleOpenProject = async (project: Project) => {
+    await selectProject({ projectId: project.id });
+    navigate('/app/dbt-project');
+  };
+
+  const getProjectDatesLine = (project: Project) =>
+    [
+      `Added ${moment(project.createdAt).format('MMM D, YYYY')}`,
+      project.lastOpenedAt &&
+        `Last active ${moment(project.lastOpenedAt).fromNow()}`,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+
+  const renderConnectionChip = (project: Project) => {
+    // Only show badge if connection name exists
+    if (project.connection?.name) {
+      return (
+        <Chip
+          label={
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <DatabaseCylinderIcon sx={{ fontSize: 12, mr: 0.5 }} />
+              {project.connection.name}
+            </Box>
+          }
+          size="small"
+          sx={{
+            mr: 1,
+            fontWeight: 500,
+            fontSize: 12,
+            textTransform: 'none',
+            bgcolor: 'background.paper',
+            color: 'primary.main',
+            border: '1px solid',
+            borderColor: 'divider',
+          }}
+          title="Connection Name"
+        />
+      );
+    }
+    return (
+      <Chip
+        label={
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <DatabaseCylinderIcon sx={{ fontSize: 12, mr: 0.5 }} />
+            No connection
+          </Box>
+        }
+        size="small"
+        sx={{
+          mr: 1,
+          fontWeight: 500,
+          fontSize: 12,
+          textTransform: 'none',
+          bgcolor: 'background.paper',
+          color: 'text.disabled',
+          border: '1px solid',
+          borderColor: 'divider',
+          cursor: 'pointer',
+          '&:hover': {
+            bgcolor: 'action.hover',
+          },
+        }}
+        title="Click to add database connection"
+        onClick={(e) => {
+          e.stopPropagation();
+          handleAddConnection(project);
+        }}
+      />
+    );
+  };
+
+  const renderProjectOptionsButton = (project: Project) => (
+    <IconButton
+      size="small"
+      onClick={(e) => handleOpenMenu(e, project.id)}
+      data-testid={`project-options-${project.name}`}
+    >
+      <MoreVertIcon />
+    </IconButton>
+  );
+
+  const renderProjectListRow = (project: Project) => (
+    <ProjectCard
+      key={project.id}
+      data-testid={`project-card-${project.name}`}
+      data-project-name={project.name}
+      onClick={() => handleOpenProject(project)}
+    >
+      <ProjectCardContent>
+        {renderProjectIcon(project)}
+        <ProjectInfo>
+          <ProjectTitle variant="body1">{project.name}</ProjectTitle>
+          <ProjectPath>{project.path || 'No path specified'}</ProjectPath>
+          <ProjectGitDetails projectPath={project.path} />
+          <ProjectDetailLine>{getProjectDatesLine(project)}</ProjectDetailLine>
+        </ProjectInfo>
+      </ProjectCardContent>
+      <ProjectActions>
+        {renderConnectionChip(project)}
+        {renderProjectOptionsButton(project)}
+      </ProjectActions>
+    </ProjectCard>
+  );
+
+  const renderProjectGridCard = (project: Project) => (
+    <ProjectGridCard
+      key={project.id}
+      data-testid={`project-card-${project.name}`}
+      data-project-name={project.name}
+      onClick={() => handleOpenProject(project)}
+    >
+      <ProjectGridCardHeader>
+        {renderProjectIcon(project)}
+        <ProjectTitle
+          variant="body1"
+          noWrap
+          title={project.name}
+          sx={{ flexGrow: 1, mb: 0 }}
+        >
+          {project.name}
+        </ProjectTitle>
+        {renderProjectOptionsButton(project)}
+      </ProjectGridCardHeader>
+      <ProjectPath title={project.path}>
+        {project.path || 'No path specified'}
+      </ProjectPath>
+      <ProjectGitDetails projectPath={project.path} />
+      <Box sx={{ mt: 'auto', pt: 1 }}>{renderConnectionChip(project)}</Box>
+      <ProjectDetailLine sx={{ mt: 1 }}>
+        {getProjectDatesLine(project)}
+      </ProjectDetailLine>
+    </ProjectGridCard>
+  );
+
   const renderConditionalContent = () => {
     if (projects.length === 0) {
       return (
@@ -417,89 +583,15 @@ const SelectProject: React.FC = () => {
         </EmptyStateContainer>
       );
     }
+    const ProjectsLayout =
+      projectsView === 'card' ? ProjectsCardGrid : ProjectsContainer;
     return (
-      <ProjectsContainer data-testid="project-list">
-        {filteredProjects.map((project) => (
-          <ProjectCard
-            key={project.id}
-            data-testid={`project-card-${project.name}`}
-            data-project-name={project.name}
-            onClick={async () => {
-              await selectProject({ projectId: project.id });
-              navigate('/app/dbt-project');
-            }}
-          >
-            <ProjectCardContent>
-              {renderProjectIcon(project)}
-              <ProjectInfo>
-                <ProjectTitle variant="body1">{project.name}</ProjectTitle>
-                <ProjectPath>{project.path || 'No path specified'}</ProjectPath>
-              </ProjectInfo>
-            </ProjectCardContent>
-            <ProjectActions>
-              {/* Only show badge if connection name exists */}
-              {project.connection?.name && (
-                <Chip
-                  label={
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <Cable sx={{ fontSize: 12, mr: 0.5 }} />
-                      {project.connection.name}
-                    </Box>
-                  }
-                  size="small"
-                  sx={{
-                    mr: 1,
-                    fontWeight: 500,
-                    fontSize: 12,
-                    textTransform: 'none',
-                    bgcolor: 'background.paper',
-                    color: 'primary.main',
-                    border: '1px solid',
-                    borderColor: 'divider',
-                  }}
-                  title="Connection Name"
-                />
-              )}
-              {!project.connection?.name && (
-                <Chip
-                  label={
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <DatabaseIcon sx={{ fontSize: 12, mr: 0.5 }} />
-                      No connection
-                    </Box>
-                  }
-                  size="small"
-                  sx={{
-                    mr: 1,
-                    fontWeight: 500,
-                    fontSize: 12,
-                    textTransform: 'none',
-                    bgcolor: 'background.paper',
-                    color: 'text.disabled',
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    cursor: 'pointer',
-                    '&:hover': {
-                      bgcolor: 'action.hover',
-                    },
-                  }}
-                  title="Click to add database connection"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleAddConnection(project);
-                  }}
-                />
-              )}
-              <IconButton
-                size="small"
-                onClick={(e) => handleOpenMenu(e, project.id)}
-                data-testid={`project-options-${project.name}`}
-              >
-                <MoreVertIcon />
-              </IconButton>
-            </ProjectActions>
-          </ProjectCard>
-        ))}
+      <ProjectsLayout data-testid="project-list">
+        {filteredProjects.map((project) =>
+          projectsView === 'card'
+            ? renderProjectGridCard(project)
+            : renderProjectListRow(project),
+        )}
 
         <Menu
           anchorEl={menuAnchorEl}
@@ -566,7 +658,7 @@ const SelectProject: React.FC = () => {
             <ListItemText>Delete</ListItemText>
           </MenuItem>
         </Menu>
-      </ProjectsContainer>
+      </ProjectsLayout>
     );
   };
 
@@ -601,156 +693,161 @@ const SelectProject: React.FC = () => {
           />
         ) : (
           <>
-            <TaglineContainer>
-              {/* <TaglineLogo src={logo} alt="RosettaDB Logo" /> */}
-              <TaglineText>Manage your projects</TaglineText>
-            </TaglineContainer>
+            <ProjectsStickyHeader>
+              <TaglineContainer>
+                {/* <TaglineLogo src={logo} alt="RosettaDB Logo" /> */}
+                <TaglineText>Manage your projects</TaglineText>
+              </TaglineContainer>
 
-            <HeaderContainer>
-              <SearchContainer>
-                <TextField
-                  fullWidth
-                  placeholder="Search Projects"
-                  variant="outlined"
-                  size="small"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  inputProps={{ 'data-testid': 'project-search-input' }}
-                  slotProps={{
-                    input: {
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <SearchIcon color="action" />
-                        </InputAdornment>
-                      ),
-                    },
-                  }}
-                />
-              </SearchContainer>
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                {!projects.some(
-                  (p) => p.name === 'dbtstudio_getting_started',
-                ) && (
-                  <Tooltip title="Import getting started example project">
+              <HeaderContainer>
+                <SearchContainer>
+                  <TextField
+                    fullWidth
+                    placeholder="Search Projects"
+                    variant="outlined"
+                    size="small"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    inputProps={{ 'data-testid': 'project-search-input' }}
+                    slotProps={{
+                      input: {
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <SearchIcon color="action" />
+                          </InputAdornment>
+                        ),
+                      },
+                    }}
+                  />
+                </SearchContainer>
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  {!projects.some(
+                    (p) => p.name === 'dbtstudio_getting_started',
+                  ) && (
+                    <Tooltip title="Import getting started example project">
+                      <Button
+                        variant="outlined"
+                        color="primary"
+                        onClick={handleGetStarted}
+                        sx={{ height: 40 }}
+                      >
+                        <RocketLaunchIcon
+                          sx={{ marginRight: 1 }}
+                          fontSize="small"
+                        />
+                        Get Started
+                      </Button>
+                    </Tooltip>
+                  )}
+                  <Tooltip title="Clone from git repository...">
                     <Button
-                      variant="outlined"
+                      variant="contained"
                       color="primary"
-                      onClick={handleGetStarted}
-                      sx={{ height: 40 }}
+                      onClick={() => setIsCloneModalOpen(true)}
                     >
-                      <RocketLaunchIcon
+                      <Icon
+                        src={icons.git}
+                        width={20}
+                        height={20}
+                        style={{ marginRight: 4 }}
+                      />
+                      Clone
+                    </Button>
+                  </Tooltip>
+                  <Tooltip title="Import project from folder or compressed file...">
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      data-testid="import-project-btn"
+                      onClick={async () => {
+                        try {
+                          const project =
+                            await projectsServices.addProjectFromFolder();
+                          if (project && project.id) {
+                            await selectProject({
+                              projectId: project.id,
+                            });
+                            setIsAddingProject(false);
+                            setNewProject({
+                              name: '',
+                              createTemplateFolders: true,
+                            });
+
+                            // Show different success messages based on whether it was extracted
+                            if (project.isExtracted) {
+                              toast.success(
+                                `Project ${project.name} imported from compressed file successfully!`,
+                              );
+                            } else {
+                              toast.success(
+                                `Project ${project.name} loaded successfully!`,
+                              );
+                            }
+
+                            navigate('/app/dbt-project');
+                          } else {
+                            toast.error('Failed to import project.');
+                          }
+                        } catch (error: any) {
+                          if (
+                            error instanceof Error &&
+                            error.message === 'No file or folder selected'
+                          ) {
+                            return;
+                          }
+
+                          // Show more specific error messages
+                          if (error.message.includes('compressed')) {
+                            toast.error(
+                              'Failed to extract compressed file. Please ensure it contains a valid dbt project.',
+                            );
+                          } else if (error.message.includes('validation')) {
+                            toast.error(
+                              'Invalid dbt project structure. Please ensure the folder contains a valid dbt_project.yml file.',
+                            );
+                          } else if (
+                            error.message.includes('already exists') ||
+                            error.message.includes('already imported')
+                          ) {
+                            toast.error(error.message);
+                          } else {
+                            toast.error(
+                              'Failed to import project. Please try again.',
+                            );
+                          }
+                        }
+                      }}
+                    >
+                      <DriveFolderUploadIcon
                         sx={{ marginRight: 1 }}
                         fontSize="small"
                       />
-                      Get Started
+                      Import
                     </Button>
                   </Tooltip>
-                )}
-                <Tooltip title="Clone from git repository...">
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    onClick={() => setIsCloneModalOpen(true)}
-                  >
-                    <Icon
-                      src={icons.git}
-                      width={20}
-                      height={20}
-                      style={{ marginRight: 4 }}
-                    />
-                    Clone
-                  </Button>
-                </Tooltip>
-                <Tooltip title="Import project from folder or compressed file...">
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    data-testid="import-project-btn"
-                    onClick={async () => {
-                      try {
-                        const project =
-                          await projectsServices.addProjectFromFolder();
-                        if (project && project.id) {
-                          await selectProject({
-                            projectId: project.id,
-                          });
-                          setIsAddingProject(false);
-                          setNewProject({
-                            name: '',
-                            createTemplateFolders: true,
-                          });
-
-                          // Show different success messages based on whether it was extracted
-                          if (project.isExtracted) {
-                            toast.success(
-                              `Project ${project.name} imported from compressed file successfully!`,
-                            );
-                          } else {
-                            toast.success(
-                              `Project ${project.name} loaded successfully!`,
-                            );
-                          }
-
-                          navigate('/app/dbt-project');
-                        } else {
-                          toast.error('Failed to import project.');
-                        }
-                      } catch (error: any) {
-                        if (
-                          error instanceof Error &&
-                          error.message === 'No file or folder selected'
-                        ) {
-                          return;
-                        }
-
-                        // Show more specific error messages
-                        if (error.message.includes('compressed')) {
-                          toast.error(
-                            'Failed to extract compressed file. Please ensure it contains a valid dbt project.',
-                          );
-                        } else if (error.message.includes('validation')) {
-                          toast.error(
-                            'Invalid dbt project structure. Please ensure the folder contains a valid dbt_project.yml file.',
-                          );
-                        } else if (
-                          error.message.includes('already exists') ||
-                          error.message.includes('already imported')
-                        ) {
-                          toast.error(error.message);
-                        } else {
-                          toast.error(
-                            'Failed to import project. Please try again.',
-                          );
-                        }
-                      }
-                    }}
-                  >
-                    <DriveFolderUploadIcon
-                      sx={{ marginRight: 1 }}
-                      fontSize="small"
-                    />
-                    Import
-                  </Button>
-                </Tooltip>
-                <Tooltip title="Create a new project">
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    startIcon={<AddIcon />}
-                    onClick={() => setIsAddingProject(true)}
-                    sx={{ height: 40 }}
-                    data-testid="create-project-btn"
-                  >
-                    New
-                  </Button>
-                </Tooltip>
-              </Box>
-            </HeaderContainer>
+                  <Tooltip title="Create a new project">
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      startIcon={<AddIcon />}
+                      onClick={() => setIsAddingProject(true)}
+                      sx={{ height: 40 }}
+                      data-testid="create-project-btn"
+                    >
+                      New
+                    </Button>
+                  </Tooltip>
+                  <ViewToggle
+                    view={projectsView}
+                    onViewChange={handleProjectsViewChange}
+                  />
+                </Box>
+              </HeaderContainer>
+            </ProjectsStickyHeader>
 
             <Box
               sx={{
-                flex: 1,
-                minHeight: 0,
+                flex: '1 0 auto',
                 display: 'flex',
                 flexDirection: 'column',
               }}
