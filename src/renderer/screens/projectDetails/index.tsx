@@ -2,17 +2,7 @@ import React from 'react';
 import SplitPane, { Pane } from 'split-pane-react';
 import 'split-pane-react/esm/themes/default.css';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
-import {
-  Badge,
-  Box,
-  CircularProgress,
-  IconButton,
-  Tab,
-  TabProps,
-  Tabs,
-  Tooltip,
-} from '@mui/material';
-import { Cached } from '@mui/icons-material';
+import { Badge, Box, Tab, TabProps, Tabs, Tooltip } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import {
   Loader,
@@ -29,15 +19,12 @@ import { TabManager } from '../../components/editor/tabManager';
 import { ActiveFileView } from '../../components/fileViews';
 import {
   useGetFileStatuses,
-  useGetProjectFiles,
   useGetSelectedProject,
   useGitIsInitialized,
 } from '../../controllers';
 import { useTabs } from '../../context/TabsProvider';
 import { Content, EditorContainer, Header, NoFileSelected } from './styles';
 import { useAppContext } from '../../hooks';
-import { useRefreshProjectFiles } from '../../hooks/useRefreshProjectFiles';
-import { Project } from '../../../types/backend';
 import { AppLayout } from '../../layouts';
 import ChatScreen from '../chat';
 
@@ -118,10 +105,6 @@ const ProjectDetails: React.FC = () => {
   const { data: statuses = [] } = useGetFileStatuses(project?.path, {
     enabled: !!project?.path && !!isInitialized,
   });
-  const refreshProjectFiles = useRefreshProjectFiles();
-  const { isLoading: isLoadingFiles } = useGetProjectFiles(project as Project, {
-    enabled: !!project?.id,
-  });
   const {
     tabs,
     activeTab,
@@ -173,25 +156,18 @@ const ProjectDetails: React.FC = () => {
             bgcolor: 'background.paper',
           }}
         >
-          <Box
-            sx={{
-              borderBottom: `1px solid ${theme.palette.divider}`,
-              display: 'flex',
-              alignItems: 'center',
-            }}
-          >
+          <Box sx={{ borderBottom: `1px solid ${theme.palette.divider}` }}>
             <Tabs
               value={sidebarTab}
               onChange={(_e, newValue) => setSidebarTab(newValue)}
-              variant="fullWidth"
+              centered
               sx={{
-                flex: 1,
                 minHeight: 34,
                 '& .MuiTab-root': {
                   minHeight: 34,
                   py: 0,
-                  minWidth: 0,
-                  px: 0.5,
+                  minWidth: 40,
+                  px: 1,
                 },
               }}
             >
@@ -201,8 +177,8 @@ const ProjectDetails: React.FC = () => {
                 icon={
                   <Icon
                     src={icons.folder}
-                    width={15}
-                    height={15}
+                    width={18}
+                    height={18}
                     color={sidebarIconColor('explorer')}
                   />
                 }
@@ -221,15 +197,15 @@ const ProjectDetails: React.FC = () => {
                         height: 14,
                         minWidth: 14,
                         padding: '0 2px',
-                        top: -2,
-                        right: -6,
+                        top: 3,
+                        right: -2,
                       },
                     }}
                   >
                     <Icon
                       src={icons.gitBranch}
-                      width={15}
-                      height={15}
+                      width={18}
+                      height={18}
                       color={sidebarIconColor('scm')}
                     />
                   </Badge>
@@ -245,8 +221,8 @@ const ProjectDetails: React.FC = () => {
                     viewBox="0 0 24 24"
                     strokeWidth={1.5}
                     stroke={sidebarIconColor('connections')}
-                    width={15}
-                    height={15}
+                    width={18}
+                    height={18}
                   >
                     <path
                       strokeLinecap="round"
@@ -257,24 +233,14 @@ const ProjectDetails: React.FC = () => {
                 }
               />
             </Tabs>
-            {sidebarTab === 'explorer' && (
-              <Box sx={{ px: 0.5, display: 'flex' }}>
-                <Tooltip title="Refresh directories">
-                  {isLoadingFiles ? (
-                    <CircularProgress size={20} />
-                  ) : (
-                    <IconButton
-                      size="small"
-                      onClick={() => refreshProjectFiles()}
-                    >
-                      <Cached sx={{ color: 'primary.main' }} />
-                    </IconButton>
-                  )}
-                </Tooltip>
-              </Box>
-            )}
           </Box>
-          <Box sx={{ flex: 1, overflow: 'hidden' }}>
+          <Box
+            sx={{
+              flex: 1,
+              overflow: 'hidden',
+              pt: sidebarTab === 'explorer' ? 1 : 0,
+            }}
+          >
             <ProjectSidebar
               activeTab={sidebarTab}
               project={project}

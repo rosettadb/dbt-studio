@@ -21,6 +21,7 @@ const TreeContainer = styled('div')({
   width: '100%',
   height: 'calc(100% - 60px)',
   overflow: 'hidden',
+  paddingLeft: 4,
 });
 
 interface ArboristTreeProps {
@@ -518,6 +519,7 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
                 onCreateFile={onCreateFile}
                 onCreateFolder={onCreateFolder}
                 onDelete={handleDelete}
+                onRefresh={onRefresh}
                 onRunPipeline={onRunPipeline}
                 onRunPipelineLocal={onRunPipelineLocal}
                 dragOverFolder={dragOverFolder}
