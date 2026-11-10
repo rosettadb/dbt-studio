@@ -102,10 +102,22 @@ const registerRunnerHandlers = (mainWindow: BrowserWindow) => {
 
       const toolEnv = await getRunnerToolEnvironment(settings);
       try {
-        const content = await fs.readFile(
-          path.resolve(workspaceDir, pipelineFile),
-          'utf8',
+        // pipelineFile is relative to rosetta/pipelines/ (or the legacy
+        // .rosetta/ folder), the same places ProjectsService.listPipelines
+        // looks, in the same order.
+        const pipelinePaths = [
+          path.resolve(workspaceDir, 'rosetta', 'pipelines', pipelineFile),
+          path.resolve(workspaceDir, '.rosetta', pipelineFile),
+        ];
+        const pipelinePathExists = await Promise.all(
+          pipelinePaths.map((pipelinePath) => fs.pathExists(pipelinePath)),
         );
+        const pipelinePath = pipelinePaths.find(
+          (_, index) => pipelinePathExists[index],
+        );
+        const content = pipelinePath
+          ? await fs.readFile(pipelinePath, 'utf8')
+          : '';
         if (/\bplugin:\s*["']?pyspark@v1\b/.test(content)) {
           const java = await RunnerService.checkJavaRuntime(toolEnv);
           if (!java.available) {
