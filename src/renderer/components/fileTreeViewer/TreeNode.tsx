@@ -10,6 +10,7 @@ import {
   NoteAdd as CreateFileIcon,
   Delete as DeleteIcon,
   PlayArrow as PlayIcon,
+  Cached as RefreshIcon,
 } from '@mui/icons-material';
 import { getClassWithColor } from 'file-icons-js';
 import { toast } from 'react-toastify';
@@ -125,6 +126,7 @@ interface TreeNodeProps extends NodeRendererProps<FileNode> {
   onCreateFile: (parentPath: string) => void;
   onCreateFolder: (parentPath: string) => void;
   onDelete: (path: string) => void;
+  onRefresh: () => void;
   onRunPipeline?: (filePath: string) => void;
   onRunPipelineLocal?: (filePath: string) => void;
   dragOverFolder?: string | null;
@@ -158,6 +160,7 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
   onCreateFile,
   onCreateFolder,
   onDelete,
+  onRefresh,
   onRunPipeline,
   onRunPipelineLocal,
   dragOverFolder,
@@ -341,6 +344,17 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
             </IconButton>
           )}
         </NodeActions>
+      )}
+      {/* Outside the hover-only group, so it always shows */}
+      {!node.isEditing && isRootFolder && (
+        <IconButton
+          size="small"
+          onClick={(e) => handleActionClick(e, onRefresh)}
+          title="Refresh directories"
+          sx={{ padding: '4px', ml: '4px', flexShrink: 0 }}
+        >
+          <RefreshIcon sx={{ fontSize: 16 }} />
+        </IconButton>
       )}
       {!node.isEditing && isPipeline && onRunPipeline && (
         <IconButton
