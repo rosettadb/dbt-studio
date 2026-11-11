@@ -1,6 +1,9 @@
 import fs from 'fs-extra';
 import path from 'path';
 import { execFile } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 
 interface RunnerToolPaths {
   pythonPath?: string;
@@ -11,23 +14,53 @@ interface RunnerToolPaths {
 
 // Asks the system's own `java` (found on Studio's PATH, before the tool
 // folders are added) for its home folder. Resolves undefined without Java.
-function findSystemJavaHome(): Promise<string | undefined> {
-  return new Promise((resolve) => {
-    execFile(
-      'java',
+async function findSystemJavaHome(
+  command = 'java',
+  minimumVersion = 0,
+): Promise<string | undefined> {
+  try {
+    const { stdout, stderr } = await execFileAsync(
+      command,
       ['-XshowSettings:properties', '-version'],
       { timeout: 5000 },
-      (error, stdout, stderr) => {
-        resolve(
-          error
-            ? undefined
-            : `${stdout}${stderr}`
-                .match(/^\s*java\.home = (.+)$/m)?.[1]
-                ?.trim(),
-        );
-      },
     );
-  });
+    const output = `${stdout}${stderr}`;
+    const version = output.match(/version "(?:1\.)?(\d+)/)?.[1];
+    if (!version || Number(version) < minimumVersion) return undefined;
+    return output.match(/^\s*java\.home = (.+)$/m)?.[1]?.trim();
+  } catch {
+    return undefined;
+  }
+}
+
+async function findMacJavaHome(): Promise<string | undefined> {
+  // java_home avoids the install prompt from macOS's /usr/bin/java stub.
+  try {
+    const { stdout } = await execFileAsync(
+      '/usr/libexec/java_home',
+      ['-v', '17'],
+      { timeout: 5000 },
+    );
+    if (stdout.trim()) return stdout.trim();
+  } catch {
+    // A JDK on PATH may not be registered with java_home.
+  }
+
+  const pathKey =
+    Object.keys(process.env).find((key) => key.toLowerCase() === 'path') ||
+    'PATH';
+  const candidates = (process.env[pathKey] || '')
+    .split(path.delimiter)
+    .filter((dir) => dir && dir !== '/usr/bin')
+    .map((dir) => path.join(dir, 'java'));
+  const homes = await Promise.all(
+    candidates.map(async (candidate) =>
+      (await fs.pathExists(candidate))
+        ? findSystemJavaHome(candidate, 17)
+        : undefined,
+    ),
+  );
+  return homes.find(Boolean);
 }
 
 // Keep Java selection and PATH construction in one place for the preflight
@@ -66,13 +99,17 @@ export async function getRunnerToolEnvironment(
     );
     const preferredHome = javaHomes.find((_, index) => installed[index]);
     if (preferredHome) env.JAVA_HOME = preferredHome;
+    else if (!env.JAVA_HOME) {
+      const systemHome = await findMacJavaHome();
+      if (systemHome) env.JAVA_HOME = systemHome;
+    }
     toolDirs.push('/opt/homebrew/bin', '/usr/local/bin');
   }
 
   // Studio's Rosetta folder (in toolDirs) ships its own Java 11, which would
   // otherwise come first on PATH. Point JAVA_HOME at the system's Java so the
-  // PySpark check and spark-submit use it. Skipped on macOS, where running
-  // `java` without a JDK installed opens an install prompt.
+  // PySpark check and spark-submit use it. On macOS the discovery above
+  // avoids invoking the system Java install prompt.
   if (!env.JAVA_HOME && process.platform !== 'darwin') {
     const systemJavaHome = await findSystemJavaHome();
     if (systemJavaHome) env.JAVA_HOME = systemJavaHome;

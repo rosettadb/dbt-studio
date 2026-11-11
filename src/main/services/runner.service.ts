@@ -157,6 +157,10 @@ const PLUGIN_DEFINITIONS: {
 ];
 
 export default class RunnerService {
+  static supportsPySpark(version?: string | null): boolean {
+    return Boolean(version && this.compareVersions(version, '1.7.6') >= 0);
+  }
+
   static async checkJavaRuntime(
     runnerEnv?: Record<string, string | undefined>,
   ): Promise<{
@@ -449,7 +453,13 @@ export default class RunnerService {
             available: true,
           };
         }
-        const detected = await this.detectBinary(def.command, def.versionArgs);
+        const detected = await this.detectBinary(
+          def.command,
+          def.versionArgs || ['--version'],
+          def.id === 'pyspark'
+            ? await getRunnerToolEnvironment(settings)
+            : undefined,
+        );
         return {
           id: def.id,
           label: def.label,
@@ -459,7 +469,11 @@ export default class RunnerService {
           path: detected.path,
           downloadUrl: def.downloadUrl,
           ...(def.id === 'pyspark'
-            ? { java: await this.checkJavaRuntime() }
+            ? {
+                java: await this.checkJavaRuntime(
+                  await getRunnerToolEnvironment(settings),
+                ),
+              }
             : {}),
         };
       }),
@@ -468,7 +482,8 @@ export default class RunnerService {
 
   private static detectBinary(
     command: string,
-    versionArgs: string[] = ['--version'],
+    versionArgs: string[],
+    runnerEnv?: Record<string, string>,
   ): Promise<{ available: boolean; version?: string; path?: string }> {
     // On macOS, Electron's PATH often omits Homebrew directories because
     // the app is launched via launchd rather than a login shell.  Ensure
@@ -487,7 +502,7 @@ export default class RunnerService {
         versionArgs,
         {
           timeout: 5000,
-          env: {
+          env: runnerEnv || {
             ...process.env,
             ...(extraPath
               ? { PATH: `${extraPath}:${process.env.PATH ?? ''}` }

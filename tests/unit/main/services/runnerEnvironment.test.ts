@@ -52,12 +52,20 @@ describe('runner Java environment', () => {
     jest
       .spyOn(fs, 'pathExists')
       .mockImplementation(async (file) =>
-        String(file).startsWith('/opt/homebrew/'),
+        String(file).startsWith(path.join('/opt/homebrew', 'opt')),
       );
 
     const env = await getRunnerToolEnvironment({});
     expect(env.JAVA_HOME).toBe(
-      '/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home',
+      path.join(
+        '/opt/homebrew',
+        'opt',
+        'openjdk@17',
+        'libexec',
+        'openjdk.jdk',
+        'Contents',
+        'Home',
+      ),
     );
     expect(getRunnerJavaCommand(env)).toBe(
       path.join(env.JAVA_HOME, 'bin', 'java'),

@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs-extra';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import yaml from 'js-yaml';
 import { ProcessAdapter } from '../adapters';
 import {
   TaskManagerService,
@@ -15,6 +16,52 @@ import { getRunnerToolEnvironment } from '../services/runnerEnvironment';
 // run never collides with the shared 'process:*' slot used by "Serve Docs".
 const runnerProcessAdapter = new ProcessAdapter('runner');
 const execFileAsync = promisify(execFile);
+const sparkHomeCache = new Map<string, Promise<string | undefined>>();
+
+async function discoverSparkHome(
+  pythonPath: string,
+): Promise<string | undefined> {
+  if (!sparkHomeCache.has(pythonPath)) {
+    sparkHomeCache.set(
+      pythonPath,
+      (async () => {
+        try {
+          const { stdout } = await execFileAsync(
+            pythonPath,
+            [
+              '-c',
+              'import os, pyspark; print(os.path.dirname(pyspark.__file__))',
+            ],
+            { timeout: 5000 },
+          );
+          const home = stdout.trim();
+          return (await fs.pathExists(path.join(home, 'bin', 'spark-class')))
+            ? home
+            : undefined;
+        } catch {
+          return undefined;
+        }
+      })(),
+    );
+  }
+  const home = await sparkHomeCache.get(pythonPath)!;
+  if (!home) sparkHomeCache.delete(pythonPath);
+  return home;
+}
+
+function usesPySpark(content: string): boolean {
+  const pipeline = yaml.load(content) as {
+    jobs?: { steps?: { plugin?: string }[] }[];
+  } | null;
+  return (
+    Array.isArray(pipeline?.jobs) &&
+    pipeline.jobs.some(
+      (job) =>
+        Array.isArray(job?.steps) &&
+        job.steps.some((step) => step?.plugin === 'pyspark@v1'),
+    )
+  );
+}
 
 const handlerChannels = ['runner:run', 'runner:stop', 'runner:status'];
 
@@ -118,7 +165,14 @@ const registerRunnerHandlers = (mainWindow: BrowserWindow) => {
         const content = pipelinePath
           ? await fs.readFile(pipelinePath, 'utf8')
           : '';
-        if (/\bplugin:\s*["']?pyspark@v1\b/.test(content)) {
+        if (usesPySpark(content)) {
+          if (!RunnerService.supportsPySpark(settings.runnerVersion)) {
+            return {
+              success: false,
+              error:
+                'PySpark requires runner 1.7.6 or newer. Upgrade the local runner in Settings.',
+            };
+          }
           const java = await RunnerService.checkJavaRuntime(toolEnv);
           if (!java.available) {
             return {
@@ -157,23 +211,11 @@ const registerRunnerHandlers = (mainWindow: BrowserWindow) => {
       // splits Studio's "Application Support" path when resolving SPARK_HOME.
       // Resolve it with the managed interpreter and pass it to Spark directly.
       if (settings.pythonPath && (await fs.pathExists(settings.pythonPath))) {
-        try {
-          const { stdout } = await execFileAsync(
-            settings.pythonPath,
-            [
-              '-c',
-              'import os, pyspark; print(os.path.dirname(pyspark.__file__))',
-            ],
-            { timeout: 5000 },
-          );
-          const sparkHome = stdout.trim();
-          if (await fs.pathExists(path.join(sparkHome, 'bin', 'spark-class'))) {
-            env.SPARK_HOME = sparkHome;
-            env.PYSPARK_PYTHON = settings.pythonPath;
-            env.PYSPARK_DRIVER_PYTHON = settings.pythonPath;
-          }
-        } catch {
-          // PySpark is optional; other pipeline plugins still run normally.
+        const sparkHome = await discoverSparkHome(settings.pythonPath);
+        if (sparkHome) {
+          env.SPARK_HOME = sparkHome;
+          env.PYSPARK_PYTHON = settings.pythonPath;
+          env.PYSPARK_DRIVER_PYTHON = settings.pythonPath;
         }
       }
 

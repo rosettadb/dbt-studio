@@ -1178,9 +1178,13 @@ export default class SettingsService {
       throw new Error('Studio Python is not installed.');
     }
     const cliAdapter = new CliAdapter();
-    await cliAdapter.runCommandWithoutStreaming(
-      `"${settings.pythonPath}" -m pip uninstall -y pyspark`,
-    );
+    await cliAdapter.runCommandWithoutStreaming(settings.pythonPath, [
+      '-m',
+      'pip',
+      'uninstall',
+      '-y',
+      'pyspark',
+    ]);
   }
 
   private static compareVersions(version1: string, version2: string): number {
