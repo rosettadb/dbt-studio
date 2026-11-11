@@ -44,6 +44,23 @@ export const pythonNotebooksService = {
   list: (connectionId: string): Promise<PythonNotebook[]> =>
     ipcRenderer.invoke('pythonNotebooks:list', connectionId),
 
+  /** Notebooks saved in `<project>/notebooks/`. */
+  listForProject: (projectId: string): Promise<PythonNotebook[]> =>
+    ipcRenderer.invoke('pythonNotebooks:listForProject', projectId),
+
+  /** Create a notebook file in `<project>/notebooks/`; SQL runs on connectionId. */
+  createInProject: (
+    projectId: string,
+    connectionId: string | undefined,
+    input: CreatePythonNotebookInput,
+  ): Promise<PythonNotebook> =>
+    ipcRenderer.invoke(
+      'pythonNotebooks:createInProject',
+      projectId,
+      connectionId,
+      input,
+    ),
+
   get: (
     connectionId: string,
     notebookId: string,

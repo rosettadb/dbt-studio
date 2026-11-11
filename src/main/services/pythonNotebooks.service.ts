@@ -13,11 +13,24 @@
  * Follows BE-03 (one cohesive service).
  */
 
-import { dialog } from 'electron';
+import { dialog, shell } from 'electron';
 import fs from 'fs-extra';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import databaseStore from '../database';
 import { getConnectionDir, normalizeConnectionKey } from './notebooks.service';
+import {
+  forgetProjectNotebookPath,
+  freeNotebookPath,
+  newNotebookKey,
+  notebookFileStem,
+  parseProjectNotebookId,
+  projectNotebookId,
+  projectNotebooksRoot,
+  rememberProjectNotebookPath,
+  resolveProjectNotebookPath,
+  scanProjectNotebooks,
+} from '../utils/projectNotebookFiles';
 import { RECOMMENDED_PYTHON_VERSION } from './settings.service';
 import ConnectorsService from './connectors.service';
 import DuckLakeService from './duckLake.service';
@@ -667,6 +680,90 @@ function getNotebookPath(connectionId: string, notebookId: string): string {
   return path.join(dir, `${assertSafeId(notebookId)}.ipynb`);
 }
 
+/* Project notebooks (plan 95c): `<project>/notebooks/**.ipynb`, ids
+ * `pnb_<projectId>_<key>` (see utils/projectNotebookFiles.ts). The id names
+ * the project, so every (connectionId, notebookId) call works unchanged; the
+ * connection is only where SQL cells run. */
+
+async function projectPathById(projectId: string): Promise<string> {
+  const { projects } = await databaseStore.getSnapshot();
+  const project = projects.find((p) => p.id === projectId);
+  if (!project?.path) throw new Error('Project not found');
+  return project.path;
+}
+
+/** The notebook's file: app data for connection notebooks, else the project folder. */
+async function notebookPathFor(
+  connectionId: string,
+  notebookId: string,
+): Promise<string> {
+  const projectNotebook = parseProjectNotebookId(notebookId);
+  if (projectNotebook) {
+    return resolveProjectNotebookPath(
+      notebookId,
+      await projectPathById(projectNotebook.projectId),
+    );
+  }
+  return getNotebookPath(connectionId, notebookId);
+}
+
+/**
+ * Connection a project notebook last ran on, kept in the file. The id is local
+ * to this machine; name and type help find the connection after a clone.
+ */
+async function connectionMetaFor(
+  connectionId: string,
+  existing?: IpynbFile,
+): Promise<{ id: string; name?: string; type?: string } | undefined> {
+  const previous = existing?.metadata?.rosetta?.connection;
+  if (!connectionId) return previous;
+  if (previous?.id === connectionId) return previous;
+  if (connectionId.startsWith('ducklake-')) return { id: connectionId };
+  const connection = await ConnectorsService.getConnectionById(connectionId);
+  return connection
+    ? {
+        id: connectionId,
+        name: connection.connection.name,
+        type: connection.connection.type,
+      }
+    : { id: connectionId };
+}
+
+type StarterCell = { cell_type: PythonCellType; source: string };
+
+function newNotebook(
+  id: string,
+  input: CreatePythonNotebookInput,
+  cells?: StarterCell[],
+): PythonNotebook {
+  const now = new Date().toISOString();
+  const starter: StarterCell[] =
+    cells && cells.length > 0 ? cells : [{ cell_type: 'code', source: '' }];
+  const notebookCells: PythonNotebookCell[] = starter.map((cell) => ({
+    id: uuidv4(),
+    cell_type: cell.cell_type,
+    source: cell.source,
+    outputs: [],
+    execution_count: null,
+    metadata: {},
+  }));
+  return {
+    id,
+    kind: 'python',
+    name: input.name.trim(),
+    description: input.description?.trim() || undefined,
+    cells: notebookCells,
+    createdAt: now,
+    updatedAt: now,
+    cellCount: notebookCells.length,
+    runtime: {
+      pythonVersion: input.pythonVersion,
+      venvPath: NotebookEnvService.getVenvDir(id),
+      status: 'creating',
+    },
+  };
+}
+
 async function readIpynb(filePath: string): Promise<IpynbFile> {
   const raw = await fs.readFile(filePath, 'utf-8');
   const parsed = JSON.parse(raw);
@@ -687,7 +784,7 @@ export default class PythonNotebooksService {
     connectionId: string,
     notebookId: string,
   ): Promise<{ notebook: PythonNotebook; file: IpynbFile; filePath: string }> {
-    const filePath = getNotebookPath(connectionId, notebookId);
+    const filePath = await notebookPathFor(connectionId, notebookId);
     const file = await readIpynb(filePath);
     const declaredVersion =
       file.metadata?.rosetta?.runtime?.pythonVersion ?? '';
@@ -695,17 +792,124 @@ export default class PythonNotebooksService {
       notebookId,
       declaredVersion,
     );
-    return { notebook: fromIpynb(file, notebookId, runtime), file, filePath };
+    const projectNotebook = parseProjectNotebookId(notebookId);
+    if (!projectNotebook) {
+      return { notebook: fromIpynb(file, notebookId, runtime), file, filePath };
+    }
+
+    // The file name is the fallback name; the id always comes from the path
+    // scan (a copied file may carry another notebook's metadata).
+    const parsed = fromIpynb(file, path.basename(filePath, '.ipynb'), runtime);
+    const projectPath = await projectPathById(projectNotebook.projectId);
+    const connection = file.metadata?.rosetta?.connection;
+    NotebookEnvService.setWorkDir(notebookId, path.dirname(filePath));
+    return {
+      notebook: {
+        ...parsed,
+        id: notebookId,
+        project: {
+          projectId: projectNotebook.projectId,
+          relativePath: path
+            .relative(projectPath, filePath)
+            .split(path.sep)
+            .join('/'),
+          connectionId:
+            typeof connection?.id === 'string' ? connection.id : undefined,
+          connectionName:
+            typeof connection?.name === 'string' ? connection.name : undefined,
+        },
+      },
+      file,
+      filePath,
+    };
   }
 
   private static async save(
     connectionId: string,
     notebook: PythonNotebook,
     existing?: IpynbFile,
+    /** Where to write a project notebook that has no file yet. */
+    targetPath?: string,
   ): Promise<void> {
-    const filePath = getNotebookPath(connectionId, notebook.id);
+    const filePath =
+      targetPath ?? (await notebookPathFor(connectionId, notebook.id));
     await fs.mkdirp(path.dirname(filePath));
-    await writeIpynb(filePath, toIpynb(notebook, existing));
+    const ipynb = toIpynb(notebook, existing);
+    const projectNotebook = parseProjectNotebookId(notebook.id);
+    if (projectNotebook) {
+      // The id holds this machine's project id, so the file keeps only the
+      // key (stable across renames) and the connection it runs on.
+      const rosetta = { ...(ipynb.metadata.rosetta ?? {}) };
+      delete rosetta.id;
+      ipynb.metadata.rosetta = {
+        ...rosetta,
+        key: projectNotebook.key,
+        connection: await connectionMetaFor(connectionId, existing),
+      };
+    }
+    await writeIpynb(filePath, ipynb);
+  }
+
+  /** Notebooks in `<project>/notebooks/`, newest first. */
+  static async listProjectNotebooks(
+    projectId: string,
+  ): Promise<PythonNotebook[]> {
+    const projectPath = await projectPathById(projectId);
+    const files = await scanProjectNotebooks(projectId, projectPath);
+    const notebooks = await Promise.all(
+      files.map(async (entry) => {
+        try {
+          const { notebook } = await this.load('', entry.id);
+          return notebook;
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.error(
+            `Failed to read project notebook ${entry.relativePath}:`,
+            error,
+          );
+          return null;
+        }
+      }),
+    );
+    return notebooks
+      .filter((n): n is PythonNotebook => n !== null)
+      .sort(
+        (a, b) =>
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+      );
+  }
+
+  /**
+   * Create a notebook file in `<project>/notebooks/`, named after the
+   * notebook (`Sales review` → `sales_review.ipynb`). `connectionId` is the
+   * connection its SQL cells run on and may be empty.
+   */
+  static async createNotebookInProject(
+    projectId: string,
+    connectionId: string | undefined,
+    input: CreatePythonNotebookInput,
+    cells?: StarterCell[],
+  ): Promise<PythonNotebook> {
+    if (!input.name.trim()) throw new Error('Notebook name is required');
+    const folder = projectNotebooksRoot(await projectPathById(projectId));
+    await fs.mkdirp(folder);
+    const filePath = await freeNotebookPath(
+      folder,
+      notebookFileStem(input.name),
+    );
+    const id = projectNotebookId(projectId, newNotebookKey());
+    rememberProjectNotebookPath(id, filePath);
+    await this.save(
+      connectionId ?? '',
+      newNotebook(id, input, cells),
+      undefined,
+      filePath,
+    );
+    NotebookEnvService.createEnv(id, input.pythonVersion).catch(
+      () => undefined,
+    );
+    const { notebook } = await this.load(connectionId ?? '', id);
+    return notebook;
   }
 
   static async listNotebooks(connectionId: string): Promise<PythonNotebook[]> {
@@ -745,7 +949,9 @@ export default class PythonNotebooksService {
     notebookId: string,
   ): Promise<boolean> {
     try {
-      return await fs.pathExists(getNotebookPath(connectionId, notebookId));
+      return await fs.pathExists(
+        await notebookPathFor(connectionId, notebookId),
+      );
     } catch {
       return false;
     }
@@ -767,35 +973,10 @@ export default class PythonNotebooksService {
     connectionId: string,
     input: CreatePythonNotebookInput,
   ): Promise<PythonNotebook> {
-    const name = input.name.trim();
-    if (!name) throw new Error('Notebook name is required');
+    if (!input.name.trim()) throw new Error('Notebook name is required');
 
-    const now = new Date().toISOString();
     const id = uuidv4();
-    const notebook: PythonNotebook = {
-      id,
-      kind: 'python',
-      name,
-      description: input.description?.trim() || undefined,
-      cells: [
-        {
-          id: uuidv4(),
-          cell_type: 'code',
-          source: '',
-          outputs: [],
-          execution_count: null,
-          metadata: {},
-        },
-      ],
-      createdAt: now,
-      updatedAt: now,
-      cellCount: 1,
-      runtime: {
-        pythonVersion: input.pythonVersion,
-        venvPath: NotebookEnvService.getVenvDir(id),
-        status: 'creating',
-      },
-    };
+    const notebook = newNotebook(id, input);
 
     await this.save(connectionId, notebook);
     // Environment creation runs in the background; progress is broadcast via
@@ -850,7 +1031,7 @@ export default class PythonNotebooksService {
     notebookId: string,
     updates: UpdatePythonNotebookInput,
   ): Promise<PythonNotebook> {
-    const filePath = getNotebookPath(connectionId, notebookId);
+    const filePath = await notebookPathFor(connectionId, notebookId);
     return withWriteLock(filePath, async () => {
       const { notebook, file } = await this.load(connectionId, notebookId);
       const updated: PythonNotebook = {
@@ -879,7 +1060,24 @@ export default class PythonNotebooksService {
     newName: string,
   ): Promise<PythonNotebook> {
     if (!newName.trim()) throw new Error('Notebook name is required');
-    return this.updateNotebook(connectionId, notebookId, { name: newName });
+    const updated = await this.updateNotebook(connectionId, notebookId, {
+      name: newName,
+    });
+    if (!parseProjectNotebookId(notebookId)) return updated;
+
+    // A project notebook's file follows its name. The save above wrote the
+    // key into the file, so the id (and the venv and kernel) stay the same.
+    const oldPath = await notebookPathFor(connectionId, notebookId);
+    const stem = notebookFileStem(newName);
+    if (path.basename(oldPath, '.ipynb') !== stem) {
+      await withWriteLock(oldPath, async () => {
+        const newPath = await freeNotebookPath(path.dirname(oldPath), stem);
+        await fs.rename(oldPath, newPath);
+        rememberProjectNotebookPath(notebookId, newPath);
+      });
+    }
+    const { notebook } = await this.load(connectionId, notebookId);
+    return notebook;
   }
 
   static async duplicateNotebook(
@@ -887,13 +1085,28 @@ export default class PythonNotebooksService {
     notebookId: string,
     newName?: string,
   ): Promise<PythonNotebook> {
-    const { notebook: source } = await this.load(connectionId, notebookId);
+    const { notebook: source, filePath: sourcePath } = await this.load(
+      connectionId,
+      notebookId,
+    );
     const now = new Date().toISOString();
-    const id = uuidv4();
+    const name = newName?.trim() || `${source.name} (Copy)`;
+    // A project notebook's copy is a new file next to it in the project
+    const projectNotebook = parseProjectNotebookId(notebookId);
+    let id = uuidv4();
+    let targetPath: string | undefined;
+    if (projectNotebook) {
+      id = projectNotebookId(projectNotebook.projectId, newNotebookKey());
+      targetPath = await freeNotebookPath(
+        path.dirname(sourcePath),
+        notebookFileStem(name),
+      );
+      rememberProjectNotebookPath(id, targetPath);
+    }
     const duplicate: PythonNotebook = {
       ...source,
       id,
-      name: newName?.trim() || `${source.name} (Copy)`,
+      name,
       createdAt: now,
       updatedAt: now,
       lastExecutedAt: undefined,
@@ -909,7 +1122,7 @@ export default class PythonNotebooksService {
         status: 'creating',
       },
     };
-    await this.save(connectionId, duplicate);
+    await this.save(connectionId, duplicate, undefined, targetPath);
 
     // Recreate the environment with the same interpreter and, best effort,
     // the same installed packages.
@@ -936,6 +1149,11 @@ export default class PythonNotebooksService {
       }
     })().catch(() => undefined);
 
+    if (projectNotebook) {
+      // Re-read so the copy reports its own file path
+      const { notebook } = await this.load(connectionId, id);
+      return notebook;
+    }
     return duplicate;
   }
 
@@ -944,8 +1162,15 @@ export default class PythonNotebooksService {
     notebookId: string,
   ): Promise<void> {
     await NotebookKernelService.shutdown(notebookId).catch(() => undefined);
-    const filePath = getNotebookPath(connectionId, notebookId);
-    await fs.remove(filePath);
+    const filePath = await notebookPathFor(connectionId, notebookId);
+    if (parseProjectNotebookId(notebookId)) {
+      // A project notebook is the user's file (and maybe in Git): move it to
+      // the OS trash so it can be restored.
+      await shell.trashItem(filePath);
+      forgetProjectNotebookPath(notebookId);
+    } else {
+      await fs.remove(filePath);
+    }
     await NotebookEnvService.deleteEnv(notebookId);
   }
 
@@ -957,7 +1182,7 @@ export default class PythonNotebooksService {
     outputs: PythonCellOutput[],
     executionCount: number | null,
   ): Promise<void> {
-    const filePath = getNotebookPath(connectionId, notebookId);
+    const filePath = await notebookPathFor(connectionId, notebookId);
     await withWriteLock(filePath, async () => {
       const { notebook, file } = await this.load(connectionId, notebookId);
       const now = new Date().toISOString();
@@ -1134,7 +1359,7 @@ export default class PythonNotebooksService {
     const version = pythonVersion ?? notebook.runtime.pythonVersion;
     await NotebookKernelService.shutdown(notebookId).catch(() => undefined);
     if (version !== notebook.runtime.pythonVersion) {
-      const filePath = getNotebookPath(connectionId, notebookId);
+      const filePath = await notebookPathFor(connectionId, notebookId);
       await withWriteLock(filePath, () =>
         this.save(
           connectionId,

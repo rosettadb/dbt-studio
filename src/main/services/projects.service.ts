@@ -25,6 +25,15 @@ import {
   getConnector,
   sanitizeForStorage,
 } from '../../connections/registry.main';
+import {
+  defaultTemplateItems,
+  getProjectType,
+  type ProjectType,
+} from '../../projectTypes/registry.shared';
+import {
+  getProjectTypeMain,
+  projectTypeMainOf,
+} from '../../projectTypes/registry.main';
 import SettingsService from './settings.service';
 import ConnectorsService from './connectors.service';
 import MainDatabaseService from './mainDatabase.service';
@@ -65,16 +74,13 @@ export default class ProjectsService {
         ...project,
         lastOpenedAt: Date.now(),
       });
-      // Parse config files to populate rosettaConnection and dbtConnection
-      // without regenerating the files
+      // The project type reads its own config files (dbt: profiles.yml and
+      // main.conf for rosettaConnection / dbtConnection) without
+      // regenerating them
       try {
-        const parsedConfig =
-          await ConnectorsService.parseProjectConnectionFiles(project.path);
-        return {
-          ...project,
-          rosettaConnection: parsedConfig.rosettaConnection,
-          dbtConnection: parsedConfig.dbtConnection,
-        };
+        const fromFiles =
+          await projectTypeMainOf(project).readConnectionFiles(project);
+        return { ...project, ...fromFiles };
       } catch {
         // If parsing fails, return project without these properties
         return project;
@@ -108,33 +114,57 @@ export default class ProjectsService {
     projectPath: string,
     connectionId?: string,
     createTemplateFolders?: boolean,
+    type?: ProjectType,
+    include?: string[],
   ) {
     const projects = await this.loadProjects();
     const name = path.basename(projectPath);
+    const projectType = getProjectType({ type });
+    // Callers from before project types send only createTemplateFolders
+    const items =
+      include ??
+      (createTemplateFolders ? defaultTemplateItems(projectType) : []);
+    const typeMain = getProjectTypeMain(projectType);
 
     const project: Project = {
       id: Date.now().toString(),
       name,
       createdAt: new Date().toISOString(),
       path: projectPath,
+      type: projectType,
       isExtracted: false,
       connectionId,
       createTemplateFolders,
     };
 
     sanitizeForStorage(project);
-    await this.copyDbtTemplateFiles(project.path, project.name);
-    // Always copy main.conf template (rosetta requires it), but profiles.yml is excluded from template
-    await this.copyRosettaMainConf(project.path);
-    if (createTemplateFolders) {
-      await this.createDbtTemplateFolderStructure(project.path);
-    }
+    const connection = connectionId
+      ? (await ConnectorsService.getConnectionById(connectionId))?.connection
+      : undefined;
+    await typeMain.scaffold({
+      projectPath: project.path,
+      name: project.name,
+      include: items,
+      connection: connection && {
+        name: connection.name,
+        type: connection.type,
+      },
+    });
     projects.push(project);
     await this.saveProjects(projects);
 
-    // If connection is selected, generate config files
+    // If connection is selected, let the type write its config files
+    // (dbt: profiles.yml and rosetta/main.conf)
     if (connectionId) {
-      await ConnectorsService.loadConfigurations(project.id);
+      await typeMain.onConnectionChanged(project);
+    }
+    try {
+      // Extras such as an Analytics starter notebook: the project is already
+      // saved, so a failure here must not report the project as not created
+      await typeMain.afterCreate(project, items);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Project created, but its starter files failed:', error);
     }
 
     return (await this.getProject(project.id)) ?? project;
@@ -682,7 +712,9 @@ export default class ProjectsService {
     // Only regenerate config files if the connection changed
     // This is a full regeneration because it's switching to a different connection
     if (connectionChanged && project.connectionId) {
-      await ConnectorsService.loadConfigurations(project.id);
+      await projectTypeMainOf(updatedProject).onConnectionChanged(
+        updatedProject,
+      );
     }
 
     return projects;

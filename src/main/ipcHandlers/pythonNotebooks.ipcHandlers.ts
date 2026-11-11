@@ -30,6 +30,23 @@ export function registerPythonNotebooksHandlers() {
   ipcMain.handle('pythonNotebooks:list', (_e, connectionId: string) =>
     PythonNotebooksService.listNotebooks(connectionId),
   );
+  ipcMain.handle('pythonNotebooks:listForProject', (_e, projectId: string) =>
+    PythonNotebooksService.listProjectNotebooks(projectId),
+  );
+  ipcMain.handle(
+    'pythonNotebooks:createInProject',
+    (
+      _e,
+      projectId: string,
+      connectionId: string | undefined,
+      input: CreatePythonNotebookInput,
+    ) =>
+      PythonNotebooksService.createNotebookInProject(
+        projectId,
+        connectionId,
+        input,
+      ),
+  );
   ipcMain.handle(
     'pythonNotebooks:get',
     (_e, connectionId: string, notebookId: string) =>

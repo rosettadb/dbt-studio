@@ -155,6 +155,15 @@ export interface DataFrameTableInfo {
   totalColumns: number;
 }
 
+export interface ProjectNotebookInfo {
+  projectId: string;
+  /** Path from the project root, e.g. `notebooks/sales_review.ipynb`. */
+  relativePath: string;
+  /** Connection the notebook last ran on (an id on this machine). */
+  connectionId?: string;
+  connectionName?: string;
+}
+
 export interface PythonNotebook {
   id: string;
   kind: 'python';
@@ -166,6 +175,8 @@ export interface PythonNotebook {
   lastExecutedAt?: string;
   cellCount: number;
   runtime: NotebookRuntime;
+  /** Set for notebooks saved in a project folder (plan 95c). */
+  project?: ProjectNotebookInfo;
 }
 
 export interface CreatePythonNotebookInput {

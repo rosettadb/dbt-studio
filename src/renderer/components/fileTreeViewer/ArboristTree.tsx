@@ -16,6 +16,7 @@ import { MoveConfirmDialog } from './MoveConfirmDialog';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';
 import { projectsServices } from '../../services';
 import { path as nodePath } from '../../lib/path';
+import { useFitTreeHeight } from './useFitTreeHeight';
 
 const TreeContainer = styled('div')({
   width: '100%',
@@ -40,7 +41,14 @@ interface ArboristTreeProps {
   onRunPipelineLocal?: (filePath: string) => void;
   revealFolderPath?: string | null;
   onFolderRevealed?: () => void;
+  /**
+   * Grow to show every visible row instead of filling (and scrolling inside)
+   * the parent's height; the parent scrolls. Off by default.
+   */
+  fitContent?: boolean;
 }
+
+const ROW_HEIGHT = 22;
 
 const buildTreeStructure = (node: FileNode): FileNode => {
   // Sort children: folders first, then files, each sorted alphabetically by name
@@ -77,6 +85,7 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
   onRunPipelineLocal,
   revealFolderPath,
   onFolderRevealed,
+  fitContent = false,
 }) => {
   const treeRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -113,6 +122,7 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
   const treeData = useMemo(() => {
     return [buildTreeStructure(data)];
   }, [data]);
+  const fitHeight = useFitTreeHeight(treeRef, ROW_HEIGHT, treeData, fitContent);
 
   const handleSelect = useCallback(
     (nodes: NodeApi<FileNode>[]) => {
@@ -493,16 +503,20 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
         onFilesDropped={handleExternalFilesDropped}
         onDragOverFolder={handleDragOverFolderChange}
       >
-        <TreeContainer ref={containerRef}>
+        <TreeContainer
+          ref={containerRef}
+          style={fitContent ? { height: 'auto' } : undefined}
+        >
           <Tree
             ref={treeRef}
             data={treeData}
             openByDefault={false}
             width="100%"
-            height={containerHeight}
+            height={fitContent ? fitHeight.height : containerHeight}
             indent={TREE_INDENT}
-            rowHeight={22}
+            rowHeight={ROW_HEIGHT}
             overscanCount={10}
+            onToggle={fitContent ? fitHeight.onToggle : undefined}
             onSelect={handleSelect}
             onMove={handleMove}
             onRename={handleRename}

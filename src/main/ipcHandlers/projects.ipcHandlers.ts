@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import { ProjectsService } from '../services';
 import { AIProviderManager } from '../services/ai/providerManager.service';
 import { Project } from '../../types/backend';
+import type { ProjectType } from '../../projectTypes/registry.shared';
 import {
   CompletionResponse,
   JSONSchema,
@@ -24,12 +25,16 @@ const registerProjectHandlers = () => {
         name: string;
         connectionId?: string;
         createTemplateFolders?: boolean;
+        type?: ProjectType;
+        include?: string[];
       },
     ) => {
       return ProjectsService.addProject(
         body.name,
         body.connectionId,
         body.createTemplateFolders,
+        body.type,
+        body.include,
       );
     },
   );

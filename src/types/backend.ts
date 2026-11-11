@@ -6,6 +6,7 @@ import type {
 } from '../connections/registry.shared';
 import { CloudConnection, RecentItem } from './frontend';
 import type { IcebergInstanceConfig } from './iceberg';
+import type { ProjectType } from '../projectTypes/core/types.shared';
 
 export type {
   ConnectionInput,
@@ -66,6 +67,8 @@ export type Project = {
   name: string;
   path: string;
   createdAt: string;
+  /** Missing on projects saved before project types existed: those are dbt. */
+  type?: ProjectType;
   connectionId?: string;
   rosettaConnection?: RosettaConnection;
   dbtConnection?: DBTConnection;

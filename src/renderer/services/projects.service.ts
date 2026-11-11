@@ -9,6 +9,7 @@ import {
   EnhanceModelResponseType,
   CliProcessEnvironment,
 } from '../../types/backend';
+import type { ProjectType } from '../../projectTypes/registry.shared';
 
 export const getProjects = async (): Promise<Project[]> => {
   const { data } = await client.get<Project[]>('project:list');
@@ -25,15 +26,20 @@ export const getProjectById = async (body: {
   return data;
 };
 
-export const addProject = async (body: {
+type AddProjectBody = {
   name: string;
   connectionId?: string;
   createTemplateFolders?: boolean;
-}): Promise<Project> => {
-  const { data } = await client.post<
-    { name: string; connectionId?: string; createTemplateFolders?: boolean },
-    Project
-  >('project:add', body);
+  type?: ProjectType;
+  /** Ids of the project type's template items to create. */
+  include?: string[];
+};
+
+export const addProject = async (body: AddProjectBody): Promise<Project> => {
+  const { data } = await client.post<AddProjectBody, Project>(
+    'project:add',
+    body,
+  );
   return data;
 };
 

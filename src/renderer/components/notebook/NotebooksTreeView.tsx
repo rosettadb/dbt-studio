@@ -1,10 +1,9 @@
-import React, { useMemo, useState, useCallback } from 'react';
+/* eslint-disable react/jsx-props-no-spreading */
+import React, { useMemo, useState, useCallback, useRef } from 'react';
 import {
   Box,
   Typography,
   CircularProgress,
-  Checkbox,
-  FormControlLabel,
   Menu,
   MenuItem,
   ListItemIcon,
@@ -15,15 +14,14 @@ import {
   Description,
   Delete,
   Restore,
-  Archive,
   Edit,
   FileCopy,
-  LibraryBooks,
 } from '@mui/icons-material';
-import { SimpleTreeView } from '@mui/x-tree-view/SimpleTreeView';
-import { TreeItem } from '@mui/x-tree-view/TreeItem';
+import { NodeApi, NodeRendererProps, Tree, TreeApi } from 'react-arborist';
 import { Notebook } from '../../../types/notebooks';
-import { NotebookKindIcon } from './NotebookKindIcon';
+import { TREE_INDENT, TreeNode } from '../fileTreeViewer/TreeNode';
+import type { FileNode, FileStatuses } from '../fileTreeViewer/types';
+import { useFitTreeHeight } from '../fileTreeViewer/useFitTreeHeight';
 
 interface NotebooksTreeViewProps {
   notebooks: Notebook[];
@@ -41,8 +39,15 @@ interface NotebooksTreeViewProps {
     notebookId: string,
     notebookName: string,
   ) => void;
-  onToggleArchived: (show: boolean) => void;
   getConnectionName: (connectionKey: string) => string;
+  /** Label of the folder holding the notebooks (default "My Notebooks"). */
+  rootLabel?: string;
+  /** Text when there are no notebooks and no filter. */
+  emptyText?: string;
+  /** Id of the notebook in the active tab, highlighted in the tree. */
+  activeNotebookId?: string;
+  /** Opens the create dialog for a notebook saved in Studio. */
+  onCreateNotebook?: () => void;
 }
 
 type ContextMenuState = {
@@ -54,6 +59,29 @@ type ContextMenuState = {
   connectionKey?: string;
 } | null;
 
+// Node ids. Active notebooks use their own id; the rest are prefixed so they
+// can't collide with one.
+const ROOT_ID = 'studio-notebooks';
+const ARCHIVED_ID = 'studio-notebooks-archived';
+const ARCHIVED_GROUP_PREFIX = 'studio-notebooks-archived-group:';
+const ARCHIVED_ITEM_PREFIX = 'studio-notebooks-archived-item:';
+const ROW_HEIGHT = 22;
+const NO_GIT_STATUSES: FileStatuses = {};
+
+/** A tree row's notebook; `archivedIn` is the connection key of an archived one. */
+type NotebookEntry = { notebook: Notebook; archivedIn?: string };
+
+// The file name the row shows; its extension also picks the file icon, as
+// in the project file tree
+const notebookFileName = (notebook: Notebook) =>
+  `${notebook.name}${notebook.kind === 'python' ? '.ipynb' : '.sql'}`;
+
+/**
+ * Notebooks saved in Studio (app data, not a project folder), drawn with the
+ * project file tree's rows so both lists look the same. They aren't files, so
+ * the rows have no file actions: open, rename, duplicate and delete go
+ * through the right-click menu as before.
+ */
 export const NotebooksTreeView: React.FC<NotebooksTreeViewProps> = ({
   notebooks,
   isLoading,
@@ -66,10 +94,15 @@ export const NotebooksTreeView: React.FC<NotebooksTreeViewProps> = ({
   onDeleteNotebook,
   onRestoreNotebook,
   onDeleteArchivedNotebook,
-  onToggleArchived,
   getConnectionName,
+  rootLabel = 'My Notebooks',
+  emptyText = 'No notebooks yet. Click the + button to create one.',
+  activeNotebookId,
+  onCreateNotebook,
 }) => {
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
+
+  const treeRef = useRef<TreeApi<FileNode> | null>(null);
 
   // Filter notebooks
   const filteredNotebooks = useMemo(() => {
@@ -98,6 +131,58 @@ export const NotebooksTreeView: React.FC<NotebooksTreeViewProps> = ({
     return filtered;
   }, [archivedNotebooks, filter]);
 
+  const archivedGroups = useMemo(
+    () => (showArchived ? Object.entries(filteredArchivedNotebooks) : []),
+    [showArchived, filteredArchivedNotebooks],
+  );
+  const isEmpty = filteredNotebooks.length === 0 && archivedGroups.length === 0;
+
+  // The root folder with the notebooks, then an Archived folder with one
+  // subfolder per connection
+  const { treeData, entries } = useMemo(() => {
+    const byNodeId = new Map<string, NotebookEntry>();
+    const fileNode = (
+      id: string,
+      notebook: Notebook,
+      archivedIn?: string,
+    ): FileNode => {
+      byNodeId.set(id, { notebook, archivedIn });
+      return { id, name: notebookFileName(notebook), path: id, type: 'file' };
+    };
+
+    const data: FileNode[] = [
+      {
+        id: ROOT_ID,
+        name: rootLabel,
+        path: ROOT_ID,
+        type: 'folder',
+        children: filteredNotebooks.map((n) => fileNode(n.id, n)),
+      },
+    ];
+    if (archivedGroups.length > 0) {
+      data.push({
+        id: ARCHIVED_ID,
+        name: 'Archived',
+        path: ARCHIVED_ID,
+        type: 'folder',
+        children: archivedGroups.map(([connectionKey, list]) => ({
+          id: `${ARCHIVED_GROUP_PREFIX}${connectionKey}`,
+          name: `${getConnectionName(connectionKey)} (${list.length})`,
+          path: `${ARCHIVED_GROUP_PREFIX}${connectionKey}`,
+          type: 'folder',
+          children: list.map((n) =>
+            fileNode(`${ARCHIVED_ITEM_PREFIX}${n.id}`, n, connectionKey),
+          ),
+        })),
+      });
+    }
+    return { treeData: data, entries: byNodeId };
+  }, [rootLabel, filteredNotebooks, archivedGroups, getConnectionName]);
+
+  // As tall as its visible rows, so it sits right under the project tree and
+  // the Notebooks tab scrolls both
+  const fitHeight = useFitTreeHeight(treeRef, ROW_HEIGHT, treeData);
+
   const handleContextMenu = useCallback(
     (
       event: React.MouseEvent,
@@ -118,6 +203,36 @@ export const NotebooksTreeView: React.FC<NotebooksTreeViewProps> = ({
       });
     },
     [],
+  );
+
+  const handleNodeContextMenu = useCallback(
+    (event: React.MouseEvent, node: FileNode) => {
+      event.preventDefault();
+      const entry = entries.get(node.id);
+      if (!entry) return;
+      handleContextMenu(
+        event,
+        entry.notebook.id,
+        entry.notebook.name,
+        !!entry.archivedIn,
+        entry.archivedIn,
+      );
+    },
+    [entries, handleContextMenu],
+  );
+
+  // A click on an active notebook opens it; archived ones open from the menu
+  const handleSelect = useCallback(
+    (nodes: NodeApi<FileNode>[]) => {
+      const node = nodes[0];
+      if (!node || node.data.type !== 'file') return;
+      const entry = entries.get(node.data.id);
+      if (!entry || entry.archivedIn) return;
+      if (entry.notebook.id !== activeNotebookId) {
+        onOpenNotebook(entry.notebook.id);
+      }
+    },
+    [entries, activeNotebookId, onOpenNotebook],
   );
 
   const handleCloseContextMenu = useCallback(() => {
@@ -190,249 +305,66 @@ export const NotebooksTreeView: React.FC<NotebooksTreeViewProps> = ({
     );
   }
 
-  if (
-    filteredNotebooks.length === 0 &&
-    (!showArchived || Object.keys(filteredArchivedNotebooks).length === 0)
-  ) {
-    return (
-      <Box sx={{ p: 2 }}>
+  return (
+    <Box>
+      {/* No focus ring on the clicked row; the selection highlight shows it */}
+      <Box
+        data-testid="studio-notebooks-tree"
+        sx={{
+          pl: '4px',
+          '& [role="treeitem"]:focus': { outline: 'none' },
+        }}
+      >
+        <Tree<FileNode>
+          ref={treeRef}
+          data={treeData}
+          idAccessor="id"
+          openByDefault={false}
+          initialOpenState={{ [ROOT_ID]: true, [ARCHIVED_ID]: true }}
+          width="100%"
+          height={fitHeight.height}
+          indent={TREE_INDENT}
+          rowHeight={ROW_HEIGHT}
+          overscanCount={10}
+          disableDrag
+          disableDrop
+          disableEdit
+          selection={activeNotebookId}
+          onSelect={handleSelect}
+          onToggle={fitHeight.onToggle}
+        >
+          {(props: NodeRendererProps<FileNode>) => (
+            <TreeNode
+              {...props}
+              fileStatuses={NO_GIT_STATUSES}
+              onContextMenu={handleNodeContextMenu}
+              projectPath={ROOT_ID}
+              // New notebook from the root folder's hover button only
+              onCreateFile={
+                onCreateNotebook && props.node.id === ROOT_ID
+                  ? () => onCreateNotebook()
+                  : undefined
+              }
+            />
+          )}
+        </Tree>
+      </Box>
+
+      {isEmpty && (
         <Typography
           variant="body2"
           color="text.secondary"
           sx={{
+            px: 2,
+            py: 1,
             wordWrap: 'break-word',
             overflowWrap: 'break-word',
             whiteSpace: 'normal',
           }}
         >
-          {filter
-            ? 'No notebooks match your filter'
-            : 'No notebooks yet. Click the + button to create one.'}
+          {filter ? 'No notebooks match your filter' : emptyText}
         </Typography>
-      </Box>
-    );
-  }
-
-  return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ flex: 1, overflow: 'auto' }}>
-        <SimpleTreeView
-          defaultExpandedItems={['notebooks-root', 'archived-root']}
-          sx={{
-            '& .MuiTreeItem-root': {
-              '& .MuiTreeItem-content': {
-                padding: '0px 2px',
-                minHeight: '26px',
-                borderRadius: '4px',
-                '&:hover': {
-                  backgroundColor: 'action.hover',
-                },
-                '&.Mui-selected': {
-                  backgroundColor: 'transparent',
-                  '&:hover': {
-                    backgroundColor: 'action.hover',
-                  },
-                },
-                '&.Mui-focused': {
-                  backgroundColor: 'transparent',
-                },
-              },
-              '& .MuiTreeItem-label': {
-                fontSize: '0.85rem',
-                padding: '0px',
-              },
-              '& .MuiTreeItem-iconContainer': {
-                width: '12px',
-                marginRight: '2px',
-                '& svg': {
-                  fontSize: '16px',
-                },
-              },
-              '& .MuiTreeItem-groupTransition': {
-                marginLeft: '12px',
-                paddingLeft: '0px',
-              },
-            },
-          }}
-        >
-          {/* Active Notebooks */}
-          {filteredNotebooks.length > 0 && (
-            <TreeItem
-              itemId="notebooks-root"
-              label={
-                <Box
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 0.5,
-                    py: 0,
-                  }}
-                >
-                  <LibraryBooks
-                    sx={{ fontSize: 14, color: 'text.secondary' }}
-                  />
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      fontWeight: 500,
-                      fontSize: '0.85rem',
-                      color: 'text.primary',
-                    }}
-                  >
-                    My Notebooks
-                  </Typography>
-                </Box>
-              }
-            >
-              {filteredNotebooks.map((notebook) => (
-                <TreeItem
-                  key={notebook.id}
-                  itemId={notebook.id}
-                  label={
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 0.5,
-                        py: 0,
-                        pr: 1,
-                        width: '100%',
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onOpenNotebook(notebook.id);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          onOpenNotebook(notebook.id);
-                        }
-                      }}
-                      onContextMenu={(e) =>
-                        handleContextMenu(e, notebook.id, notebook.name, false)
-                      }
-                      role="button"
-                      tabIndex={0}
-                      data-testid={`notebook-tree-item-${notebook.kind ?? 'sql'}`}
-                    >
-                      <NotebookKindIcon
-                        kind={notebook.kind}
-                        sx={{ fontSize: 14, color: 'text.secondary' }}
-                      />
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          fontSize: '0.825rem',
-                          flex: 1,
-                        }}
-                      >
-                        {notebook.name}
-                      </Typography>
-                    </Box>
-                  }
-                />
-              ))}
-            </TreeItem>
-          )}
-
-          {/* Archived Notebooks */}
-          {showArchived &&
-            Object.keys(filteredArchivedNotebooks).length > 0 && (
-              <TreeItem
-                itemId="archived-root"
-                label={
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 0.5,
-                      py: 0,
-                    }}
-                  >
-                    <Archive sx={{ fontSize: 14, color: 'text.secondary' }} />
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        fontWeight: 500,
-                        fontSize: '0.85rem',
-                        color: 'text.primary',
-                      }}
-                    >
-                      Archived
-                    </Typography>
-                  </Box>
-                }
-              >
-                {Object.entries(filteredArchivedNotebooks).map(
-                  ([connectionKey, archivedList]) => (
-                    <TreeItem
-                      key={connectionKey}
-                      itemId={connectionKey}
-                      label={
-                        <Typography
-                          variant="body2"
-                          sx={{ fontSize: '0.825rem', color: 'text.secondary' }}
-                        >
-                          {getConnectionName(connectionKey)} (
-                          {archivedList.length})
-                        </Typography>
-                      }
-                    >
-                      {archivedList.map((notebook) => (
-                        <TreeItem
-                          key={`archived-${notebook.id}`}
-                          itemId={`archived-${notebook.id}`}
-                          label={
-                            <Box
-                              sx={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 0.5,
-                                py: 0,
-                                pr: 1,
-                                width: '100%',
-                              }}
-                              onContextMenu={(e) =>
-                                handleContextMenu(
-                                  e,
-                                  notebook.id,
-                                  notebook.name,
-                                  true,
-                                  connectionKey,
-                                )
-                              }
-                            >
-                              <NotebookKindIcon
-                                kind={notebook.kind}
-                                sx={{ fontSize: 14, color: 'text.secondary' }}
-                              />
-                              <Typography
-                                variant="body2"
-                                sx={{
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap',
-                                  fontSize: '0.75rem',
-                                  flex: 1,
-                                }}
-                              >
-                                {notebook.name}
-                              </Typography>
-                            </Box>
-                          }
-                        />
-                      ))}
-                    </TreeItem>
-                  ),
-                )}
-              </TreeItem>
-            )}
-        </SimpleTreeView>
-      </Box>
+      )}
 
       {/* Context Menu */}
       <Menu
@@ -527,33 +459,6 @@ export const NotebooksTreeView: React.FC<NotebooksTreeViewProps> = ({
           />
         </MenuItem>
       </Menu>
-
-      {/* Show Archived Toggle */}
-      <Box
-        sx={{
-          px: 1,
-          py: 0.5,
-          borderTop: (theme) => `1px solid ${theme.palette.divider}`,
-          mt: 'auto',
-        }}
-      >
-        <FormControlLabel
-          control={
-            <Checkbox
-              checked={showArchived}
-              onChange={(e) => onToggleArchived(e.target.checked)}
-              size="small"
-              sx={{ py: 0 }}
-            />
-          }
-          label={
-            <Typography variant="caption" color="text.secondary">
-              Show archived
-            </Typography>
-          }
-          sx={{ m: 0 }}
-        />
-      </Box>
     </Box>
   );
 };

@@ -17,6 +17,7 @@ import { toast } from 'react-toastify';
 import { isFileUnpushed } from '../../services/git.service';
 import { path, splitSegments, toPosix } from '../../lib/path';
 import { YamlFileIcon } from '../fileIcon';
+import { PythonLogoIcon } from '../notebook/NotebookKindIcon';
 import { FileNode, FileStatuses } from './types';
 import { GitStatusBadge } from './GitStatusBadge';
 import { PipelineThumbnailPreview } from './PipelineThumbnailPreview';
@@ -123,10 +124,12 @@ const FolderIconWrapper = styled('div')(({ theme }) => ({
 interface TreeNodeProps extends NodeRendererProps<FileNode> {
   fileStatuses: FileStatuses;
   onContextMenu: (event: React.MouseEvent, node: FileNode) => void;
-  onCreateFile: (parentPath: string) => void;
-  onCreateFolder: (parentPath: string) => void;
-  onDelete: (path: string) => void;
-  onRefresh: () => void;
+  // Optional: a tree of items that aren't files (Studio notebooks) leaves
+  // these out, and their buttons don't show
+  onCreateFile?: (parentPath: string) => void;
+  onCreateFolder?: (parentPath: string) => void;
+  onDelete?: (path: string) => void;
+  onRefresh?: () => void;
   onRunPipeline?: (filePath: string) => void;
   onRunPipelineLocal?: (filePath: string) => void;
   dragOverFolder?: string | null;
@@ -235,6 +238,15 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
         </FileIconWrapper>
       );
     }
+    // Notebooks get the same Python notebook icon as in the Notebooks list,
+    // not file-icons-js's orange Jupyter logo
+    if (lowerCaseName.endsWith('.ipynb')) {
+      return (
+        <FileIconWrapper>
+          <PythonLogoIcon sx={{ fontSize: 16 }} />
+        </FileIconWrapper>
+      );
+    }
     const iconClass = getClassWithColor(node.data.name);
     return (
       <FileIconWrapper>
@@ -311,27 +323,31 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
       </NodeContent>
       {!node.isEditing && isFolder && (
         <NodeActions className="node-actions">
-          <IconButton
-            size="small"
-            onClick={(e) =>
-              handleActionClick(e, () => onCreateFile(node.data.path))
-            }
-            title="New File"
-            sx={{ padding: '4px' }}
-          >
-            <CreateFileIcon sx={{ fontSize: 16 }} />
-          </IconButton>
-          <IconButton
-            size="small"
-            onClick={(e) =>
-              handleActionClick(e, () => onCreateFolder(node.data.path))
-            }
-            title="New Folder"
-            sx={{ padding: '4px' }}
-          >
-            <CreateFolderIcon sx={{ fontSize: 16 }} />
-          </IconButton>
-          {!isRootFolder && (
+          {onCreateFile && (
+            <IconButton
+              size="small"
+              onClick={(e) =>
+                handleActionClick(e, () => onCreateFile(node.data.path))
+              }
+              title="New File"
+              sx={{ padding: '4px' }}
+            >
+              <CreateFileIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          )}
+          {onCreateFolder && (
+            <IconButton
+              size="small"
+              onClick={(e) =>
+                handleActionClick(e, () => onCreateFolder(node.data.path))
+              }
+              title="New Folder"
+              sx={{ padding: '4px' }}
+            >
+              <CreateFolderIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          )}
+          {!isRootFolder && onDelete && (
             <IconButton
               size="small"
               onClick={(e) =>
@@ -346,7 +362,7 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
         </NodeActions>
       )}
       {/* Outside the hover-only group, so it always shows */}
-      {!node.isEditing && isRootFolder && (
+      {!node.isEditing && isRootFolder && onRefresh && (
         <IconButton
           size="small"
           onClick={(e) => handleActionClick(e, onRefresh)}

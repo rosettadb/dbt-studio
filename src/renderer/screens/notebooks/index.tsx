@@ -89,7 +89,14 @@ import {
   useDuplicatePythonNotebook,
   useDeletePythonNotebook,
   useImportPythonNotebook,
+  usePythonProjectNotebooks,
+  useCreatePythonProjectNotebook,
 } from '../../controllers/pythonNotebooks.controller';
+import { ProjectNotebooksTree } from '../../components/notebook/ProjectNotebooksTree';
+import {
+  PROJECT_NOTEBOOKS_DIR,
+  isProjectNotebookId,
+} from '../../../shared/projectNotebooks';
 import { pythonNotebooksService } from '../../services/pythonNotebooks.service';
 import type { NotebookKind } from '../../../types/pythonNotebooks';
 import { ExportNotebookDialog } from '../../components/notebook/ExportNotebookDialog';
@@ -145,8 +152,10 @@ const Notebooks = () => {
   const navigate = useNavigate();
   const { selectedProject, projects } = useContext(AppContext);
   const { isSidebarOpen } = useContext(AppContext);
-  const { data: connections = [] } = useGetConnections();
-  const { data: duckLakeInstances = [] } = useDuckLakeInstances();
+  const { data: connections = [], isSuccess: connectionsLoaded } =
+    useGetConnections();
+  const { data: duckLakeInstances = [], isSuccess: duckLakeInstancesLoaded } =
+    useDuckLakeInstances();
 
   const { isChatOpen, setIsChatOpen } = useAppContext();
 
@@ -208,6 +217,10 @@ const Notebooks = () => {
   // Validate hydrated connection exists, clear if not
   useEffect(() => {
     if (!isConnectionHydrated || !activeConnectionId) return;
+    // Judge only against a loaded list: after a reload both lists start
+    // empty, which would clear the saved connection before they arrive
+    const isDuckLake = activeConnectionId.startsWith('ducklake-');
+    if (isDuckLake ? !duckLakeInstancesLoaded : !connectionsLoaded) return;
 
     const connectionExists =
       connections.some((c) => c.id === activeConnectionId) ||
@@ -223,7 +236,9 @@ const Notebooks = () => {
     isConnectionHydrated,
     activeConnectionId,
     connections,
+    connectionsLoaded,
     duckLakeInstances,
+    duckLakeInstancesLoaded,
     setActiveConnectionId,
   ]);
 
@@ -233,19 +248,33 @@ const Notebooks = () => {
     {},
   );
 
+  // The project this connection belongs to (plan 95c): its notebooks/ folder
+  // is listed above the notebooks saved in Studio, and new notebooks go there.
+  const connectionProject = useMemo(
+    () =>
+      activeConnectionId
+        ? projects?.find((p) => p.connectionId === activeConnectionId)
+        : undefined,
+    [projects, activeConnectionId],
+  );
+
   // Notebooks state - fetch from backend
   const { data: notebooks = [], isLoading: isLoadingNotebooks } =
     useNotebooks(activeConnectionId);
   const { data: pythonNotebooks = [], isLoading: isLoadingPythonNotebooks } =
     usePythonNotebooks(activeConnectionId);
+  const { data: projectNotebooks = [] } = usePythonProjectNotebooks(
+    connectionProject?.id ?? '',
+  );
   const createPythonNotebook = useCreatePythonNotebook();
+  const createProjectNotebook = useCreatePythonProjectNotebook();
   const renamePythonNotebook = useRenamePythonNotebook();
   const duplicatePythonNotebook = useDuplicatePythonNotebook();
   const deletePythonNotebook = useDeletePythonNotebook();
   const importPythonNotebook = useImportPythonNotebook();
 
-  // SQL and Python notebooks share one list in the sidebar; the icon is
-  // derived from `kind` (absent → sql).
+  // Notebooks saved in Studio for this connection: SQL and Python share one
+  // list in the sidebar; the icon is derived from `kind` (absent → sql).
   const allNotebooks = useMemo(
     () =>
       [
@@ -259,6 +288,7 @@ const Notebooks = () => {
   );
   const kindOf = useCallback(
     (notebookId: string): NotebookKind =>
+      (isProjectNotebookId(notebookId) ? 'python' : undefined) ??
       allNotebooks.find((n) => n.id === notebookId)?.kind ??
       notebookTabManager.tabs.find((t) => t.notebookId === notebookId)?.kind ??
       'sql',
@@ -291,6 +321,20 @@ const Notebooks = () => {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteAllConfirmOpen, setDeleteAllConfirmOpen] = useState(false);
   const [createNotebookOpen, setCreateNotebookOpen] = useState(false);
+  // Where the create dialog saves: the connection's project notebooks/
+  // folder, or Studio. With no linked project it's always Studio.
+  const [createNotebookTarget, setCreateNotebookTarget] = useState<
+    'project' | 'studio'
+  >('project');
+  const createInProject =
+    createNotebookTarget === 'project' && !!connectionProject;
+  const openCreateNotebook = useCallback(
+    (target: 'project' | 'studio' = 'project') => {
+      setCreateNotebookTarget(target);
+      setCreateNotebookOpen(true);
+    },
+    [],
+  );
   const [deleteNotebookConfirmOpen, setDeleteNotebookConfirmOpen] =
     useState(false);
   const [renameNotebookOpen, setRenameNotebookOpen] = useState(false);
@@ -661,27 +705,39 @@ const Notebooks = () => {
     if (!activeConnectionId || !newNotebookName.trim()) return;
     if (!newNotebookPython || !newNotebookPythonReady) return;
 
+    const input = {
+      name: newNotebookName.trim(),
+      description: newNotebookDescription.trim() || undefined,
+      pythonVersion: newNotebookPython,
+    };
+    // Open the newly created notebook in a tab
+    const onCreated = (
+      created: Parameters<typeof pythonNotebookToSummary>[0],
+    ) => {
+      notebookTabManager.openNotebook(
+        pythonNotebookToSummary(created),
+        activeConnectionId,
+      );
+      setCreateNotebookOpen(false);
+      setNewNotebookName('');
+      setNewNotebookDescription('');
+    };
+    if (createInProject && connectionProject) {
+      // A file in <project>/notebooks/; SQL cells run on the active connection
+      createProjectNotebook.mutate(
+        {
+          projectId: connectionProject.id,
+          connectionId: activeConnectionId,
+          input,
+        },
+        { onSuccess: onCreated },
+      );
+      return;
+    }
+
     createPythonNotebook.mutate(
-      {
-        connectionId: activeConnectionId,
-        input: {
-          name: newNotebookName.trim(),
-          description: newNotebookDescription.trim() || undefined,
-          pythonVersion: newNotebookPython,
-        },
-      },
-      {
-        onSuccess: (created) => {
-          // Open the newly created notebook in a tab
-          notebookTabManager.openNotebook(
-            pythonNotebookToSummary(created),
-            activeConnectionId,
-          );
-          setCreateNotebookOpen(false);
-          setNewNotebookName('');
-          setNewNotebookDescription('');
-        },
-      },
+      { connectionId: activeConnectionId, input },
+      { onSuccess: onCreated },
     );
   }, [
     activeConnectionId,
@@ -690,8 +746,30 @@ const Notebooks = () => {
     newNotebookPython,
     newNotebookPythonReady,
     createPythonNotebook,
+    createProjectNotebook,
+    createInProject,
+    connectionProject,
     notebookTabManager,
   ]);
+
+  // Project notebooks open from the folder tree with their full record, so a
+  // file added outside Studio opens before the list query catches up
+  const handleOpenProjectNotebook = useCallback(
+    (notebook: Parameters<typeof pythonNotebookToSummary>[0]) => {
+      notebookTabManager.openNotebook(
+        pythonNotebookToSummary(notebook),
+        activeConnectionId,
+      );
+    },
+    [activeConnectionId, notebookTabManager],
+  );
+
+  const handleProjectNotebooksDeleted = useCallback(
+    (notebookIds: string[]) => {
+      notebookIds.forEach((id) => notebookTabManager.closeTab(id));
+    },
+    [notebookTabManager],
+  );
 
   // Import a Jupyter .ipynb as a Python notebook: pick the file, then the
   // interpreter for its environment.
@@ -1452,9 +1530,28 @@ const Notebooks = () => {
                 isLoadingNotebooks || isLoadingPythonNotebooks
               }
               archivedNotebooks={archivedNotebooks}
+              activeNotebookId={notebookTabManager.activeTabId ?? undefined}
+              renderProjectNotebooks={
+                connectionProject
+                  ? (filter) => (
+                      <ProjectNotebooksTree
+                        project={connectionProject}
+                        notebooks={projectNotebooks}
+                        filter={filter}
+                        activeNotebookId={
+                          notebookTabManager.activeTabId ?? undefined
+                        }
+                        onOpenNotebook={handleOpenProjectNotebook}
+                        onCreateNotebook={() => openCreateNotebook('project')}
+                        onNotebooksDeleted={handleProjectNotebooksDeleted}
+                      />
+                    )
+                  : undefined
+              }
               showArchived={showArchived}
               onRefresh={handleRefreshSchema}
-              onCreateNotebook={() => setCreateNotebookOpen(true)}
+              onCreateNotebook={openCreateNotebook}
+              linkedProjectName={connectionProject?.name}
               onOpenNotebook={handleOpenNotebook}
               onRenameNotebook={handleRenameNotebook}
               onDuplicateNotebook={handleDuplicateNotebook}
@@ -1733,7 +1830,7 @@ const Notebooks = () => {
                         <Button
                           variant="contained"
                           startIcon={<Add />}
-                          onClick={() => setCreateNotebookOpen(true)}
+                          onClick={() => openCreateNotebook()}
                         >
                           Create New Notebook
                         </Button>
@@ -1863,9 +1960,20 @@ const Notebooks = () => {
         </DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to permanently delete the notebook &quot;
-            {activeNotebookToDelete?.notebookName}&quot;? This action cannot be
-            undone.
+            {activeNotebookToDelete &&
+            isProjectNotebookId(activeNotebookToDelete.notebookId) ? (
+              <>
+                Move the notebook &quot;{activeNotebookToDelete.notebookName}
+                &quot; to the trash? Its file leaves {connectionProject?.name}/
+                {PROJECT_NOTEBOOKS_DIR}/ and can be restored from the trash.
+              </>
+            ) : (
+              <>
+                Are you sure you want to permanently delete the notebook &quot;
+                {activeNotebookToDelete?.notebookName}&quot;? This action cannot
+                be undone.
+              </>
+            )}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
@@ -1897,6 +2005,20 @@ const Notebooks = () => {
         <DialogTitle>Create New Notebook</DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+            {createInProject && connectionProject && (
+              <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                Saved as a file in {connectionProject.name}/
+                {PROJECT_NOTEBOOKS_DIR}/. SQL cells run on{' '}
+                {activeConnection?.connection.name ?? 'the selected connection'}
+                .
+              </Typography>
+            )}
+            {!createInProject && connectionProject && (
+              <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                Saved in Studio with this connection&apos;s notebooks, not in
+                the project folder.
+              </Typography>
+            )}
             <TextField
               autoFocus
               label="Notebook Name"

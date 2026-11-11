@@ -1,6 +1,9 @@
 import React, { useState, useCallback } from 'react';
 import {
   Box,
+  Checkbox,
+  Divider,
+  FormControlLabel,
   Tabs,
   Tab,
   IconButton,
@@ -17,7 +20,6 @@ import {
 import {
   TableChart,
   Description,
-  LibraryBooks,
   Refresh,
   Add,
   Search,
@@ -28,6 +30,7 @@ import {
 } from '@mui/icons-material';
 import { SchemaTreeViewerWithSchema } from '../../screens/sql/SchemaTreeViewerWithSchema';
 import { NotebooksTreeView } from './NotebooksTreeView';
+import { PythonMonoIcon } from './NotebookKindIcon';
 import { AnalyticsPagesTreeView } from '../analytics';
 import { Table, SupportedConnectionTypes } from '../../../types/backend';
 import { Notebook } from '../../../types/notebooks';
@@ -72,7 +75,8 @@ interface NotebooksSidebarProps {
 
   // Callbacks
   onRefresh: () => void;
-  onCreateNotebook: () => void;
+  /** Opens the create dialog for the project's notebooks/ folder or Studio. */
+  onCreateNotebook: (target?: 'project' | 'studio') => void;
   onOpenNotebook: (notebookId: string) => void;
   onRenameNotebook: (notebookId: string, currentName: string) => void;
   onDuplicateNotebook: (notebookId: string, currentName: string) => void;
@@ -105,6 +109,22 @@ interface NotebooksSidebarProps {
     event: React.MouseEvent<HTMLDivElement>,
     node: SchemaTreeNodeRef,
   ) => void;
+
+  /**
+   * Folder tree of the linked project's notebooks, given the search text.
+   * When set, it opens the Notebooks tab and the notebooks above follow it
+   * in a "Saved in Studio" folder.
+   */
+  renderProjectNotebooks?: (filter: string) => React.ReactNode;
+
+  /** Id of the notebook in the active tab, highlighted in the list. */
+  activeNotebookId?: string;
+
+  /**
+   * Name of the project the connection belongs to: the + menu then offers a
+   * new notebook in its notebooks/ folder or in Studio.
+   */
+  linkedProjectName?: string;
 }
 
 export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
@@ -136,6 +156,9 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
   onOpenAnalyticsPage,
   onDeleteAnalyticsPage,
   onSchemaContextMenu,
+  renderProjectNotebooks,
+  activeNotebookId,
+  linkedProjectName,
 }) => {
   const theme = useTheme();
   const [activeTab, setActiveTab] = useState(0);
@@ -185,10 +208,13 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
     onExportSelected?.();
   }, [handleExportMenuClose, onExportSelected]);
 
-  const handleCreateNotebook = useCallback(() => {
-    handleAddMenuClose();
-    onCreateNotebook();
-  }, [handleAddMenuClose, onCreateNotebook]);
+  const handleCreateNotebook = useCallback(
+    (target: 'project' | 'studio' = 'project') => {
+      handleAddMenuClose();
+      onCreateNotebook(target);
+    },
+    [handleAddMenuClose, onCreateNotebook],
+  );
 
   const handleImportAllNotebooks = useCallback(() => {
     handleAddMenuClose();
@@ -242,7 +268,7 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
           }}
         >
           <Tab
-            icon={<LibraryBooks sx={{ fontSize: 16 }} />}
+            icon={<PythonMonoIcon sx={{ fontSize: 16 }} />}
             iconPosition="start"
             label="Notebooks"
             id="notebooks-tab-0"
@@ -413,12 +439,46 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
           horizontal: 'left',
         }}
       >
-        <MenuItem onClick={handleCreateNotebook}>
-          <ListItemIcon>
-            <Description fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Add New Notebook</ListItemText>
-        </MenuItem>
+        {linkedProjectName ? (
+          [
+            <MenuItem
+              key="new-in-project"
+              data-testid="notebooks-new-in-project"
+              onClick={() => handleCreateNotebook('project')}
+            >
+              <ListItemIcon>
+                <Description fontSize="small" />
+              </ListItemIcon>
+              <ListItemText
+                primary={`New Notebook in ${linkedProjectName}`}
+                secondary="Saved as a file in notebooks/"
+                secondaryTypographyProps={{ fontSize: 11.5 }}
+              />
+            </MenuItem>,
+            <MenuItem
+              key="new-in-studio"
+              data-testid="notebooks-new-in-studio"
+              onClick={() => handleCreateNotebook('studio')}
+            >
+              <ListItemIcon>
+                <Description fontSize="small" />
+              </ListItemIcon>
+              <ListItemText
+                primary="New Notebook in Studio"
+                secondary="Saved with this connection's notebooks"
+                secondaryTypographyProps={{ fontSize: 11.5 }}
+              />
+            </MenuItem>,
+          ]
+        ) : (
+          <MenuItem onClick={() => handleCreateNotebook('studio')}>
+            <ListItemIcon>
+              <Description fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Add New Notebook</ListItemText>
+          </MenuItem>
+        )}
+        {linkedProjectName && <Divider />}
         <MenuItem onClick={handleImportAllNotebooks}>
           <ListItemIcon>
             <Upload fontSize="small" />
@@ -439,22 +499,70 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
       <Box sx={{ flex: 1, overflow: 'hidden' }}>
         {/* Notebooks Tab */}
         <TabPanel value={activeTab} index={0}>
-          <Box sx={{ height: '100%', overflow: 'auto', p: 1 }}>
-            <NotebooksTreeView
-              notebooks={notebooks}
-              isLoading={isLoadingNotebooks}
-              archivedNotebooks={archivedNotebooks}
-              showArchived={showArchived}
-              onOpenNotebook={onOpenNotebook}
-              onRenameNotebook={onRenameNotebook}
-              onDuplicateNotebook={onDuplicateNotebook}
-              onDeleteNotebook={onDeleteNotebook}
-              onRestoreNotebook={onRestoreNotebook}
-              onDeleteArchivedNotebook={onDeleteArchivedNotebook}
-              onToggleArchived={onToggleArchived}
-              getConnectionName={getConnectionName}
-              filter={searchQuery}
-            />
+          <Box
+            sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+          >
+            {/* The project's notebooks folder, then the Studio notebooks
+                right after it; both trees are as tall as their rows and
+                scroll together */}
+            <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', pt: 0.5 }}>
+              {renderProjectNotebooks && (
+                <>
+                  {renderProjectNotebooks(searchQuery)}
+                  <Divider sx={{ mt: 1.5, mb: 0.5 }} />
+                </>
+              )}
+              <NotebooksTreeView
+                notebooks={notebooks}
+                isLoading={isLoadingNotebooks}
+                archivedNotebooks={archivedNotebooks}
+                showArchived={showArchived}
+                onOpenNotebook={onOpenNotebook}
+                onRenameNotebook={onRenameNotebook}
+                onDuplicateNotebook={onDuplicateNotebook}
+                onDeleteNotebook={onDeleteNotebook}
+                onRestoreNotebook={onRestoreNotebook}
+                onDeleteArchivedNotebook={onDeleteArchivedNotebook}
+                getConnectionName={getConnectionName}
+                filter={searchQuery}
+                rootLabel={
+                  renderProjectNotebooks ? 'Saved in Studio' : undefined
+                }
+                emptyText={
+                  renderProjectNotebooks
+                    ? 'No notebooks saved in Studio for this connection.'
+                    : undefined
+                }
+                activeNotebookId={activeNotebookId}
+                onCreateNotebook={() => onCreateNotebook('studio')}
+              />
+            </Box>
+
+            {/* Show Archived Toggle, pinned under the list */}
+            <Box
+              sx={{
+                px: 1,
+                py: 0.5,
+                borderTop: `1px solid ${theme.palette.divider}`,
+              }}
+            >
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={showArchived}
+                    onChange={(e) => onToggleArchived(e.target.checked)}
+                    size="small"
+                    sx={{ py: 0 }}
+                  />
+                }
+                label={
+                  <Typography variant="caption" color="text.secondary">
+                    Show archived
+                  </Typography>
+                }
+                sx={{ m: 0 }}
+              />
+            </Box>
           </Box>
         </TabPanel>
 

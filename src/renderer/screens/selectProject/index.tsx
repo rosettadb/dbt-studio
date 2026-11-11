@@ -55,7 +55,14 @@ import { ViewToggle } from '../../components/cloudExplorer/ViewToggle';
 import { DatabaseCylinderIcon } from '../../components/icon/DatabaseCylinderIcon';
 import { icons } from '../../../../assets';
 import { AppLayout } from '../../layouts';
-import { Project, canUseAsDbtConnection } from '../../../types/backend';
+import { Project } from '../../../types/backend';
+import {
+  DEFAULT_PROJECT_TYPE,
+  defaultTemplateItems,
+  projectTypeOf,
+  type ProjectType,
+} from '../../../projectTypes/registry.shared';
+import { projectTypeUiOf } from '../../../projectTypes/registry.renderer';
 import {
   ConnectionIcon,
   EmptyStateContainer,
@@ -116,6 +123,11 @@ const SelectProject: React.FC = () => {
     name: '',
     createTemplateFolders: true,
   });
+  const [newProjectType, setNewProjectType] =
+    React.useState<ProjectType>(DEFAULT_PROJECT_TYPE);
+  const [newProjectInclude, setNewProjectInclude] = React.useState<string[]>(
+    () => defaultTemplateItems(DEFAULT_PROJECT_TYPE),
+  );
   const [connectionType, setConnectionType] = React.useState<
     'standard' | 'datalake'
   >('standard');
@@ -189,6 +201,32 @@ const SelectProject: React.FC = () => {
       <ProjectMuiIcon>
         <DatabaseIcon />
       </ProjectMuiIcon>
+    );
+  };
+
+  const renderTypeChip = (project: Project) => {
+    const { Icon: TypeIcon } = projectTypeUiOf(project);
+    return (
+      <Chip
+        label={
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <TypeIcon size={12} />
+            {projectTypeOf(project).title}
+          </Box>
+        }
+        size="small"
+        sx={{
+          mr: 1,
+          fontWeight: 500,
+          fontSize: 12,
+          bgcolor: 'background.paper',
+          color: 'text.secondary',
+          border: '1px solid',
+          borderColor: 'divider',
+        }}
+        title="Project type"
+        data-testid={`project-type-chip-${project.name}`}
+      />
     );
   };
 
@@ -330,7 +368,9 @@ const SelectProject: React.FC = () => {
       const project = await projectsServices.addProject({
         name: projectPath,
         connectionId,
-        createTemplateFolders: newProject.createTemplateFolders,
+        createTemplateFolders: newProjectInclude.length > 0,
+        type: newProjectType,
+        include: newProjectInclude,
       });
 
       await selectProject({ projectId: project.id });
@@ -338,6 +378,8 @@ const SelectProject: React.FC = () => {
       toast.success(`Project ${project.name} created successfully!`);
       setIsAddingProject(false);
       setNewProject({ name: '', createTemplateFolders: true });
+      setNewProjectType(DEFAULT_PROJECT_TYPE);
+      setNewProjectInclude(defaultTemplateItems(DEFAULT_PROJECT_TYPE));
       setSelectedConnection('');
       setConnectionType('standard');
       navigate('/app/dbt-project');
@@ -484,6 +526,7 @@ const SelectProject: React.FC = () => {
         </ProjectInfo>
       </ProjectCardContent>
       <ProjectActions>
+        {renderTypeChip(project)}
         {renderConnectionChip(project)}
         {renderProjectOptionsButton(project)}
       </ProjectActions>
@@ -513,7 +556,10 @@ const SelectProject: React.FC = () => {
         {project.path || 'No path specified'}
       </ProjectPath>
       <ProjectGitDetails projectPath={project.path} />
-      <Box sx={{ mt: 'auto', pt: 1 }}>{renderConnectionChip(project)}</Box>
+      <Box sx={{ mt: 'auto', pt: 1 }}>
+        {renderTypeChip(project)}
+        {renderConnectionChip(project)}
+      </Box>
       <ProjectDetailLine sx={{ mt: 1 }}>
         {getProjectDatesLine(project)}
       </ProjectDetailLine>
@@ -675,14 +721,17 @@ const SelectProject: React.FC = () => {
             setDefaultProjectPath={setDefaultProjectPath}
             newProject={newProject}
             setNewProject={setNewProject}
+            projectType={newProjectType}
+            setProjectType={setNewProjectType}
+            include={newProjectInclude}
+            setInclude={setNewProjectInclude}
+            validateName={validateProjectName}
             selectedConnection={selectedConnection}
             setSelectedConnection={setSelectedConnection}
             connectionType={connectionType}
             setConnectionType={setConnectionType}
             isLoadingConnections={isLoadingConnections}
-            connections={connections.filter((connection) =>
-              canUseAsDbtConnection(connection.connection.type),
-            )}
+            connections={connections}
             datalakeInstances={datalakeInstances}
             isLoadingDatalakes={isLoadingDatalakes}
             navigate={navigate}
@@ -936,7 +985,9 @@ const SelectProject: React.FC = () => {
           onClose={handleConnectionModalClose}
           project={selectedProjectForConnection}
           connections={connections.filter((connection) =>
-            canUseAsDbtConnection(connection.connection.type),
+            projectTypeOf(selectedProjectForConnection).acceptsConnection(
+              connection.connection.type,
+            ),
           )}
           onSuccess={() => {
             // Projects will be automatically refreshed via React Query

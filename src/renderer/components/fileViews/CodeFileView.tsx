@@ -16,6 +16,7 @@ import { AI_PROMPTS } from '../../config/constants';
 import { utils } from '../../helpers';
 import { path as nodePath } from '../../lib/path';
 import type { SupportedConnectionTypes } from '../../../types/backend';
+import { projectTypeOf } from '../../../projectTypes/registry.shared';
 import type { FileViewDefinition, FileViewProps } from './types';
 
 type EditorTabsProps = Pick<FileViewProps, 'project'>;
@@ -48,6 +49,11 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({ project }) => {
   const filePath = activeTab?.path;
   const fileContent = activeTab?.content;
   const isSqlFile = !!filePath?.endsWith('.sql');
+  // dbt model actions (dbt compile before a run, AI transformations from
+  // Rosetta's model.yaml, the model split button) exist only for project
+  // types with dbt. Elsewhere a .sql file runs as plain SQL on the project
+  // connection.
+  const hasDbt = projectTypeOf(project).capabilities.dbt;
 
   // --- SQL execution from code lenses -----------------------------------
   const handleExecuteQuery = React.useCallback(
@@ -55,13 +61,14 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({ project }) => {
       sql,
       filePath: queryFilePath,
       modelName,
-      compileModel,
+      compileModel: requestedCompile,
     }: {
       sql: string;
       filePath: string;
       modelName?: string;
       compileModel?: boolean;
     }) => {
+      const compileModel = hasDbt && requestedCompile;
       if (!settings?.dbtPath && compileModel) {
         toast.info('Please configure dbt path in settings');
         return;
@@ -75,7 +82,7 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({ project }) => {
         limit: queryState.limit,
       });
     },
-    [execute, project, settings?.dbtPath, queryState.limit],
+    [execute, project, settings?.dbtPath, queryState.limit, hasDbt],
   );
 
   const handleExecuteCte = React.useCallback(
@@ -84,7 +91,7 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({ project }) => {
       filePath: queryFilePath,
       cteName,
       modelName,
-      compileModel,
+      compileModel: requestedCompile,
     }: {
       sql: string;
       filePath: string;
@@ -92,6 +99,7 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({ project }) => {
       modelName?: string;
       compileModel?: boolean;
     }) => {
+      const compileModel = hasDbt && requestedCompile;
       if (!settings?.dbtPath && compileModel) {
         toast.info('Please configure dbt path in settings');
         return;
@@ -108,7 +116,7 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({ project }) => {
         limit: queryState.limit,
       });
     },
-    [execute, project, settings?.dbtPath, queryState.limit],
+    [execute, project, settings?.dbtPath, queryState.limit, hasDbt],
   );
 
   // --- AI actions on .sql models ----------------------------------------
@@ -217,7 +225,7 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({ project }) => {
   };
 
   const menuItems = React.useMemo(() => {
-    if (!filePath || !fileContent || !isSqlFile) {
+    if (!filePath || !fileContent || !isSqlFile || !hasDbt) {
       return [];
     }
     const items = [
@@ -268,7 +276,7 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({ project }) => {
       });
     }
     return items;
-  }, [filePath, fileContent]);
+  }, [filePath, fileContent, hasDbt]);
 
   return (
     <>
@@ -297,7 +305,7 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({ project }) => {
                 menuItems={menuItems}
               />
             )}
-            {filePath && isSqlFile && filePath.includes('models') && (
+            {hasDbt && filePath && isSqlFile && filePath.includes('models') && (
               <ModelSplitButton
                 modelPath={filePath}
                 project={project}

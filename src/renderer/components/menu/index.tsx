@@ -45,7 +45,7 @@ import {
 } from '../../controllers';
 import { SimpleDropdownMenu } from '../simpleDropdown';
 import { Icon } from '../icon';
-import { LetterAvatar } from '../letterAvatar';
+import { projectTypeUiOf } from '../../../projectTypes/registry.renderer';
 import { useAppContext } from '../../hooks';
 import { ExpandRightIcon } from '../sidebar/collapse-icons';
 import { CommandPalette } from '../commandPalette';
@@ -95,7 +95,7 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
   const isProjectSelected = Boolean(project?.id);
   const isOnHome = location.pathname === '/app';
   const isOnProjectDetails = location.pathname === '/app/dbt-project';
-  const isOnSelectProject = location.pathname.includes('select-project');
+  const ProjectTypeIcon = project ? projectTypeUiOf(project).Icon : null;
 
   return (
     <StyledToolbar variant="dense">
@@ -116,7 +116,8 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
               </IconButton>
             </Tooltip>
           )}
-        {!isOnHome && !isOnSelectProject && (
+        {/* The project switcher belongs to the Project screen only */}
+        {isOnProjectDetails && (
           <SimpleDropdownMenu
             items={[
               {
@@ -128,15 +129,18 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
                   </BranchDropdownToggle>
                 ),
               },
-              ...projects.map((p) => ({
-                value: String(p.id),
-                label: (
-                  <BranchDropdownToggle>
-                    <LetterAvatar name={p?.name ?? ''} size={16} />
-                    {p?.name}
-                  </BranchDropdownToggle>
-                ),
-              })),
+              ...projects.map((p) => {
+                const TypeIcon = projectTypeUiOf(p).Icon;
+                return {
+                  value: String(p.id),
+                  label: (
+                    <BranchDropdownToggle>
+                      <TypeIcon size={16} />
+                      {p?.name}
+                    </BranchDropdownToggle>
+                  ),
+                };
+              }),
             ]}
             onSelect={async (value) => {
               if (value === 'all') {
@@ -149,9 +153,9 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
             selectedItem={project ? String(project.id) : 'all'}
             anchorElement={
               <BranchDropdownToggle>
-                {project ? (
+                {project && ProjectTypeIcon ? (
                   <>
-                    <LetterAvatar name={project.name ?? ''} size={16} />
+                    <ProjectTypeIcon size={16} />
                     {project.name}
                   </>
                 ) : (

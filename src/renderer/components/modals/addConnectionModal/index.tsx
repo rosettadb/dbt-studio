@@ -13,11 +13,8 @@ import {
   Typography,
 } from '@mui/material';
 import { toast } from 'react-toastify';
-import {
-  Project,
-  ConnectionModel,
-  canUseAsDbtConnection,
-} from '../../../../types/backend';
+import { Project, ConnectionModel } from '../../../../types/backend';
+import { projectTypeOf } from '../../../../projectTypes/registry.shared';
 
 interface AddConnectionModalProps {
   isOpen: boolean;
@@ -84,7 +81,9 @@ export const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
           >
             {connections
               .filter((connection) =>
-                canUseAsDbtConnection(connection.connection.type),
+                projectTypeOf(project).acceptsConnection(
+                  connection.connection.type,
+                ),
               )
               .map((connection) => (
                 <MenuItem key={connection.id} value={connection.id}>

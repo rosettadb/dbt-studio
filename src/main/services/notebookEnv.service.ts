@@ -166,9 +166,23 @@ export default class NotebookEnvService {
     return dir;
   }
 
+  /**
+   * Notebooks saved in a project folder run in their own folder, as in
+   * Jupyter and VS Code, so relative paths work the same outside Studio
+   * (plan 95c). Set when the notebook is loaded.
+   */
+  private static workDirOverrides = new Map<string, string>();
+
+  static setWorkDir(notebookId: string, dir: string): void {
+    this.workDirOverrides.set(notebookId, dir);
+  }
+
   /** Per-notebook working directory the kernel runs in (user files land here). */
   static getWorkDir(notebookId: string): string {
-    return path.join(this.getVenvDir(notebookId), 'workspace');
+    return (
+      this.workDirOverrides.get(notebookId) ??
+      path.join(this.getVenvDir(notebookId), 'workspace')
+    );
   }
 
   static resolveVenvPython(venvDir: string): string {

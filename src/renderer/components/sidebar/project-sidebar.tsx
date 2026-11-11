@@ -25,6 +25,7 @@ import {
   connectionLabel,
   connectionAccentColor,
 } from '../../../connections/registry.renderer';
+import { projectTypeOf } from '../../../projectTypes/registry.shared';
 import { ReactComponent as RouteIcon } from '../../assets/icons/lucide/route.svg';
 import { FileTreeViewer } from '../index';
 import { FileTreeContainer } from '../../screens/projectDetails/styles';
@@ -360,36 +361,38 @@ const ExplorerTab: React.FC<{
         )}
       </Box>
 
-      {/* Create Pipeline button — always visible */}
-      <Box
-        sx={{
-          px: 1,
-          pb: 1,
-          pt: 0.75,
-          flexShrink: 0,
-          borderTop: `1px solid ${theme.palette.divider}`,
-        }}
-      >
-        <Tooltip
-          title="Create a pipeline to run jobs on the cloud"
-          placement="top"
-          arrow
+      {/* Create Pipeline button — shown for every project type with pipelines */}
+      {projectTypeOf(project).capabilities.pipelines && (
+        <Box
+          sx={{
+            px: 1,
+            pb: 1,
+            pt: 0.75,
+            flexShrink: 0,
+            borderTop: `1px solid ${theme.palette.divider}`,
+          }}
         >
-          <Button
-            fullWidth
-            variant="contained"
-            size="small"
-            startIcon={<RouteIcon width={16} height={16} />}
-            onClick={() => setCreatePipelineOpen(true)}
-            sx={{
-              fontSize: '0.72rem',
-              py: 0.75,
-            }}
+          <Tooltip
+            title="Create a pipeline to run jobs on the cloud"
+            placement="top"
+            arrow
           >
-            Create Pipeline
-          </Button>
-        </Tooltip>
-      </Box>
+            <Button
+              fullWidth
+              variant="contained"
+              size="small"
+              startIcon={<RouteIcon width={16} height={16} />}
+              onClick={() => setCreatePipelineOpen(true)}
+              sx={{
+                fontSize: '0.72rem',
+                py: 0.75,
+              }}
+            >
+              Create Pipeline
+            </Button>
+          </Tooltip>
+        </Box>
+      )}
 
       <CreatePipelineModal
         isOpen={createPipelineOpen}

@@ -10,6 +10,9 @@ import {
   pythonNotebooksService,
   pythonRuntimesService,
 } from '../services/pythonNotebooks.service';
+import { projectsServices } from '../services';
+import { QUERY_KEYS } from '../config/constants';
+import type { FileNode } from '../../types/backend';
 import { notebooksKeys } from './notebooks.controller';
 import type {
   CreatePythonNotebookInput,
@@ -29,6 +32,9 @@ export const pythonNotebooksKeys = {
   lists: () => [...pythonNotebooksKeys.all, 'list'] as const,
   list: (connectionId: string) =>
     [...pythonNotebooksKeys.lists(), connectionId] as const,
+  projectLists: () => [...pythonNotebooksKeys.all, 'projectList'] as const,
+  projectList: (projectId: string) =>
+    [...pythonNotebooksKeys.projectLists(), projectId] as const,
   details: () => [...pythonNotebooksKeys.all, 'detail'] as const,
   detail: (connectionId: string, notebookId: string) =>
     [...pythonNotebooksKeys.details(), connectionId, notebookId] as const,
@@ -91,6 +97,57 @@ export function usePythonNotebooks(connectionId: string) {
   });
 }
 
+/** Notebooks saved in `<project>/notebooks/` (plan 95c). */
+export function usePythonProjectNotebooks(projectId: string) {
+  return useQuery<PythonNotebook[]>({
+    queryKey: pythonNotebooksKeys.projectList(projectId),
+    queryFn: () => pythonNotebooksService.listForProject(projectId),
+    enabled: !!projectId,
+    staleTime: 30_000,
+  });
+}
+
+/**
+ * Folder tree of `<project>/notebooks/` for the Notebooks sidebar. Shares the
+ * project file tree's query key, so a refresh in either view updates both.
+ * `null` when the folder doesn't exist yet (no notebook created so far).
+ */
+export function useProjectNotebooksFolder(folderPath: string) {
+  return useQuery<FileNode | null>({
+    queryKey: [QUERY_KEYS.GET_FILE_STRUCTURE, folderPath],
+    queryFn: () =>
+      projectsServices
+        .loadProjectDirectory({ path: folderPath })
+        .catch(() => null),
+    enabled: !!folderPath,
+  });
+}
+
+export function useCreatePythonProjectNotebook() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      connectionId,
+      input,
+    }: {
+      projectId: string;
+      connectionId?: string;
+      input: CreatePythonNotebookInput;
+    }) =>
+      pythonNotebooksService.createInProject(projectId, connectionId, input),
+    onSuccess: (notebook, { projectId }) => {
+      queryClient.invalidateQueries(pythonNotebooksKeys.projectList(projectId));
+      toast.success(
+        `Notebook "${notebook.name}" created in ${notebook.project?.relativePath ?? 'the project'}`,
+      );
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to create notebook: ${error.message}`);
+    },
+  });
+}
+
 export function usePythonNotebook(connectionId: string, notebookId: string) {
   return useQuery<PythonNotebook | null>({
     queryKey: pythonNotebooksKeys.detail(connectionId, notebookId),
@@ -138,6 +195,7 @@ export function useUpdatePythonNotebook() {
     onSuccess: (_notebook, { connectionId, updates }) => {
       if (updates.name !== undefined) {
         queryClient.invalidateQueries(pythonNotebooksKeys.list(connectionId));
+        queryClient.invalidateQueries(pythonNotebooksKeys.projectLists());
       }
     },
     onError: (error: Error) => {
@@ -160,6 +218,7 @@ export function useRenamePythonNotebook() {
     }) => pythonNotebooksService.rename(connectionId, notebookId, newName),
     onSuccess: (notebook, { connectionId }) => {
       queryClient.invalidateQueries(pythonNotebooksKeys.list(connectionId));
+      queryClient.invalidateQueries(pythonNotebooksKeys.projectLists());
       toast.success(`Notebook renamed to "${notebook.name}"`);
     },
     onError: (error: Error) => {
@@ -182,6 +241,7 @@ export function useDuplicatePythonNotebook() {
     }) => pythonNotebooksService.duplicate(connectionId, notebookId, newName),
     onSuccess: (notebook, { connectionId }) => {
       queryClient.invalidateQueries(pythonNotebooksKeys.list(connectionId));
+      queryClient.invalidateQueries(pythonNotebooksKeys.projectLists());
       toast.success(`Notebook duplicated as "${notebook.name}"`);
     },
     onError: (error: Error) => {
@@ -205,6 +265,7 @@ export function useDeletePythonNotebook() {
         pythonNotebooksKeys.detail(connectionId, notebookId),
       );
       queryClient.invalidateQueries(pythonNotebooksKeys.list(connectionId));
+      queryClient.invalidateQueries(pythonNotebooksKeys.projectLists());
       toast.success('Notebook deleted');
     },
     onError: (error: Error) => {
