@@ -1,8 +1,6 @@
 import { ipcMain, BrowserWindow, app } from 'electron';
 import path from 'path';
 import fs from 'fs-extra';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
 import yaml from 'js-yaml';
 import { ProcessAdapter } from '../adapters';
 import {
@@ -11,43 +9,11 @@ import {
   RunnerService,
 } from '../services';
 import { getRunnerToolEnvironment } from '../services/runnerEnvironment';
+import { discoverSparkHome } from '../services/sparkEnvironment';
 
 // Separate ProcessAdapter instance (own 'runner:*' channels) so a pipeline
 // run never collides with the shared 'process:*' slot used by "Serve Docs".
 const runnerProcessAdapter = new ProcessAdapter('runner');
-const execFileAsync = promisify(execFile);
-const sparkHomeCache = new Map<string, Promise<string | undefined>>();
-
-async function discoverSparkHome(
-  pythonPath: string,
-): Promise<string | undefined> {
-  if (!sparkHomeCache.has(pythonPath)) {
-    sparkHomeCache.set(
-      pythonPath,
-      (async () => {
-        try {
-          const { stdout } = await execFileAsync(
-            pythonPath,
-            [
-              '-c',
-              'import os, pyspark; print(os.path.dirname(pyspark.__file__))',
-            ],
-            { timeout: 5000 },
-          );
-          const home = stdout.trim();
-          return (await fs.pathExists(path.join(home, 'bin', 'spark-class')))
-            ? home
-            : undefined;
-        } catch {
-          return undefined;
-        }
-      })(),
-    );
-  }
-  const home = await sparkHomeCache.get(pythonPath)!;
-  if (!home) sparkHomeCache.delete(pythonPath);
-  return home;
-}
 
 function usesPySpark(content: string): boolean {
   const pipeline = yaml.load(content) as {
@@ -209,7 +175,7 @@ const registerRunnerHandlers = (mainWindow: BrowserWindow) => {
 
       // The pip-installed spark-submit launcher calls find-spark-home, which
       // splits Studio's "Application Support" path when resolving SPARK_HOME.
-      // Resolve it with the managed interpreter and pass it to Spark directly.
+      // Locate it in the managed venv and pass it to Spark directly.
       if (settings.pythonPath && (await fs.pathExists(settings.pythonPath))) {
         const sparkHome = await discoverSparkHome(settings.pythonPath);
         if (sparkHome) {

@@ -38,7 +38,7 @@ async function findMacJavaHome(): Promise<string | undefined> {
   try {
     const { stdout } = await execFileAsync(
       '/usr/libexec/java_home',
-      ['-v', '17'],
+      ['--failfast', '-v', '17'],
       { timeout: 5000 },
     );
     if (stdout.trim()) return stdout.trim();

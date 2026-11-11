@@ -158,7 +158,9 @@ const PLUGIN_DEFINITIONS: {
 
 export default class RunnerService {
   static supportsPySpark(version?: string | null): boolean {
-    return Boolean(version && this.compareVersions(version, '1.7.6') >= 0);
+    return Boolean(
+      version && this.compareVersions(version.replace(/^v/, ''), '1.7.6') >= 0,
+    );
   }
 
   static async checkJavaRuntime(
