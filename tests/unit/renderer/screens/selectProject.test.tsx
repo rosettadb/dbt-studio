@@ -11,6 +11,7 @@ const VIEW_STORAGE_KEY = 'selectProject.view';
 
 jest.mock('react-router-dom', () => ({
   useNavigate: () => jest.fn(),
+  useLocation: () => ({ pathname: '/app/select-project', state: null }),
 }));
 
 jest.mock('../../../../src/renderer/controllers', () => {
