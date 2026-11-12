@@ -16,8 +16,6 @@ const updateSettings = jest.fn();
 const installPython = jest.fn();
 const installPythonVersion = jest.fn();
 const checkPythonVersions = jest.fn();
-const checkRunnerVersions = jest.fn();
-const installRunnerVersion = jest.fn();
 const saveSettings = jest.fn();
 const listDbtCoreVersions = jest.fn();
 const getInstalledDbtCore = jest.fn();
@@ -43,8 +41,6 @@ jest.mock('../../../src/renderer/services', () => ({
     installPython: () => installPython(),
     installPythonVersion: (version: string) => installPythonVersion(version),
     checkPythonVersions: () => checkPythonVersions(),
-    checkRunnerVersions: () => checkRunnerVersions(),
-    installRunnerVersion: (version: string) => installRunnerVersion(version),
     updateSettings: (value: unknown) => saveSettings(value),
   },
 }));
@@ -155,11 +151,6 @@ describe('Setup wizard', () => {
         return { ok: true };
       },
     );
-    checkRunnerVersions.mockResolvedValue({ latestStable: '1.7.2' });
-    installRunnerVersion.mockImplementation(async (version: string) => {
-      installLog.push(`runner ${version}`);
-      return { success: true, version, path: '/runner/bin' };
-    });
     flowfileInstall.mockImplementation(async () => {
       installLog.push('flowfile');
       return { ok: true };
@@ -245,7 +236,7 @@ describe('Setup wizard', () => {
     expect(screen.getByTestId('setup-install-btn')).toBeDisabled();
   });
 
-  it('installs dbt 1.x with the picked adapters and the runner, without a runner row', async () => {
+  it('installs dbt 1.x with the picked adapters and no runner step', async () => {
     render(<Setup />);
     pickLine('v1');
     await pickVersion('1.11.12');
@@ -268,11 +259,10 @@ describe('Setup wizard', () => {
       'dbt-redshift',
       'dbt-databricks',
       'dbt-duckdb',
-      'runner 1.7.2',
     ]);
     // Python was already installed at app startup, so it isn't reinstalled.
     expect(installPython).not.toHaveBeenCalled();
-    // The runner installs but has no row; Flowfile wasn't ticked.
+    // The runner ships with the app, so it has no row; Flowfile wasn't ticked.
     expect(screen.queryByText('Local runner')).not.toBeInTheDocument();
     expect(
       screen.queryByTestId('setup-install-row-flowfile'),
@@ -304,7 +294,7 @@ describe('Setup wizard', () => {
     goToInstallStep();
     await waitForInstallsToFinish();
 
-    expect(installLog).toEqual(['python 3.11.12', 'dbt 2.0.3', 'runner 1.7.2']);
+    expect(installLog).toEqual(['python 3.11.12', 'dbt 2.0.3']);
     expect(installLatestPackage).not.toHaveBeenCalled();
   });
 
@@ -375,23 +365,6 @@ describe('Setup wizard', () => {
 
     expect(flowfileInstall).toHaveBeenCalledTimes(2);
     expect(installPackageVersion).toHaveBeenCalledTimes(1);
-  });
-
-  it('shows a short note only when the hidden runner install fails', async () => {
-    installRunnerVersion.mockResolvedValueOnce({
-      success: false,
-      error: 'No internet connection',
-    });
-
-    render(<Setup />);
-    await makeChoices('v1', '1.11.12');
-    goToInstallStep();
-    await waitForInstallsToFinish();
-
-    expect(screen.getByTestId('setup-runner-failed')).toBeInTheDocument();
-    expect(
-      screen.queryByText('No internet connection'),
-    ).not.toBeInTheDocument();
   });
 
   it('saves setup as done with the settings the installs wrote', async () => {

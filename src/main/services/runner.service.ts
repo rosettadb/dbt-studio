@@ -51,20 +51,6 @@ function getRunnerRoot(): string {
   return path.join(app.getPath('userData'), 'runner');
 }
 
-// Only remove a previous install directory if it actually lives under the
-// runner root - settings.runnerPath is persisted/loaded as plain JSON, so a
-// corrupted or tampered value must never drive an arbitrary fs.remove.
-async function removeRunnerInstallDir(runnerPath: string): Promise<void> {
-  const runnerRoot = getRunnerRoot();
-  const dir = path.resolve(path.dirname(runnerPath));
-  const relative = path.relative(runnerRoot, dir);
-  const isInsideRoot =
-    relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
-  if (isInsideRoot && fs.existsSync(runnerPath)) {
-    await fs.remove(dir);
-  }
-}
-
 // Plugins the runner binary executes, and the external tool (if any) they
 // shell out to. dbt/rosetta are already managed elsewhere in Studio, so
 // their status is read from existing settings rather than re-detected here.
@@ -192,7 +178,6 @@ export default class RunnerService {
       return;
     }
 
-    const previousRunnerPath = settings.runnerPath;
     await fs.remove(installDir);
     await fs.copy(bundledDir, installDir);
 
@@ -203,12 +188,14 @@ export default class RunnerService {
       '';
     await SettingsService.saveSettings(settings);
 
-    if (
-      previousRunnerPath &&
-      path.dirname(path.resolve(previousRunnerPath)) !== installDir
-    ) {
-      await removeRunnerInstallDir(previousRunnerPath);
-    }
+    // Settings now point at the new copy, so every other runner folder
+    // (the previous version, older downloads) is unused.
+    const runnerFolderNames = await fs.readdir(getRunnerRoot());
+    await Promise.all(
+      runnerFolderNames
+        .filter((folderName) => folderName !== version)
+        .map((folderName) => fs.remove(path.join(getRunnerRoot(), folderName))),
+    );
   }
 
   // Returns the RUNNER_HOME path - the directory that directly contains
