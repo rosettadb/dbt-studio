@@ -11,7 +11,12 @@ import {
   Box,
 } from '@mui/material';
 import TerminalIcon from '@mui/icons-material/Terminal';
-import { CloseRounded, MinimizeRounded } from '@mui/icons-material';
+import {
+  CloseFullscreenRounded,
+  CloseRounded,
+  MinimizeRounded,
+  OpenInFullRounded,
+} from '@mui/icons-material';
 import {
   Root,
   EditorWrapper,
@@ -96,11 +101,14 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
   );
 
   const [lock, setLock] = React.useState(false);
-  const [sizes, setSizes] = React.useState<number[]>([
+  const [sizes, setSizes] = React.useState<(number | string)[]>([
     window.innerHeight - 300,
     300,
   ]);
   const [isMinimized, setIsMinimized] = React.useState(false);
+  const [isMaximized, setIsMaximized] = React.useState(false);
+  const isMaximizedRef = React.useRef(isMaximized);
+  isMaximizedRef.current = isMaximized;
   const rootRef = React.useRef<HTMLDivElement | null>(null);
   const lastTerminalHeight = React.useRef<number>(300);
   const sizesRef = React.useRef(sizes);
@@ -116,16 +124,43 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
     setIsMinimized(true);
     const layoutHeight = getLayoutHeight();
     const [, currentTerminalHeight] = sizesRef.current;
+    // While maximized the height to come back to is already remembered.
+    if (
+      !isMaximizedRef.current &&
+      typeof currentTerminalHeight === 'number' &&
+      currentTerminalHeight > MINIMIZED_TERMINAL_HEIGHT
+    ) {
+      lastTerminalHeight.current = currentTerminalHeight;
+    }
+    setIsMaximized(false);
+    setSizes([
+      layoutHeight - MINIMIZED_TERMINAL_HEIGHT,
+      MINIMIZED_TERMINAL_HEIGHT,
+    ]);
+  }, [getLayoutHeight]);
+
+  // Maximize gives the whole area to the bottom panel; toggling again
+  // returns to the height it had before.
+  const handleToggleMaximize = React.useCallback(() => {
+    if (isMaximizedRef.current) {
+      setIsMaximized(false);
+      const layoutHeight = getLayoutHeight();
+      setSizes([
+        layoutHeight - lastTerminalHeight.current,
+        lastTerminalHeight.current,
+      ]);
+      return;
+    }
+    const [, currentTerminalHeight] = sizesRef.current;
     if (
       typeof currentTerminalHeight === 'number' &&
       currentTerminalHeight > MINIMIZED_TERMINAL_HEIGHT
     ) {
       lastTerminalHeight.current = currentTerminalHeight;
     }
-    setSizes([
-      layoutHeight - MINIMIZED_TERMINAL_HEIGHT,
-      MINIMIZED_TERMINAL_HEIGHT,
-    ]);
+    setIsMaximized(true);
+    // 'auto' (not a pixel height) so it keeps filling a resized window.
+    setSizes([0, 'auto']);
   }, [getLayoutHeight]);
 
   const handleRestore = React.useCallback(() => {
@@ -237,6 +272,8 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
         sizes={sizes}
         onChange={(newSizes) => {
           if (!isMinimized) {
+            // Dragging the splitter ends the maximized state.
+            setIsMaximized(false);
             setSizes(newSizes);
           }
         }}
@@ -326,16 +363,57 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
                     </Button>
                   );
                 })}
-                {/* Minimize Button */}
-                <IconButton
-                  onClick={handleMinimize}
-                  size="small"
-                  style={{ marginLeft: 'auto' }}
+                <Box
+                  sx={{
+                    marginLeft: 'auto',
+                    display: 'flex',
+                    alignItems: 'center',
+                    flexShrink: 0,
+                  }}
                 >
-                  <div style={{ marginTop: -8 }}>
-                    <MinimizeRounded style={{ color: getTextColor(mode) }} />
-                  </div>
-                </IconButton>
+                  {/* Actions of the selected panel (new terminal, kill…) */}
+                  {panels
+                    .filter(
+                      (panel) =>
+                        panel.HeaderActions &&
+                        selectedId === panel.id &&
+                        isVisible(panel),
+                    )
+                    .map((panel) => {
+                      const Actions = panel.HeaderActions!;
+                      return <Actions key={panel.id} project={project} />;
+                    })}
+                  {/* Maximize Button */}
+                  <Tooltip
+                    title={
+                      isMaximized ? 'Restore Panel Size' : 'Maximize Panel'
+                    }
+                  >
+                    <IconButton
+                      onClick={handleToggleMaximize}
+                      size="small"
+                      aria-label={
+                        isMaximized ? 'Restore Panel Size' : 'Maximize Panel'
+                      }
+                    >
+                      {isMaximized ? (
+                        <CloseFullscreenRounded
+                          style={{ color: getTextColor(mode), fontSize: 15 }}
+                        />
+                      ) : (
+                        <OpenInFullRounded
+                          style={{ color: getTextColor(mode), fontSize: 15 }}
+                        />
+                      )}
+                    </IconButton>
+                  </Tooltip>
+                  {/* Minimize Button */}
+                  <IconButton onClick={handleMinimize} size="small">
+                    <div style={{ marginTop: -8 }}>
+                      <MinimizeRounded style={{ color: getTextColor(mode) }} />
+                    </div>
+                  </IconButton>
+                </Box>
               </TerminalHeader>
 
               {/* Tab Content */}
