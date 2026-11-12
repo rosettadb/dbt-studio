@@ -102,6 +102,8 @@ Start the app in the `dev` environment:
 npm start
 ```
 
+The local runner ships inside released builds. To run pipelines under `npm start`, copy a runner once into `resources/runner/` (git-ignored): the binary as `rosetta-runner` (`rosetta-runner.exe` on Windows) plus the unzipped plugins in `resources/runner/plugins-home/`. Both come from a [dbt Studio release](https://github.com/rosettadb/dbt-studio/releases). The app sets it up on the next start.
+
 ## Packaging for Production
 
 To package apps for the local platform:

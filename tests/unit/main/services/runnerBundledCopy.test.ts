@@ -19,13 +19,21 @@ describe('RunnerService.copyBundledRunnerToUserData', () => {
   const originalResourcesPath = process.resourcesPath;
   let tempDir: string;
   let bundledRunnerDir: string;
+  let projectDir: string;
   let runnerRoot: string;
 
-  // The runner the publish workflow puts inside the app.
-  const addBundledRunner = async () => {
-    await fs.outputFile(path.join(bundledRunnerDir, binaryName), 'new runner');
+  const setIsPackaged = (isPackaged: boolean) =>
+    Object.defineProperty(app, 'isPackaged', {
+      value: isPackaged,
+      configurable: true,
+    });
+
+  // A runner as the publish workflow lays it out: inside the installed app,
+  // or by default in bundledRunnerDir.
+  const addBundledRunner = async (runnerDir = bundledRunnerDir) => {
+    await fs.outputFile(path.join(runnerDir, binaryName), 'new runner');
     await fs.outputJson(
-      path.join(bundledRunnerDir, 'plugins-home', 'plugins.json'),
+      path.join(runnerDir, 'plugins-home', 'plugins.json'),
       {},
     );
   };
@@ -41,11 +49,17 @@ describe('RunnerService.copyBundledRunnerToUserData', () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'runner-copy-'));
     const resourcesPath = path.join(tempDir, 'resources');
     bundledRunnerDir = path.join(resourcesPath, 'resources', 'runner');
+    projectDir = path.join(tempDir, 'project');
     const userDataPath = path.join(tempDir, 'userData');
     runnerRoot = path.join(userDataPath, 'runner');
 
     Object.defineProperty(process, 'resourcesPath', {
       value: resourcesPath,
+      configurable: true,
+    });
+    setIsPackaged(true);
+    Object.defineProperty(app, 'getAppPath', {
+      value: () => projectDir,
       configurable: true,
     });
     (app.getPath as jest.Mock).mockReturnValue(userDataPath);
@@ -59,6 +73,8 @@ describe('RunnerService.copyBundledRunnerToUserData', () => {
       value: originalResourcesPath,
       configurable: true,
     });
+    Reflect.deleteProperty(app, 'isPackaged');
+    Reflect.deleteProperty(app, 'getAppPath');
     await fs.remove(tempDir);
   });
 
@@ -125,5 +141,21 @@ describe('RunnerService.copyBundledRunnerToUserData', () => {
     expect(loadSettings).not.toHaveBeenCalled();
     expect(saveSettings).not.toHaveBeenCalled();
     expect(await installedRunnerFolders()).toEqual(['1.7.6']);
+  });
+
+  it('under npm start, sets up the runner a developer copied into the project', async () => {
+    setIsPackaged(false);
+    await addBundledRunner(path.join(projectDir, 'resources', 'runner'));
+    loadSettings.mockResolvedValue({});
+
+    await RunnerService.copyBundledRunnerToUserData();
+
+    const copiedBinary = path.join(runnerRoot, '1.7.7', binaryName);
+    expect(await fs.readFile(copiedBinary, 'utf8')).toBe('new runner');
+    expect(saveSettings).toHaveBeenCalledWith({
+      runnerVersion: '1.7.7',
+      runnerPath: copiedBinary,
+      runnerHome: path.join(runnerRoot, '1.7.7', 'plugins-home'),
+    });
   });
 });

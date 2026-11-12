@@ -43,8 +43,12 @@ function getRunnerBinaryFileName(): string {
 
 // The publish workflow puts the runner binary and its unzipped plugins into
 // resources/runner, which electron-builder ships inside the installed app.
+// Under npm start the same folder is read from the project itself, where a
+// developer copies a runner by hand (it is git-ignored).
 function getBundledRunnerDir(): string {
-  return path.join(process.resourcesPath, 'resources', 'runner');
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'resources', 'runner')
+    : path.join(app.getAppPath(), 'resources', 'runner');
 }
 
 function getRunnerRoot(): string {
@@ -156,8 +160,8 @@ export default class RunnerService {
   // version> and points settings at it. It is copied rather than run in place
   // because the install folder is read-only on macOS and Linux. Runs on every
   // start but only copies after an app update (or when the copy is missing).
-  // Builds without a bundled runner (npm start, unsupported platforms) keep
-  // whatever runner is already saved.
+  // Without a bundled runner (unsupported platforms, or npm start with an
+  // empty project resources/runner) whatever runner is already saved is kept.
   static async copyBundledRunnerToUserData(): Promise<void> {
     const bundledDir = getBundledRunnerDir();
     if (
