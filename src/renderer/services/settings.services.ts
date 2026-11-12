@@ -214,6 +214,14 @@ export const checkRunnerPluginDependencies = async (): Promise<
   return data;
 };
 
+export const installPySpark = async (): Promise<void> => {
+  await client.get<void>('runner:pyspark:install');
+};
+
+export const uninstallPySpark = async (): Promise<void> => {
+  await client.get<void>('runner:pyspark:uninstall');
+};
+
 // DuckDB management services
 export const getDuckDbMetadata = async (): Promise<any> => {
   const { data } = await client.get<any>('settings:duckdb:metadata');

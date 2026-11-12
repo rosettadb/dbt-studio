@@ -6,6 +6,10 @@ import {
   Chip,
   Typography,
   Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
   CircularProgress,
   IconButton,
   Tooltip,
@@ -47,6 +51,8 @@ import {
   useCheckKisqlVersion,
   useInstallKisql,
   useUninstallKisql,
+  useInstallPySpark,
+  useUninstallPySpark,
 } from '../../controllers';
 
 // Manual-install guidance shown in the help popover for deps that have no
@@ -86,6 +92,19 @@ const MANUAL_INSTALL_HELP: Partial<
 // Versions shown before "Show older versions" is clicked.
 const LATEST_RUNNER_VERSIONS_SHOWN = 4;
 
+function describeJavaRequirement(
+  version?: string,
+  available?: boolean,
+): string {
+  if (!version) {
+    return 'Java was not found. PySpark requires Java 17 or newer. Install a JDK, then restart Studio.';
+  }
+  if (available) {
+    return `Java ${version} is available. PySpark requires Java 17 or newer.`;
+  }
+  return `Java ${version} was found. PySpark requires Java 17 or newer. Install a newer JDK, then restart Studio.`;
+}
+
 interface RunnerSettingsProps {
   settings: SettingsType;
 }
@@ -103,8 +122,14 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
     useState(false);
   const [showKisqlUninstallConfirmation, setShowKisqlUninstallConfirmation] =
     useState(false);
+  const [
+    showPySparkUninstallConfirmation,
+    setShowPySparkUninstallConfirmation,
+  ] = useState(false);
   const isInstallTaskActive = useIsTaskTypeActive('install:runner');
+  const isPySparkInstallTaskActive = useIsTaskTypeActive('install:pyspark');
   const [kisqlUpdateAvailable, setKisqlUpdateAvailable] = useState(false);
+  const [javaInfoOpen, setJavaInfoOpen] = useState(false);
   const [helpAnchor, setHelpAnchor] = useState<{
     el: HTMLElement;
     id: RunnerPluginId;
@@ -122,6 +147,9 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
       toast.error(`Failed to check plugin dependencies: ${error.message}`);
     },
   });
+  const javaStatus = pluginDependencies.data?.find(
+    (dependency) => dependency.id === 'pyspark',
+  )?.java;
 
   const installVersion = useInstallRunnerVersion({
     onSuccess: (result) => {
@@ -179,6 +207,28 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
     },
   });
 
+  const installPySpark = useInstallPySpark({
+    onSuccess: () => {
+      toast.success('PySpark installed successfully');
+      pluginDependencies.mutate();
+    },
+    onError: (error) => {
+      if (isInstallCancelledError(error)) return;
+      toast.error(`PySpark installation failed: ${error.message}`);
+    },
+  });
+
+  const uninstallPySpark = useUninstallPySpark({
+    onSuccess: () => {
+      toast.success('PySpark uninstalled');
+      pluginDependencies.mutate();
+    },
+    onError: (error) => {
+      if (isInstallCancelledError(error)) return;
+      toast.error(`PySpark uninstall failed: ${error.message}`);
+    },
+  });
+
   const uninstallKisql = useUninstallKisql({
     onSuccess: () => {
       setKisqlUpdateAvailable(false);
@@ -201,6 +251,11 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
   const handleInstallVersion = (version: string) => {
     setInstallingVersion(version);
     installVersion.mutate(version);
+  };
+
+  const confirmPySparkUninstall = () => {
+    setShowPySparkUninstallConfirmation(false);
+    uninstallPySpark.mutate();
   };
 
   const handleInstallKisql = () => {
@@ -401,6 +456,11 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
                 {dep.id === 'kinetica_cli' && kisqlUpdateAvailable && (
                   <SettingsStatus tone="info">Update available</SettingsStatus>
                 )}
+                {dep.id === 'pyspark' && dep.java && !dep.java.available && (
+                  <SettingsStatus tone="warning">
+                    Java 17+ required
+                  </SettingsStatus>
+                )}
               </Box>
             }
             description={
@@ -466,16 +526,67 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
                 )}
               </>
             )}
-            {!dep.available && dep.downloadUrl && dep.id !== 'kinetica_cli' && (
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={<Launch />}
-                onClick={() => window.open(dep.downloadUrl, '_blank')}
-              >
-                Install
-              </Button>
+            {dep.id === 'pyspark' && (
+              <>
+                <Tooltip title="Java requirement">
+                  <IconButton
+                    size="small"
+                    onClick={() => setJavaInfoOpen(true)}
+                  >
+                    <Info fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => installPySpark.mutate()}
+                  disabled={
+                    dep.available ||
+                    installPySpark.isLoading ||
+                    uninstallPySpark.isLoading ||
+                    isPySparkInstallTaskActive
+                  }
+                  startIcon={
+                    installPySpark.isLoading ? (
+                      <CircularProgress size={14} />
+                    ) : (
+                      <Download />
+                    )
+                  }
+                >
+                  {dep.available ? 'Installed' : 'Install'}
+                </Button>
+                {dep.managedInStudio && (
+                  <Tooltip title="Uninstall PySpark">
+                    <IconButton
+                      size="small"
+                      color="error"
+                      onClick={() => setShowPySparkUninstallConfirmation(true)}
+                      disabled={
+                        installPySpark.isLoading ||
+                        uninstallPySpark.isLoading ||
+                        isPySparkInstallTaskActive
+                      }
+                    >
+                      <Delete fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
+              </>
             )}
+            {!dep.available &&
+              dep.downloadUrl &&
+              dep.id !== 'kinetica_cli' &&
+              dep.id !== 'pyspark' && (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<Launch />}
+                  onClick={() => window.open(dep.downloadUrl, '_blank')}
+                >
+                  Install
+                </Button>
+              )}
             {dep.id !== 'kinetica_cli' &&
               dep.id !== 'dbt' &&
               dep.id !== 'rosetta' &&
@@ -539,6 +650,29 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
         title="Uninstall KiSQL"
         question="Are you sure you want to uninstall KiSQL? Pipeline steps using kinetica_cli@v1 will fail until it is reinstalled."
       />
+
+      <ConfirmationModal
+        isOpen={showPySparkUninstallConfirmation}
+        onClose={() => setShowPySparkUninstallConfirmation(false)}
+        onConfirm={confirmPySparkUninstall}
+        title="Uninstall PySpark"
+        question="Are you sure you want to uninstall PySpark from Studio Python? Local pipeline steps using pyspark@v1 will fail until it is reinstalled."
+      />
+
+      <Dialog open={javaInfoOpen} onClose={() => setJavaInfoOpen(false)}>
+        <DialogTitle>Java required for PySpark</DialogTitle>
+        <DialogContent>
+          <Typography>
+            {describeJavaRequirement(
+              javaStatus?.version,
+              javaStatus?.available,
+            )}
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setJavaInfoOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Manual-install help popover */}
       <Popover

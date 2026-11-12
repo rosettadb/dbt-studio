@@ -5,7 +5,8 @@ export type PipelinePluginId =
   | 'command@v1'
   | 's3@v1'
   | 'kinetica_cli@v1'
-  | 'git_clone@v1';
+  | 'git_clone@v1'
+  | 'pyspark@v1';
 
 export interface PipelinePluginField {
   key: 'command' | 'working_dir' | 'url' | 'branch' | 'dest';
@@ -63,6 +64,26 @@ export const PIPELINE_PLUGIN_CATALOG: readonly PipelinePluginContract[] = [
         required: false,
         defaultValue: 'rosetta',
         placeholder: 'rosetta',
+      },
+    ],
+  },
+  {
+    id: 'pyspark@v1',
+    label: 'PySpark',
+    availability: 'addable',
+    fields: [
+      {
+        key: 'command',
+        label: 'Command',
+        required: true,
+        multiline: true,
+        placeholder: 'spark-submit jobs/transform.py',
+      },
+      {
+        key: 'working_dir',
+        label: 'Working Dir',
+        required: false,
+        placeholder: 'spark',
       },
     ],
   },

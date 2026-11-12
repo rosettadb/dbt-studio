@@ -1,12 +1,33 @@
 import { ipcMain, BrowserWindow, app } from 'electron';
 import path from 'path';
 import fs from 'fs-extra';
+import yaml from 'js-yaml';
 import { ProcessAdapter } from '../adapters';
-import { TaskManagerService, SettingsService } from '../services';
+import {
+  TaskManagerService,
+  SettingsService,
+  RunnerService,
+} from '../services';
+import { getRunnerToolEnvironment } from '../services/runnerEnvironment';
+import { discoverSparkHome } from '../services/sparkEnvironment';
 
 // Separate ProcessAdapter instance (own 'runner:*' channels) so a pipeline
 // run never collides with the shared 'process:*' slot used by "Serve Docs".
 const runnerProcessAdapter = new ProcessAdapter('runner');
+
+function usesPySpark(content: string): boolean {
+  const pipeline = yaml.load(content) as {
+    jobs?: { steps?: { plugin?: string }[] }[];
+  } | null;
+  return (
+    Array.isArray(pipeline?.jobs) &&
+    pipeline.jobs.some(
+      (job) =>
+        Array.isArray(job?.steps) &&
+        job.steps.some((step) => step?.plugin === 'pyspark@v1'),
+    )
+  );
+}
 
 const handlerChannels = ['runner:run', 'runner:stop', 'runner:status'];
 
@@ -92,6 +113,46 @@ const registerRunnerHandlers = (mainWindow: BrowserWindow) => {
         };
       }
 
+      const toolEnv = await getRunnerToolEnvironment(settings);
+      try {
+        // pipelineFile is relative to rosetta/pipelines/ (or the legacy
+        // .rosetta/ folder), the same places ProjectsService.listPipelines
+        // looks, in the same order.
+        const pipelinePaths = [
+          path.resolve(workspaceDir, 'rosetta', 'pipelines', pipelineFile),
+          path.resolve(workspaceDir, '.rosetta', pipelineFile),
+        ];
+        const pipelinePathExists = await Promise.all(
+          pipelinePaths.map((pipelinePath) => fs.pathExists(pipelinePath)),
+        );
+        const pipelinePath = pipelinePaths.find(
+          (_, index) => pipelinePathExists[index],
+        );
+        const content = pipelinePath
+          ? await fs.readFile(pipelinePath, 'utf8')
+          : '';
+        if (usesPySpark(content)) {
+          if (!RunnerService.supportsPySpark(settings.runnerVersion)) {
+            return {
+              success: false,
+              error:
+                'PySpark requires runner 1.7.6 or newer. Upgrade the local runner in Settings.',
+            };
+          }
+          const java = await RunnerService.checkJavaRuntime(toolEnv);
+          if (!java.available) {
+            return {
+              success: false,
+              error: java.version
+                ? `Java ${java.version} was found. PySpark requires Java 17 or newer.`
+                : 'Java was not found. PySpark requires Java 17 or newer.',
+            };
+          }
+        }
+      } catch {
+        // The runner reports missing or invalid pipeline files itself.
+      }
+
       const logDir = path.join(app.getPath('userData'), 'runner-logs');
       await fs.mkdirp(logDir);
       // taskId is a deterministic id built from a filesystem path and may
@@ -100,6 +161,7 @@ const registerRunnerHandlers = (mainWindow: BrowserWindow) => {
       const logFile = path.join(logDir, `${safeLogName}.log`);
 
       const env: Record<string, string> = {
+        ...toolEnv,
         RUN_MODE: 'studio',
         WORKSPACE_DIR: workspaceDir,
         EXECUTION_MODE: 'pipeline',
@@ -111,35 +173,16 @@ const registerRunnerHandlers = (mainWindow: BrowserWindow) => {
         env.RUNNER_HOME = settings.runnerHome;
       }
 
-      // In studio mode the dbt@v1/rosetta@v1 plugin scripts just call the
-      // bare `dbt`/`rosetta` commands (no auto-install, no absolute-path
-      // support) - so Studio's own managed installs, which live in a venv /
-      // app-data dir rather than the system PATH, need to be put on PATH for
-      // the runner's child process to find them.
-      const toolDirs = [
-        settings.dbtPath,
-        settings.rosettaPath,
-        settings.kisqlPath,
-      ]
-        .filter((toolPath): toolPath is string => Boolean(toolPath))
-        .map((toolPath) => path.dirname(toolPath));
-
-      // On macOS, Electron's PATH often omits Homebrew directories because
-      // the app is launched via launchd rather than a login shell. Add the
-      // standard Homebrew prefixes so tools like terraform, git, and aws
-      // that are installed via Homebrew are visible to the runner.
-      const homebrewDirs =
-        process.platform === 'darwin'
-          ? [
-              '/opt/homebrew/bin', // Apple Silicon
-              '/usr/local/bin', // Intel
-            ]
-          : [];
-
-      const basePath = process.env.PATH ?? '';
-      const allDirs = [...toolDirs, ...homebrewDirs];
-      if (allDirs.length) {
-        env.PATH = [...allDirs, basePath].join(path.delimiter);
+      // The pip-installed spark-submit launcher calls find-spark-home, which
+      // splits Studio's "Application Support" path when resolving SPARK_HOME.
+      // Locate it in the managed venv and pass it to Spark directly.
+      if (settings.pythonPath && (await fs.pathExists(settings.pythonPath))) {
+        const sparkHome = await discoverSparkHome(settings.pythonPath);
+        if (sparkHome) {
+          env.SPARK_HOME = sparkHome;
+          env.PYSPARK_PYTHON = settings.pythonPath;
+          env.PYSPARK_DRIVER_PYTHON = settings.pythonPath;
+        }
       }
 
       TaskManagerService.create({

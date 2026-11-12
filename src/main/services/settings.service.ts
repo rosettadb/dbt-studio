@@ -1131,7 +1131,7 @@ export default class SettingsService {
     let settings = await this.loadSettings();
 
     const safeName = packageName.trim();
-    const allowedPackages = new Set(['sqlglot']);
+    const allowedPackages = new Set(['sqlglot', 'pyspark']);
     const isValidPackageName = /^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/i.test(
       safeName,
     );
@@ -1170,6 +1170,21 @@ export default class SettingsService {
 
   static async installSqlGlot(): Promise<void> {
     return this.installPackage('sqlglot');
+  }
+
+  static async uninstallPySpark(): Promise<void> {
+    const settings = await this.loadSettings();
+    if (!settings.pythonPath || !fs.existsSync(settings.pythonPath)) {
+      throw new Error('Studio Python is not installed.');
+    }
+    const cliAdapter = new CliAdapter();
+    await cliAdapter.runCommandWithoutStreaming(settings.pythonPath, [
+      '-m',
+      'pip',
+      'uninstall',
+      '-y',
+      'pyspark',
+    ]);
   }
 
   private static compareVersions(version1: string, version2: string): number {

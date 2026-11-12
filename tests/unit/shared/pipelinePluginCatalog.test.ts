@@ -5,10 +5,11 @@ import {
 import { PLUGIN_DEFS } from '../../../src/renderer/components/pipelineView/pluginDefinitions';
 
 describe('pipeline plugin authoring catalog', () => {
-  it('defines six unique addable plugins with required fields', () => {
+  it('defines seven unique addable plugins with required fields', () => {
     expect(ADDABLE_PIPELINE_PLUGINS.map((plugin) => plugin.id)).toEqual([
       'dbt@v1',
       'rosetta@v1',
+      'pyspark@v1',
       'terraform@v1',
       'command@v1',
       's3@v1',
