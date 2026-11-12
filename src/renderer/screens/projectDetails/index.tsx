@@ -160,7 +160,7 @@ const ProjectDetails: React.FC = () => {
             <Tabs
               value={sidebarTab}
               onChange={(_e, newValue) => setSidebarTab(newValue)}
-              centered
+              variant="fullWidth"
               sx={{
                 minHeight: 34,
                 '& .MuiTab-root': {

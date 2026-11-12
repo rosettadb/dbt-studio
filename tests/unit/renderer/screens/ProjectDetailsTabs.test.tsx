@@ -121,6 +121,18 @@ describe('ProjectDetails side panel tabs', () => {
     ).toEqual(['Explorer', 'Git', 'Database']);
   });
 
+  // jsdom has no layout, so this checks MUI's full-width class, not pixels
+  it.each(['Explorer', 'Git', 'Database'])(
+    'stretches the %s tab to share the full width of the panel',
+    (tabName) => {
+      renderProjectDetails();
+
+      expect(screen.getByRole('tab', { name: tabName })).toHaveClass(
+        'MuiTab-fullWidth',
+      );
+    },
+  );
+
   it.each(['Explorer', 'Git', 'Database'])(
     'shows no label text on the %s tab',
     (tabName) => {
