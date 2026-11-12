@@ -261,6 +261,7 @@ export type RunnerPluginId =
   | 'terraform'
   | 's3'
   | 'kinetica_cli'
+  | 'pyspark'
   | 'command';
 
 export type RunnerPluginStatus = {
@@ -272,6 +273,11 @@ export type RunnerPluginStatus = {
   path?: string;
   managedInStudio?: boolean;
   downloadUrl?: string;
+  java?: {
+    available: boolean;
+    version?: string;
+    requiredVersion: number;
+  };
 };
 
 export type DbtCoreVersionListItem = {
@@ -850,6 +856,10 @@ export type RepoInfoRes = {
   remoteUrl: string | null;
   currentBranch: string;
   branchExistsOnRemote: boolean;
+};
+
+export type ProjectGitSummary = {
+  currentBranch: string | null;
 };
 
 export type Secret = {

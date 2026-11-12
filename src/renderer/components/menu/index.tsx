@@ -48,6 +48,7 @@ import { Icon } from '../icon';
 import { LetterAvatar } from '../letterAvatar';
 import { useAppContext } from '../../hooks';
 import { ExpandRightIcon } from '../sidebar/collapse-icons';
+import { CommandPalette } from '../commandPalette';
 
 type MenuProps = {
   actions?: React.ReactNode;
@@ -166,6 +167,7 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
         )}
       </IconsContainer>
       <IconsContainer sx={{ gap: 2 }}>
+        <CommandPalette />
         {isProjectSelected && !isOnHome && actions}
         {/* Authentication - Only show when not logged in */}
         {!apiKey && (

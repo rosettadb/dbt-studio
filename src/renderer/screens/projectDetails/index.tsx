@@ -2,8 +2,7 @@ import React from 'react';
 import SplitPane, { Pane } from 'split-pane-react';
 import 'split-pane-react/esm/themes/default.css';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { Search as SearchIcon } from '@mui/icons-material';
-import { Badge, Box, Tab, Tabs } from '@mui/material';
+import { Badge, Box, Tab, TabProps, Tabs, Tooltip } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import {
   Loader,
@@ -60,6 +59,19 @@ const VerticalSash = (_: number, active: boolean) => (
 // Minimum width for the chat panel — must be wide enough for the chat UI
 const CHAT_MIN_WIDTH = 280;
 
+// The tooltip sits on the tab itself, so its name shows on hover and on
+// keyboard focus, and also becomes the tab's accessible name. Tabs passes
+// its props (selected, onChange, ...) through this wrapper to the Tab.
+const IconOnlyTab: React.FC<TabProps & { tabName: string }> = ({
+  tabName,
+  ...tabProps
+}) => (
+  <Tooltip title={tabName}>
+    {/* eslint-disable-next-line react/jsx-props-no-spreading */}
+    <Tab {...tabProps} />
+  </Tooltip>
+);
+
 // Layout only: sidebar strip, tab strip, the active file view, the bottom
 // panels and the chat pane. Which component renders a file, and which panel
 // a run lands in, are resolved by their registries from the stores — this
@@ -85,7 +97,7 @@ const ProjectDetails: React.FC = () => {
   );
   const [sidebarTab, setSidebarTab] = React.useState<SidebarTab>('explorer');
 
-  const { isChatOpen } = useAppContext();
+  const { isChatOpen, setIsSidebarOpen } = useAppContext();
   const { data: project, isLoading } = useGetSelectedProject();
   const { data: isInitialized } = useGitIsInitialized(project?.path, {
     enabled: !!project?.path,
@@ -107,7 +119,16 @@ const ProjectDetails: React.FC = () => {
     saveAll,
     saveTab,
     reorderTabs,
+    revealedFolderPath,
   } = useTabs();
+
+  // The file tree only exists on the Explorer tab of an open side panel
+  React.useEffect(() => {
+    if (revealedFolderPath) {
+      setSidebarTab('explorer');
+      setIsSidebarOpen(true);
+    }
+  }, [revealedFolderPath, setIsSidebarOpen]);
 
   if (isLoading) {
     return <Loader />;
@@ -144,42 +165,26 @@ const ProjectDetails: React.FC = () => {
                 minHeight: 34,
                 '& .MuiTab-root': {
                   minHeight: 34,
-                  fontSize: '0.7rem',
-                  textTransform: 'none',
                   py: 0,
-                  minWidth: 0,
-                  px: 0.5,
-                },
-                '& .MuiTab-iconWrapper': {
-                  marginRight: '4px !important',
-                  marginBottom: '0 !important',
+                  minWidth: 40,
+                  px: 1,
                 },
               }}
             >
-              <Tab
+              <IconOnlyTab
+                tabName="Explorer"
                 value="explorer"
                 icon={
                   <Icon
                     src={icons.folder}
-                    width={15}
-                    height={15}
+                    width={18}
+                    height={18}
                     color={sidebarIconColor('explorer')}
                   />
                 }
-                iconPosition="start"
-                label="Explorer"
               />
-              <Tab
-                value="search"
-                icon={
-                  <SearchIcon
-                    sx={{ fontSize: 15, color: sidebarIconColor('search') }}
-                  />
-                }
-                iconPosition="start"
-                label="Search"
-              />
-              <Tab
+              <IconOnlyTab
+                tabName="Git"
                 value="scm"
                 icon={
                   <Badge
@@ -192,23 +197,22 @@ const ProjectDetails: React.FC = () => {
                         height: 14,
                         minWidth: 14,
                         padding: '0 2px',
-                        top: -2,
-                        right: -6,
+                        top: 3,
+                        right: -2,
                       },
                     }}
                   >
                     <Icon
                       src={icons.gitBranch}
-                      width={15}
-                      height={15}
+                      width={18}
+                      height={18}
                       color={sidebarIconColor('scm')}
                     />
                   </Badge>
                 }
-                iconPosition="start"
-                label="Git"
               />
-              <Tab
+              <IconOnlyTab
+                tabName="Database"
                 value="connections"
                 icon={
                   <svg
@@ -217,8 +221,8 @@ const ProjectDetails: React.FC = () => {
                     viewBox="0 0 24 24"
                     strokeWidth={1.5}
                     stroke={sidebarIconColor('connections')}
-                    width={15}
-                    height={15}
+                    width={18}
+                    height={18}
                   >
                     <path
                       strokeLinecap="round"
@@ -227,12 +231,16 @@ const ProjectDetails: React.FC = () => {
                     />
                   </svg>
                 }
-                iconPosition="start"
-                label="Database"
               />
             </Tabs>
           </Box>
-          <Box sx={{ flex: 1, overflow: 'hidden' }}>
+          <Box
+            sx={{
+              flex: 1,
+              overflow: 'hidden',
+              pt: sidebarTab === 'explorer' ? 1 : 0,
+            }}
+          >
             <ProjectSidebar
               activeTab={sidebarTab}
               project={project}

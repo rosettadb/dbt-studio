@@ -13,6 +13,10 @@ import {
   RunnerPluginStatus,
 } from '../../types/backend';
 import SettingsService from './settings.service';
+import {
+  getRunnerJavaCommand,
+  getRunnerToolEnvironment,
+} from './runnerEnvironment';
 
 const KISQL_GITHUB_REPO = 'kineticadb/kisql';
 const KISQL_UNIX_ASSET = 'kisql';
@@ -135,6 +139,15 @@ const PLUGIN_DEFINITIONS: {
     downloadUrl: 'https://aws.amazon.com/cli/',
   },
   {
+    id: 'pyspark',
+    label: 'PySpark (spark-submit)',
+    plugin: 'pyspark@v1',
+    command: 'spark-submit',
+    versionArgs: ['--version'],
+    downloadUrl:
+      'https://spark.apache.org/docs/latest/api/python/getting_started/install.html',
+  },
+  {
     id: 'kinetica_cli',
     label: 'Kinetica CLI (KiSQL)',
     plugin: 'kinetica_cli@v1',
@@ -144,6 +157,51 @@ const PLUGIN_DEFINITIONS: {
 ];
 
 export default class RunnerService {
+  static supportsPySpark(version?: string | null): boolean {
+    return Boolean(
+      version && this.compareVersions(version.replace(/^v/, ''), '1.7.6') >= 0,
+    );
+  }
+
+  static async checkJavaRuntime(
+    runnerEnv?: Record<string, string | undefined>,
+  ): Promise<{
+    available: boolean;
+    version?: string;
+    requiredVersion: number;
+  }> {
+    const requiredVersion = 17;
+    const env =
+      runnerEnv ||
+      (await getRunnerToolEnvironment(await SettingsService.loadSettings()));
+    const java = getRunnerJavaCommand(env);
+
+    return new Promise((resolve) => {
+      execFile(
+        java,
+        ['-version'],
+        { timeout: 5000, env },
+        (error, stdout, stderr) => {
+          if (error) {
+            resolve({ available: false, requiredVersion });
+            return;
+          }
+          const version = `${stdout}${stderr}`.match(/version "([\d.]+)/)?.[1];
+          const major = Number(
+            version?.split('.')[0] === '1'
+              ? version?.split('.')[1]
+              : version?.split('.')[0],
+          );
+          resolve({
+            available: Number.isFinite(major) && major >= requiredVersion,
+            version,
+            requiredVersion,
+          });
+        },
+      );
+    });
+  }
+
   static async checkRunnerVersions(): Promise<RunnerVersionInfo> {
     const settings = await SettingsService.loadSettings();
     const currentVersion = settings.runnerVersion || null;
@@ -365,6 +423,29 @@ export default class RunnerService {
             managedInStudio: true,
           };
         }
+        if (def.id === 'pyspark') {
+          const java = await this.checkJavaRuntime();
+          const managedSparkSubmit = settings.pythonPath
+            ? path.join(
+                path.dirname(settings.pythonPath),
+                process.platform === 'win32'
+                  ? 'spark-submit.cmd'
+                  : 'spark-submit',
+              )
+            : '';
+          if (managedSparkSubmit && (await fs.pathExists(managedSparkSubmit))) {
+            return {
+              id: def.id,
+              label: def.label,
+              plugin: def.plugin,
+              available: true,
+              path: managedSparkSubmit,
+              managedInStudio: true,
+              downloadUrl: def.downloadUrl,
+              java,
+            };
+          }
+        }
         if (!def.command) {
           // command@v1: no external dependency, always usable
           return {
@@ -374,7 +455,13 @@ export default class RunnerService {
             available: true,
           };
         }
-        const detected = await this.detectBinary(def.command, def.versionArgs);
+        const detected = await this.detectBinary(
+          def.command,
+          def.versionArgs || ['--version'],
+          def.id === 'pyspark'
+            ? await getRunnerToolEnvironment(settings)
+            : undefined,
+        );
         return {
           id: def.id,
           label: def.label,
@@ -383,6 +470,13 @@ export default class RunnerService {
           version: detected.version,
           path: detected.path,
           downloadUrl: def.downloadUrl,
+          ...(def.id === 'pyspark'
+            ? {
+                java: await this.checkJavaRuntime(
+                  await getRunnerToolEnvironment(settings),
+                ),
+              }
+            : {}),
         };
       }),
     );
@@ -390,7 +484,8 @@ export default class RunnerService {
 
   private static detectBinary(
     command: string,
-    versionArgs: string[] = ['--version'],
+    versionArgs: string[],
+    runnerEnv?: Record<string, string>,
   ): Promise<{ available: boolean; version?: string; path?: string }> {
     // On macOS, Electron's PATH often omits Homebrew directories because
     // the app is launched via launchd rather than a login shell.  Ensure
@@ -409,7 +504,7 @@ export default class RunnerService {
         versionArgs,
         {
           timeout: 5000,
-          env: {
+          env: runnerEnv || {
             ...process.env,
             ...(extraPath
               ? { PATH: `${extraPath}:${process.env.PATH ?? ''}` }
