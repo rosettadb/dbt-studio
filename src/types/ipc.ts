@@ -269,6 +269,21 @@ export type ProcessChannels =
   | 'process:exit'
   | 'process:done';
 
+// OS shell terminal (real PTY sessions, see src/types/pty.ts)
+export type PtyChannels =
+  | 'pty:profiles'
+  | 'pty:create'
+  | 'pty:list'
+  | 'pty:snapshot'
+  | 'pty:kill'
+  | 'pty:rename'
+  | 'pty:write' // renderer → main (send)
+  | 'pty:resize' // renderer → main (send)
+  | 'pty:ack' // renderer → main (send): flow control acknowledgement
+  | 'pty:data' // main → renderer
+  | 'pty:exit' // main → renderer
+  | 'pty:title'; // main → renderer
+
 export type RunnerChannels =
   | 'runner:run'
   | 'runner:status'
@@ -623,6 +638,7 @@ export type Channels =
   | GitChannels
   | UtilChannels
   | ProcessChannels
+  | PtyChannels
   | RunnerChannels
   | SecureStorageChannels
   | UpdateChannels
