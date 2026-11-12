@@ -48,3 +48,6 @@ resources/analytics-runtime.umd.js
 # Python cache
 __pycache__/
 *.pyc
+
+# Local runner bundled into the app by the publish workflow
+resources/runner/

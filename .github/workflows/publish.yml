@@ -96,6 +96,19 @@ jobs:
       - name: Build project
         run: npm run build
 
+      # Ships the local runner inside the app (resources/runner). electron-builder
+      # signs and notarizes it together with the app.
+      - name: Bundle local runner (macOS ARM64)
+        env:
+          GH_TOKEN: ${{ secrets.ORCHESTRATOR_REPO_TOKEN }}
+        run: |
+          mkdir -p resources/runner
+          gh release download --repo rosettadb/cloud-api --pattern 'rosetta-runner-darwin-arm64' --pattern 'rosetta-runner-plugins.zip' --dir resources/runner --clobber
+          mv resources/runner/rosetta-runner-darwin-arm64 resources/runner/rosetta-runner
+          chmod +x resources/runner/rosetta-runner
+          unzip -q resources/runner/rosetta-runner-plugins.zip -d resources/runner/plugins-home
+          rm resources/runner/rosetta-runner-plugins.zip
+
       - name: Import signing certificate
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}
@@ -347,6 +360,19 @@ jobs:
           export PATH="$HOME/node-x64/bin:$PATH"
           arch -x86_64 npm run build
 
+      # Ships the local runner inside the app (resources/runner). electron-builder
+      # signs and notarizes it together with the app.
+      - name: Bundle local runner (macOS x64)
+        env:
+          GH_TOKEN: ${{ secrets.ORCHESTRATOR_REPO_TOKEN }}
+        run: |
+          mkdir -p resources/runner
+          gh release download --repo rosettadb/cloud-api --pattern 'rosetta-runner-darwin-amd64' --pattern 'rosetta-runner-plugins.zip' --dir resources/runner --clobber
+          mv resources/runner/rosetta-runner-darwin-amd64 resources/runner/rosetta-runner
+          chmod +x resources/runner/rosetta-runner
+          unzip -q resources/runner/rosetta-runner-plugins.zip -d resources/runner/plugins-home
+          rm resources/runner/rosetta-runner-plugins.zip
+
       - name: Import signing certificate
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}
@@ -562,6 +588,33 @@ jobs:
       - name: Build project
         run: npm run build
 
+      # Ships the local runner inside the app (resources/runner).
+      - name: Bundle local runner (Windows)
+        env:
+          GH_TOKEN: ${{ secrets.ORCHESTRATOR_REPO_TOKEN }}
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force resources/runner | Out-Null
+          gh release download --repo rosettadb/cloud-api --pattern 'rosetta-runner-windows-amd64.exe' --pattern 'rosetta-runner-plugins.zip' --dir resources/runner --clobber
+          Move-Item resources/runner/rosetta-runner-windows-amd64.exe resources/runner/rosetta-runner.exe
+          Expand-Archive resources/runner/rosetta-runner-plugins.zip -DestinationPath resources/runner/plugins-home
+          Remove-Item resources/runner/rosetta-runner-plugins.zip
+
+      - name: Sign bundled local runner (Windows)
+        uses: azure/trusted-signing-action@v0.5.0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.AZURE_ENDPOINT }}
+          trusted-signing-account-name: ${{ secrets.AZURE_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ secrets.AZURE_CERT_PROFILE }}
+          files-folder: resources/runner
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
       - name: Build for Windows (no publish yet)
         run: |
           npm exec electron-builder -- --publish never --win
@@ -738,6 +791,17 @@ jobs:
       - name: Build project
         run: npm run build
 
+      # Ships the local runner inside the app (resources/runner).
+      - name: Bundle local runner (Linux)
+        env:
+          GH_TOKEN: ${{ secrets.ORCHESTRATOR_REPO_TOKEN }}
+        run: |
+          mkdir -p resources/runner
+          gh release download --repo rosettadb/cloud-api --pattern 'rosetta-runner-linux-amd64' --pattern 'rosetta-runner-plugins.zip' --dir resources/runner --clobber
+          mv resources/runner/rosetta-runner-linux-amd64 resources/runner/rosetta-runner
+          chmod +x resources/runner/rosetta-runner
+          unzip -q resources/runner/rosetta-runner-plugins.zip -d resources/runner/plugins-home
+          rm resources/runner/rosetta-runner-plugins.zip
 
       - name: Build for Linux (no publish yet)
         env:
