@@ -116,4 +116,10 @@ The build files after packaging can be found at: ```/release/build```
 
 ## License
 
-AGPL-3.0 - See [LICENSE](./LICENSE) for details.
+Copyright (C) 2025-2026 Rosettalabs.ai and contributors.
+
+Rosetta dbt Studio is licensed under the GNU Affero General Public License v3.0 only (AGPL-3.0-only). See [LICENSE](./LICENSE) for details.
+
+## Contributing
+
+Contributions are welcome. Read [CONTRIBUTING.md](./CONTRIBUTING.md) to get started, and see [SECURITY.md](./SECURITY.md) for reporting security problems.
