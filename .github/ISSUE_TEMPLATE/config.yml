@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a question
+    url: https://github.com/rosettadb/dbt-studio/discussions/categories/q-a
+    about: Questions about using or building Rosetta dbt Studio go to Discussions.
+  - name: Share an idea
+    url: https://github.com/rosettadb/dbt-studio/discussions/categories/ideas
+    about: Early ideas that aren't ready to be a feature request.
+  - name: Report a security vulnerability
+    url: https://github.com/rosettadb/dbt-studio/security/advisories/new
+    about: Report security problems privately, never in a public issue.
