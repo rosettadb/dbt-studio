@@ -16,6 +16,12 @@ import {
 
 const mockNavigate = jest.fn();
 
+// The Dashboard watches its size to fit the window; jsdom has no ResizeObserver
+window.ResizeObserver = jest.fn(() => ({
+  observe: jest.fn(),
+  disconnect: jest.fn(),
+})) as unknown as typeof ResizeObserver;
+
 jest.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate,
 }));

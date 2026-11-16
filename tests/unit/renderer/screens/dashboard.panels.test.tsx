@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 
 import Dashboard from '../../../../src/renderer/screens/dashboard';
 import {
@@ -10,6 +10,14 @@ import {
 } from '../../../../src/renderer/controllers';
 
 const mockNavigate = jest.fn();
+
+// The Dashboard watches its size to fit the window; jsdom has no
+// ResizeObserver, so this one lets a test say "the window was resized".
+let refitDashboardToWindow: () => void = () => {};
+window.ResizeObserver = jest.fn((callback: () => void) => {
+  refitDashboardToWindow = callback;
+  return { observe: jest.fn(), disconnect: jest.fn() };
+}) as unknown as typeof ResizeObserver;
 
 jest.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate,
@@ -268,6 +276,140 @@ describe('Dashboard panels', () => {
       expect(
         screen.queryByRole('button', { name: /Connect to Cloud/ }),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  describe('fitting the window', () => {
+    // jsdom lays nothing out, so every element reports these sizes: the
+    // window's height and width, and the page's height.
+    const sizeSpies: jest.SpyInstance[] = [];
+    const setSizes = (sizes: {
+      windowHeight: number;
+      windowWidth: number;
+      pageHeight: number;
+    }) => {
+      sizeSpies.forEach((spy) => spy.mockRestore());
+      sizeSpies.splice(0);
+      sizeSpies.push(
+        jest
+          .spyOn(Element.prototype, 'clientHeight', 'get')
+          .mockReturnValue(sizes.windowHeight),
+        jest
+          .spyOn(Element.prototype, 'clientWidth', 'get')
+          .mockReturnValue(sizes.windowWidth),
+        jest
+          .spyOn(Element.prototype, 'getBoundingClientRect')
+          .mockReturnValue({ height: sizes.pageHeight } as DOMRect),
+      );
+    };
+
+    afterEach(() => {
+      sizeSpies.forEach((spy) => spy.mockRestore());
+      sizeSpies.splice(0);
+    });
+
+    // The zoom in the page's style rule (the box around the header, modules
+    // and panels)
+    const pageScale = () => {
+      const page = screen
+        .getByText('Workspace Overview')
+        .closest('[data-tour="tour-workspace-overview"]')!.parentElement!;
+      const pageSelectors = Array.from(page.classList).map(
+        (name) => `.${name}`,
+      );
+      const zoom = Array.from(document.styleSheets)
+        .flatMap((sheet) => Array.from(sheet.cssRules))
+        .filter(
+          (rule) =>
+            rule instanceof CSSStyleRule &&
+            pageSelectors.includes(rule.selectorText),
+        )
+        .map((rule) => rule.cssText.match(/zoom: ([\d.]+)/))
+        .find(Boolean);
+      return zoom ? Number(zoom[1]) : undefined;
+    };
+
+    const moduleCard = () =>
+      screen.getByText('Notebook').closest('.MuiGrid-item') as HTMLElement;
+
+    it('shrinks the page to fit a short window', () => {
+      setSizes({ windowHeight: 600, windowWidth: 2000, pageHeight: 800 });
+
+      renderDashboard();
+
+      expect(pageScale()).toBe(0.75);
+    });
+
+    it('grows the page to fill a tall window', () => {
+      setSizes({ windowHeight: 1200, windowWidth: 3000, pageHeight: 800 });
+
+      renderDashboard();
+
+      expect(pageScale()).toBe(1.5);
+    });
+
+    it('stops shrinking at 70% so the text stays readable', () => {
+      setSizes({ windowHeight: 300, windowWidth: 2000, pageHeight: 800 });
+
+      renderDashboard();
+
+      expect(pageScale()).toBe(0.7);
+    });
+
+    it('shrinks a narrow window enough to keep 4 cards per row', () => {
+      // 920 / 1150 (the width 4 cards need) = 0.8, below the height's 1.5
+      setSizes({ windowHeight: 1200, windowWidth: 920, pageHeight: 800 });
+
+      renderDashboard();
+
+      expect(pageScale()).toBe(0.8);
+    });
+
+    it('refits when the window is resized', () => {
+      setSizes({ windowHeight: 600, windowWidth: 2000, pageHeight: 800 });
+      renderDashboard();
+
+      setSizes({ windowHeight: 1000, windowWidth: 2000, pageHeight: 800 });
+      act(() => refitDashboardToWindow());
+
+      expect(pageScale()).toBe(1.25);
+    });
+
+    it('skips a tiny grow so it settles, but always applies a shrink', () => {
+      setSizes({ windowHeight: 600, windowWidth: 2000, pageHeight: 800 });
+      renderDashboard();
+
+      // Wants 0.7509: less than 0.005 bigger, so it stays put
+      setSizes({ windowHeight: 600, windowWidth: 2000, pageHeight: 799 });
+      act(() => refitDashboardToWindow());
+      expect(pageScale()).toBe(0.75);
+
+      // Wants 0.7317, rounded down: any shrink applies
+      setSizes({ windowHeight: 600, windowWidth: 2000, pageHeight: 820 });
+      act(() => refitDashboardToWindow());
+      expect(pageScale()).toBe(0.731);
+    });
+
+    it('keeps 4 cards per row and the panels side by side', () => {
+      setSizes({ windowHeight: 600, windowWidth: 2000, pageHeight: 800 });
+
+      renderDashboard();
+
+      expect(moduleCard()).toHaveClass('MuiGrid-grid-xs-3');
+      expect(moduleCard()).not.toHaveClass('MuiGrid-grid-sm-6');
+      expect(
+        screen.getByText(/Recent Projects/).closest('.MuiGrid-item'),
+      ).toHaveClass('MuiGrid-grid-xs-6');
+    });
+
+    it('stays unscaled and stacks on a narrow window with no projects, for the quick start tour', () => {
+      setSizes({ windowHeight: 600, windowWidth: 2000, pageHeight: 800 });
+
+      renderDashboard({ projects: [] });
+
+      expect(pageScale()).toBe(1);
+      expect(moduleCard()).toHaveClass('MuiGrid-grid-xs-12');
+      expect(moduleCard()).toHaveClass('MuiGrid-grid-sm-6');
     });
   });
 });

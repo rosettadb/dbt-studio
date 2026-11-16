@@ -20,6 +20,12 @@ import SelectProject from '../../../../src/renderer/screens/selectProject';
 // the default 10s limit.
 jest.setTimeout(30000);
 
+// The Dashboard watches its size to fit the window; jsdom has no ResizeObserver
+window.ResizeObserver = jest.fn(() => ({
+  observe: jest.fn(),
+  disconnect: jest.fn(),
+})) as unknown as typeof ResizeObserver;
+
 const mockSelectProject = jest.fn();
 const mockAddProject = jest.fn();
 
