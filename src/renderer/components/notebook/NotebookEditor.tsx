@@ -296,7 +296,10 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     'notebook.sql.run-all',
     'Notebook: Run all SQL cells',
     handleRunAll,
-    !!notebook && localCells.length > 0 && !isRunningAll,
+    !!notebook &&
+      localCells.length > 0 &&
+      !isRunningAll &&
+      executingCells.size === 0,
   );
 
   // Handle keyboard shortcuts

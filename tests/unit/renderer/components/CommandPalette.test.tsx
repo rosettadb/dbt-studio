@@ -190,8 +190,18 @@ describe('CommandPalette', () => {
       expect(screen.getByRole('combobox', { name: 'Command' })).toHaveValue(
         '>',
       );
-      fireEvent.change(screen.getByRole('combobox'), {
-        target: { value: '>sql editor' },
+      const input = screen.getByRole('combobox', {
+        name: 'Command',
+      }) as HTMLInputElement;
+      expect(input.selectionStart).toBe(1);
+      expect(input.selectionEnd).toBe(1);
+      const typed = 'sql editor';
+      const selectionStart = input.selectionStart ?? 0;
+      const selectionEnd = input.selectionEnd ?? input.value.length;
+      fireEvent.change(input, {
+        target: {
+          value: `${input.value.slice(0, selectionStart)}${typed}${input.value.slice(selectionEnd)}`,
+        },
       });
       fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Enter' });
       expect(mockNavigate).toHaveBeenCalledWith('/app/sql');

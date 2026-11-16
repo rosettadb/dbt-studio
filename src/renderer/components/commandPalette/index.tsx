@@ -123,12 +123,6 @@ const getCountLabel = (shownCount: number, totalCount: number): string =>
     ? `${shownCount} of ${totalCount}`
     : String(shownCount);
 
-// Runs when the search box appears: the remembered search is selected, so
-// typing straight away replaces it.
-const selectInputText = (input: HTMLInputElement | null) => {
-  input?.select();
-};
-
 const getFolderInsideProject = (
   filePath: string,
   projectPath: string,
@@ -178,6 +172,16 @@ export const CommandPalette: React.FC = () => {
   const commandQuery = commandMode
     ? trimmedQuery.slice(1).trim().toLowerCase()
     : '';
+  const selectInputText = React.useCallback(
+    (input: HTMLInputElement | null) => {
+      if (commandMode) {
+        input?.setSelectionRange(input.value.length, input.value.length);
+      } else {
+        input?.select();
+      }
+    },
+    [commandMode],
+  );
   let inputPlaceholder = 'Search screens and projects';
   if (selectedProject) {
     inputPlaceholder = `Search screens, projects, files and folders in ${selectedProject.name}`;
