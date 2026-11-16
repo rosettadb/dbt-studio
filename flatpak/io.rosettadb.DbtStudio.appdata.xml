@@ -77,11 +77,11 @@
 
   <releases>
     <!-- Auto-updated by npm version via .erb/scripts/sync-version.js — do not edit manually. -->
-    <release version="1.7.6" date="2026-11-04">
+    <release version="1.7.7" date="2026-11-12">
       <description>
         <p>See the full release notes at the link below.</p>
       </description>
-      <url>https://github.com/rosettadb/dbt-studio/releases/tag/1.7.6</url>
+      <url>https://github.com/rosettadb/dbt-studio/releases/tag/1.7.7</url>
     </release>
   </releases>
 
