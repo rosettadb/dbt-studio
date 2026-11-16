@@ -52,7 +52,20 @@ jest.mock('../../../../src/renderer/controllers', () => ({
   useUpdateProject: () => ({ mutate: jest.fn() }),
   useDuckLakeInstances: () => ({ data: [], isLoading: false }),
   useGetProjectGitSummary: () => ({ data: undefined, isLoading: false }),
+  useApiKey: () => ({ data: undefined, isLoading: false }),
+  useAuthLogin: () => ({ mutate: jest.fn(), isLoading: false }),
+  useProfile: () => ({ data: undefined }),
 }));
+
+// The Dashboard header's search and Cloud / Local switch have their own tests
+jest.mock('../../../../src/renderer/components/commandPalette', () => ({
+  CommandPalette: () => null,
+}));
+
+jest.mock(
+  '../../../../src/renderer/components/menu/CloudLocalEnvironmentSwitch',
+  () => ({ CloudLocalEnvironmentSwitch: () => null }),
+);
 
 jest.mock('../../../../src/renderer/hooks', () => ({
   useAppContext: () => ({ setIsSidebarOpen: jest.fn() }),

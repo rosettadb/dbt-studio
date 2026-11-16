@@ -94,7 +94,7 @@ describe('Menu global search position', () => {
     ).toBe(true);
   });
 
-  it.each(['/app', '/app/sql', '/app/settings', '/app/select-project'])(
+  it.each(['/app/sql', '/app/settings', '/app/select-project'])(
     'shows on %s',
     (pathname) => {
       renderMenuAt(pathname);
@@ -104,4 +104,10 @@ describe('Menu global search position', () => {
       ).toBeInTheDocument();
     },
   );
+
+  it('has no top bar on Home, where search is in the Dashboard header', () => {
+    const { container } = renderMenuAt('/app');
+
+    expect(container).toBeEmptyDOMElement();
+  });
 });
