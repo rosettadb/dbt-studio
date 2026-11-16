@@ -1,9 +1,11 @@
 import type {
+  SecondBrainManagerStatus,
+  SecondBrainOperationKind,
   SecondBrainProgressEvent,
   SecondBrainRefreshStage,
 } from '../../../types/secondBrain';
 
-export type SecondBrainOperationKind = 'init' | 'preview' | 'apply';
+export type { SecondBrainOperationKind } from '../../../types/secondBrain';
 
 export const SECOND_BRAIN_GENERATION_HELPERS = [
   'Reviewing durable project knowledge…',
@@ -67,4 +69,37 @@ export const isCurrentSecondBrainProgress = (
   if (operationId && progress.operationId !== operationId) return false;
   const timestamp = Date.parse(progress.timestamp);
   return Number.isFinite(timestamp) && timestamp >= startedAt;
+};
+
+/**
+ * A build started outside the Agent Memory tab (the AI panel's memory prompt)
+ * keeps running in the main process. Returns what the tab needs to follow it,
+ * or null when nothing is running.
+ */
+export const getRunningSecondBrainOperation = (
+  status: SecondBrainManagerStatus | undefined,
+  now = Date.now(),
+): {
+  kind: SecondBrainOperationKind;
+  operationId: string;
+  startedAt: number;
+  progress?: SecondBrainProgressEvent;
+} | null => {
+  if (!status?.busy || !status.activeOperationId) return null;
+  const startedAt = Date.parse(status.activeOperationStartedAt ?? '');
+  return {
+    kind: status.activeOperationKind ?? 'init',
+    operationId: status.activeOperationId,
+    startedAt: Number.isFinite(startedAt) ? startedAt : now,
+    progress: status.activeProgress,
+  };
+};
+
+export const getSecondBrainTerminalPhase = (
+  stage: SecondBrainRefreshStage,
+): 'succeeded' | 'cancelled' | 'failed' | null => {
+  if (stage === 'completed') return 'succeeded';
+  if (stage === 'cancelled') return 'cancelled';
+  if (stage === 'failed') return 'failed';
+  return null;
 };

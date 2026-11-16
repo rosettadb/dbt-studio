@@ -8,6 +8,7 @@ import {
   FileStatus,
   GitChangesRes,
   GitCredentials,
+  ProjectGitSummary,
   RepoInfoRes,
 } from '../../types/backend';
 import SettingsService from './settings.service';
@@ -249,12 +250,28 @@ export default class GitService {
     // Let the user decide what to stage and commit
   }
 
+  /**
+   * Current branch name. A freshly initialized repo has no commits yet, and
+   * `git branch` reports nothing for that unborn HEAD, so fall back to the
+   * symbolic ref, which already holds the name the first commit will create.
+   */
+  private async getCurrentBranchName(git: SimpleGit): Promise<string> {
+    const { current } = await git.branch();
+    if (current) return current;
+
+    try {
+      return (await git.raw(['symbolic-ref', '--short', 'HEAD'])).trim();
+    } catch {
+      return '';
+    }
+  }
+
   async listBranches(repoPath: string) {
     const git = this.getGitInstance(repoPath);
 
     const local = await git.branchLocal();
     const remote = await git.branch(['-r']);
-    const { current } = await git.branch();
+    const current = await this.getCurrentBranchName(git);
 
     const branchMap = new Map<
       string,
@@ -275,6 +292,16 @@ export default class GitService {
         isRemote: false,
       });
     });
+
+    // Fresh repo without commits: the branch exists only as HEAD's target
+    if (current && local.all.length === 0) {
+      branchMap.set(current, {
+        name: current,
+        checkedOut: true,
+        isLocal: true,
+        isRemote: false,
+      });
+    }
 
     remote.all.forEach((remoteName) => {
       if (remoteName.includes('->')) return;
@@ -1285,8 +1312,7 @@ export default class GitService {
         remoteUrl = `${remoteUrl}.git`;
       }
 
-      const branchSummary = await git.branch();
-      const currentBranch = branchSummary.current;
+      const currentBranch = await this.getCurrentBranchName(git);
 
       // Answered from local remote-tracking refs: no fetch, no ssh/credential
       // prompt, no hang. Callers treat a stale "false" as a warning only.
@@ -1308,6 +1334,20 @@ export default class GitService {
         branchExistsOnRemote,
       };
     } catch (err: any) {
+      return null;
+    }
+  }
+
+  // Local read only, no fetch: the Manage Projects screen runs this for every
+  // project, so it must stay fast and never trigger a login prompt.
+  async getProjectGitSummary(
+    repoPath: string,
+  ): Promise<ProjectGitSummary | null> {
+    try {
+      const status = await this.getGitInstance(repoPath).status();
+      return { currentBranch: status.current };
+    } catch {
+      // Not a Git repository, or the project folder no longer exists
       return null;
     }
   }

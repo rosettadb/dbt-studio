@@ -72,16 +72,10 @@ test.describe('App Shell', () => {
 
     await window.getByRole('button', { name: 'AI Assistant (beta)' }).click();
 
-    // First open asks about agent memory. The dialog is rendered inline in
-    // the chat pane (no portal), and MUI marks that subtree aria-hidden while
-    // it is open, so role-based queries cannot see its buttons; match by text.
-    await expect(window.getByText('AI Agent Memory')).toBeVisible();
-    const keepOff = window.getByText('Keep memory off', { exact: true });
-    await expect(keepOff).toBeVisible();
-    await keepOff.click();
-    await expect(window.getByText('AI Agent Memory')).toBeHidden();
-
+    // With no active provider the panel points to provider settings and does
+    // not ask about agent memory: initializing memory needs an active model.
     await expect(window.getByText('No AI providers configured')).toBeVisible();
+    await expect(window.getByText('AI Agent Memory')).toBeHidden();
     await window
       .getByRole('button', { name: 'Open AI Provider Settings' })
       .click();

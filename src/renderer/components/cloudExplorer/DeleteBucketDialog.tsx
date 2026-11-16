@@ -13,6 +13,7 @@ import {
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import { toast } from 'react-toastify';
+import { cloudExplorerDialogSx } from './styles';
 import { useDeleteBucket } from '../../controllers/cloudExplorer.controller';
 import type {
   CloudProvider,
@@ -63,7 +64,13 @@ const DeleteBucketDialog: React.FC<DeleteBucketDialogProps> = ({
   };
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+    <Dialog
+      sx={cloudExplorerDialogSx}
+      open={open}
+      onClose={handleClose}
+      maxWidth="sm"
+      fullWidth
+    >
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         <WarningAmberIcon color="warning" />
         Delete Bucket

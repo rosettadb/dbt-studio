@@ -12,7 +12,10 @@ import { SqlEditorComponent } from './editorComponent';
 import { isDuckLakeType } from '../../../connections/ducklake/ducklake.shared';
 import { useAppContext } from '../../hooks';
 import { useSqlEditorBridge } from '../../controllers';
-import { insertTextAtCursor } from '../../lib/monaco/insertText';
+import {
+  insertTextAtCursor,
+  type InsertTextOptions,
+} from '../../lib/monaco/insertText';
 
 // Keep a local runtime binding for the error path in transpile-only builds.
 const snowflakeReauthMessage = connectionTypes.SNOWFLAKE_REAUTH_MESSAGE;
@@ -23,7 +26,10 @@ const snowflakeReauthMessage = connectionTypes.SNOWFLAKE_REAUTH_MESSAGE;
  */
 export type SqlEditorHandle = {
   /** Insert text at the cursor. Returns false when no editor is mounted. */
-  insertText: (text: string) => boolean;
+  insertText: (
+    text: string,
+    options?: Pick<InsertTextOptions, 'asStatement'>,
+  ) => boolean;
   /** Run `sql` as-is and show the results; the editor content is untouched. */
   runQuery: (sql: string) => void;
 };
@@ -352,8 +358,8 @@ export const SqlEditor = React.forwardRef<SqlEditorHandle, Props>(
     React.useImperativeHandle(
       ref,
       () => ({
-        insertText: (text: string) =>
-          insertTextAtCursor(editorRef.current, text),
+        insertText: (text, options) =>
+          insertTextAtCursor(editorRef.current, text, options),
         runQuery: (sql: string) => {
           if (sql.trim()) handleRunQuery(sql);
         },

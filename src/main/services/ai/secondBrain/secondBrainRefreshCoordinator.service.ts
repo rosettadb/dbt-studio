@@ -1,5 +1,8 @@
 import { randomUUID } from 'crypto';
-import type { SecondBrainProgressEvent } from '../../../../types/secondBrain';
+import type {
+  SecondBrainOperationKind,
+  SecondBrainProgressEvent,
+} from '../../../../types/secondBrain';
 import SecondBrainRefreshService, {
   type SecondBrainRefreshResult,
 } from './secondBrainRefresh.service';
@@ -25,6 +28,9 @@ export default class SecondBrainRefreshCoordinator {
   private activeOperation: {
     operationId: string;
     ownerId: number;
+    kind: SecondBrainOperationKind;
+    startedAt: string;
+    lastProgress?: SecondBrainProgressEvent;
     controller: AbortController;
     completion: Promise<void>;
   } | null = null;
@@ -33,10 +39,19 @@ export default class SecondBrainRefreshCoordinator {
     this.dependencies = dependencies;
   }
 
-  public getStatus(): { busy: boolean; activeOperationId?: string } {
+  public getStatus(): {
+    busy: boolean;
+    activeOperationId?: string;
+    activeOperationKind?: SecondBrainOperationKind;
+    activeOperationStartedAt?: string;
+    activeProgress?: SecondBrainProgressEvent;
+  } {
     return {
       busy: Boolean(this.activeOperation),
       activeOperationId: this.activeOperation?.operationId,
+      activeOperationKind: this.activeOperation?.kind,
+      activeOperationStartedAt: this.activeOperation?.startedAt,
+      activeProgress: this.activeOperation?.lastProgress,
     };
   }
 
@@ -64,9 +79,14 @@ export default class SecondBrainRefreshCoordinator {
     const completion = new Promise<void>((resolve) => {
       resolveCompletion = resolve;
     });
+    let kind: SecondBrainOperationKind = 'apply';
+    if (options.initialize) kind = 'init';
+    else if (options.dryRun) kind = 'preview';
     this.activeOperation = {
       operationId,
       ownerId: owner.ownerId,
+      kind,
+      startedAt: new Date().toISOString(),
       controller,
       completion,
     };
@@ -79,16 +99,18 @@ export default class SecondBrainRefreshCoordinator {
         operationId,
         abortSignal: controller.signal,
         onProgress: (progress) => {
-          if (!owner.isDestroyed()) {
-            owner.emitProgress({
-              operationId,
-              ...progress,
-              timestamp: new Date().toISOString(),
-              cancellable: !['completed', 'cancelled', 'failed'].includes(
-                progress.stage,
-              ),
-            });
+          const event: SecondBrainProgressEvent = {
+            operationId,
+            ...progress,
+            timestamp: new Date().toISOString(),
+            cancellable: !['completed', 'cancelled', 'failed'].includes(
+              progress.stage,
+            ),
+          };
+          if (this.activeOperation?.operationId === operationId) {
+            this.activeOperation.lastProgress = event;
           }
+          if (!owner.isDestroyed()) owner.emitProgress(event);
         },
       });
       return { operationId, result };

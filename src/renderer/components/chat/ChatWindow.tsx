@@ -5,7 +5,6 @@ import {
   IconButton,
   Tooltip,
   Typography,
-  Button,
   CircularProgress,
   Divider,
   ListItemIcon,
@@ -45,6 +44,8 @@ import { ChatInputBox } from './ChatInputBox';
 import { FilesChangedBlock } from './FilesChangedBlock';
 import { GradientBorder } from './GradientBorder';
 import { MemoryConsentDialog } from './MemoryConsentDialog';
+import { AIProviderSetupNotice } from './AIProviderSetupNotice';
+import { getAIProviderSetupState } from './aiPanelSetup';
 import type { ContextUsageBreakdown } from './ContextUsageRing';
 
 import { useContextManager } from '../../hooks/useContextManager';
@@ -268,7 +269,8 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     data: latestCompactionSummary,
     isLoading: isLoadingCompactionSummary,
   } = useGetLatestChatCompactionSummary(selectedSessionId);
-  const { data: activeProvider } = useGetActiveAIProvider();
+  const { data: activeProvider, isLoading: isLoadingActiveProvider } =
+    useGetActiveAIProvider();
   const activeProviderModel = React.useMemo(() => {
     try {
       const config =
@@ -305,8 +307,9 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       pageId,
     ],
   );
+  // The overhead estimate needs the active model; skip it until one is active.
   const { data: contextOverhead } = useGetAgentContextOverhead(
-    contextOverheadRequest,
+    activeProvider ? contextOverheadRequest : undefined,
   );
 
   // Reset usage + context breakdown when session or scope changes
@@ -457,6 +460,11 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
 
   const { data: providers = [], isLoading: isLoadingProviders } =
     useGetAIProviders();
+  const providerSetupState = getAIProviderSetupState({
+    isLoading: isLoadingProviders || isLoadingActiveProvider,
+    providerCount: providers.length,
+    hasActiveProvider: Boolean(activeProvider),
+  });
   const { mutate: createSession, isLoading: isCreating } = useCreateChatSession(
     {
       onSuccess: (session) =>
@@ -788,7 +796,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       );
     }
 
-    if (isLoadingProviders) {
+    if (providerSetupState === 'loading') {
       return (
         <Box
           sx={{
@@ -807,34 +815,15 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       );
     }
 
-    if (providers.length === 0) {
+    if (
+      providerSetupState === 'no-providers' ||
+      providerSetupState === 'no-active-provider'
+    ) {
       return (
-        <Box
-          sx={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 1.5,
-            textAlign: 'center',
-            px: 3,
-          }}
-        >
-          <Typography variant="subtitle1" fontWeight={600}>
-            No AI providers configured
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Add an AI provider in settings to start chatting with the assistant.
-          </Typography>
-          <Button
-            variant="contained"
-            size="small"
-            onClick={() => navigate('/app/settings/ai-providers')}
-          >
-            Open AI Provider Settings
-          </Button>
-        </Box>
+        <AIProviderSetupNotice
+          state={providerSetupState}
+          onOpenSettings={() => navigateToAISettings('Providers')}
+        />
       );
     }
 
@@ -1307,7 +1296,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
         </GradientBorder>
       </Box>
 
-      <MemoryConsentDialog />
+      <MemoryConsentDialog providerSetupState={providerSetupState} />
     </Paper>
   );
 };

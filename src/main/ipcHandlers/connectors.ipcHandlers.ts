@@ -17,6 +17,7 @@ const handlerChannels = [
   'connector:configure',
   'connector:test',
   'connector:oracleWalletAliases',
+  'connector:duckdbCreateDatabase',
   'connector:validate',
   'connector:getJdbcUrl',
   'connector:query',
@@ -43,6 +44,9 @@ const registerConnectorsHandlers = () => {
   removeConnectorsIpcHandlers();
   ipcMain.handle('connector:oracleWalletAliases', (_event, walletDir: string) =>
     ConnectorsService.oracleWalletAliases(walletDir),
+  );
+  ipcMain.handle('connector:duckdbCreateDatabase', (_event, filePath: string) =>
+    ConnectorsService.duckdbCreateDatabase(filePath),
   );
   ipcMain.handle(
     'connector:configure',

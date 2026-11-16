@@ -9,7 +9,7 @@ import {
   FileStatuses,
   TreeContextMenuState,
 } from './types';
-import { TreeNode } from './TreeNode';
+import { TREE_INDENT, TreeNode } from './TreeNode';
 import { TreeContextMenu } from './TreeContextMenu';
 import { ExternalDropZone } from './ExternalDropZone';
 import { MoveConfirmDialog } from './MoveConfirmDialog';
@@ -21,6 +21,7 @@ const TreeContainer = styled('div')({
   width: '100%',
   height: 'calc(100% - 60px)',
   overflow: 'hidden',
+  paddingLeft: 4,
 });
 
 interface ArboristTreeProps {
@@ -37,6 +38,8 @@ interface ArboristTreeProps {
   copyPath: (source: string, target: string) => Promise<void>;
   onRunPipeline?: (filePath: string) => void;
   onRunPipelineLocal?: (filePath: string) => void;
+  revealFolderPath?: string | null;
+  onFolderRevealed?: () => void;
 }
 
 const buildTreeStructure = (node: FileNode): FileNode => {
@@ -72,6 +75,8 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
   copyPath,
   onRunPipeline,
   onRunPipelineLocal,
+  revealFolderPath,
+  onFolderRevealed,
 }) => {
   const treeRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -346,6 +351,14 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
     }
   }, [data]);
 
+  // select() also opens the parent folders and scrolls the folder into view
+  React.useEffect(() => {
+    if (!revealFolderPath || !treeRef.current) return;
+    treeRef.current.open(revealFolderPath);
+    treeRef.current.select(revealFolderPath);
+    onFolderRevealed?.();
+  }, [revealFolderPath, onFolderRevealed]);
+
   const handleExternalFilesDropped = useCallback(
     async (files: File[], targetPath: string) => {
       try {
@@ -487,7 +500,7 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
             openByDefault={false}
             width="100%"
             height={containerHeight}
-            indent={10}
+            indent={TREE_INDENT}
             rowHeight={22}
             overscanCount={10}
             onSelect={handleSelect}
@@ -506,6 +519,7 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
                 onCreateFile={onCreateFile}
                 onCreateFolder={onCreateFolder}
                 onDelete={handleDelete}
+                onRefresh={onRefresh}
                 onRunPipeline={onRunPipeline}
                 onRunPipelineLocal={onRunPipelineLocal}
                 dragOverFolder={dragOverFolder}

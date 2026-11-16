@@ -10,6 +10,7 @@ import {
   NoteAdd as CreateFileIcon,
   Delete as DeleteIcon,
   PlayArrow as PlayIcon,
+  Cached as RefreshIcon,
 } from '@mui/icons-material';
 import { getClassWithColor } from 'file-icons-js';
 import { toast } from 'react-toastify';
@@ -20,11 +21,27 @@ import { FileNode, FileStatuses } from './types';
 import { GitStatusBadge } from './GitStatusBadge';
 import { PipelineThumbnailPreview } from './PipelineThumbnailPreview';
 
+// Pixels each tree level is indented by. The indent guides below are drawn
+// at the same step, halfway between each ancestor folder's icon and its
+// children's icons.
+export const TREE_INDENT = 8;
+
+// Thin vertical line showing which open folder a row belongs to.
+const IndentGuide = styled('span')(({ theme }) => ({
+  position: 'absolute',
+  top: 0,
+  bottom: 0,
+  width: 1,
+  backgroundColor: alpha(theme.palette.text.primary, 0.1),
+  pointerEvents: 'none',
+}));
+
 const NodeContainer = styled('div')<{
   $isSelected: boolean;
   $isEditing: boolean;
   $isDragOver: boolean;
 }>(({ theme, $isSelected, $isEditing, $isDragOver }) => ({
+  position: 'relative',
   display: 'flex',
   alignItems: 'center',
   height: '100%',
@@ -109,6 +126,7 @@ interface TreeNodeProps extends NodeRendererProps<FileNode> {
   onCreateFile: (parentPath: string) => void;
   onCreateFolder: (parentPath: string) => void;
   onDelete: (path: string) => void;
+  onRefresh: () => void;
   onRunPipeline?: (filePath: string) => void;
   onRunPipelineLocal?: (filePath: string) => void;
   dragOverFolder?: string | null;
@@ -142,6 +160,7 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
   onCreateFile,
   onCreateFolder,
   onDelete,
+  onRefresh,
   onRunPipeline,
   onRunPipelineLocal,
   dragOverFolder,
@@ -246,6 +265,13 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
           : undefined
       }
     >
+      {/* One guide per ancestor folder below the project root */}
+      {Array.from({ length: Math.max(0, node.level - 1) }, (_, i) => (
+        <IndentGuide
+          key={i}
+          style={{ left: (i + 1) * TREE_INDENT + TREE_INDENT / 2 }}
+        />
+      ))}
       <NodeContent>
         {renderIcon()}
         {node.isEditing ? (
@@ -318,6 +344,17 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
             </IconButton>
           )}
         </NodeActions>
+      )}
+      {/* Outside the hover-only group, so it always shows */}
+      {!node.isEditing && isRootFolder && (
+        <IconButton
+          size="small"
+          onClick={(e) => handleActionClick(e, onRefresh)}
+          title="Refresh directories"
+          sx={{ padding: '4px', ml: '4px', flexShrink: 0 }}
+        >
+          <RefreshIcon sx={{ fontSize: 16 }} />
+        </IconButton>
       )}
       {!node.isEditing && isPipeline && onRunPipeline && (
         <IconButton

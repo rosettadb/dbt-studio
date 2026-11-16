@@ -12,6 +12,7 @@ import {
 } from '@mui/material';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { toast } from 'react-toastify';
+import { cloudExplorerDialogSx } from './styles';
 import { useDeleteObject } from '../../controllers/cloudExplorer.controller';
 import { cloudExplorerService } from '../../services';
 import type {
@@ -93,7 +94,13 @@ const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
     objectKey.replace(/\/$/, '').split('/').pop() || objectKey;
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+    <Dialog
+      sx={cloudExplorerDialogSx}
+      open={open}
+      onClose={handleClose}
+      maxWidth="sm"
+      fullWidth
+    >
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         <WarningAmberIcon color="warning" />
         Delete {isPrefix ? 'Folder' : 'File'}

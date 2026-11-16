@@ -34,9 +34,13 @@ test.describe('Project Details', () => {
     const window = await openProject(electronApp, PROJECT);
 
     await expect(window.getByRole('tab', { name: 'Explorer' })).toBeVisible();
-    await expect(window.getByRole('tab', { name: 'Search' })).toBeVisible();
     await expect(window.getByRole('tab', { name: /Git/ })).toBeVisible();
     await expect(window.getByRole('tab', { name: 'Database' })).toBeVisible();
+    // Search moved out of the panel into the top bar
+    await expect(window.getByRole('tab', { name: 'Search' })).toHaveCount(0);
+    await expect(
+      window.getByRole('button', { name: 'Search (Ctrl+K)' }),
+    ).toBeVisible();
 
     await expect(
       window.getByText('Please select a file from the explorer on the left!'),
@@ -50,9 +54,10 @@ test.describe('Project Details', () => {
 
     await expect(window.getByTitle(PROJECT).first()).toBeVisible();
     await expect(window.getByTitle('rosetta').first()).toBeVisible();
+    // File search moved out of the explorer into the global search
     await expect(
       window.getByPlaceholder('Search files or folders...'),
-    ).toBeVisible();
+    ).toHaveCount(0);
   });
 
   test('should show the Database tab state for the linked connection', async ({

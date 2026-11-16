@@ -19,11 +19,14 @@ const payload: SchemaDragPayload = {
   columns: ['id', 'total'],
 };
 
-const createFakeEditor = () => {
+/** `lineText` is what every line of the fake document contains. */
+const createFakeEditor = (lineText = '') => {
   const edits: any[] = [];
   const editor = {
     edits,
     getModel: () => ({
+      getLineContent: () => lineText,
+      getLineCount: () => 99,
       getOffsetAt: () => 0,
       getPositionAt: () => ({ lineNumber: 1, column: 1 }),
     }),
@@ -123,6 +126,23 @@ describe('useSchemaObjectDrop', () => {
     expect(editor.edits[0].text).toBe(
       'SELECT\n  id,\n  total\nFROM sales.orders\nLIMIT 100;',
     );
+  });
+
+  it('puts a Shift-dropped SELECT on its own lines but keeps names inline', () => {
+    const shiftEditor = createFakeEditor('FROM x');
+    const shift = render(<Harness editor={shiftEditor} />);
+    const shiftDrop = dragEvent('drop', { data: schemaData(), shiftKey: true });
+    shift.getByTestId('inner').dispatchEvent(shiftDrop.event);
+    expect(shiftEditor.edits[0].text).toBe(
+      '\n\nSELECT\n  id,\n  total\nFROM sales.orders\nLIMIT 100;\n\n',
+    );
+    shift.unmount();
+
+    const plainEditor = createFakeEditor('FROM x');
+    const plain = render(<Harness editor={plainEditor} />);
+    const plainDrop = dragEvent('drop', { data: schemaData() });
+    plain.getByTestId('inner').dispatchEvent(plainDrop.event);
+    expect(plainEditor.edits[0].text).toBe('sales.orders');
   });
 
   it('falls back to the caret when the point is outside the text', () => {

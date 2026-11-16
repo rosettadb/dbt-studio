@@ -511,4 +511,65 @@ describe('Git Service Integration', () => {
       ).resolves.not.toThrow();
     });
   });
+
+  describe('getProjectGitSummary', () => {
+    it('should return only the active branch', async () => {
+      const summary = await gitService.getProjectGitSummary(testRepoPath);
+
+      expect(summary).toEqual({ currentBranch: 'main' });
+    });
+
+    it('should report the branch that is checked out', async () => {
+      await simpleGit(testRepoPath).checkoutLocalBranch('feature/icons');
+
+      const summary = await gitService.getProjectGitSummary(testRepoPath);
+
+      expect(summary?.currentBranch).toBe('feature/icons');
+    });
+
+    it('should still report the branch when there are uncommitted changes', async () => {
+      fs.writeFileSync(path.join(testRepoPath, 'README.md'), '# Changed\n');
+      fs.writeFileSync(path.join(testRepoPath, 'new.sql'), 'select 1\n');
+
+      const summary = await gitService.getProjectGitSummary(testRepoPath);
+
+      expect(summary).toEqual({ currentBranch: 'main' });
+    });
+
+    it('should not need the network, even with an unreachable origin', async () => {
+      await simpleGit(testRepoPath).addRemote(
+        'origin',
+        'https://unreachable.invalid/org/repo.git',
+      );
+
+      const summary = await gitService.getProjectGitSummary(testRepoPath);
+
+      expect(summary).toEqual({ currentBranch: 'main' });
+    });
+
+    it('should handle a repository with no commits yet', async () => {
+      const emptyRepoPath = path.join(TEST_DIR, `empty-${Date.now()}`);
+      fs.mkdirSync(emptyRepoPath, { recursive: true });
+      await simpleGit(emptyRepoPath).init(['--initial-branch=main']);
+
+      const summary = await gitService.getProjectGitSummary(emptyRepoPath);
+
+      expect(summary).toEqual({ currentBranch: 'main' });
+    });
+
+    it('should return null for a folder that is not a repository', async () => {
+      const plainFolderPath = path.join(TEST_DIR, `plain-${Date.now()}`);
+      fs.mkdirSync(plainFolderPath, { recursive: true });
+
+      await expect(
+        gitService.getProjectGitSummary(plainFolderPath),
+      ).resolves.toBeNull();
+    });
+
+    it('should return null when the project folder no longer exists', async () => {
+      await expect(
+        gitService.getProjectGitSummary(path.join(TEST_DIR, 'deleted-project')),
+      ).resolves.toBeNull();
+    });
+  });
 });

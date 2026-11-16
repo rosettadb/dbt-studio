@@ -26,7 +26,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
   Tabs,
@@ -41,7 +40,7 @@ import {
   Add,
   ArrowBack,
   Badge,
-  ChevronRight,
+  Cable,
   CheckCircle,
   Close,
   CloudQueue,
@@ -51,13 +50,15 @@ import {
   Edit,
   ErrorOutline,
   Folder,
-  History,
   Info,
   Inventory2,
-  Refresh,
+  PlayArrow,
   Search,
   Storage,
   TableChart,
+  Visibility,
+  Schema,
+  History,
 } from '@mui/icons-material';
 import { useQueryClient } from 'react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -90,6 +91,15 @@ import {
 import { IcebergIcon } from './IcebergIcon';
 import { IcebergOperationBackdrop } from './IcebergOperationBackdrop';
 import { IcebergTableImportWizard } from './IcebergTableImportWizard';
+import { SettingsRefreshButton } from '../../settings/SettingsLayout';
+import {
+  DataLakePageHeader,
+  DataLakeRowActions,
+  DataLakeTableContainer,
+  dataLakeContentSx,
+  dataLakeTabsSx,
+  dataLakeDialogSx,
+} from '../DataLakeLayout';
 
 interface IcebergDetailProps {
   instance: IcebergInstanceConfig;
@@ -176,15 +186,13 @@ const IcebergTableRow: React.FC<{
       onClick={() => onSelect({ namespace, table })}
       sx={{ cursor: 'pointer' }}
     >
-      <TableCell>
+      <TableCell sx={{ fontWeight: 500 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <TableChart fontSize="small" color="action" />
+          <TableChart sx={{ fontSize: 16, color: 'text.secondary' }} />
           {table}
         </Box>
       </TableCell>
-      <TableCell>
-        <Chip label="TABLE" size="small" />
-      </TableCell>
+      <TableCell sx={{ color: 'text.secondary' }}>Table</TableCell>
       <TableCell>{namespace.join('.')}</TableCell>
       <TableCell>{summary['total-records'] ?? '—'}</TableCell>
       <TableCell>
@@ -199,44 +207,30 @@ const IcebergTableRow: React.FC<{
           : '—'}
       </TableCell>
       <TableCell align="right">
-        <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
-          <Tooltip title="Rename Table">
-            <IconButton
-              size="small"
-              aria-label="Rename Table"
-              onClick={(event) => {
-                event.stopPropagation();
-                onRename({ namespace, table });
-              }}
-            >
-              <DriveFileRenameOutline fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Delete Table">
-            <IconButton
-              size="small"
-              color="error"
-              aria-label="Delete Table"
-              onClick={(event) => {
-                event.stopPropagation();
-                onDelete({ namespace, table });
-              }}
-            >
-              <Delete fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Open table">
-            <IconButton
-              size="small"
-              onClick={(event) => {
-                event.stopPropagation();
-                onSelect({ namespace, table });
-              }}
-            >
-              <ChevronRight fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        </Box>
+        <DataLakeRowActions
+          label={`Actions for ${table}`}
+          actions={[
+            {
+              key: 'open',
+              label: 'View details',
+              icon: <Visibility fontSize="small" />,
+              onClick: () => onSelect({ namespace, table }),
+            },
+            {
+              key: 'rename',
+              label: 'Rename',
+              icon: <DriveFileRenameOutline fontSize="small" />,
+              onClick: () => onRename({ namespace, table }),
+            },
+            {
+              key: 'delete',
+              label: 'Delete',
+              icon: <Delete fontSize="small" />,
+              onClick: () => onDelete({ namespace, table }),
+              danger: true,
+            },
+          ]}
+        />
       </TableCell>
     </TableRow>
   );
@@ -306,8 +300,8 @@ const NamespaceGroupHeader: React.FC<{
     <TableRow sx={{ bgcolor: 'action.hover' }}>
       <TableCell colSpan={8} sx={{ py: 0.5 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Folder fontSize="small" color="primary" />
-          <Typography variant="subtitle2" fontWeight={600}>
+          <Folder sx={{ fontSize: 16, color: 'text.secondary' }} />
+          <Typography variant="body2" fontWeight={600}>
             {namespace.join('.')}
           </Typography>
           <Chip
@@ -436,7 +430,7 @@ const InstanceHistory: React.FC<{
   instanceId: string;
   namespaces: string[][];
 }> = ({ instanceId, namespaces }) => (
-  <TableContainer>
+  <DataLakeTableContainer>
     <Table size="small">
       <TableHead>
         <TableRow>
@@ -457,7 +451,7 @@ const InstanceHistory: React.FC<{
         ))}
       </TableBody>
     </Table>
-  </TableContainer>
+  </DataLakeTableContainer>
 );
 
 const TableDetail: React.FC<{
@@ -533,7 +527,7 @@ const TableDetail: React.FC<{
     return (
       <Grid container spacing={2}>
         <Grid item xs={12} md={6}>
-          <Paper variant="outlined" sx={{ p: 2 }}>
+          <Paper variant="outlined" sx={{ borderRadius: 2, p: 2 }}>
             <Typography variant="h6" gutterBottom>
               Table Information
             </Typography>
@@ -556,7 +550,7 @@ const TableDetail: React.FC<{
           </Paper>
         </Grid>
         <Grid item xs={12} md={6}>
-          <Paper variant="outlined" sx={{ p: 2 }}>
+          <Paper variant="outlined" sx={{ borderRadius: 2, p: 2 }}>
             <Typography variant="h6" gutterBottom>
               Snapshot Status
             </Typography>
@@ -589,7 +583,7 @@ const TableDetail: React.FC<{
       return <Alert severity="info">No schema fields found.</Alert>;
     }
     return (
-      <TableContainer>
+      <DataLakeTableContainer>
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -612,7 +606,7 @@ const TableDetail: React.FC<{
             ))}
           </TableBody>
         </Table>
-      </TableContainer>
+      </DataLakeTableContainer>
     );
   };
 
@@ -630,7 +624,7 @@ const TableDetail: React.FC<{
       return <Alert severity="info">No snapshots found.</Alert>;
     }
     return (
-      <TableContainer>
+      <DataLakeTableContainer>
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -650,15 +644,7 @@ const TableDetail: React.FC<{
                 <TableCell sx={{ fontFamily: 'monospace' }}>
                   …{snapshot.snapshotId.slice(-8)}
                 </TableCell>
-                <TableCell>
-                  <Chip
-                    label={snapshot.operation}
-                    size="small"
-                    color={
-                      snapshot.operation === 'append' ? 'success' : 'default'
-                    }
-                  />
-                </TableCell>
+                <TableCell>{snapshot.operation}</TableCell>
                 <TableCell>
                   {new Date(Number(snapshot.committedAt)).toLocaleString()}
                 </TableCell>
@@ -672,7 +658,7 @@ const TableDetail: React.FC<{
             ))}
           </TableBody>
         </Table>
-      </TableContainer>
+      </DataLakeTableContainer>
     );
   };
 
@@ -734,6 +720,7 @@ const TableDetail: React.FC<{
         <Button
           variant="contained"
           size="small"
+          startIcon={<PlayArrow />}
           onClick={applyFilter}
           disabled={previewQuery.isFetching}
           sx={{ height: '32px', minHeight: '32px' }}
@@ -746,7 +733,7 @@ const TableDetail: React.FC<{
         <Alert severity="error">{errorMessage(previewQuery.error)}</Alert>
       )}
       {previewQuery.data && (
-        <TableContainer sx={{ mt: 1, maxHeight: 420 }}>
+        <DataLakeTableContainer maxHeight={420} sx={{ mt: 1 }}>
           <Table size="small" stickyHeader>
             <TableHead>
               <TableRow>
@@ -771,7 +758,7 @@ const TableDetail: React.FC<{
               ))}
             </TableBody>
           </Table>
-        </TableContainer>
+        </DataLakeTableContainer>
       )}
     </Box>
   );
@@ -785,62 +772,69 @@ const TableDetail: React.FC<{
       return <Alert severity="info">No table properties defined.</Alert>;
     }
     return (
-      <Table size="small">
-        <TableBody>
-          {properties.map(([key, value]) => (
-            <TableRow key={key}>
-              <TableCell sx={{ fontFamily: 'monospace' }}>{key}</TableCell>
-              <TableCell>{value}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <DataLakeTableContainer>
+        <Table size="small">
+          <TableBody>
+            {properties.map(([key, value]) => (
+              <TableRow key={key}>
+                <TableCell sx={{ fontFamily: 'monospace' }}>{key}</TableCell>
+                <TableCell>{value}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </DataLakeTableContainer>
     );
   };
 
+  const currentSnapshot = getCurrentSnapshot(snapshotsQuery.data ?? []);
+
   return (
-    <Box sx={{ p: 2 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
-        <Tooltip title="Back to Instance Details">
-          <IconButton
-            onClick={() =>
-              navigate(`/app/data-lake/iceberg/instances/${instance.id}`)
-            }
-          >
-            <ArrowBack />
-          </IconButton>
-        </Tooltip>
-        <TableChart sx={{ fontSize: 32, color: 'primary.main' }} />
-        <Box sx={{ flex: 1 }}>
-          <Typography variant="h4" fontWeight={700}>
-            {selection.table}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Namespace: {selection.namespace.join('.')} • Apache Iceberg
-          </Typography>
-        </Box>
-        {getCurrentSnapshot(snapshotsQuery.data ?? []) ? (
-          <Chip
-            label={`Snapshot ${getCurrentSnapshot(snapshotsQuery.data ?? [])?.snapshotId}`}
-            variant="outlined"
-          />
-        ) : null}
-      </Box>
+    <Box sx={dataLakeContentSx}>
+      <DataLakePageHeader
+        icon={
+          <>
+            <Tooltip title="Back to Instance Details">
+              <IconButton
+                size="small"
+                aria-label="Back to Instance Details"
+                onClick={() =>
+                  navigate(`/app/data-lake/iceberg/instances/${instance.id}`)
+                }
+              >
+                <ArrowBack fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <TableChart sx={{ fontSize: 20, color: 'text.secondary' }} />
+          </>
+        }
+        title={selection.table}
+        description={`Namespace: ${selection.namespace.join('.')} • Apache Iceberg`}
+        actions={
+          currentSnapshot ? (
+            <Chip
+              size="small"
+              variant="outlined"
+              label={`Snapshot ${currentSnapshot.snapshotId}`}
+            />
+          ) : null
+        }
+      />
       <Tabs
         value={tab}
         onChange={(_event, value) => {
           setTab(value);
           updateTableViewParams({ tab: value });
         }}
-        sx={{ borderBottom: 1, borderColor: 'divider' }}
+        sx={dataLakeTabsSx}
       >
         <Tab icon={<Info />} label="Overview" iconPosition="start" />
-        <Tab icon={<TableChart />} label="Schema" iconPosition="start" />
+        <Tab icon={<Schema />} label="Schema" iconPosition="start" />
         <Tab icon={<TableChart />} label="Data" iconPosition="start" />
         <Tab icon={<History />} label="History" iconPosition="start" />
         <Tab icon={<Storage />} label="Properties" iconPosition="start" />
       </Tabs>
-      <Box sx={{ pt: 3 }}>
+      <Box sx={{ pt: 2 }}>
         {tab === 0 && renderOverview()}
         {tab === 1 && renderSchema()}
         {tab === 2 && renderPreview()}
@@ -1205,7 +1199,7 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: 2,
-            mb: 2,
+            mb: 1.5,
             flexWrap: 'wrap',
           }}
         >
@@ -1282,7 +1276,7 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
             alignItems: 'center',
             gap: 0.5,
             flexWrap: 'wrap',
-            mb: 2,
+            mb: 1.5,
           }}
         >
           <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>
@@ -1329,7 +1323,7 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
             );
           })}
         </Box>
-        <TableContainer>
+        <DataLakeTableContainer>
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -1340,7 +1334,11 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
                 <TableCell>Size</TableCell>
                 <TableCell>Updated</TableCell>
                 <TableCell>Created</TableCell>
-                <TableCell align="right">Actions</TableCell>
+                <TableCell
+                  align="right"
+                  aria-label="Actions"
+                  sx={{ width: 48 }}
+                />
               </TableRow>
             </TableHead>
             <TableBody>
@@ -1388,7 +1386,7 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
                 )}
             </TableBody>
           </Table>
-        </TableContainer>
+        </DataLakeTableContainer>
       </>
     );
   };
@@ -1444,56 +1442,66 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
   }
 
   return (
-    <Box sx={{ p: 2 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
-        {catalogImage ? (
-          <ConfigImageIcon
-            src={catalogImage}
-            alt={`${instance.catalogType} catalog`}
-            size={24}
-          />
-        ) : (
-          <IcebergIcon size={24} />
-        )}
-        <Box sx={{ flex: 1 }}>
-          <Typography variant="h5" fontWeight={700}>
-            {instance.name}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Apache Iceberg • {instance.catalogType.toUpperCase()} Catalog
-          </Typography>
-        </Box>
-        <Button startIcon={<Refresh />} variant="outlined" onClick={refresh}>
-          Refresh
-        </Button>
-        <Button startIcon={<Edit />} variant="outlined" onClick={onEdit}>
-          Edit
-        </Button>
-        <Button
-          startIcon={<Delete />}
-          variant="outlined"
-          color="error"
-          onClick={onDelete}
-        >
-          Delete
-        </Button>
-      </Box>
-      <Paper variant="outlined">
+    <Box sx={dataLakeContentSx}>
+      <DataLakePageHeader
+        icon={
+          catalogImage ? (
+            <ConfigImageIcon
+              src={catalogImage}
+              alt={`${instance.catalogType} catalog`}
+              size={24}
+            />
+          ) : (
+            <IcebergIcon size={24} />
+          )
+        }
+        title={instance.name}
+        description={`Apache Iceberg • ${instance.catalogType.toUpperCase()} Catalog`}
+        actions={
+          <>
+            <SettingsRefreshButton title="Refresh instance" onClick={refresh} />
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<Edit />}
+              onClick={onEdit}
+              sx={{ height: '32px' }}
+            >
+              Edit
+            </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              color="error"
+              startIcon={<Delete />}
+              onClick={onDelete}
+              sx={{ height: '32px' }}
+            >
+              Delete
+            </Button>
+          </>
+        }
+      />
+      <Box>
         <Tabs
           value={currentTab}
           onChange={(_event, value) => setCurrentTab(value)}
-          sx={{ borderBottom: 1, borderColor: 'divider' }}
+          sx={dataLakeTabsSx}
         >
-          <Tab label="Tables & Views" />
-          <Tab label="Overview" />
-          <Tab label="History" />
+          <Tab
+            icon={<TableChart />}
+            label="Tables & Views"
+            iconPosition="start"
+          />
+          <Tab icon={<Info />} label="Overview" iconPosition="start" />
+          <Tab icon={<History />} label="History" iconPosition="start" />
         </Tabs>
-        <Box sx={{ p: 2 }}>
+        <Box>
           {currentTab === 0 && renderTables()}
           {currentTab === 1 && (
             <Grid container spacing={2}>
               <Grid item xs={12}>
-                <Paper variant="outlined" sx={{ p: 2 }}>
+                <Paper variant="outlined" sx={{ borderRadius: 2, p: 2 }}>
                   <Box
                     sx={{
                       display: 'flex',
@@ -1511,37 +1519,25 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
                     </Typography>
                     <Button
                       variant="outlined"
-                      color="inherit"
                       size="small"
                       onClick={testConnection}
                       disabled={testInstanceMutation.isLoading}
-                      sx={{
-                        position: 'relative',
-                        pr: 4,
-                        minWidth: 140,
-                        color: 'text.secondary',
-                        borderColor: 'divider',
-                        '&:hover': {
-                          borderColor: 'primary.main',
-                          backgroundColor: 'action.hover',
-                        },
-                      }}
+                      startIcon={<Cable />}
                     >
                       {testInstanceMutation.isLoading
                         ? 'Testing…'
                         : 'Test Connection'}
+                      {/* Last test result, after the label */}
                       <Box
+                        component="span"
+                        aria-hidden
                         sx={{
-                          position: 'absolute',
-                          right: 10,
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                          width: 10,
-                          height: 10,
+                          width: 8,
+                          height: 8,
+                          ml: 0.75,
+                          flexShrink: 0,
                           borderRadius: '50%',
-                          backgroundColor: testIndicatorColor,
-                          border: '1px solid',
-                          borderColor: 'background.paper',
+                          bgcolor: testIndicatorColor,
                         }}
                       />
                     </Button>
@@ -1588,7 +1584,7 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
                 </Paper>
               </Grid>
               <Grid item xs={12} md={6}>
-                <Paper variant="outlined" sx={{ p: 2 }}>
+                <Paper variant="outlined" sx={{ borderRadius: 2, p: 2 }}>
                   <Typography
                     variant="h6"
                     gutterBottom
@@ -1657,7 +1653,7 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
                 </Paper>
               </Grid>
               <Grid item xs={12} md={6}>
-                <Paper variant="outlined" sx={{ p: 2 }}>
+                <Paper variant="outlined" sx={{ borderRadius: 2, p: 2 }}>
                   <Typography
                     variant="h6"
                     gutterBottom
@@ -1714,12 +1710,13 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
             />
           )}
         </Box>
-      </Paper>
+      </Box>
 
       {renderImportWizard()}
 
       {/* Delete table confirmation dialog */}
       <Dialog
+        slotProps={{ paper: { sx: dataLakeDialogSx } }}
         open={!!tableToDelete}
         onClose={() => setTableToDelete(null)}
         maxWidth="sm"
@@ -1765,6 +1762,7 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
 
       {/* Rename table dialog */}
       <Dialog
+        slotProps={{ paper: { sx: dataLakeDialogSx } }}
         open={!!tableToRename}
         onClose={() => {
           setTableToRename(null);
@@ -1821,6 +1819,7 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
 
       {/* Create namespace dialog */}
       <Dialog
+        slotProps={{ paper: { sx: dataLakeDialogSx } }}
         open={namespaceCreateOpen}
         onClose={() => {
           setNamespaceCreateOpen(false);
@@ -1883,6 +1882,7 @@ export const IcebergDetail: React.FC<IcebergDetailProps> = ({
 
       {/* Drop namespace confirmation dialog */}
       <Dialog
+        slotProps={{ paper: { sx: dataLakeDialogSx } }}
         open={!!namespaceToDelete}
         onClose={() => setNamespaceToDelete(null)}
         maxWidth="sm"

@@ -549,3 +549,31 @@ export const useUninstallKisql = (
     onError: (...args) => onCustomError?.(...args),
   });
 };
+
+export const useInstallPySpark = (
+  customOptions?: UseMutationOptions<void, CustomError, void>,
+): UseMutationResult<void, CustomError, void> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => settingsServices.installPySpark(),
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
+      onCustomSuccess?.(...args);
+    },
+    onError: (...args) => onCustomError?.(...args),
+  });
+};
+
+export const useUninstallPySpark = (
+  customOptions?: UseMutationOptions<void, CustomError, void>,
+): UseMutationResult<void, CustomError, void> => {
+  const { onSuccess: onCustomSuccess, onError: onCustomError } =
+    customOptions || {};
+  return useMutation({
+    mutationFn: async () => settingsServices.uninstallPySpark(),
+    onSuccess: (...args) => onCustomSuccess?.(...args),
+    onError: (...args) => onCustomError?.(...args),
+  });
+};

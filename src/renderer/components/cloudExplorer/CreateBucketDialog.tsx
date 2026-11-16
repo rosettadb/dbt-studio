@@ -17,6 +17,7 @@ import {
   CircularProgress,
 } from '@mui/material';
 import { toast } from 'react-toastify';
+import { cloudExplorerDialogSx } from './styles';
 import { useCreateBucket } from '../../controllers/cloudExplorer.controller';
 import { AWS_REGIONS, GCS_REGIONS } from '../../config/cloudRegions';
 import type {
@@ -185,7 +186,13 @@ const CreateBucketDialog: React.FC<CreateBucketDialogProps> = ({
   };
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+    <Dialog
+      sx={cloudExplorerDialogSx}
+      open={open}
+      onClose={handleClose}
+      maxWidth="sm"
+      fullWidth
+    >
       <DialogTitle>Create New Bucket</DialogTitle>
       <form onSubmit={handleSubmit(onSubmit)} noValidate>
         <DialogContent

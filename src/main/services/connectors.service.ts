@@ -33,6 +33,7 @@ import {
   sanitizeForStorage,
 } from '../../connections/registry.main';
 import { listOracleWalletAliases } from '../../connections/oracle/oracle.client.main';
+import { createDuckDBDatabase } from '../../connections/duckdb/duckdb.client.main';
 import {
   materializeSnowflakeOAuthEnv as materializeSnowflakeEnv,
   revokeSnowflakeSession as revokeSnowflake,
@@ -40,6 +41,8 @@ import {
 
 export default class ConnectorsService {
   static oracleWalletAliases = listOracleWalletAliases;
+
+  static duckdbCreateDatabase = createDuckDBDatabase;
 
   static cleanupBigQueryKeyFiles(): void {
     // settings.service.ts and the tests call this name; it disposes every connector.

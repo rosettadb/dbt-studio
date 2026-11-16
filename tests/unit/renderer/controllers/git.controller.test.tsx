@@ -2,7 +2,10 @@ import React from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from 'react-query';
 
-import { useGitStage } from '../../../../src/renderer/controllers/git.controller';
+import {
+  useGetProjectGitSummary,
+  useGitStage,
+} from '../../../../src/renderer/controllers/git.controller';
 import { gitServices } from '../../../../src/renderer/services';
 import { QUERY_KEYS } from '../../../../src/renderer/config/constants';
 
@@ -15,6 +18,7 @@ jest.mock('../../../../src/renderer/services', () => {
   return {
     gitServices: {
       add: jest.fn(),
+      getProjectGitSummary: jest.fn(),
     },
   };
 });
@@ -109,5 +113,55 @@ describe('useGitStage', () => {
       QUERY_KEYS.GIT_STATUSES,
       repoPath,
     ]);
+  });
+});
+
+describe('useGetProjectGitSummary', () => {
+  const getProjectGitSummaryMock =
+    gitServices.getProjectGitSummary as jest.Mock;
+
+  const renderSummaryHook = (path: string) => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    return {
+      queryClient,
+      ...renderHook(() => useGetProjectGitSummary(path), { wrapper }),
+    };
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('loads the summary for the given project path', async () => {
+    const summary = { currentBranch: 'main' };
+    getProjectGitSummaryMock.mockResolvedValue(summary);
+
+    const { result } = renderSummaryHook('/repo');
+
+    await waitFor(() => expect(result.current.data).toEqual(summary));
+    expect(getProjectGitSummaryMock).toHaveBeenCalledWith('/repo');
+  });
+
+  it('keeps a separate cached summary per project path', async () => {
+    const summary = { currentBranch: 'main' };
+    getProjectGitSummaryMock.mockResolvedValue(summary);
+
+    const { result, queryClient } = renderSummaryHook('/repo');
+
+    await waitFor(() => expect(result.current.data).toEqual(summary));
+    expect(
+      queryClient.getQueryData([QUERY_KEYS.GIT_PROJECT_SUMMARY, '/repo']),
+    ).toEqual(summary);
+  });
+
+  it('does not ask for a summary when the project has no path', () => {
+    renderSummaryHook('');
+
+    expect(getProjectGitSummaryMock).not.toHaveBeenCalled();
   });
 });

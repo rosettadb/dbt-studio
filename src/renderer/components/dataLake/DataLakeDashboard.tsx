@@ -13,9 +13,9 @@ import {
   Storage,
   TableChart,
   Settings,
-  Dashboard,
   Add,
   Folder,
+  Visibility,
 } from '@mui/icons-material';
 import { IcebergIcon } from './iceberg/IcebergIcon';
 import {
@@ -25,6 +25,7 @@ import {
 import { icons } from '../../../../assets/icons';
 import { DataLakeSVG } from '../sidebar/icons';
 import type { IcebergInstanceListItem } from '../../../types/iceberg';
+import { DataLakePageHeader, dataLakeContentSx } from './DataLakeLayout';
 
 interface DuckLakeInstance {
   id: string;
@@ -195,29 +196,21 @@ export const DataLakeDashboard: React.FC<DataLakeDashboardProps> = ({
   };
 
   return (
-    <Box sx={{ p: 2 }}>
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          mb: 3,
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold' }}>
-            DataLake Dashboard
-          </Typography>
-          <Dashboard sx={{ color: 'text.secondary', fontSize: 28 }} />
-        </Box>
-        <Button
-          variant="outlined"
-          startIcon={<Settings />}
-          onClick={() => navigate('/app/data-lake/instances')}
-        >
-          Manage DataLakes
-        </Button>
-      </Box>
+    <Box sx={dataLakeContentSx}>
+      <DataLakePageHeader
+        title="DataLake Dashboard"
+        description="Overview of your DuckLake and Apache Iceberg instances"
+        actions={
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<Settings />}
+            onClick={() => navigate('/app/data-lake/instances')}
+          >
+            Manage DataLakes
+          </Button>
+        }
+      />
 
       <Box
         sx={{
@@ -228,12 +221,12 @@ export const DataLakeDashboard: React.FC<DataLakeDashboardProps> = ({
       >
         <Card
           sx={{
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-            transition: 'all 0.3s ease',
-            '&:hover': {
-              boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
-              transform: 'translateY(-2px)',
-            },
+            border: 1,
+            borderColor: 'divider',
+            borderRadius: 2,
+            boxShadow: 'none',
+            backgroundImage: 'none',
+            bgcolor: 'background.default',
           }}
         >
           <CardHeader
@@ -255,9 +248,9 @@ export const DataLakeDashboard: React.FC<DataLakeDashboardProps> = ({
           />
           <CardContent sx={{ pt: 0 }}>
             <Typography
-              variant="h4"
+              variant="h6"
               component="div"
-              sx={{ fontWeight: 'bold', mb: 2 }}
+              sx={{ fontSize: 22, fontWeight: 600, mb: 2 }}
             >
               {stats.totalInstances}
             </Typography>
@@ -381,12 +374,12 @@ export const DataLakeDashboard: React.FC<DataLakeDashboardProps> = ({
 
         <Card
           sx={{
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-            transition: 'all 0.3s ease',
-            '&:hover': {
-              boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
-              transform: 'translateY(-2px)',
-            },
+            border: 1,
+            borderColor: 'divider',
+            borderRadius: 2,
+            boxShadow: 'none',
+            backgroundImage: 'none',
+            bgcolor: 'background.default',
           }}
         >
           <CardHeader
@@ -408,9 +401,9 @@ export const DataLakeDashboard: React.FC<DataLakeDashboardProps> = ({
           />
           <CardContent sx={{ pt: 0 }}>
             <Typography
-              variant="h4"
+              variant="h6"
               component="div"
-              sx={{ fontWeight: 'bold' }}
+              sx={{ fontSize: 22, fontWeight: 600 }}
             >
               0
             </Typography>
@@ -422,12 +415,12 @@ export const DataLakeDashboard: React.FC<DataLakeDashboardProps> = ({
 
         <Card
           sx={{
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-            transition: 'all 0.3s ease',
-            '&:hover': {
-              boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
-              transform: 'translateY(-2px)',
-            },
+            border: 1,
+            borderColor: 'divider',
+            borderRadius: 2,
+            boxShadow: 'none',
+            backgroundImage: 'none',
+            bgcolor: 'background.default',
           }}
         >
           <CardHeader
@@ -449,9 +442,9 @@ export const DataLakeDashboard: React.FC<DataLakeDashboardProps> = ({
           />
           <CardContent sx={{ pt: 0 }}>
             <Typography
-              variant="h4"
+              variant="h6"
               component="div"
-              sx={{ fontWeight: 'bold' }}
+              sx={{ fontSize: 22, fontWeight: 600 }}
             >
               {Object.keys(stats.catalogTypes).length}
             </Typography>
@@ -488,12 +481,12 @@ export const DataLakeDashboard: React.FC<DataLakeDashboardProps> = ({
           sx={{
             display: 'flex',
             flexDirection: 'column',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-            transition: 'all 0.3s ease',
-            '&:hover': {
-              boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
-              transform: 'translateY(-2px)',
-            },
+            border: 1,
+            borderColor: 'divider',
+            borderRadius: 2,
+            boxShadow: 'none',
+            backgroundImage: 'none',
+            bgcolor: 'background.default',
           }}
         >
           <CardHeader
@@ -598,6 +591,7 @@ export const DataLakeDashboard: React.FC<DataLakeDashboardProps> = ({
             <Button
               variant="outlined"
               size="small"
+              startIcon={<Visibility />}
               onClick={() => navigate('/app/data-lake/instances')}
               fullWidth
             >
@@ -611,12 +605,12 @@ export const DataLakeDashboard: React.FC<DataLakeDashboardProps> = ({
         <Box sx={{ mt: 3 }}>
           <Card
             sx={{
-              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-              transition: 'all 0.3s ease',
-              '&:hover': {
-                boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
-                transform: 'translateY(-2px)',
-              },
+              border: 1,
+              borderColor: 'divider',
+              borderRadius: 2,
+              boxShadow: 'none',
+              backgroundImage: 'none',
+              bgcolor: 'background.default',
             }}
           >
             <CardHeader
@@ -633,6 +627,7 @@ export const DataLakeDashboard: React.FC<DataLakeDashboardProps> = ({
                 Iceberg instances. Start by creating your first DataLake.
               </Typography>
               <Button
+                size="small"
                 variant="contained"
                 color="primary"
                 startIcon={<Add />}

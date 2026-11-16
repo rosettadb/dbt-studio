@@ -11,13 +11,19 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
+import { useQueryClient } from 'react-query';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import {
-  useGetAISettings,
-  useInitializeSecondBrain,
-  useSaveAISettings,
-} from '../../controllers';
+import { useGetAISettings, useSaveAISettings } from '../../controllers';
 import { ReactComponent as MemoriesIcon } from '../../assets/icons/lucide/brain-circuit.svg';
+import {
+  type AIProviderSetupState,
+  shouldShowMemoryConsent,
+} from './aiPanelSetup';
+import {
+  AGENT_MEMORY_SETTINGS_PATH,
+  buildAgentMemoryInBackground,
+} from './agentMemoryBuild';
 
 const MEMORY_CONSENT_KEY = 'dbt-studio-second-brain-consent';
 
@@ -39,21 +45,28 @@ const storeMemoryConsentDecision = (enabled: boolean): void => {
   }
 };
 
-export const MemoryConsentDialog: React.FC = () => {
-  const [open, setOpen] = React.useState(
-    () => getMemoryConsentDecision() === null,
+type MemoryConsentDialogProps = {
+  providerSetupState: AIProviderSetupState;
+};
+
+export const MemoryConsentDialog: React.FC<MemoryConsentDialogProps> = ({
+  providerSetupState,
+}) => {
+  const [storedDecision, setStoredDecision] = React.useState(() =>
+    getMemoryConsentDecision(),
   );
+  const open = shouldShowMemoryConsent({ providerSetupState, storedDecision });
   const [selectedChoice, setSelectedChoice] = React.useState<boolean | null>(
     null,
   );
   const settingsQuery = useGetAISettings();
   const saveSettings = useSaveAISettings();
-  const initializeSecondBrain = useInitializeSecondBrain();
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const busy =
     selectedChoice !== null ||
     settingsQuery.isLoading ||
-    saveSettings.isLoading ||
-    initializeSecondBrain.isLoading;
+    saveSettings.isLoading;
 
   const handleChoice = async (enabled: boolean) => {
     const settings = settingsQuery.data;
@@ -61,37 +74,38 @@ export const MemoryConsentDialog: React.FC = () => {
 
     setSelectedChoice(enabled);
     try {
-      let nextSettings = {
+      await saveSettings.mutateAsync({
         ...settings,
         secondBrain: { ...settings.secondBrain, enabled },
-      };
-      await saveSettings.mutateAsync(nextSettings);
-
-      if (enabled && !settings.secondBrain.initialized) {
-        await initializeSecondBrain.mutateAsync();
-        nextSettings = {
-          ...nextSettings,
-          secondBrain: { ...nextSettings.secondBrain, initialized: true },
-        };
-        await saveSettings.mutateAsync(nextSettings);
-      }
-
-      storeMemoryConsentDecision(enabled);
-      setOpen(false);
-      toast.success(
-        enabled
-          ? 'AI Agent Memory is enabled and ready.'
-          : 'Memory will remain disabled.',
-      );
+      });
     } catch (error) {
       toast.error(
         enabled
           ? `Memory could not be enabled: ${(error as Error).message}`
           : `Memory preference could not be saved: ${(error as Error).message}`,
       );
-    } finally {
       setSelectedChoice(null);
+      return;
     }
+
+    storeMemoryConsentDecision(enabled);
+    setStoredDecision(enabled);
+    setSelectedChoice(null);
+
+    if (!enabled) {
+      toast.success('Memory will remain disabled.');
+      return;
+    }
+    if (settings.secondBrain.initialized) {
+      toast.success('AI Agent Memory is enabled.');
+      return;
+    }
+    // The first build can take minutes, so close the dialog and keep the
+    // panel usable while it runs.
+    buildAgentMemoryInBackground({
+      queryClient,
+      openAgentMemorySettings: () => navigate(AGENT_MEMORY_SETTINGS_PATH),
+    });
   };
 
   return (

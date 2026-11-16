@@ -27,6 +27,9 @@ describe('GitService (main)', () => {
     gitMock = {
       status: jest.fn(),
       raw: jest.fn(),
+      getRemotes: jest.fn(),
+      log: jest.fn(),
+      fetch: jest.fn(),
     };
 
     jest.clearAllMocks();
@@ -105,6 +108,43 @@ describe('GitService (main)', () => {
       await expect(service.getAheadBehindCount('/tmp/repo')).resolves.toBeNull();
 
       consoleErrorSpy.mockRestore();
+    });
+  });
+
+  describe('getProjectGitSummary', () => {
+    it('returns the active branch', async () => {
+      gitMock.status.mockResolvedValue({ current: 'feature/icons' });
+
+      await expect(
+        new GitService().getProjectGitSummary('/tmp/repo'),
+      ).resolves.toEqual({ currentBranch: 'feature/icons' });
+    });
+
+    it('returns no branch name when Git cannot name one', async () => {
+      gitMock.status.mockResolvedValue({ current: null });
+
+      await expect(
+        new GitService().getProjectGitSummary('/tmp/repo'),
+      ).resolves.toEqual({ currentBranch: null });
+    });
+
+    it('only reads the status, so it stays fast and cannot trigger a login prompt', async () => {
+      gitMock.status.mockResolvedValue({ current: 'main' });
+
+      await new GitService().getProjectGitSummary('/tmp/repo');
+
+      expect(gitMock.status).toHaveBeenCalledTimes(1);
+      expect(gitMock.fetch).not.toHaveBeenCalled();
+      expect(gitMock.getRemotes).not.toHaveBeenCalled();
+      expect(gitMock.log).not.toHaveBeenCalled();
+    });
+
+    it('returns null when the folder is not a Git repository', async () => {
+      gitMock.status.mockRejectedValue(new Error('not a git repository'));
+
+      await expect(
+        new GitService().getProjectGitSummary('/tmp/repo'),
+      ).resolves.toBeNull();
     });
   });
 });

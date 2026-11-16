@@ -1,5 +1,10 @@
 import React from 'react';
-import { useMutation, useQuery, useQueryClient } from 'react-query';
+import {
+  type QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from 'react-query';
 import * as secondBrainService from '../services/secondBrain.service';
 import type {
   SecondBrainArchiveRequest,
@@ -55,6 +60,21 @@ export const useSecondBrainRevision = (pageId?: string, revisionId?: string) =>
     () => secondBrainService.readRevision(pageId!, revisionId!),
     { enabled: Boolean(pageId && revisionId) },
   );
+
+/**
+ * After memory files are deleted (Clear and disable, or a failed first build
+ * rolling back), drop cached page-level data instead of refetching it: the
+ * page that was open no longer exists, and refetching it fails.
+ */
+export const resetSecondBrainQueriesAfterDelete = async (
+  queryClient: QueryClient,
+): Promise<void> => {
+  queryClient.removeQueries(['second-brain', 'page']);
+  queryClient.removeQueries(['second-brain', 'revisions']);
+  queryClient.removeQueries(['second-brain', 'revision']);
+  queryClient.removeQueries(['second-brain', 'search']);
+  await queryClient.invalidateQueries(SECOND_BRAIN_KEYS.all);
+};
 
 const useInvalidateSecondBrain = () => {
   const queryClient = useQueryClient();
@@ -114,11 +134,10 @@ export const usePauseSecondBrain = () => {
 };
 
 export const useClearAndDisableSecondBrain = () => {
-  const invalidate = useInvalidateSecondBrain();
   const queryClient = useQueryClient();
   return useMutation(secondBrainService.clearAndDisable, {
     onSuccess: async () => {
-      await invalidate();
+      await resetSecondBrainQueriesAfterDelete(queryClient);
       await queryClient.invalidateQueries(['ai-settings']);
     },
   });

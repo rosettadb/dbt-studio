@@ -21,6 +21,7 @@ import { SQLiteConnector } from './sqlite/SQLiteConnector.main';
 import { KineticaConnector } from './kinetica/KineticaConnector.main';
 import { OracleConnector } from './oracle/OracleConnector.main';
 import { MySqlConnector } from './mysql/MySqlConnector.main';
+import { SpannerConnector } from './spanner/SpannerConnector.main';
 import { DuckLakeConnector } from './ducklake/DuckLakeConnector.main';
 
 /** One instance per database. A missing key fails tsc. */
@@ -37,6 +38,7 @@ export const connectors: {
   kinetica: new KineticaConnector(),
   oracle: new OracleConnector(),
   mysql: new MySqlConnector(),
+  spanner: new SpannerConnector(),
   ducklake: new DuckLakeConnector(),
 };
 

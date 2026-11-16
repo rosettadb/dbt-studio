@@ -27,6 +27,8 @@ export type SettingsChannels =
   | 'version:runner:install'
   | 'version:runner:uninstall'
   | 'runner:plugins:check'
+  | 'runner:pyspark:install'
+  | 'runner:pyspark:uninstall'
   | 'settings:reset-factory'
   | 'settings:restart'
   | 'settings:duckdb:metadata'
@@ -110,6 +112,7 @@ export type ConnectorChannels =
   | 'connector:remove'
   | 'connector:test'
   | 'connector:oracleWalletAliases'
+  | 'connector:duckdbCreateDatabase'
   | 'connector:generateProfiles'
   | 'connector:generateRosetta'
   | 'connector:validate'
@@ -238,6 +241,7 @@ export type GitChannels =
   | 'git:unstageAll'
   | 'git:discardChanges'
   | 'git:aheadBehind'
+  | 'git:projectSummary'
   | 'git:createBranch'
   | 'git:deleteBranch'
   | 'git:renameBranch';
@@ -310,7 +314,8 @@ export type CloudExplorerChannels =
   | 'cloudExplorer:uploadProgress'
   | 'cloudExplorer:createFolder'
   | 'cloudExplorer:deleteBucket'
-  | 'cloudExplorer:downloadObject';
+  | 'cloudExplorer:downloadObject'
+  | 'cloudExplorer:downloadFolder';
 
 export type DuckLakeChannels =
   // Extension Management
@@ -710,6 +715,15 @@ export interface DownloadObjectRequest {
   destinationPath: string;
   taskId: string;
   label?: string;
+}
+
+export interface DownloadFolderRequest {
+  provider: CloudProvider;
+  config: CloudStorageConfig;
+  bucketName: string;
+  prefix: string;
+  destinationPath: string;
+  taskId: string;
 }
 
 export interface DownloadObjectResponse {

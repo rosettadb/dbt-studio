@@ -1,22 +1,22 @@
 import React from 'react';
 import {
-  Card,
-  CardContent,
-  Typography,
-  TableContainer,
   Table,
   TableHead,
   TableRow,
   TableCell,
   TableBody,
-  Alert,
-  Box,
 } from '@mui/material';
+import { Splitscreen, ViewList } from '@mui/icons-material';
 import {
   DuckLakePartitionColumn,
   DuckLakeFilePartitionValue,
 } from '../../../../types/duckLake';
 import { safeToString } from '../../../helpers/utils';
+import { SettingsStack, SettingsSection } from '../../settings/SettingsLayout';
+import {
+  DataLakeSectionEmpty,
+  DataLakeTableContainer,
+} from '../DataLakeLayout';
 
 interface TablePartitionsTabProps {
   tableDetails: any;
@@ -25,84 +25,83 @@ interface TablePartitionsTabProps {
 export const TablePartitionsTab: React.FC<TablePartitionsTabProps> = ({
   tableDetails,
 }) => {
-  return (
-    <Card>
-      <CardContent>
-        <Typography variant="h6" gutterBottom>
-          Partition Information
-        </Typography>
-        {tableDetails.partitionInfo ? (
-          <Box>
-            <Typography variant="subtitle1" gutterBottom>
-              Partition Columns (
-              {(tableDetails.partitionInfo.columns ?? []).length})
-            </Typography>
-            <TableContainer sx={{ mb: 3 }}>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Key Index</TableCell>
-                    <TableCell>Column Name</TableCell>
-                    <TableCell>Transform</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {(tableDetails.partitionInfo.columns ?? []).map(
-                    (col: DuckLakePartitionColumn) => (
-                      <TableRow
-                        key={`${col.partitionId}-${safeToString(
-                          col.partitionKeyIndex,
-                        )}`}
-                      >
-                        <TableCell>
-                          {safeToString(col.partitionKeyIndex)}
-                        </TableCell>
-                        <TableCell>
-                          <strong>{col.columnName}</strong>
-                        </TableCell>
-                        <TableCell>{col.transform || 'identity'}</TableCell>
-                      </TableRow>
-                    ),
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
+  if (!tableDetails.partitionInfo) {
+    return (
+      <SettingsSection title="Partition Columns" icon={<Splitscreen />}>
+        <DataLakeSectionEmpty>Table is not partitioned</DataLakeSectionEmpty>
+      </SettingsSection>
+    );
+  }
 
-            <Typography variant="subtitle1" gutterBottom>
-              File Partition Values (
-              {(tableDetails.partitionInfo.filePartitionValues ?? []).length})
-            </Typography>
-            <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Data File ID</TableCell>
-                    <TableCell>Key Index</TableCell>
-                    <TableCell>Partition Value</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {(tableDetails.partitionInfo.filePartitionValues ?? []).map(
-                    (val: DuckLakeFilePartitionValue, idx: number) => (
-                      <TableRow key={idx}>
-                        <TableCell>{safeToString(val.dataFileId)}</TableCell>
-                        <TableCell>
-                          {safeToString(val.partitionKeyIndex)}
-                        </TableCell>
-                        <TableCell>
-                          <strong>{val.partitionValue}</strong>
-                        </TableCell>
-                      </TableRow>
-                    ),
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Box>
-        ) : (
-          <Alert severity="info">Table is not partitioned</Alert>
-        )}
-      </CardContent>
-    </Card>
+  const columns: DuckLakePartitionColumn[] =
+    tableDetails.partitionInfo.columns ?? [];
+  const filePartitionValues: DuckLakeFilePartitionValue[] =
+    tableDetails.partitionInfo.filePartitionValues ?? [];
+
+  return (
+    <SettingsStack>
+      <SettingsSection
+        title="Partition Columns"
+        icon={<Splitscreen />}
+        description={`${columns.length} ${columns.length === 1 ? 'column' : 'columns'}`}
+      >
+        <DataLakeTableContainer bordered={false}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Key Index</TableCell>
+                <TableCell>Column Name</TableCell>
+                <TableCell>Transform</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {columns.map((col) => (
+                <TableRow
+                  key={`${col.partitionId}-${safeToString(
+                    col.partitionKeyIndex,
+                  )}`}
+                >
+                  <TableCell>{safeToString(col.partitionKeyIndex)}</TableCell>
+                  <TableCell sx={{ fontWeight: 500 }}>
+                    {col.columnName}
+                  </TableCell>
+                  <TableCell>{col.transform || 'identity'}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </DataLakeTableContainer>
+      </SettingsSection>
+
+      <SettingsSection
+        title="File Partition Values"
+        icon={<ViewList />}
+        description={`${filePartitionValues.length} ${filePartitionValues.length === 1 ? 'value' : 'values'}`}
+      >
+        <DataLakeTableContainer bordered={false}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Data File ID</TableCell>
+                <TableCell>Key Index</TableCell>
+                <TableCell>Partition Value</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filePartitionValues.map((val, idx) => (
+                // eslint-disable-next-line react/no-array-index-key
+                <TableRow key={idx}>
+                  <TableCell>{safeToString(val.dataFileId)}</TableCell>
+                  <TableCell>{safeToString(val.partitionKeyIndex)}</TableCell>
+                  <TableCell sx={{ fontWeight: 500 }}>
+                    {val.partitionValue}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </DataLakeTableContainer>
+      </SettingsSection>
+    </SettingsStack>
   );
 };

@@ -49,6 +49,11 @@ export interface TabsContextValue extends UseTabManagerReturn {
   openFileAt: (position: RevealPosition) => Promise<void>;
   revealPosition: RevealPosition | null;
   clearRevealPosition: () => void;
+  // Asks the project screen's file tree to show a folder (used by the global
+  // search). The tree clears the request once it has shown the folder.
+  revealedFolderPath: string | null;
+  revealFolderInTree: (path: string) => void;
+  clearRevealedFolder: () => void;
   // Opens or closes the read-only preview tab for a markdown/html source.
   togglePreview: (sourcePath: string, content: string) => Promise<void>;
   saveAll: () => Promise<void>;
@@ -97,6 +102,9 @@ export const TabsProvider: React.FC<TabsProviderProps> = ({ children }) => {
   const [revealPosition, setRevealPosition] = useState<RevealPosition | null>(
     null,
   );
+  const [revealedFolderPath, setRevealedFolderPath] = useState<string | null>(
+    null,
+  );
 
   const activeFilePath = useMemo(() => {
     if (!activeTab?.path) return undefined;
@@ -126,6 +134,16 @@ export const TabsProvider: React.FC<TabsProviderProps> = ({ children }) => {
   );
 
   const clearRevealPosition = useCallback(() => setRevealPosition(null), []);
+
+  const revealFolderInTree = useCallback(
+    (path: string) => setRevealedFolderPath(path),
+    [],
+  );
+
+  const clearRevealedFolder = useCallback(
+    () => setRevealedFolderPath(null),
+    [],
+  );
 
   const togglePreview = useCallback(
     async (currentPath: string, content: string) => {
@@ -161,7 +179,7 @@ export const TabsProvider: React.FC<TabsProviderProps> = ({ children }) => {
             path: tab.path,
             content: tab.content,
           });
-          markTabSavedByPath(tab.path);
+          markTabSavedByPath(tab.path, tab.content);
           setTabErrorByPath(tab.path, undefined);
         } catch (error: any) {
           setTabErrorByPath(tab.path, error?.message);
@@ -180,7 +198,9 @@ export const TabsProvider: React.FC<TabsProviderProps> = ({ children }) => {
           path: tab.path,
           content: tab.content,
         });
-        markTabSavedByPath(tab.path);
+        // `tab` is the snapshot that was written; the tab stays modified if
+        // it was edited while the write was in flight.
+        markTabSavedByPath(tab.path, tab.content);
         setTabErrorByPath(tab.path, undefined);
         await refreshProjectFiles();
       } catch (error: any) {
@@ -336,6 +356,9 @@ export const TabsProvider: React.FC<TabsProviderProps> = ({ children }) => {
       openFileAt,
       revealPosition,
       clearRevealPosition,
+      revealedFolderPath,
+      revealFolderInTree,
+      clearRevealedFolder,
       togglePreview,
       saveAll,
       saveTab,
@@ -352,6 +375,9 @@ export const TabsProvider: React.FC<TabsProviderProps> = ({ children }) => {
       openFileAt,
       revealPosition,
       clearRevealPosition,
+      revealedFolderPath,
+      revealFolderInTree,
+      clearRevealedFolder,
       togglePreview,
       saveAll,
       saveTab,

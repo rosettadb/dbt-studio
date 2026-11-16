@@ -209,6 +209,10 @@ const Sql = () => {
 
   // Schema state for active tab
   const [tabSchemas, setTabSchemas] = useState<Record<string, Table[]>>({});
+  // Every schema of a connection, also empty ones (sent only by DuckDB)
+  const [tabSchemaNames, setTabSchemaNames] = useState<
+    Record<string, string[] | undefined>
+  >({});
   const [loadingSchemas, setLoadingSchemas] = useState<Record<string, boolean>>(
     {},
   );
@@ -291,6 +295,16 @@ const Sql = () => {
   const activeSchema =
     (activeConnectionId ? tabSchemas[activeConnectionId] : undefined) ||
     EMPTY_ARRAY;
+  // The tree shows these schemas even without tables. While filtering, only
+  // names that match stay, the same as tables.
+  const activeSchemaNames = useMemo(() => {
+    const names = activeConnectionId
+      ? tabSchemaNames[activeConnectionId]
+      : undefined;
+    if (!names || !filter) return names;
+    const lowerFilter = filter.toLowerCase();
+    return names.filter((name) => name.toLowerCase().includes(lowerFilter));
+  }, [activeConnectionId, tabSchemaNames, filter]);
   const isLoadingSchema = activeConnectionId
     ? (loadingSchemas[activeConnectionId] ?? false)
     : false;
@@ -494,6 +508,7 @@ const Sql = () => {
       }
 
       setLoadingSchemas((prev) => ({ ...prev, [connectionId]: true }));
+      setTabSchemaNames((prev) => ({ ...prev, [connectionId]: undefined }));
       try {
         const result =
           await connectorsServices.extractSchemaFromConnection(connectionId);
@@ -504,6 +519,10 @@ const Sql = () => {
           setTabSchemas((prev) => ({ ...prev, [connectionId]: [] }));
         } else {
           setTabSchemas((prev) => ({ ...prev, [connectionId]: result.tables }));
+          setTabSchemaNames((prev) => ({
+            ...prev,
+            [connectionId]: result.schemas,
+          }));
         }
       } catch (error: any) {
         // eslint-disable-next-line no-console
@@ -710,11 +729,14 @@ const Sql = () => {
   const renameDuckLakeTable = useRenameDuckLakeTable();
   const renameDuckLakeColumn = useRenameDuckLakeColumn();
 
-  const handleSchemaInsertText = useCallback((text: string) => {
-    if (!sqlEditorRef.current?.insertText(text)) {
-      toast.info('Open a SQL editor tab to insert text');
-    }
-  }, []);
+  const handleSchemaInsertText = useCallback(
+    (text: string, options: { asStatement: boolean }) => {
+      if (!sqlEditorRef.current?.insertText(text, options)) {
+        toast.info('Open a SQL editor tab to insert text');
+      }
+    },
+    [],
+  );
 
   const handleSchemaPreview = useCallback((sql: string) => {
     if (!sqlEditorRef.current) {
@@ -779,7 +801,7 @@ const Sql = () => {
             )
           : buildRenameTableStatement(ref, newName, connectionInput?.type);
 
-      if (sqlEditorRef.current?.insertText(sql)) {
+      if (sqlEditorRef.current?.insertText(sql, { asStatement: true })) {
         toast.info('Rename statement inserted. Review it, then run it.');
       } else {
         toast.info('Open a SQL editor tab to insert the rename statement');
@@ -1267,6 +1289,7 @@ const Sql = () => {
                         )}
                         type={connectionInput.type}
                         schema={activeSchema}
+                        schemaNames={activeSchemaNames}
                         isLoading={isLoadingSchema}
                         filter={filter}
                         connectionId={activeConnectionId}

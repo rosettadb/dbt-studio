@@ -27,7 +27,7 @@ export const IcebergOperationBackdrop: React.FC<
     <Backdrop
       open={!!active}
       sx={{
-        color: '#fff',
+        color: 'common.white',
         zIndex: (theme) => theme.zIndex.drawer + 999, // above everything incl. sidebar + dialogs
         display: 'flex',
         flexDirection: 'column',

@@ -1,23 +1,24 @@
 import React, { useMemo, useState } from 'react';
 import {
   Box,
-  Card,
-  CardContent,
   Typography,
   Button,
-  Chip,
-  IconButton,
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
-  Paper,
   CircularProgress,
   Alert,
 } from '@mui/material';
-import { Edit, Delete, Folder, Storage, Refresh } from '@mui/icons-material';
+import {
+  Edit,
+  Delete,
+  Folder,
+  Storage,
+  Refresh,
+  Visibility,
+} from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import moment from 'moment';
 import {
@@ -38,6 +39,24 @@ import {
   icebergCatalogImages,
 } from '../../../../assets/connectionIcons';
 import { icons } from '../../../../assets/icons';
+import {
+  SettingsRefreshButton,
+  SettingsSection,
+} from '../settings/SettingsLayout';
+import {
+  DataLakePageHeader,
+  DataLakeRowActions,
+  DataLakeTableContainer,
+  dataLakeContentSx,
+} from './DataLakeLayout';
+
+const iconLabelSx = { display: 'flex', alignItems: 'center', gap: 1 } as const;
+const imageIconSx = {
+  width: 16,
+  height: 16,
+  objectFit: 'contain',
+  flexShrink: 0,
+} as const;
 
 type DataLakeTableRow =
   | {
@@ -119,12 +138,14 @@ export const DataLakeInstances: React.FC<DataLakeInstancesProps> = ({
   const {
     data: duckLakeInstances = [],
     isLoading: duckLakeLoading,
+    isFetching: duckLakeFetching,
     error: duckLakeError,
     refetch: refetchDuckLake,
   } = useDuckLakeInstances();
   const {
     data: icebergInstances = [],
     isLoading: icebergLoading,
+    isFetching: icebergFetching,
     error: icebergError,
     refetch: refetchIceberg,
   } = useListIcebergInstances();
@@ -132,6 +153,7 @@ export const DataLakeInstances: React.FC<DataLakeInstancesProps> = ({
   const deleteIcebergMutation = useDeleteIcebergInstance();
 
   const isLoading = duckLakeLoading || icebergLoading;
+  const isFetching = duckLakeFetching || icebergFetching;
   const error = duckLakeError || icebergError;
 
   const rows = useMemo<DataLakeTableRow[]>(() => {
@@ -230,14 +252,30 @@ export const DataLakeInstances: React.FC<DataLakeInstancesProps> = ({
     refetchIceberg();
   };
 
+  const header = (
+    <DataLakePageHeader
+      title="DataLake Instances"
+      description="Manage your DuckLake and Apache Iceberg instances"
+      actions={
+        <SettingsRefreshButton
+          title="Refresh instances"
+          onClick={handleRefresh}
+          loading={isFetching}
+        />
+      }
+    />
+  );
+
   if (error) {
     return (
-      <Box sx={{ p: 2 }}>
+      <Box sx={dataLakeContentSx}>
+        {header}
         <Alert severity="error" sx={{ mb: 2 }}>
           Failed to load DataLake instances: {(error as Error).message}
         </Alert>
         <Button
-          variant="contained"
+          size="small"
+          variant="outlined"
           onClick={handleRefresh}
           startIcon={<Refresh />}
         >
@@ -248,190 +286,165 @@ export const DataLakeInstances: React.FC<DataLakeInstancesProps> = ({
   }
 
   return (
-    <Box sx={{ p: 2 }}>
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          mb: 3,
-        }}
-      >
-        <Box>
-          <Typography variant="h5" component="h1" sx={{ fontWeight: 'bold' }}>
-            DataLake Instances
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Manage your DuckLake and Apache Iceberg instances
-          </Typography>
-        </Box>
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-          <IconButton
-            onClick={handleRefresh}
-            disabled={isLoading}
-            title="Refresh"
-          >
-            <Refresh />
-          </IconButton>
-        </Box>
-      </Box>
+    <Box sx={dataLakeContentSx}>
+      {header}
 
       {isLoading && (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-          <CircularProgress />
+          <CircularProgress size={24} />
         </Box>
       )}
 
       {!isLoading && rows.length === 0 && (
-        <Card sx={{ textAlign: 'center', py: 4 }}>
-          <CardContent>
-            <Storage sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-            <Typography variant="h6" gutterBottom>
+        <SettingsSection title="Instances" icon={<Storage />}>
+          <Box sx={{ textAlign: 'center', py: 5, px: 2 }}>
+            <Storage sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
+            <Typography variant="subtitle2" component="h2" gutterBottom>
               No DataLake Instances
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            <Typography variant="body2" color="text.secondary">
               Create your first DataLake instance using the &quot;New
               DataLake&quot; button in the sidebar.
             </Typography>
-          </CardContent>
-        </Card>
+          </Box>
+        </SettingsSection>
       )}
 
       {!isLoading && rows.length > 0 && (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Name</TableCell>
-                <TableCell>DataLake Type</TableCell>
-                <TableCell>Catalog Type</TableCell>
-                <TableCell>Data Path / Storage</TableCell>
-                <TableCell>Created</TableCell>
-                <TableCell>Last Updated</TableCell>
-                <TableCell align="right">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {rows.map((row) => (
-                <TableRow
-                  key={`${row.lakeType}-${row.id}`}
-                  hover
-                  sx={{ cursor: 'pointer' }}
-                  onClick={() => handleInstanceClick(row)}
-                >
-                  <TableCell>
-                    <Box>
-                      <Typography
-                        variant="subtitle2"
-                        sx={{ fontWeight: 'bold' }}
-                      >
+        <SettingsSection
+          title="Instances"
+          icon={<Storage />}
+          description={`${rows.length} ${rows.length === 1 ? 'instance' : 'instances'}`}
+        >
+          <DataLakeTableContainer bordered={false}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Name</TableCell>
+                  <TableCell>Type</TableCell>
+                  <TableCell>Catalog</TableCell>
+                  <TableCell>Data Path / Storage</TableCell>
+                  <TableCell>Created</TableCell>
+                  <TableCell>Last Updated</TableCell>
+                  <TableCell
+                    align="right"
+                    aria-label="Actions"
+                    sx={{ width: 48 }}
+                  />
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {rows.map((row) => (
+                  <TableRow
+                    key={`${row.lakeType}-${row.id}`}
+                    hover
+                    sx={{ cursor: 'pointer' }}
+                    onClick={() => handleInstanceClick(row)}
+                  >
+                    <TableCell sx={{ maxWidth: 260 }}>
+                      <Typography variant="body2" fontWeight={500} noWrap>
                         {row.name}
                       </Typography>
                       {row.description && (
-                        <Typography variant="caption" color="text.secondary">
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          component="div"
+                          noWrap
+                          title={row.description}
+                        >
                           {row.description}
                         </Typography>
                       )}
-                    </Box>
-                  </TableCell>
-                  <TableCell>
-                    {row.lakeType === 'duck-lake' ? (
-                      <Chip
-                        icon={
+                    </TableCell>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                      <Box sx={iconLabelSx}>
+                        {row.lakeType === 'duck-lake' ? (
                           <Box
                             component="img"
                             src={icons.duckLake}
                             alt=""
-                            sx={{ width: 16, height: 16, objectFit: 'contain' }}
+                            sx={imageIconSx}
                           />
-                        }
-                        label="DuckLake"
-                        size="small"
-                        color="primary"
-                        variant="outlined"
-                      />
-                    ) : (
-                      <Chip
-                        icon={<IcebergIcon size={16} />}
-                        label="Apache Iceberg"
-                        size="small"
-                        color="primary"
-                        variant="outlined"
-                      />
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      icon={
+                        ) : (
+                          <IcebergIcon size={16} />
+                        )}
+                        {row.lakeType === 'duck-lake'
+                          ? 'DuckLake'
+                          : 'Apache Iceberg'}
+                      </Box>
+                    </TableCell>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                      <Box sx={iconLabelSx}>
                         <Box
                           component="img"
                           src={getCatalogIcon(row)}
                           alt=""
-                          sx={{ width: 16, height: 16, objectFit: 'contain' }}
+                          sx={imageIconSx}
                         />
-                      }
-                      label={row.catalogType}
-                      size="small"
-                      variant="outlined"
-                    />
-                  </TableCell>
-                  <TableCell
-                    sx={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}
-                  >
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      {getStorageIcon(row)}
-                      <Typography
-                        variant="body2"
-                        sx={{ fontFamily: 'monospace' }}
-                      >
-                        {row.dataPath}
-                      </Typography>
-                    </Box>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2">
+                        {row.catalogType}
+                      </Box>
+                    </TableCell>
+                    <TableCell sx={{ maxWidth: 320 }}>
+                      <Box sx={iconLabelSx}>
+                        {getStorageIcon(row)}
+                        <Typography
+                          variant="body2"
+                          noWrap
+                          title={row.dataPath}
+                          sx={{ fontFamily: 'monospace', fontSize: 12 }}
+                        >
+                          {row.dataPath}
+                        </Typography>
+                      </Box>
+                    </TableCell>
+                    <TableCell
+                      sx={{ whiteSpace: 'nowrap' }}
+                      title={moment(row.createdAt).format('LLL')}
+                    >
                       {moment(row.createdAt).format('MMM D, YYYY')}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {moment(row.createdAt).fromNow()}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2">
-                      {moment(row.updatedAt).format('MMM D, YYYY')}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
+                    </TableCell>
+                    <TableCell
+                      sx={{ whiteSpace: 'nowrap', color: 'text.secondary' }}
+                      title={moment(row.updatedAt).format('LLL')}
+                    >
                       {moment(row.updatedAt).fromNow()}
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="right" onClick={(e) => e.stopPropagation()}>
-                    <Box sx={{ display: 'flex', gap: 0.5 }}>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleEdit(row)}
-                        title="Edit"
-                      >
-                        <Edit />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleDelete(row)}
-                        disabled={
-                          deleteDuckLakeMutation.isLoading ||
-                          deleteIcebergMutation.isLoading
-                        }
-                        title="Delete"
-                        color="error"
-                      >
-                        <Delete />
-                      </IconButton>
-                    </Box>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+                    </TableCell>
+                    <TableCell align="right">
+                      <DataLakeRowActions
+                        label={`Actions for ${row.name}`}
+                        actions={[
+                          {
+                            key: 'open',
+                            label: 'View details',
+                            icon: <Visibility fontSize="small" />,
+                            onClick: () => handleInstanceClick(row),
+                          },
+                          {
+                            key: 'edit',
+                            label: 'Edit',
+                            icon: <Edit fontSize="small" />,
+                            onClick: () => handleEdit(row),
+                          },
+                          {
+                            key: 'delete',
+                            label: 'Delete',
+                            icon: <Delete fontSize="small" />,
+                            onClick: () => handleDelete(row),
+                            disabled:
+                              deleteDuckLakeMutation.isLoading ||
+                              deleteIcebergMutation.isLoading,
+                            danger: true,
+                          },
+                        ]}
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </DataLakeTableContainer>
+        </SettingsSection>
       )}
 
       <ConfirmationModal

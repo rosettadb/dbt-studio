@@ -73,8 +73,11 @@ export function useSchemaObjectDrop(
         getPositionAtClientPoint(editor, event.clientX, event.clientY) ??
         editor.getPosition();
       const text = buildDropText(payload, event.shiftKey);
+      // Shift on a table/view drops a full SELECT; everything else is a name.
+      const asStatement =
+        event.shiftKey && (payload.kind === 'table' || payload.kind === 'view');
 
-      if (insertTextAtCursor(editor, text, { position })) {
+      if (insertTextAtCursor(editor, text, { position, asStatement })) {
         onDropped?.(payload, text);
       }
     };

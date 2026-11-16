@@ -5,6 +5,31 @@ import type {
   SecondBrainRevisionSummary,
 } from './backend';
 
+export type SecondBrainRefreshStage =
+  | 'preparing'
+  | 'collecting'
+  | 'redacting'
+  | 'comparing'
+  | 'generating'
+  | 'validating'
+  | 'applying'
+  | 'completed'
+  | 'cancelled'
+  | 'failed';
+
+export type SecondBrainProgressEvent = {
+  operationId: string;
+  stage: SecondBrainRefreshStage;
+  sourceId?: string;
+  completed: number;
+  total?: number;
+  message: string;
+  timestamp: string;
+  cancellable: boolean;
+};
+
+export type SecondBrainOperationKind = 'init' | 'preview' | 'apply';
+
 export type SecondBrainManagerStatus = {
   enabled: boolean;
   initialized: boolean;
@@ -13,6 +38,10 @@ export type SecondBrainManagerStatus = {
   lastSuccessfulRefreshAt?: string;
   busy: boolean;
   activeOperationId?: string;
+  /** What the running build is doing; lets other screens follow it. */
+  activeOperationKind?: SecondBrainOperationKind;
+  activeOperationStartedAt?: string;
+  activeProgress?: SecondBrainProgressEvent;
   layoutVersion: 'okf-v0.2' | 'empty';
   okfVersion?: '0.2';
 };
@@ -62,29 +91,6 @@ export type SecondBrainRestoreRequest =
       pageId: string;
       expectedHash: string;
     };
-
-export type SecondBrainRefreshStage =
-  | 'preparing'
-  | 'collecting'
-  | 'redacting'
-  | 'comparing'
-  | 'generating'
-  | 'validating'
-  | 'applying'
-  | 'completed'
-  | 'cancelled'
-  | 'failed';
-
-export type SecondBrainProgressEvent = {
-  operationId: string;
-  stage: SecondBrainRefreshStage;
-  sourceId?: string;
-  completed: number;
-  total?: number;
-  message: string;
-  timestamp: string;
-  cancellable: boolean;
-};
 
 export type SecondBrainRefreshResult = {
   status: 'completed' | 'partial' | 'no-change' | 'cancelled';

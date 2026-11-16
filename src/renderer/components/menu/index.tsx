@@ -48,6 +48,7 @@ import { Icon } from '../icon';
 import { LetterAvatar } from '../letterAvatar';
 import { useAppContext } from '../../hooks';
 import { ExpandRightIcon } from '../sidebar/collapse-icons';
+import { CommandPalette } from '../commandPalette';
 
 type MenuProps = {
   actions?: React.ReactNode;
@@ -94,6 +95,7 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
   const isProjectSelected = Boolean(project?.id);
   const isOnHome = location.pathname === '/app';
   const isOnProjectDetails = location.pathname === '/app/dbt-project';
+  const isOnSelectProject = location.pathname.includes('select-project');
 
   return (
     <StyledToolbar variant="dense">
@@ -114,7 +116,7 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
               </IconButton>
             </Tooltip>
           )}
-        {!isOnHome && (
+        {!isOnHome && !isOnSelectProject && (
           <SimpleDropdownMenu
             items={[
               {
@@ -165,6 +167,7 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
         )}
       </IconsContainer>
       <IconsContainer sx={{ gap: 2 }}>
+        <CommandPalette />
         {isProjectSelected && !isOnHome && actions}
         {/* Authentication - Only show when not logged in (on Home it's in the Dashboard header) */}
         {!isOnHome && !apiKey && (

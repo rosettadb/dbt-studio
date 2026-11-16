@@ -1,75 +1,76 @@
 import React from 'react';
 import {
-  Card,
-  CardContent,
-  Typography,
-  TableContainer,
   Table,
   TableHead,
   TableRow,
   TableCell,
   TableBody,
-  Chip,
-  Alert,
 } from '@mui/material';
+import { BarChart } from '@mui/icons-material';
 import { DuckLakeColumnStats } from '../../../../types/duckLake';
+import { SettingsStatus, SettingsSection } from '../../settings/SettingsLayout';
+import {
+  DataLakeSectionEmpty,
+  DataLakeTableContainer,
+} from '../DataLakeLayout';
 
 interface TableStatisticsTabProps {
   tableDetails: any;
 }
 
+const YesNoStatus: React.FC<{ value: boolean }> = ({ value }) =>
+  value ? (
+    <SettingsStatus tone="warning">Yes</SettingsStatus>
+  ) : (
+    <SettingsStatus tone="success">No</SettingsStatus>
+  );
+
 export const TableStatisticsTab: React.FC<TableStatisticsTabProps> = ({
   tableDetails,
 }) => {
+  const count = tableDetails.columnStats.length;
   return (
-    <Card>
-      <CardContent>
-        <Typography variant="h6" gutterBottom>
-          Column Statistics ({tableDetails.columnStats.length} columns)
-        </Typography>
-        {tableDetails.columnStats.length > 0 ? (
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Column Name</TableCell>
-                  <TableCell>Contains Null</TableCell>
-                  <TableCell>Contains NaN</TableCell>
-                  <TableCell>Min Value</TableCell>
-                  <TableCell>Max Value</TableCell>
+    <SettingsSection
+      title="Column Statistics"
+      icon={<BarChart />}
+      description={`${count} ${count === 1 ? 'column' : 'columns'}`}
+    >
+      {count > 0 ? (
+        <DataLakeTableContainer bordered={false}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Column Name</TableCell>
+                <TableCell>Contains Null</TableCell>
+                <TableCell>Contains NaN</TableCell>
+                <TableCell>Min Value</TableCell>
+                <TableCell>Max Value</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {tableDetails.columnStats.map((stat: DuckLakeColumnStats) => (
+                <TableRow key={stat.columnId}>
+                  <TableCell sx={{ fontWeight: 500 }}>
+                    {stat.columnName}
+                  </TableCell>
+                  <TableCell>
+                    <YesNoStatus value={!!stat.containsNull} />
+                  </TableCell>
+                  <TableCell>
+                    <YesNoStatus value={!!stat.containsNan} />
+                  </TableCell>
+                  <TableCell>{stat.minValue || '-'}</TableCell>
+                  <TableCell>{stat.maxValue || '-'}</TableCell>
                 </TableRow>
-              </TableHead>
-              <TableBody>
-                {tableDetails.columnStats.map((stat: DuckLakeColumnStats) => (
-                  <TableRow key={stat.columnId}>
-                    <TableCell>
-                      <strong>{stat.columnName}</strong>
-                    </TableCell>
-                    <TableCell>
-                      {stat.containsNull ? (
-                        <Chip label="Yes" size="small" color="warning" />
-                      ) : (
-                        <Chip label="No" size="small" color="success" />
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {stat.containsNan ? (
-                        <Chip label="Yes" size="small" color="warning" />
-                      ) : (
-                        <Chip label="No" size="small" color="success" />
-                      )}
-                    </TableCell>
-                    <TableCell>{stat.minValue || '-'}</TableCell>
-                    <TableCell>{stat.maxValue || '-'}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        ) : (
-          <Alert severity="info">No column statistics available</Alert>
-        )}
-      </CardContent>
-    </Card>
+              ))}
+            </TableBody>
+          </Table>
+        </DataLakeTableContainer>
+      ) : (
+        <DataLakeSectionEmpty>
+          No column statistics available
+        </DataLakeSectionEmpty>
+      )}
+    </SettingsSection>
   );
 };

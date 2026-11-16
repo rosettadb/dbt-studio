@@ -21,6 +21,7 @@ import {
   useGitDeleteBranch,
   useGitRenameBranch,
   useGitCheckout,
+  refreshGitQueries,
 } from '../../controllers';
 import { BranchDialog } from './BranchDialog';
 import { Icon } from '../icon';
@@ -187,10 +188,15 @@ export const RepositoryHeader: React.FC<RepositoryHeaderProps> = ({
 
   const invalidateGitQueries = React.useCallback(async () => {
     if (!projectPath) return;
-    await Promise.all([
-      queryClient.invalidateQueries([QUERY_KEYS.GIT_BRANCHES, projectPath]),
-      queryClient.invalidateQueries([QUERY_KEYS.GIT_STATUSES, projectPath]),
-      queryClient.invalidateQueries([QUERY_KEYS.GIT_REMOTES, projectPath]),
+    await refreshGitQueries(queryClient, [
+      [QUERY_KEYS.GIT_BRANCHES, projectPath],
+      [QUERY_KEYS.GIT_STATUSES, projectPath],
+      [QUERY_KEYS.GIT_REMOTES, projectPath],
+      // Status bar branch + ahead/behind counters
+      [QUERY_KEYS.GIT_REPO_INFO, projectPath],
+      [QUERY_KEYS.GIT_AHEAD_BEHIND, projectPath],
+      // Editor gutter baselines (every file of this project)
+      [QUERY_KEYS.GIT_HEAD_CONTENT, projectPath],
     ]);
   }, [projectPath, queryClient]);
 
@@ -286,7 +292,9 @@ export const RepositoryHeader: React.FC<RepositoryHeaderProps> = ({
 
   const handleSynchronize = async () => {
     try {
-      await onSynchronize?.();
+      // Refetch branch info too: the repo may have changed outside the UI
+      // (e.g. `git checkout -b` in the terminal).
+      await Promise.all([invalidateGitQueries(), onSynchronize?.()]);
     } catch (error) {
       emitGitError({
         title: 'Synchronize failed',

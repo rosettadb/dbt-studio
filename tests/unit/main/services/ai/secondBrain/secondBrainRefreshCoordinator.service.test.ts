@@ -38,6 +38,47 @@ describe('SecondBrainRefreshCoordinator', () => {
     });
   });
 
+  it('reports the kind, start time and latest progress of the running build', async () => {
+    let reportProgress: (stage: 'collecting') => void = () => {};
+    let resolveRefresh: (result: typeof completedResult) => void = () => {};
+    mockRefresh.mockImplementation(async (options: any) => {
+      reportProgress = (stage) =>
+        options.onProgress({ stage, completed: 1, message: 'Collecting.' });
+      return new Promise<typeof completedResult>((resolve) => {
+        resolveRefresh = resolve;
+      });
+    });
+    const coordinator = createCoordinator();
+    const emitProgress = jest.fn();
+    const owner = {
+      ownerId: 17,
+      isDestroyed: () => false,
+      onDestroyed: () => () => undefined,
+      emitProgress,
+    };
+
+    const runPromise = coordinator.run(owner, { initialize: true });
+    await Promise.resolve();
+    await Promise.resolve();
+    reportProgress('collecting');
+
+    const status = coordinator.getStatus();
+    expect(status.activeOperationKind).toBe('init');
+    expect(Number.isFinite(Date.parse(status.activeOperationStartedAt!))).toBe(
+      true,
+    );
+    expect(status.activeProgress).toMatchObject({
+      operationId: 'operation-1',
+      stage: 'collecting',
+      cancellable: true,
+    });
+    expect(emitProgress).toHaveBeenCalledWith(status.activeProgress);
+
+    resolveRefresh(completedResult);
+    await runPromise;
+    expect(coordinator.getStatus().activeProgress).toBeUndefined();
+  });
+
   it('preserves operation and owner checks while an operation is active', async () => {
     let resolveRefresh: (result: typeof completedResult) => void = () => {};
     mockRefresh.mockImplementation(
@@ -61,6 +102,9 @@ describe('SecondBrainRefreshCoordinator', () => {
     expect(coordinator.getStatus()).toEqual({
       busy: true,
       activeOperationId: 'operation-1',
+      activeOperationKind: 'apply',
+      activeOperationStartedAt: expect.any(String),
+      activeProgress: undefined,
     });
     expect(() => coordinator.cancel(18, 'operation-1')).toThrow(
       'Active Wiki Memory operation not found.',

@@ -1,7 +1,103 @@
 /* eslint-disable prefer-promise-reject-errors, consistent-return */
 import { DuckDBInstance } from '@duckdb/node-api';
 import fs from 'fs';
+import path from 'path';
 import { DuckDBConnection, QueryResponseType } from '../../types/backend';
+
+/**
+ * Creates an empty DuckDB database for the connection form. Adds `.duckdb`
+ * when the name has no extension. Never overwrites: an existing DuckDB file
+ * is reused unchanged, and any other existing file is refused.
+ */
+export async function createDuckDBDatabase(
+  filePath: string,
+): Promise<{ path: string; created: boolean }> {
+  const databasePath = path.extname(filePath) ? filePath : `${filePath}.duckdb`;
+  const fileName = path.basename(databasePath);
+  const exists = fs.existsSync(databasePath);
+  if (exists && fs.statSync(databasePath).isDirectory()) {
+    throw new Error(`${fileName} is a folder. Choose a file name instead.`);
+  }
+
+  let instance: any = null;
+  let connection: any = null;
+  try {
+    // DuckDB creates the file when it opens a missing path. An existing file
+    // is opened read-only, which only checks that it is a DuckDB database.
+    instance = exists
+      ? await DuckDBInstance.create(databasePath, { access_mode: 'READ_ONLY' })
+      : await DuckDBInstance.create(databasePath);
+    connection = await instance.connect();
+    if (!exists) {
+      await connection.run('CHECKPOINT');
+    }
+  } catch (error: any) {
+    if (error.message?.includes('not a valid DuckDB database file')) {
+      throw new Error(
+        `${fileName} already exists and is not a DuckDB database. Choose another file name.`,
+      );
+    }
+    if (error.message?.includes('Conflicting lock')) {
+      throw new Error(
+        `${fileName} is locked by another process. Close any DuckDB CLI sessions and try again.`,
+      );
+    }
+    throw error;
+  } finally {
+    try {
+      connection?.closeSync?.();
+    } catch {
+      /* empty */
+    }
+    try {
+      instance?.closeSync?.();
+    } catch {
+      /* empty */
+    }
+  }
+
+  return { path: databasePath, created: !exists };
+}
+
+/**
+ * The order unqualified names are looked up in for SQL Editor queries: the
+ * connection's schema, then main, then the other schemas by name. The
+ * connector lists tables in the same order, so autocomplete matches it.
+ */
+const asciiFold = (value: string) =>
+  value.replace(/[A-Z]/g, (char) => char.toLowerCase());
+
+export const duckDBSearchOrder = (
+  defaultSchema: string,
+  schemas: string[],
+): string[] => {
+  const resolveSchema = (name: string) =>
+    schemas.find((schema) => asciiFold(schema) === asciiFold(name));
+  return Array.from(
+    new Set([
+      resolveSchema(defaultSchema),
+      resolveSchema('main'),
+      ...[...schemas].sort(),
+    ]),
+  ).filter((schema): schema is string => typeof schema === 'string');
+};
+
+// The SQL Editor shows every schema, so a query can name any of their
+// tables without the schema. Names are escaped because they come from the
+// file.
+const setSearchPath = async (connection: any, defaultSchema: string) => {
+  const result = await connection.run(
+    'SELECT schema_name FROM information_schema.schemata WHERE catalog_name = current_database()',
+  );
+  const rows = await result.getRows();
+  const schemas = rows
+    .map((row: any[]) => row[0])
+    .filter((name: unknown): name is string => typeof name === 'string');
+  const searchPath = duckDBSearchOrder(defaultSchema, schemas)
+    .map((schema) => `"${schema.replace(/"/g, '""')}"`)
+    .join(',');
+  await connection.run(`SET search_path = '${searchPath.replace(/'/g, "''")}'`);
+};
 
 export async function testDuckDBConnection(
   config: DuckDBConnection,
@@ -14,13 +110,16 @@ export async function testDuckDBConnection(
       return false;
     }
 
-    try {
-      const stats = fs.statSync(config.database_path);
-      if (stats.isDirectory()) {
-        return false;
-      }
-    } catch {
-      /* empty */
+    // Opening a missing path would make DuckDB create an empty database, so a
+    // mistyped path must fail here. New databases come from
+    // createDuckDBDatabase.
+    if (!fs.existsSync(config.database_path)) {
+      throw new Error(
+        `Database file not found: ${config.database_path}. Use the Create icon to make a new database.`,
+      );
+    }
+    if (fs.statSync(config.database_path).isDirectory()) {
+      return false;
     }
     instance = await DuckDBInstance.create(config.database_path);
     connection = await instance.connect();
@@ -190,6 +289,12 @@ export const executeDuckDBQuery = async (
         }
         // If it's some other error, continue - might be a permission issue but schema exists
       }
+    }
+
+    try {
+      await setSearchPath(connection, config.schema || 'main');
+    } catch {
+      // Keep DuckDB's default lookup: the connection's schema, then main
     }
 
     const result = await connection.run(query);

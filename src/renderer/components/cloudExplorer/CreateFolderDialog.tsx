@@ -12,6 +12,7 @@ import {
   CircularProgress,
 } from '@mui/material';
 import { toast } from 'react-toastify';
+import { cloudExplorerDialogSx } from './styles';
 import { useCreateFolder } from '../../controllers/cloudExplorer.controller';
 import type {
   CloudProvider,
@@ -90,7 +91,13 @@ const CreateFolderDialog: React.FC<CreateFolderDialogProps> = ({
   };
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
+    <Dialog
+      sx={cloudExplorerDialogSx}
+      open={open}
+      onClose={handleClose}
+      maxWidth="xs"
+      fullWidth
+    >
       <DialogTitle>Create New Folder</DialogTitle>
       <form onSubmit={handleSubmit(onSubmit)} noValidate>
         <DialogContent>

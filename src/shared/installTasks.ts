@@ -25,6 +25,7 @@ export const MANAGED_ENVIRONMENT_INSTALL_TYPES = [
   'install:dbt',
   'install:flowfile',
   'install:sqlglot',
+  'install:pyspark',
   'install:pyiceberg',
 ];
 // Installs with no time limit: Flowfile and sqlglot run pip through a shell,
@@ -33,12 +34,14 @@ export const MANAGED_ENVIRONMENT_INSTALL_TYPES = [
 export const UNLIMITED_INSTALL_TYPES = [
   'install:flowfile',
   'install:sqlglot',
+  'install:pyspark',
   'install:app-update',
 ];
 
 export const FINISH_BEFORE_PYTHON_INSTALL_TYPES = [
   'install:flowfile',
   'install:sqlglot',
+  'install:pyspark',
 ];
 
 export const isInstallTaskType = (type: string): boolean =>

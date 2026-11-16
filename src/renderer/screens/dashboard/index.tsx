@@ -7,6 +7,10 @@ import {
   CardActionArea,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   Grid,
   List,
@@ -18,7 +22,6 @@ import {
   useTheme,
 } from '@mui/material';
 import { toast } from 'react-toastify';
-import FolderSpecialIcon from '@mui/icons-material/FolderSpecial';
 import Terminal from '@mui/icons-material/Terminal';
 import AutoStoriesIcon from '@mui/icons-material/AutoStories';
 import AddIcon from '@mui/icons-material/Add';
@@ -26,8 +29,10 @@ import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import StorageOutlinedIcon from '@mui/icons-material/StorageOutlined';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import DatabaseIcon from '@mui/icons-material/Storage';
 
 import { icons, rosettaIcon } from '../../../../assets';
+import { connectionIcon } from '../../../connections/registry.renderer';
 import { ReactComponent as RouteIcon } from '../../assets/icons/lucide/route.svg';
 import { useAppContext } from '../../hooks';
 import { utils } from '../../helpers';
@@ -95,6 +100,22 @@ const CloudExplorerCardIcon: React.FC = () => (
 const SqlEditorCardIcon: React.FC = () => (
   <Terminal color="primary" sx={{ fontSize: 28 }} />
 );
+
+const ProjectTypeIcon: React.FC<{ connectionType?: string }> = ({
+  connectionType,
+}) => {
+  const connectionIconSrc = connectionIcon(connectionType);
+  if (!connectionIconSrc) {
+    return <DatabaseIcon fontSize="small" />;
+  }
+  return (
+    <img
+      src={connectionIconSrc}
+      alt={connectionType}
+      style={{ width: 20, height: 20, objectFit: 'contain' }}
+    />
+  );
+};
 
 const features = [
   {
@@ -183,10 +204,11 @@ const bigMonitorPageScale = {
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const theme = useTheme();
-  const { setIsSidebarOpen, selectedProject } = useAppContext();
+  const { setIsSidebarOpen } = useAppContext();
   const { data: projects = [] } = useGetProjects();
   const { data: connections = [] } = useGetConnections();
   const { mutateAsync: selectProject } = useSelectProject();
+  const [isPipelineChoiceOpen, setIsPipelineChoiceOpen] = React.useState(false);
   const { data: apiKey, isLoading: apiKeyLoading } = useApiKey();
   const { mutate: login, isLoading: loginLoading } = useAuthLogin({
     onSuccess: () => {
@@ -204,14 +226,23 @@ const Dashboard: React.FC = () => {
     navigate(path);
   };
 
+  // The project list opens the chosen (or newly created) project with the
+  // Create Pipeline dialog already open.
+  const openProjectListForPipeline = (startNewProject: boolean) => {
+    setIsPipelineChoiceOpen(false);
+    setIsSidebarOpen(true);
+    navigate('/app/select-project', {
+      state: { forPipeline: true, startNewProject },
+    });
+  };
+
   const handleCardClick = (feature: (typeof features)[number]) => {
     if (feature.id === 'pipeline') {
-      if (!selectedProject) {
-        navigate('/app/select-project');
+      if (projects.length === 0) {
+        openProjectListForPipeline(true);
         return;
       }
-      setIsSidebarOpen(true);
-      navigate('/app/dbt-project', { state: { openCreatePipeline: true } });
+      setIsPipelineChoiceOpen(true);
       return;
     }
     if (feature.id === 'analytics') {
@@ -539,7 +570,7 @@ const Dashboard: React.FC = () => {
                 onClick={() => {
                   setIsSidebarOpen(true);
                   navigate('/app/select-project', {
-                    state: { openNewProject: true },
+                    state: { startNewProject: true },
                   });
                 }}
                 data-tour="tour-open-project-btn"
@@ -574,7 +605,7 @@ const Dashboard: React.FC = () => {
                     <ListItemIcon
                       sx={{ minWidth: 36, color: theme.palette.primary.main }}
                     >
-                      <FolderSpecialIcon fontSize="small" />
+                      <ProjectTypeIcon connectionType={p.connection?.type} />
                     </ListItemIcon>
                     <ListItemText
                       sx={{ my: 0 }}
@@ -722,6 +753,47 @@ const Dashboard: React.FC = () => {
           </Paper>
         </Grid>
       </Grid>
+      <Dialog
+        open={isPipelineChoiceOpen}
+        onClose={() => setIsPipelineChoiceOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Where should the pipeline go?</DialogTitle>
+        <DialogContent>
+          <List disablePadding>
+            <ListItemButton
+              onClick={() => openProjectListForPipeline(true)}
+              sx={{ borderRadius: 1.5, mb: 0.5 }}
+            >
+              <ListItemIcon sx={{ minWidth: 36 }}>
+                <AddIcon color="primary" />
+              </ListItemIcon>
+              <ListItemText
+                primary="New project"
+                secondary="Create a new project, then add a pipeline to it"
+                primaryTypographyProps={{ fontWeight: 600 }}
+              />
+            </ListItemButton>
+            <ListItemButton
+              onClick={() => openProjectListForPipeline(false)}
+              sx={{ borderRadius: 1.5 }}
+            >
+              <ListItemIcon sx={{ minWidth: 36 }}>
+                <FolderOpenIcon color="primary" />
+              </ListItemIcon>
+              <ListItemText
+                primary="Existing project"
+                secondary="Pick one of your projects to add a pipeline to"
+                primaryTypographyProps={{ fontWeight: 600 }}
+              />
+            </ListItemButton>
+          </List>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setIsPipelineChoiceOpen(false)}>Cancel</Button>
+        </DialogActions>
+      </Dialog>
       {/* Only show the quick start tour for brand-new users with no projects */}
       {projects.length === 0 && <QuickStartTour />}
     </Box>

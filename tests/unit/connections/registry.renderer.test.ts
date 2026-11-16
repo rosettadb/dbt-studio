@@ -18,10 +18,10 @@ describe('registry.renderer', () => {
     CONNECTION_TYPES.forEach((t) => expect(connectionUis[t].type).toBe(t));
   });
 
-  it('creatableConnections lists the 10 types in today\'s order', () => {
+  it('creatableConnections lists the 11 types in today\'s order', () => {
     expect(creatableConnections().map((u) => u.type)).toEqual([
       'postgres', 'snowflake', 'bigquery', 'redshift', 'databricks',
-      'duckdb', 'sqlite', 'kinetica', 'oracle', 'mysql',
+      'duckdb', 'sqlite', 'kinetica', 'oracle', 'mysql', 'spanner',
     ]);
   });
 

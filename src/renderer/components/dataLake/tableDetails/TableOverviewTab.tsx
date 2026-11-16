@@ -1,141 +1,88 @@
 import React from 'react';
-import {
-  Grid,
-  Card,
-  CardContent,
-  Typography,
-  Table,
-  TableBody,
-  TableRow,
-  TableCell,
-} from '@mui/material';
+import { Box, Grid, Typography } from '@mui/material';
+import { BarChart, InfoOutlined } from '@mui/icons-material';
 import {
   formatBytes,
   formatNumber,
   safeToString,
 } from '../../../helpers/utils';
 import { DuckLakeTableDetails } from '../../../../types/duckLake';
+import { SettingsRow, SettingsSection } from '../../settings/SettingsLayout';
 
 interface TableOverviewTabProps {
   tableDetails: DuckLakeTableDetails;
 }
 
+// Value on the right of a settings-style row.
+const RowValue: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <Typography variant="body2" color="text.secondary">
+    {children}
+  </Typography>
+);
+
 export const TableOverviewTab: React.FC<TableOverviewTabProps> = ({
   tableDetails,
 }) => {
   return (
-    <Grid container spacing={3}>
+    <Grid container spacing={1.5}>
       <Grid item xs={12} md={6}>
-        <Card>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>
-              Table Information
-            </Typography>
-            <Table size="small">
-              <TableBody>
-                <TableRow>
-                  <TableCell>
-                    <strong>Table ID</strong>
-                  </TableCell>
-                  <TableCell>{safeToString(tableDetails.tableId)}</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>
-                    <strong>Table UUID</strong>
-                  </TableCell>
-                  <TableCell>{tableDetails.tableUuid}</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>
-                    <strong>Schema ID</strong>
-                  </TableCell>
-                  <TableCell>{safeToString(tableDetails.schemaId)}</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>
-                    <strong>Schema Name</strong>
-                  </TableCell>
-                  <TableCell>{tableDetails.schemaName}</TableCell>
-                </TableRow>
-                {tableDetails.path && (
-                  <TableRow>
-                    <TableCell>
-                      <strong>Path</strong>
-                    </TableCell>
-                    <TableCell
-                      sx={{
-                        wordBreak: 'break-all',
-                        overflowWrap: 'anywhere',
-                      }}
-                    >
-                      <Typography
-                        variant="body2"
-                        sx={{ fontFamily: 'monospace' }}
-                      >
-                        {tableDetails.path}
-                      </Typography>
-                      {tableDetails.pathIsRelative && (
-                        <Typography variant="caption" color="text.secondary">
-                          (relative)
-                        </Typography>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        <SettingsSection title="Table Information" icon={<InfoOutlined />}>
+          <SettingsRow label="Table ID">
+            <RowValue>{safeToString(tableDetails.tableId)}</RowValue>
+          </SettingsRow>
+          <SettingsRow label="Table UUID">
+            <RowValue>{tableDetails.tableUuid}</RowValue>
+          </SettingsRow>
+          <SettingsRow label="Schema ID">
+            <RowValue>{safeToString(tableDetails.schemaId)}</RowValue>
+          </SettingsRow>
+          <SettingsRow label="Schema Name">
+            <RowValue>{tableDetails.schemaName}</RowValue>
+          </SettingsRow>
+          {tableDetails.path && (
+            <SettingsRow
+              label={tableDetails.pathIsRelative ? 'Path (relative)' : 'Path'}
+              description={
+                <Box
+                  component="span"
+                  sx={{
+                    fontFamily: 'monospace',
+                    wordBreak: 'break-all',
+                    overflowWrap: 'anywhere',
+                  }}
+                >
+                  {tableDetails.path}
+                </Box>
+              }
+            />
+          )}
+        </SettingsSection>
       </Grid>
 
       <Grid item xs={12} md={6}>
-        <Card>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>
-              Statistics
-            </Typography>
-            <Table size="small">
-              <TableBody>
-                <TableRow>
-                  <TableCell>
-                    <strong>Record Count</strong>
-                  </TableCell>
-                  <TableCell>
-                    {formatNumber(tableDetails.stats?.recordCount ?? 0)}
-                  </TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>
-                    <strong>File Size</strong>
-                  </TableCell>
-                  <TableCell>
-                    {formatBytes(tableDetails.stats?.fileSizeBytes ?? 0)}
-                  </TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>
-                    <strong>Next Row ID</strong>
-                  </TableCell>
-                  <TableCell>
-                    {formatNumber(tableDetails.stats?.nextRowId ?? 0)}
-                  </TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>
-                    <strong>Columns</strong>
-                  </TableCell>
-                  <TableCell>{tableDetails.columns?.length ?? 0}</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>
-                    <strong>Data Files</strong>
-                  </TableCell>
-                  <TableCell>{tableDetails.dataFiles?.length ?? 0}</TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        <SettingsSection title="Statistics" icon={<BarChart />}>
+          <SettingsRow label="Record Count">
+            <RowValue>
+              {formatNumber(tableDetails.stats?.recordCount ?? 0)}
+            </RowValue>
+          </SettingsRow>
+          <SettingsRow label="File Size">
+            <RowValue>
+              {formatBytes(tableDetails.stats?.fileSizeBytes ?? 0)}
+            </RowValue>
+          </SettingsRow>
+          <SettingsRow label="Next Row ID">
+            <RowValue>
+              {formatNumber(tableDetails.stats?.nextRowId ?? 0)}
+            </RowValue>
+          </SettingsRow>
+          <SettingsRow label="Columns">
+            <RowValue>{tableDetails.columns?.length ?? 0}</RowValue>
+          </SettingsRow>
+          <SettingsRow label="Data Files">
+            <RowValue>{tableDetails.dataFiles?.length ?? 0}</RowValue>
+          </SettingsRow>
+        </SettingsSection>
       </Grid>
     </Grid>
   );

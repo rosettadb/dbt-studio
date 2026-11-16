@@ -18,6 +18,7 @@ import {
 import {
   ArrowBack,
   TableChart,
+  Info,
   Schema,
   BarChart,
   InsertDriveFile,
@@ -29,6 +30,11 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useDuckLakeTableDetails } from '../../controllers/duckLake.controller';
 import { safeToString } from '../../helpers/utils';
 import { useDuckLakeConnection } from '../../hooks';
+import {
+  DataLakePageHeader,
+  dataLakeContentSx,
+  dataLakeTabsSx,
+} from './DataLakeLayout';
 
 // Import Tab Components
 import { TableOverviewTab } from './tableDetails/TableOverviewTab';
@@ -56,7 +62,7 @@ function TabPanel(props: TabPanelProps) {
       id={`table-details-tabpanel-${index}`}
       aria-labelledby={`table-details-tab-${index}`}
     >
-      {value === index && <Box sx={{ py: 3 }}>{children}</Box>}
+      {value === index && <Box sx={{ pt: 2 }}>{children}</Box>}
     </div>
   );
 }
@@ -99,7 +105,7 @@ export const DataLakeTableDetails: React.FC = () => {
 
   if (error) {
     return (
-      <Box sx={{ p: 2 }}>
+      <Box sx={dataLakeContentSx}>
         <Alert severity="error" sx={{ mb: 2 }}>
           <Typography variant="body1" sx={{ fontWeight: 'bold', mb: 1 }}>
             Failed to load table details
@@ -114,67 +120,68 @@ export const DataLakeTableDetails: React.FC = () => {
 
   if (!tableDetails) {
     return (
-      <Box sx={{ p: 2 }}>
+      <Box sx={dataLakeContentSx}>
         <Alert severity="warning">Table details not found</Alert>
       </Box>
     );
   }
 
   return (
-    <Box sx={{ p: 2 }}>
-      {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, gap: 2 }}>
-        <Tooltip title="Back to Instance Details">
-          <IconButton
-            onClick={() =>
-              navigate(`/app/data-lake/duck-lake/instances/${instanceId}`)
-            }
-            sx={{ mr: 1 }}
-          >
-            <ArrowBack />
-          </IconButton>
-        </Tooltip>
-        <TableChart sx={{ fontSize: 32, color: 'primary.main' }} />
-        <Box sx={{ flex: 1 }}>
-          <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold' }}>
-            {tableDetails.tableName}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Schema: {tableDetails.schemaName} • UUID: {tableDetails.tableUuid}
-          </Typography>
-        </Box>
-        <Chip
-          label={`Snapshot ${safeToString(tableDetails.beginSnapshot)}${
-            tableDetails.endSnapshot
-              ? ` - ${safeToString(tableDetails.endSnapshot)}`
-              : ' (current)'
-          }`}
-          color="primary"
-          variant="outlined"
-        />
-      </Box>
+    <Box sx={dataLakeContentSx}>
+      <DataLakePageHeader
+        icon={
+          <>
+            <Tooltip title="Back to Instance Details">
+              <IconButton
+                size="small"
+                aria-label="Back to Instance Details"
+                onClick={() =>
+                  navigate(`/app/data-lake/duck-lake/instances/${instanceId}`)
+                }
+              >
+                <ArrowBack fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <TableChart sx={{ fontSize: 20, color: 'text.secondary' }} />
+          </>
+        }
+        title={tableDetails.tableName}
+        description={`Schema: ${tableDetails.schemaName} • UUID: ${tableDetails.tableUuid}`}
+        actions={
+          <Chip
+            size="small"
+            variant="outlined"
+            label={`Snapshot ${safeToString(tableDetails.beginSnapshot)}${
+              tableDetails.endSnapshot
+                ? ` - ${safeToString(tableDetails.endSnapshot)}`
+                : ' (current)'
+            }`}
+          />
+        }
+      />
 
       {/* Tabs */}
-      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-        <Tabs
-          value={currentTab}
-          onChange={handleTabChange}
-          aria-label="table details tabs"
-        >
-          <Tab icon={<BarChart />} label="Overview" iconPosition="start" />
-          <Tab icon={<Schema />} label="Schema" iconPosition="start" />
-          <Tab icon={<TableChart />} label="Data" iconPosition="start" />
-          <Tab icon={<BarChart />} label="Statistics" iconPosition="start" />
-          <Tab
-            icon={<InsertDriveFile />}
-            label="Data Files"
-            iconPosition="start"
-          />
-          <Tab icon={<Splitscreen />} label="Partitions" iconPosition="start" />
-          <Tab icon={<History />} label="History" iconPosition="start" />
-          <Tab icon={<Label />} label="Tags" iconPosition="start" />
-        </Tabs>
-      </Box>
+      <Tabs
+        value={currentTab}
+        onChange={handleTabChange}
+        aria-label="table details tabs"
+        variant="scrollable"
+        scrollButtons="auto"
+        sx={dataLakeTabsSx}
+      >
+        <Tab icon={<Info />} label="Overview" iconPosition="start" />
+        <Tab icon={<Schema />} label="Schema" iconPosition="start" />
+        <Tab icon={<TableChart />} label="Data" iconPosition="start" />
+        <Tab icon={<BarChart />} label="Statistics" iconPosition="start" />
+        <Tab
+          icon={<InsertDriveFile />}
+          label="Data Files"
+          iconPosition="start"
+        />
+        <Tab icon={<Splitscreen />} label="Partitions" iconPosition="start" />
+        <Tab icon={<History />} label="History" iconPosition="start" />
+        <Tab icon={<Label />} label="Tags" iconPosition="start" />
+      </Tabs>
 
       {/* Tab Panels */}
       <TabPanel value={currentTab} index={0}>

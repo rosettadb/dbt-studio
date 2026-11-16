@@ -29,14 +29,17 @@ jest.mock('../../../../src/main/services/notebooks.service', () => ({
 }));
 
 // SQL cells run queries through the connectors / DuckLake services; neither
-// stack is needed here beyond the query entry points.
+// stack is needed here beyond the query entry points and the connection
+// lookup (unknown connections get the default LIMIT wrapper).
 const executeQueryForConnection = jest.fn();
+const getConnectionById = jest.fn();
 const duckLakeExecuteQuery = jest.fn();
 jest.mock('../../../../src/main/services/connectors.service', () => ({
   __esModule: true,
   default: {
     executeQueryForConnection: (...args: unknown[]) =>
       executeQueryForConnection(...args),
+    getConnectionById: (id: string) => getConnectionById(id),
   },
 }));
 jest.mock('../../../../src/main/services/duckLake.service', () => ({
@@ -541,6 +544,36 @@ describe('PythonNotebooksService', () => {
     });
   });
 
+  it("caps Oracle SQL cells with the connector's paging SQL instead of AS … LIMIT (#536)", async () => {
+    const service = await load();
+    const [notebook] = await service.listNotebooks(connectionId);
+    executeQueryForConnection.mockClear();
+
+    getConnectionById.mockResolvedValueOnce({
+      id: connectionId,
+      connection: { type: 'oracle' },
+    });
+    executeQueryForConnection.mockResolvedValueOnce({
+      success: true,
+      fields: [{ name: 'ID' }],
+      data: [{ ID: 1 }],
+    });
+    const result = await service.executeCell(
+      connectionId,
+      notebook.id,
+      'cell-sql',
+      'SELECT * FROM example_table',
+      { cellType: 'sql', variable: 'df' },
+    );
+    expect(result.status).toBe('ok');
+    expect(getConnectionById).toHaveBeenLastCalledWith(connectionId);
+    expect(executeQueryForConnection).toHaveBeenCalledWith({
+      connectionId,
+      query:
+        'SELECT * FROM (SELECT * FROM example_table) studio_page OFFSET 0 ROWS FETCH NEXT 100001 ROWS ONLY',
+    });
+  });
+
   describe('buildFallbackTable', () => {
     it('turns rows into the interactive-table payload', async () => {
       const { buildFallbackTable } = await import(
@@ -600,6 +633,9 @@ describe('PythonNotebooksService', () => {
       expect(
         isWrapperRejection('Every derived table must have its own alias'),
       ).toBe(true);
+      expect(isWrapperRejection('ORA-00918: column ambiguously defined')).toBe(
+        true,
+      );
       expect(isWrapperRejection('Query timed out after 30s')).toBe(false);
       expect(isWrapperRejection('ECONNRESET')).toBe(false);
       expect(isWrapperRejection(undefined)).toBe(false);
@@ -608,7 +644,11 @@ describe('PythonNotebooksService', () => {
 
   describe('boundSqlQuery', () => {
     // Loaded lazily, like the service, so the mocks above are in place.
-    let boundSqlQuery: (query: string, maxRows: number) => string;
+    let boundSqlQuery: (
+      query: string,
+      maxRows: number,
+      wrap?: (body: string, limit: number) => string,
+    ) => string;
     beforeAll(async () => {
       ({ boundSqlQuery } = await import(
         '../../../../src/main/services/pythonNotebooks.service'
@@ -655,6 +695,17 @@ describe('PythonNotebooksService', () => {
       ].forEach((sql) => {
         expect(boundSqlQuery(sql, 11)).toBe(sql);
       });
+    });
+
+    it("uses the connection's wrapper when LIMIT doesn't apply", () => {
+      const fetchFirst = (body: string, limit: number) =>
+        `[${body}] FETCH FIRST ${limit}`;
+      expect(boundSqlQuery('select 1 from dual;\n-- end', 11, fetchFirst)).toBe(
+        '[select 1 from dual] FETCH FIRST 11',
+      );
+      expect(boundSqlQuery('update t set x = 1', 11, fetchFirst)).toBe(
+        'update t set x = 1',
+      );
     });
   });
 

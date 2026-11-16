@@ -24,8 +24,11 @@ import {
 export type SchemaTreeContextMenuOptions = {
   /** Dialect used for quoting and generated SQL. */
   connectionType?: string;
-  /** Insert text at the cursor of the host's active editor. */
-  onInsertText?: (text: string) => void;
+  /**
+   * Insert text at the cursor of the host's active editor. `asStatement` is
+   * set for generated statements so the host can put them on their own lines.
+   */
+  onInsertText?: (text: string, options: { asStatement: boolean }) => void;
   /** Run a SELECT and show its results (Preview data). */
   onPreviewSql?: (sql: string) => void;
   /**
@@ -203,7 +206,11 @@ export const useSchemaTreeContextMenu = (
             connectionType,
             previewLimit,
           );
-          if (text != null) onInsertText?.(text);
+          if (text != null) {
+            onInsertText?.(text, {
+              asStatement: action.startsWith('generate-'),
+            });
+          }
         }
       }
     },
