@@ -139,6 +139,23 @@ describe('PtyService', () => {
   });
 
   describe('create', () => {
+    it('rejects a pending create when shutdown begins during environment setup', async () => {
+      let resolveEnv: (env: Record<string, string>) => void = () => undefined;
+      const buildEnv = jest.fn(
+        () =>
+          new Promise<Record<string, string>>((resolve) => {
+            resolveEnv = resolve;
+          }),
+      );
+      const { service, spawn } = setup({ buildEnv });
+      const pending = service.create(request);
+      await service.killAll();
+      resolveEnv({ PATH: '/usr/bin' });
+      await expect(pending).rejects.toThrow('shutdown');
+      await expect(service.create(request)).rejects.toThrow('shutdown');
+      expect(spawn).not.toHaveBeenCalled();
+    });
+
     it('starts the default shell in the project folder', async () => {
       const { service, spawn } = setup();
 

@@ -120,6 +120,8 @@ const clampInt = (
 export class PtyService {
   private sessions = new Map<string, Session>();
 
+  private shuttingDown = false;
+
   private sink: PtyEventSink | null = null;
 
   private titleTimer: ReturnType<typeof setInterval> | null = null;
@@ -144,6 +146,7 @@ export class PtyService {
   }
 
   async create(request: PtyCreateRequest): Promise<PtySessionInfo> {
+    if (this.shuttingDown) throw new Error('Terminal shutdown is in progress.');
     if (!request || typeof request.projectId !== 'string') {
       throw new Error('A project is required to open a terminal.');
     }
@@ -166,6 +169,7 @@ export class PtyService {
         ? request.cwd
         : this.deps.homedir();
     const env = await this.deps.buildEnv();
+    if (this.shuttingDown) throw new Error('Terminal shutdown is in progress.');
     // macOS login startup runs path_helper, which can move managed tools
     // behind system paths. Restore the intended order after login setup.
     const loginShell =
@@ -364,6 +368,7 @@ export class PtyService {
   }
 
   async killAll(): Promise<void> {
+    this.shuttingDown = true;
     await Promise.all([...this.sessions.keys()].map((id) => this.kill(id)));
   }
 

@@ -352,9 +352,12 @@ export class ShellSessionManager {
 
     // Register first (live output is queued), then replay each snapshot.
     sessions.forEach((info) => this.register(info, true));
+    const refreshed = new Map(sessions.map((info) => [info.id, info]));
     this.setState({
       sessions: [
-        ...this.state.sessions,
+        ...this.state.sessions.map(
+          (existing) => refreshed.get(existing.id) ?? existing,
+        ),
         ...sessions.filter(
           (info) =>
             !this.state.sessions.some((existing) => existing.id === info.id),

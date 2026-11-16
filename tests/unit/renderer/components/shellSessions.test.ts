@@ -422,6 +422,28 @@ describe('ShellSessionManager', () => {
     expect(terminals[0].written).toBe('prompt');
   });
 
+  it('refreshes exit metadata when a snapshot retry finds an exited shell', async () => {
+    const { manager, api, terminals, emitExit } = setup({
+      existing: [session({ id: 'a' })],
+      snapshots: { a: { data: 'failed command', endOffset: 14 } },
+    });
+    api.getPtySnapshot.mockRejectedValueOnce(new Error('snapshot failed'));
+    await expect(manager.init()).rejects.toThrow('snapshot failed');
+    emitExit({ id: 'a', exitCode: 1, signal: null });
+    api.listPtySessions.mockResolvedValueOnce([
+      session({ id: 'a', exited: true, exitCode: 1 }),
+    ]);
+
+    await manager.init();
+
+    expect(manager.sessionsFor('p1')).toHaveLength(1);
+    expect(manager.sessionsFor('p1')[0]).toMatchObject({
+      exited: true,
+      exitCode: 1,
+    });
+    expect(terminals[0].written).toContain('[Process exited with code 1]');
+  });
+
   it('closes a session whose shell exited normally', async () => {
     const { manager, api, terminals, emitExit } = setup();
     await manager.init();
