@@ -11,6 +11,7 @@ import {
 } from '@mui/material';
 import {
   ArrowForward,
+  Code,
   ChevronRight,
   ExpandMore,
   FolderOutlined,
@@ -32,6 +33,8 @@ import { getBottomElements, getMainElements } from '../sidebar/elements';
 import { LetterAvatar } from '../letterAvatar';
 import { HighlightedLine, toRelativePath } from '../searchInFiles';
 import { FileNode, FileSearchResult, Project } from '../../../types/backend';
+import { useAppContext } from '../../hooks';
+import { getCommands, subscribeCommands } from './commands';
 
 type PaletteItem = {
   id: string;
@@ -134,14 +137,18 @@ const getFolderInsideProject = (
   return folder === '.' ? 'Project root' : folder;
 };
 
-// The search icon in the top bar. Clicking it or pressing Ctrl+K opens one
-// palette to jump to a screen, switch project, open a file or show a folder by
-// name or path, or find text inside the project's files. The last search stays
-// until the project changes, so reopening goes on to the next match.
+// The top bar search opens the existing search. Ctrl+Shift+P or a leading >
+// shows commands for actions already available elsewhere in the app.
 export const CommandPalette: React.FC = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const { openFile, openFileAt, revealFolderInTree } = useTabs();
+  const { isSidebarOpen, setIsSidebarOpen, isChatOpen, setIsChatOpen } =
+    useAppContext();
+  const registeredCommands = React.useSyncExternalStore(
+    subscribeCommands,
+    getCommands,
+  );
   const { data: projects = [] } = useGetProjects();
   const { data: selectedProject } = useGetSelectedProject();
   const { mutateAsync: selectProject } = useSelectProject();
@@ -167,6 +174,15 @@ export const CommandPalette: React.FC = () => {
   const projectPath = selectedProject?.path ?? '';
   const trimmedQuery = query.trim();
   const lowerQuery = trimmedQuery.toLowerCase();
+  const commandMode = trimmedQuery.startsWith('>');
+  const commandQuery = commandMode
+    ? trimmedQuery.slice(1).trim().toLowerCase()
+    : '';
+  let inputPlaceholder = 'Search screens and projects';
+  if (selectedProject) {
+    inputPlaceholder = `Search screens, projects, files and folders in ${selectedProject.name}`;
+  }
+  if (commandMode) inputPlaceholder = 'Type a command';
 
   // Text matches only show for the project and search they were found for,
   // so an older search never shows, not even for a moment, after either
@@ -184,13 +200,25 @@ export const CommandPalette: React.FC = () => {
     enabled: open && !!selectedProject?.id,
   });
 
-  // Ctrl+K anywhere opens the palette. Editors that already use the key
+  // Ctrl+K opens search; Ctrl+Shift+P opens the existing actions as commands.
   // (Monaco starts its Ctrl+K chords with it) mark the event as handled.
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        event.shiftKey &&
+        event.key.toLowerCase() === 'p'
+      ) {
         event.preventDefault();
+        setQuery('>');
+        setOpen(true);
+      } else if (
+        (event.ctrlKey || event.metaKey) &&
+        event.key.toLowerCase() === 'k'
+      ) {
+        event.preventDefault();
+        setQuery((current) => (current.startsWith('>') ? '' : current));
         setOpen(true);
       }
     };
@@ -205,7 +233,12 @@ export const CommandPalette: React.FC = () => {
   }, [selectedProject?.id]);
 
   React.useEffect(() => {
-    if (!open || !projectPath || trimmedQuery.length < TEXT_SEARCH_MIN_LENGTH) {
+    if (
+      !open ||
+      commandMode ||
+      !projectPath ||
+      trimmedQuery.length < TEXT_SEARCH_MIN_LENGTH
+    ) {
       setIsSearchingText(false);
       return undefined;
     }
@@ -242,7 +275,7 @@ export const CommandPalette: React.FC = () => {
       isCurrent = false;
       clearTimeout(timeout);
     };
-  }, [open, projectPath, trimmedQuery]);
+  }, [open, commandMode, projectPath, trimmedQuery]);
 
   const close = () => {
     setOpen(false);
@@ -270,6 +303,52 @@ export const CommandPalette: React.FC = () => {
   );
 
   const sections: PaletteSection[] = React.useMemo(() => {
+    if (commandMode) {
+      const commands: PaletteItem[] = [
+        ...registeredCommands.map((command) => ({
+          id: command.id,
+          label: command.label,
+          icon: <Code sx={{ fontSize: 16 }} />,
+          run: command.run,
+        })),
+        ...[...getMainElements(!!selectedProject?.id), ...getBottomElements()]
+          .filter((element) => !element.disabled)
+          .map((element) => ({
+            id: `command-navigate-${element.path}`,
+            label: `Go to ${element.text}`,
+            description: element.description,
+            icon: <ArrowForward sx={{ fontSize: 16 }} />,
+            run: () => navigate(element.path),
+          })),
+        {
+          id: 'command-sidebar',
+          label: isSidebarOpen ? 'Hide sidebar' : 'Show sidebar',
+          icon: <Code sx={{ fontSize: 16 }} />,
+          run: () => setIsSidebarOpen(!isSidebarOpen),
+        },
+        {
+          id: 'command-assistant',
+          label: isChatOpen ? 'Hide AI Assistant' : 'Show AI Assistant',
+          icon: <Code sx={{ fontSize: 16 }} />,
+          run: () => setIsChatOpen?.(!isChatOpen),
+        },
+      ];
+      const matches = commands.filter((item) =>
+        `${item.label} ${item.description ?? ''}`
+          .toLowerCase()
+          .includes(commandQuery),
+      );
+      return matches.length
+        ? [
+            {
+              title: 'Commands',
+              countLabel: String(matches.length),
+              resultCount: matches.length,
+              items: matches,
+            },
+          ]
+        : [];
+    }
     const screenItems: PaletteItem[] = [
       ...getMainElements(!!selectedProject?.id),
       ...getBottomElements(),
@@ -418,6 +497,13 @@ export const CommandPalette: React.FC = () => {
     ];
     return allSections.filter((section) => section.items.length > 0);
   }, [
+    commandMode,
+    commandQuery,
+    registeredCommands,
+    isSidebarOpen,
+    setIsSidebarOpen,
+    isChatOpen,
+    setIsChatOpen,
     lowerQuery,
     selectedProject?.id,
     projects,
@@ -528,8 +614,12 @@ export const CommandPalette: React.FC = () => {
 
   return (
     <>
-      <Tooltip title="Search (Ctrl+K)">
-        <IconButton size="small" onClick={() => setOpen(true)}>
+      <Tooltip title="Search (Ctrl/Cmd+K) · Commands (Ctrl/Cmd+Shift+P)">
+        <IconButton
+          size="small"
+          aria-label="Search (Ctrl+K)"
+          onClick={() => setOpen(true)}
+        >
           <SearchIcon sx={{ fontSize: 20 }} />
         </IconButton>
       </Tooltip>
@@ -557,17 +647,13 @@ export const CommandPalette: React.FC = () => {
             autoFocus
             fullWidth
             inputRef={selectInputText}
-            placeholder={
-              selectedProject
-                ? `Search screens, projects, files and folders in ${selectedProject.name}`
-                : 'Search screens and projects'
-            }
+            placeholder={inputPlaceholder}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={handleInputKeyDown}
             inputProps={{
               role: 'combobox',
-              'aria-label': 'Search',
+              'aria-label': commandMode ? 'Command' : 'Search',
               'aria-autocomplete': 'list',
               'aria-expanded': items.length > 0,
               'aria-controls': listboxId,

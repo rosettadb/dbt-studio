@@ -24,6 +24,7 @@ import {
   useGetRemotes,
 } from '../../controllers';
 import { AddGitRemoteModal, GitUiError, SshPassphraseModal } from '../modals';
+import { usePaletteCommand } from '../commandPalette/commands';
 
 function isSshUrl(url: string): boolean {
   return url.startsWith('git@') || url.startsWith('ssh://');
@@ -422,6 +423,13 @@ export const TipTapCommitInput: React.FC<TipTapCommitInputProps> = ({
       handleCommit();
     }
   };
+
+  usePaletteCommand(
+    'git.commit',
+    'Git: Commit staged changes',
+    () => handleCommitMenuAction(false),
+    !!projectPath && stagedFilesCount > 0 && !isLoading,
+  );
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.metaKey && e.key === 'Enter') {

@@ -6,6 +6,7 @@ import {
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { SplitButton } from '../splitButton';
+import { usePaletteCommands } from '../commandPalette/commands';
 import { icons } from '../../../../assets';
 import { Icon } from '../icon';
 import {
@@ -387,6 +388,35 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
     }
     return !item.cloudOnly;
   });
+
+  usePaletteCommands(
+    filteredMenuItems
+      .filter(
+        (item): item is typeof item & { name: string } =>
+          typeof item.name === 'string',
+      )
+      .filter((item) =>
+        [
+          'Run',
+          'Test',
+          'Build',
+          'Compile',
+          'Debug',
+          'Generate Docs',
+          'Deps',
+          'Seed',
+        ].includes(item.name),
+      )
+      .map((item) => ({
+        id: `dbt.project.${item.name.toLowerCase().replace(/\s+/g, '-')}`,
+        label: `dbt: ${item.name} project`,
+        run: item.onClick,
+      })),
+    !isRunningDbt &&
+      !isRunningRosettaDbt &&
+      !isCloudRunActive &&
+      !cloudV2Blocked,
+  );
 
   let projectTooltipTitle = '';
   if (cloudV2Blocked) {

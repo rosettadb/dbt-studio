@@ -516,7 +516,16 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
             openCreatePipeline={openCreatePipeline}
           />
         )}
-        {activeTab === 'scm' && <SourceControlTab project={project} />}
+        {/* Keep the existing Git handlers mounted across project sidebar tabs so
+            their palette commands remain available throughout DBT Studio. */}
+        <Box
+          sx={{
+            display: activeTab === 'scm' ? 'block' : 'none',
+            height: '100%',
+          }}
+        >
+          <SourceControlTab project={project} />
+        </Box>
         {activeTab === 'connections' && <ConnectionsTab project={project} />}
       </Box>
     </Box>

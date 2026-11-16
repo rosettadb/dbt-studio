@@ -9,6 +9,7 @@ import {
 } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material';
 import { CommandPalette } from '../../../../src/renderer/components/commandPalette';
+import { usePaletteCommand } from '../../../../src/renderer/components/commandPalette/commands';
 import { HighlightedLine } from '../../../../src/renderer/components/searchInFiles';
 import {
   getBottomElements,
@@ -27,6 +28,15 @@ const mockRevealFolderInTree = jest.fn();
 
 jest.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate,
+}));
+
+jest.mock('../../../../src/renderer/hooks', () => ({
+  useAppContext: () => ({
+    isSidebarOpen: true,
+    setIsSidebarOpen: jest.fn(),
+    isChatOpen: false,
+    setIsChatOpen: jest.fn(),
+  }),
 }));
 
 jest.mock('react-toastify', () => ({
@@ -170,6 +180,46 @@ describe('CommandPalette', () => {
       fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
 
       expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+
+    it('opens existing navigation commands with Ctrl+Shift+P', () => {
+      render(<CommandPalette />);
+
+      fireEvent.keyDown(window, { key: 'P', ctrlKey: true, shiftKey: true });
+
+      expect(screen.getByRole('combobox', { name: 'Command' })).toHaveValue(
+        '>',
+      );
+      fireEvent.change(screen.getByRole('combobox'), {
+        target: { value: '>sql editor' },
+      });
+      fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Enter' });
+      expect(mockNavigate).toHaveBeenCalledWith('/app/sql');
+    });
+
+    it('runs a registered action and removes it when its owner unmounts', () => {
+      const run = jest.fn();
+      const Owner = () => {
+        usePaletteCommand('test.action', 'Git: Test action', run);
+        return null;
+      };
+      const { rerender } = render(
+        <>
+          <Owner />
+          <CommandPalette />
+        </>,
+      );
+      fireEvent.keyDown(window, { key: 'p', ctrlKey: true, shiftKey: true });
+      fireEvent.change(screen.getByRole('combobox'), {
+        target: { value: '>git: test' },
+      });
+      fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Enter' });
+      expect(run).toHaveBeenCalledTimes(1);
+      rerender(<CommandPalette />);
+      fireEvent.keyDown(window, { key: 'p', ctrlKey: true, shiftKey: true });
+      expect(
+        screen.queryByRole('option', { name: 'Git: Test action' }),
+      ).not.toBeInTheDocument();
     });
 
     it('leaves Ctrl+K alone when an editor already handled the key', () => {

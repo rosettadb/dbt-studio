@@ -6,6 +6,7 @@ import { QueryHistoryType } from '../../../types/frontend';
 import { QueryHistory } from './queryHistory';
 import { SaveQueryDialog } from './SaveQueryDialog';
 import { useCreateSavedQuery } from '../../controllers/savedQueries.controller';
+import { usePaletteCommand } from '../commandPalette/commands';
 
 type Props = {
   connectionId?: string;
@@ -39,6 +40,13 @@ export const SqlEditorActions: React.FC<Props> = ({
       toast.error('Failed to save query');
     }
   };
+
+  usePaletteCommand(
+    'sql.save-query',
+    'SQL: Save query',
+    () => setSaveDialogOpen(true),
+    !!connectionId && !!query.trim(),
+  );
 
   if (!connectionId) {
     return null;

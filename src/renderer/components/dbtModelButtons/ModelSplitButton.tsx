@@ -20,6 +20,7 @@ import {
 } from '../../services/connectors.service';
 import type { PreviewResult } from '../../../types/frontend';
 import type { DbtCommandType } from '../../../types/backend';
+import { usePaletteCommand } from '../commandPalette/commands';
 
 interface ModelSplitButtonProps {
   modelPath: string;
@@ -673,6 +674,39 @@ export const ModelSplitButton: React.FC<ModelSplitButtonProps> = ({
       `--select +${modelName}+`,
     );
   };
+
+  const canRunModel =
+    !isCompiling && !isRunningDbtModel && !isPreviewing && !cloudV2Blocked;
+  usePaletteCommand(
+    'dbt.run-model',
+    'dbt: Run model',
+    handleRunModel,
+    canRunModel,
+  );
+  usePaletteCommand(
+    'dbt.build-model',
+    'dbt: Build model',
+    handleBuildModel,
+    canRunModel,
+  );
+  usePaletteCommand(
+    'dbt.test-model',
+    'dbt: Test model',
+    handleTestModel,
+    canRunModel,
+  );
+  usePaletteCommand(
+    'dbt.compile-model',
+    'dbt: Compile model',
+    handleCompileModel,
+    canRunModel && environment !== 'cloud',
+  );
+  usePaletteCommand(
+    'dbt.preview-model',
+    'dbt: Preview model',
+    handlePreviewModel,
+    canRunModel && environment !== 'cloud',
+  );
 
   // Define all menu items with environment restrictions
   const allMenuItems = [
