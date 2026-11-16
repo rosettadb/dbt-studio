@@ -27,23 +27,23 @@ import AutoStoriesIcon from '@mui/icons-material/AutoStories';
 import AddIcon from '@mui/icons-material/Add';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
-import StorageOutlinedIcon from '@mui/icons-material/StorageOutlined';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import DatabaseIcon from '@mui/icons-material/Storage';
+import ElectricalServicesIcon from '@mui/icons-material/ElectricalServices';
 
 import { icons, rosettaIcon } from '../../../../assets';
 import { connectionIcon } from '../../../connections/registry.renderer';
 import { ReactComponent as RouteIcon } from '../../assets/icons/lucide/route.svg';
 import { useAppContext } from '../../hooks';
-import { utils } from '../../helpers';
-import { ROSETTA_CLOUD_BASE_URL } from '../../../main/utils/constants';
 import { QuickStartTour, hasSeenTour, markTourSeen } from '../../components';
+import { CommandPalette } from '../../components/commandPalette';
+import { CloudLocalEnvironmentSwitch } from '../../components/menu/CloudLocalEnvironmentSwitch';
 import {
   useGetProjects,
   useGetConnections,
   useSelectProject,
   useApiKey,
   useAuthLogin,
+  useProfile,
 } from '../../controllers';
 
 const DbtCardIcon: React.FC = () => (
@@ -210,6 +210,7 @@ const Dashboard: React.FC = () => {
   const { mutateAsync: selectProject } = useSelectProject();
   const [isPipelineChoiceOpen, setIsPipelineChoiceOpen] = React.useState(false);
   const { data: apiKey, isLoading: apiKeyLoading } = useApiKey();
+  const { data: profile } = useProfile();
   const { mutate: login, isLoading: loginLoading } = useAuthLogin({
     onSuccess: () => {
       toast.success(
@@ -349,30 +350,19 @@ const Dashboard: React.FC = () => {
         </Box>
 
         {/* Quick Header Actions */}
-        <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
-          {apiKey ? (
-            <Button
-              variant="outlined"
-              startIcon={
-                <Box
-                  component="img"
-                  src={rosettaIcon}
-                  alt="Rosetta"
-                  sx={{ width: 18, height: 18 }}
-                />
-              }
-              endIcon={<OpenInNewIcon />}
-              onClick={(e) =>
-                utils.handleExternalLink(
-                  e as any,
-                  `${ROSETTA_CLOUD_BASE_URL}/dashboard`,
-                )
-              }
-              sx={outlinedButtonSx}
-            >
-              Cloud Dashboard
-            </Button>
-          ) : (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1.5,
+            flexWrap: 'wrap',
+          }}
+        >
+          <CommandPalette />
+          {/* Once logged in, Connect to Cloud turns into the Cloud / Local
+              switch (shown when the profile has loaded, like the top bar) */}
+          {apiKey && profile && <CloudLocalEnvironmentSwitch />}
+          {!apiKey && (
             <Button
               variant="outlined"
               disabled={apiKeyLoading || loginLoading}
@@ -548,7 +538,7 @@ const Dashboard: React.FC = () => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                mb: 0.5,
+                mb: 1.25,
               }}
             >
               <Typography
@@ -579,7 +569,7 @@ const Dashboard: React.FC = () => {
                 New Project
               </Button>
             </Box>
-            <Divider sx={{ mb: 0.125 }} />
+            <Divider sx={{ mb: 1 }} />
             {projects.length === 0 ? (
               <Typography
                 variant="body2"
@@ -626,7 +616,7 @@ const Dashboard: React.FC = () => {
             )}
             {projects.length > panelRowsShownCount && (
               <>
-                <Divider sx={{ mt: 0.625, mb: 1.125 }} />
+                <Divider sx={{ mt: 1.5, mb: 1.125 }} />
                 <Box sx={{ display: 'flex', justifyContent: 'center' }}>
                   <Button
                     size="small"
@@ -662,7 +652,7 @@ const Dashboard: React.FC = () => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                mb: 0.5,
+                mb: 1.25,
               }}
             >
               <Typography
@@ -674,10 +664,8 @@ const Dashboard: React.FC = () => {
                   gap: 1,
                 }}
               >
-                <RouteIcon
-                  width={20}
-                  height={20}
-                  style={{ color: theme.palette.primary.main }}
+                <ElectricalServicesIcon
+                  sx={{ color: theme.palette.primary.main }}
                 />
                 Configured Connections ({connections.length})
               </Typography>
@@ -691,7 +679,7 @@ const Dashboard: React.FC = () => {
                 New Connection
               </Button>
             </Box>
-            <Divider sx={{ mb: 0.125 }} />
+            <Divider sx={{ mb: 1 }} />
             {connections.length === 0 ? (
               <Typography
                 variant="body2"
@@ -717,7 +705,7 @@ const Dashboard: React.FC = () => {
                     <ListItemIcon
                       sx={{ minWidth: 36, color: theme.palette.primary.main }}
                     >
-                      <StorageOutlinedIcon fontSize="small" />
+                      <ProjectTypeIcon connectionType={c.connection?.type} />
                     </ListItemIcon>
                     <ListItemText
                       sx={{ my: 0 }}
@@ -737,7 +725,7 @@ const Dashboard: React.FC = () => {
             )}
             {connections.length > panelRowsShownCount && (
               <>
-                <Divider sx={{ mt: 0.625, mb: 1.125 }} />
+                <Divider sx={{ mt: 1.5, mb: 1.125 }} />
                 <Box sx={{ display: 'flex', justifyContent: 'center' }}>
                   <Button
                     size="small"
