@@ -16,6 +16,7 @@ jobs:
     outputs:
       release_tag: ${{ steps.version.outputs.release_tag }}
       version: ${{ steps.version.outputs.version }}
+      runner_tag: ${{ steps.runner.outputs.runner_tag }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -49,6 +50,17 @@ jobs:
 
           echo "release_tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      # Every job downloads this one cloud-api release, so a runner published
+      # while the build runs can't end up in only some of the installers.
+      - name: Pick the runner release to bundle
+        id: runner
+        env:
+          GH_TOKEN: ${{ secrets.ORCHESTRATOR_REPO_TOKEN }}
+        run: |
+          RUNNER_TAG=$(gh release view --repo rosettadb/cloud-api --json tagName --jq .tagName)
+          echo "Runner release: $RUNNER_TAG"
+          echo "runner_tag=$RUNNER_TAG" >> $GITHUB_OUTPUT
   publish-mac-arm64:
     runs-on: macos-latest
     needs: extract-version
@@ -101,9 +113,10 @@ jobs:
       - name: Bundle local runner (macOS ARM64)
         env:
           GH_TOKEN: ${{ secrets.ORCHESTRATOR_REPO_TOKEN }}
+          RUNNER_TAG: ${{ needs.extract-version.outputs.runner_tag }}
         run: |
           mkdir -p resources/runner
-          gh release download --repo rosettadb/cloud-api --pattern 'rosetta-runner-darwin-arm64' --pattern 'rosetta-runner-plugins.zip' --dir resources/runner --clobber
+          gh release download "$RUNNER_TAG" --repo rosettadb/cloud-api --pattern 'rosetta-runner-darwin-arm64' --pattern 'rosetta-runner-plugins.zip' --dir resources/runner --clobber
           mv resources/runner/rosetta-runner-darwin-arm64 resources/runner/rosetta-runner
           chmod +x resources/runner/rosetta-runner
           unzip -q resources/runner/rosetta-runner-plugins.zip -d resources/runner/plugins-home
@@ -365,9 +378,10 @@ jobs:
       - name: Bundle local runner (macOS x64)
         env:
           GH_TOKEN: ${{ secrets.ORCHESTRATOR_REPO_TOKEN }}
+          RUNNER_TAG: ${{ needs.extract-version.outputs.runner_tag }}
         run: |
           mkdir -p resources/runner
-          gh release download --repo rosettadb/cloud-api --pattern 'rosetta-runner-darwin-amd64' --pattern 'rosetta-runner-plugins.zip' --dir resources/runner --clobber
+          gh release download "$RUNNER_TAG" --repo rosettadb/cloud-api --pattern 'rosetta-runner-darwin-amd64' --pattern 'rosetta-runner-plugins.zip' --dir resources/runner --clobber
           mv resources/runner/rosetta-runner-darwin-amd64 resources/runner/rosetta-runner
           chmod +x resources/runner/rosetta-runner
           unzip -q resources/runner/rosetta-runner-plugins.zip -d resources/runner/plugins-home
@@ -592,10 +606,11 @@ jobs:
       - name: Bundle local runner (Windows)
         env:
           GH_TOKEN: ${{ secrets.ORCHESTRATOR_REPO_TOKEN }}
+          RUNNER_TAG: ${{ needs.extract-version.outputs.runner_tag }}
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force resources/runner | Out-Null
-          gh release download --repo rosettadb/cloud-api --pattern 'rosetta-runner-windows-amd64.exe' --pattern 'rosetta-runner-plugins.zip' --dir resources/runner --clobber
+          gh release download $env:RUNNER_TAG --repo rosettadb/cloud-api --pattern 'rosetta-runner-windows-amd64.exe' --pattern 'rosetta-runner-plugins.zip' --dir resources/runner --clobber
           Move-Item resources/runner/rosetta-runner-windows-amd64.exe resources/runner/rosetta-runner.exe
           Expand-Archive resources/runner/rosetta-runner-plugins.zip -DestinationPath resources/runner/plugins-home
           Remove-Item resources/runner/rosetta-runner-plugins.zip
@@ -795,9 +810,10 @@ jobs:
       - name: Bundle local runner (Linux)
         env:
           GH_TOKEN: ${{ secrets.ORCHESTRATOR_REPO_TOKEN }}
+          RUNNER_TAG: ${{ needs.extract-version.outputs.runner_tag }}
         run: |
           mkdir -p resources/runner
-          gh release download --repo rosettadb/cloud-api --pattern 'rosetta-runner-linux-amd64' --pattern 'rosetta-runner-plugins.zip' --dir resources/runner --clobber
+          gh release download "$RUNNER_TAG" --repo rosettadb/cloud-api --pattern 'rosetta-runner-linux-amd64' --pattern 'rosetta-runner-plugins.zip' --dir resources/runner --clobber
           mv resources/runner/rosetta-runner-linux-amd64 resources/runner/rosetta-runner
           chmod +x resources/runner/rosetta-runner
           unzip -q resources/runner/rosetta-runner-plugins.zip -d resources/runner/plugins-home
@@ -948,9 +964,10 @@ jobs:
       - name: Download runner release assets (macOS)
         env:
           GH_TOKEN: ${{ secrets.ORCHESTRATOR_REPO_TOKEN }}
+          RUNNER_TAG: ${{ needs.extract-version.outputs.runner_tag }}
         run: |
           mkdir -p runner-artifacts
-          gh release download --repo rosettadb/cloud-api --pattern 'rosetta-runner-darwin-*' --dir runner-artifacts --clobber
+          gh release download "$RUNNER_TAG" --repo rosettadb/cloud-api --pattern 'rosetta-runner-darwin-*' --dir runner-artifacts --clobber
 
       - name: Import signing certificate
         env:
@@ -1017,10 +1034,11 @@ jobs:
       - name: Download runner release assets (Windows)
         env:
           GH_TOKEN: ${{ secrets.ORCHESTRATOR_REPO_TOKEN }}
+          RUNNER_TAG: ${{ needs.extract-version.outputs.runner_tag }}
         shell: bash
         run: |
           mkdir -p runner-artifacts
-          gh release download --repo rosettadb/cloud-api --pattern 'rosetta-runner-windows-*' --dir runner-artifacts --clobber
+          gh release download "$RUNNER_TAG" --repo rosettadb/cloud-api --pattern 'rosetta-runner-windows-*' --dir runner-artifacts --clobber
 
       - name: Sign with Azure Trusted Signing
         uses: azure/trusted-signing-action@v0.5.0
@@ -1061,9 +1079,10 @@ jobs:
       - name: Download runner release assets (Linux & plugins)
         env:
           GH_TOKEN: ${{ secrets.ORCHESTRATOR_REPO_TOKEN }}
+          RUNNER_TAG: ${{ needs.extract-version.outputs.runner_tag }}
         run: |
           mkdir -p runner-artifacts
-          gh release download --repo rosettadb/cloud-api --pattern 'rosetta-runner-linux-*' --pattern 'rosetta-runner-plugins.zip' --dir runner-artifacts --clobber
+          gh release download "$RUNNER_TAG" --repo rosettadb/cloud-api --pattern 'rosetta-runner-linux-*' --pattern 'rosetta-runner-plugins.zip' --dir runner-artifacts --clobber
 
       - name: Upload runner artifacts to Studio release
         env:

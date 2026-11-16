@@ -133,6 +133,41 @@ describe('RunnerService.copyBundledRunnerToUserData', () => {
     expect(saveSettings).toHaveBeenCalledTimes(1);
   });
 
+  it('leaves no runner behind when a copy fails halfway, so the next start copies again', async () => {
+    await addBundledRunner();
+    loadSettings.mockResolvedValue({
+      runnerVersion: '1.7.7',
+      runnerPath: path.join(runnerRoot, '1.7.7', binaryName),
+    });
+    // The first copy writes the binary, then fails before the plugins.
+    const copySpy = jest.spyOn(fs, 'copy').mockImplementationOnce((async (
+      _source: string,
+      destination: string,
+    ) => {
+      await fs.outputFile(path.join(destination, binaryName), 'partial');
+      throw new Error('disk full');
+    }) as never);
+    const copiedBinary = path.join(runnerRoot, '1.7.7', binaryName);
+
+    await expect(RunnerService.copyBundledRunnerToUserData()).rejects.toThrow(
+      'disk full',
+    );
+    expect(await fs.pathExists(copiedBinary)).toBe(false);
+    expect(saveSettings).not.toHaveBeenCalled();
+
+    await RunnerService.copyBundledRunnerToUserData();
+    copySpy.mockRestore();
+
+    expect(await fs.readFile(copiedBinary, 'utf8')).toBe('new runner');
+    expect(
+      await fs.pathExists(
+        path.join(runnerRoot, '1.7.7', 'plugins-home', 'plugins.json'),
+      ),
+    ).toBe(true);
+    expect(saveSettings).toHaveBeenCalledTimes(1);
+    expect(await installedRunnerFolders()).toEqual(['1.7.7']);
+  });
+
   it('keeps the saved runner when the app has no bundled runner', async () => {
     await addInstalledRunner('1.7.6');
 

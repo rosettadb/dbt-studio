@@ -182,8 +182,13 @@ export default class RunnerService {
       return;
     }
 
-    await fs.remove(installDir);
-    await fs.copy(bundledDir, installDir);
+    // Copy into a staging folder and rename it into place only once the whole
+    // copy succeeded, so installDir is either complete or missing. A failed
+    // copy then leaves no binary behind, and the next start copies again.
+    const stagingDir = `${installDir}.partial`;
+    await fs.remove(stagingDir);
+    await fs.copy(bundledDir, stagingDir);
+    await fs.move(stagingDir, installDir, { overwrite: true });
 
     settings.runnerVersion = version;
     settings.runnerPath = binaryPath;
