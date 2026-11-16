@@ -34,6 +34,11 @@ interface TipTapEditorProps {
   onSubmit?: () => void; // Enter to send (Shift+Enter for newline)
 }
 
+// Pasted line breaks are stored as "\n" inside the text (see handlePaste).
+// Parse HTML coming back in through `value` with whitespace preserved, or
+// those line breaks would collapse into spaces.
+const VALUE_PARSE_OPTIONS = { preserveWhitespace: 'full' } as const;
+
 export const TipTapEditor: React.FC<TipTapEditorProps> = ({
   value,
   onChange,
@@ -42,11 +47,30 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
   onSubmit,
 }) => {
   const [focused, setFocused] = React.useState(false);
-  const containerRef = React.useRef<HTMLDivElement>(null);
   const tiptapEditor = useEditor({
     extensions: [StarterKit],
     content: value || '',
+    parseOptions: VALUE_PARSE_OPTIONS,
     editable: !disabled,
+    editorProps: {
+      // Paste as plain text (strip formatting). This has to run inside
+      // ProseMirror's own paste handling: a React onPaste on EditorContent
+      // fires after ProseMirror has already inserted the clipboard content,
+      // so the text ended up in the input twice (#634).
+      handlePaste: (view, event) => {
+        const text = event.clipboardData?.getData('text/plain');
+        if (!text) return false;
+        // insertText keeps the text literal (no HTML parsing), replaces the
+        // selection and leaves the caret after the pasted text; scrollIntoView
+        // keeps that caret visible in the scrollable input.
+        view.dispatch(
+          view.state.tr
+            .insertText(text.replace(/\r\n?/g, '\n'))
+            .scrollIntoView(),
+        );
+        return true;
+      },
+    },
     onUpdate: ({ editor }) => {
       onChange?.(editor.getHTML());
     },
@@ -58,7 +82,9 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
       value !== undefined &&
       value !== tiptapEditor.getHTML()
     ) {
-      tiptapEditor.commands.setContent(value);
+      tiptapEditor.commands.setContent(value, {
+        parseOptions: VALUE_PARSE_OPTIONS,
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
@@ -82,29 +108,6 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
     [disabled, tiptapEditor, onSubmit],
   );
 
-  // Paste as plain text (strip formatting)
-  const handlePaste = React.useCallback(
-    (e: React.ClipboardEvent) => {
-      const text = e.clipboardData.getData('text/plain');
-      if (text) {
-        e.preventDefault();
-        tiptapEditor?.chain().focus('end').insertContent(text).run();
-        tiptapEditor?.commands.setTextSelection(
-          tiptapEditor.state.doc.content.size,
-        );
-        requestAnimationFrame(() => {
-          containerRef.current?.scrollTo({
-            top: containerRef.current.scrollHeight,
-            behavior: 'auto',
-          });
-          tiptapEditor?.commands.focus('end');
-          tiptapEditor?.commands.scrollIntoView();
-        });
-      }
-    },
-    [tiptapEditor],
-  );
-
   // Auto-focus on mount (when enabled)
   React.useEffect(() => {
     if (!disabled) {
@@ -112,11 +115,10 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
     }
   }, [tiptapEditor, disabled]);
   return (
-    <EditorContainer ref={containerRef}>
+    <EditorContainer>
       <EditorContent
         editor={tiptapEditor}
         onKeyDown={handleKeyDown}
-        onPaste={handlePaste}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
       />

@@ -35,6 +35,8 @@ const handlerChannels: SettingsChannels[] = [
   'version:runner:install',
   'version:runner:uninstall',
   'runner:plugins:check',
+  'runner:pyspark:install',
+  'runner:pyspark:uninstall',
   'settings:reset-factory',
   'settings:restart',
   'dbt:versions:list',
@@ -201,6 +203,18 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
 
   ipcMain.handle('runner:plugins:check', async () => {
     return RunnerService.checkPluginDependencies();
+  });
+
+  ipcMain.handle('runner:pyspark:install', async () => {
+    return runInstallTask('install:pyspark', 'Installing PySpark', () =>
+      SettingsService.installPackage('pyspark'),
+    );
+  });
+
+  ipcMain.handle('runner:pyspark:uninstall', async () => {
+    return runInstallTask('install:pyspark', 'Uninstalling PySpark', () =>
+      SettingsService.uninstallPySpark(),
+    );
   });
 
   ipcMain.handle('settings:reset-factory', async (event) => {

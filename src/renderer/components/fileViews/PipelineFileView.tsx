@@ -1,5 +1,15 @@
 import React from 'react';
-import { Box, IconButton, Tooltip, Typography } from '@mui/material';
+import {
+  Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  Tooltip,
+  Typography,
+} from '@mui/material';
 import { AccountTree } from '@mui/icons-material';
 import { Editor } from '../editor';
 import { PushToCloudModal, RunWithEnvModal } from '../modals';
@@ -21,7 +31,7 @@ import { useTaskChannel } from '../../hooks/useTaskChannel';
 import { useRefreshProjectFiles } from '../../hooks/useRefreshProjectFiles';
 import { useGetConnectionById, useGetSettings } from '../../controllers';
 import { usePipelineActionId } from '../../controllers/rosettaCloud.controller';
-import { projectsServices } from '../../services';
+import { projectsServices, settingsServices } from '../../services';
 import type { FileViewDefinition, FileViewProps } from './types';
 
 // Visual pipeline editor over a pipeline YAML tab, with an inline code mode
@@ -73,6 +83,7 @@ const PipelineFileView: React.FC<FileViewProps> = ({ tab, project }) => {
 
   const [cloudModalOpen, setCloudModalOpen] = React.useState(false);
   const [envModalOpen, setEnvModalOpen] = React.useState(false);
+  const [javaError, setJavaError] = React.useState<string | null>(null);
 
   const runDisabledReason = React.useMemo(() => {
     if (isDbtV2) {
@@ -84,14 +95,38 @@ const PipelineFileView: React.FC<FileViewProps> = ({ tab, project }) => {
     return undefined;
   }, [isDbtV2, isCloud, settings?.runnerPath]);
 
-  const handleRun = React.useCallback(() => {
+  const handleRun = React.useCallback(async () => {
     if (isCloud) {
       setCloudModalOpen(true);
       return;
     }
     if (!settings?.runnerPath) return;
+    const pipeline = parsePipelineConfig(tab.savedContent ?? tab.content);
+    const usesPySpark = pipeline?.jobs.some((job) =>
+      job.steps.some((step) => step.plugin === 'pyspark@v1'),
+    );
+    if (usesPySpark) {
+      try {
+        const dependencies =
+          await settingsServices.checkRunnerPluginDependencies();
+        const java = dependencies.find(
+          (dependency) => dependency.id === 'pyspark',
+        )?.java;
+        if (java && !java.available) {
+          setJavaError(
+            java.version
+              ? `Java ${java.version} was found. PySpark requires Java 17 or newer. Install a newer JDK, then restart Studio.`
+              : 'Java was not found. PySpark requires Java 17 or newer. Install a JDK, then restart Studio.',
+          );
+          return;
+        }
+      } catch {
+        setJavaError('Could not check Java. Try again before running PySpark.');
+        return;
+      }
+    }
     setEnvModalOpen(true);
-  }, [isCloud, settings?.runnerPath]);
+  }, [isCloud, settings?.runnerPath, tab.savedContent, tab.content]);
 
   // --- Code / visual toggle --------------------------------------------
   const [codeMode, setCodeMode] = React.useState(false);
@@ -172,7 +207,7 @@ const PipelineFileView: React.FC<FileViewProps> = ({ tab, project }) => {
                 ? () => cancelTask(runnerTask.id)
                 : undefined
             }
-            onRunWithEnv={!isCloud ? () => setEnvModalOpen(true) : undefined}
+            onRunWithEnv={!isCloud ? handleRun : undefined}
           />
         )}
       </Box>
@@ -195,6 +230,15 @@ const PipelineFileView: React.FC<FileViewProps> = ({ tab, project }) => {
           connectionName={connection?.connection?.name}
         />
       )}
+      <Dialog open={Boolean(javaError)} onClose={() => setJavaError(null)}>
+        <DialogTitle>Java required for PySpark</DialogTitle>
+        <DialogContent>
+          <Typography>{javaError}</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setJavaError(null)}>Close</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

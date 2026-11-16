@@ -27,6 +27,8 @@ export type SettingsChannels =
   | 'version:runner:install'
   | 'version:runner:uninstall'
   | 'runner:plugins:check'
+  | 'runner:pyspark:install'
+  | 'runner:pyspark:uninstall'
   | 'settings:reset-factory'
   | 'settings:restart'
   | 'settings:duckdb:metadata'

@@ -264,6 +264,7 @@ export type RunnerPluginId =
   | 'terraform'
   | 's3'
   | 'kinetica_cli'
+  | 'pyspark'
   | 'command';
 
 export type RunnerPluginStatus = {
@@ -275,6 +276,11 @@ export type RunnerPluginStatus = {
   path?: string;
   managedInStudio?: boolean;
   downloadUrl?: string;
+  java?: {
+    available: boolean;
+    version?: string;
+    requiredVersion: number;
+  };
 };
 
 export type DbtCoreVersionListItem = {
