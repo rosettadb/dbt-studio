@@ -1,6 +1,6 @@
 import React from 'react';
 
-// The Dashboard scales its page up with CSS zoom on big monitors. Chromium
+// The Dashboard scales its page with CSS zoom to fit the window. Chromium
 // before 128 (Electron 31) reports positions inside a zoomed page divided by
 // the zoom, so a tooltip there would aim at the wrong spot. Chromium 128+
 // reports true positions and has Element.currentCSSZoom, so the correction
@@ -8,7 +8,7 @@ import React from 'react';
 const reportsZoomedPositions =
   typeof Element !== 'undefined' && !('currentCSSZoom' in Element.prototype);
 
-const getTrueScreenRect = (element: Element): DOMRect => {
+export const getTrueScreenRect = (element: Element): DOMRect => {
   const rect = element.getBoundingClientRect();
   if (!reportsZoomedPositions) return rect;
   let zoom = 1;

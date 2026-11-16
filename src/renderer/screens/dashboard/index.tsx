@@ -34,6 +34,7 @@ import { icons, rosettaIcon } from '../../../../assets';
 import { connectionIcon } from '../../../connections/registry.renderer';
 import { ReactComponent as RouteIcon } from '../../assets/icons/lucide/route.svg';
 import { useAppContext } from '../../hooks';
+import { getTrueScreenRect } from '../../hooks/useTrueScreenTooltipAnchor';
 import { QuickStartTour, hasSeenTour, markTourSeen } from '../../components';
 import { CommandPalette } from '../../components/commandPalette';
 import { CloudLocalEnvironmentSwitch } from '../../components/menu/CloudLocalEnvironmentSwitch';
@@ -193,12 +194,61 @@ const features = [
 // there are more than this.
 const panelRowsShownCount = 3;
 
-// Scales the page up on big monitors so it fills the screen like it does on a
-// laptop. Not used while the quick start tour can show (no projects), because
-// the tour's highlight lands in the wrong place on a scaled page.
-const bigMonitorPageScale = {
-  '@media (min-width: 1800px) and (min-height: 980px)': { zoom: 1.25 },
-  '@media (min-width: 2400px) and (min-height: 1350px)': { zoom: 1.75 },
+// Below this scale the text gets too small to read, so a smaller window than
+// that scrolls instead of shrinking the page further.
+const smallestReadablePageScale = 0.7;
+// The page needs about this much width for 4 module cards per row, so a narrow
+// window shrinks the page instead of squeezing the cards.
+const narrowestComfortablePageWidth = 1150;
+
+// Scales the page (CSS zoom) so it exactly fills the window's height: bigger
+// on big monitors, smaller in a small window, never past the smallest readable
+// scale. Off while the quick start tour can show (no projects), because the
+// tour's highlight lands in the wrong place on a scaled page.
+const usePageScaleThatFitsWindow = (isScalingAllowed: boolean) => {
+  const windowRef = React.useRef<HTMLDivElement>(null);
+  const pageRef = React.useRef<HTMLDivElement>(null);
+  const [pageScale, setPageScale] = React.useState(1);
+
+  React.useLayoutEffect(() => {
+    if (!isScalingAllowed) {
+      setPageScale(1);
+      return undefined;
+    }
+    const windowBox = windowRef.current!;
+    const page = pageRef.current!;
+    const fitPageToWindow = () => {
+      const currentScale =
+        parseFloat(getComputedStyle(page).getPropertyValue('zoom')) || 1;
+      const unscaledPageHeight = getTrueScreenRect(page).height / currentScale;
+      const scaleThatFits = Math.min(
+        windowBox.clientHeight / unscaledPageHeight,
+        windowBox.clientWidth / narrowestComfortablePageWidth,
+      );
+      // Rounded down, so rounding never leaves the page 1px too tall
+      const nextScale = Math.max(
+        smallestReadablePageScale,
+        Math.floor(scaleThatFits * 1000) / 1000,
+      );
+      // Rescaling rewraps some text, which changes the page's height a little,
+      // so this runs again after each change. Shrinking always applies, so the
+      // page never stays too tall; a tiny grow is skipped so it settles.
+      setPageScale((previousScale) =>
+        nextScale > previousScale && nextScale - previousScale < 0.005
+          ? previousScale
+          : nextScale,
+      );
+    };
+    // Fits once before the first paint, so Home doesn't flash at the wrong
+    // size, then refits when the window resizes or the page's content changes
+    fitPageToWindow();
+    const resizeObserver = new ResizeObserver(fitPageToWindow);
+    resizeObserver.observe(windowBox);
+    resizeObserver.observe(page);
+    return () => resizeObserver.disconnect();
+  }, [isScalingAllowed]);
+
+  return { windowRef, pageRef, pageScale };
 };
 
 const Dashboard: React.FC = () => {
@@ -289,458 +339,482 @@ const Dashboard: React.FC = () => {
     fontSize: '0.75rem',
   };
 
+  // A page that fits the window keeps 4 cards per row and its panels side by
+  // side, shrinking instead; otherwise a narrow window stacks them.
+  const isPageFitToWindow = projects.length > 0;
+  const { windowRef, pageRef, pageScale } =
+    usePageScaleThatFitsWindow(isPageFitToWindow);
+
   const mostRecentlyOpenedProjects = [...projects]
     .sort((a, b) => (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0))
     .slice(0, panelRowsShownCount);
 
   return (
     <Box
+      ref={windowRef}
       sx={{
-        px: { xs: 2.5, md: 4 },
-        py: 1.5,
         height: '100%',
         width: '100%',
         overflowY: 'auto',
-        boxSizing: 'border-box',
         backgroundColor: theme.palette.background.default,
-        ...(projects.length > 0 ? bigMonitorPageScale : {}),
       }}
     >
-      {/* Hero / Welcome Header */}
-      <Paper
-        elevation={0}
-        data-tour="tour-workspace-overview"
+      <Box
+        ref={pageRef}
         sx={{
-          px: 3,
+          px: { xs: 2.5, md: 4 },
           py: 1.5,
-          mb: 2,
-          borderRadius: 3,
-          border: `1px solid ${theme.palette.divider}`,
-          backgroundColor: theme.palette.background.paper,
-          display: 'flex',
-          flexDirection: { xs: 'column', md: 'row' },
-          alignItems: { xs: 'flex-start', md: 'center' },
-          justifyContent: 'space-between',
-          gap: 2,
+          boxSizing: 'border-box',
+          zoom: pageScale,
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2.5 }}>
-          <Box
-            component="img"
-            src={rosettaIcon}
-            alt="Rosetta Studio"
-            sx={{ width: 56, height: 56, objectFit: 'contain' }}
-          />
-          <Box>
-            <Typography
-              variant="h5"
-              sx={{
-                fontWeight: 800,
-                color: theme.palette.text.primary,
-                letterSpacing: '-0.5px',
-              }}
-            >
-              Workspace Overview
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              Access your data engineering modules, analytics notebooks, and
-              pipelines.
-            </Typography>
-          </Box>
-        </Box>
-
-        {/* Quick Header Actions */}
-        <Box
+        {/* Hero / Welcome Header */}
+        <Paper
+          elevation={0}
+          data-tour="tour-workspace-overview"
           sx={{
+            px: 3,
+            py: 1.5,
+            mb: 2,
+            borderRadius: 3,
+            border: `1px solid ${theme.palette.divider}`,
+            backgroundColor: theme.palette.background.paper,
             display: 'flex',
-            alignItems: 'center',
-            gap: 1.5,
-            flexWrap: 'wrap',
+            flexDirection: { xs: 'column', md: 'row' },
+            alignItems: { xs: 'flex-start', md: 'center' },
+            justifyContent: 'space-between',
+            gap: 2,
           }}
         >
-          <CommandPalette />
-          {/* Once logged in, Connect to Cloud turns into the Cloud / Local
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2.5 }}>
+            <Box
+              component="img"
+              src={rosettaIcon}
+              alt="Rosetta Studio"
+              sx={{ width: 56, height: 56, objectFit: 'contain' }}
+            />
+            <Box>
+              <Typography
+                variant="h5"
+                sx={{
+                  fontWeight: 800,
+                  color: theme.palette.text.primary,
+                  letterSpacing: '-0.5px',
+                }}
+              >
+                Workspace Overview
+              </Typography>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ mt: 0.5 }}
+              >
+                Access your data engineering modules, analytics notebooks, and
+                pipelines.
+              </Typography>
+            </Box>
+          </Box>
+
+          {/* Quick Header Actions */}
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.5,
+              flexWrap: 'wrap',
+            }}
+          >
+            <CommandPalette />
+            {/* Once logged in, Connect to Cloud turns into the Cloud / Local
               switch (shown when the profile has loaded, like the top bar) */}
-          {apiKey && profile && <CloudLocalEnvironmentSwitch />}
-          {!apiKey && (
+            {apiKey && profile && <CloudLocalEnvironmentSwitch />}
+            {!apiKey && (
+              <Button
+                variant="outlined"
+                disabled={apiKeyLoading || loginLoading}
+                startIcon={
+                  apiKeyLoading || loginLoading ? (
+                    <CircularProgress size={16} />
+                  ) : (
+                    <Box
+                      component="img"
+                      src={rosettaIcon}
+                      alt="Rosetta"
+                      sx={{ width: 18, height: 18 }}
+                    />
+                  )
+                }
+                onClick={() => login()}
+                sx={outlinedButtonSx}
+              >
+                Connect to Cloud
+              </Button>
+            )}
             <Button
               variant="outlined"
-              disabled={apiKeyLoading || loginLoading}
-              startIcon={
-                apiKeyLoading || loginLoading ? (
-                  <CircularProgress size={16} />
-                ) : (
-                  <Box
-                    component="img"
-                    src={rosettaIcon}
-                    alt="Rosetta"
-                    sx={{ width: 18, height: 18 }}
-                  />
-                )
-              }
-              onClick={() => login()}
+              startIcon={<SettingsOutlinedIcon />}
+              onClick={() => handleFeatureClick('/app/settings')}
               sx={outlinedButtonSx}
             >
-              Connect to Cloud
+              Settings
             </Button>
-          )}
-          <Button
-            variant="outlined"
-            startIcon={<SettingsOutlinedIcon />}
-            onClick={() => handleFeatureClick('/app/settings')}
-            sx={outlinedButtonSx}
-          >
-            Settings
-          </Button>
-        </Box>
-      </Paper>
+          </Box>
+        </Paper>
 
-      {/* Main Studio Modules (7 Cards) */}
-      <Box data-tour="tour-modules-area">
-        <Typography
-          variant="h6"
-          sx={{ fontWeight: 700, mb: 1, textAlign: 'center' }}
-        >
-          Studio Modules
-        </Typography>
-        <Grid container rowSpacing={2} columnSpacing={2.5} sx={{ mb: 2 }}>
-          {features.map((feature) => {
-            const IconComponent = feature.icon;
-            return (
-              <Grid item xs={12} sm={6} md={4} lg={3} key={feature.id}>
-                <Card
-                  sx={{
-                    height: '100%',
-                    borderRadius: 2.5,
-                    border: `1px solid ${theme.palette.divider}`,
-                    backgroundColor: theme.palette.background.paper,
-                    transition: 'all 0.25s ease-in-out',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    '&:hover': {
-                      transform: 'translateY(-4px)',
-                      boxShadow:
-                        theme.palette.mode === 'dark'
-                          ? '0 8px 24px rgba(0, 0, 0, 0.4)'
-                          : '0 8px 20px rgba(0, 0, 0, 0.08)',
-                      borderColor: theme.palette.primary.main,
-                      '& .icon-box': {
-                        backgroundColor: theme.palette.action.selected,
-                        color: theme.palette.primary.main,
-                        transform: 'scale(1.05)',
-                      },
-                    },
-                  }}
+        {/* Main Studio Modules (7 Cards) */}
+        <Box data-tour="tour-modules-area">
+          <Typography
+            variant="h6"
+            sx={{ fontWeight: 700, mb: 1, textAlign: 'center' }}
+          >
+            Studio Modules
+          </Typography>
+          <Grid container rowSpacing={2} columnSpacing={2.5} sx={{ mb: 2 }}>
+            {features.map((feature) => {
+              const IconComponent = feature.icon;
+              return (
+                <Grid
+                  item
+                  xs={isPageFitToWindow ? 3 : 12}
+                  sm={isPageFitToWindow ? 3 : 6}
+                  md={isPageFitToWindow ? 3 : 4}
+                  lg={3}
+                  key={feature.id}
                 >
-                  <CardActionArea
-                    onClick={() => handleCardClick(feature)}
+                  <Card
                     sx={{
                       height: '100%',
-                      p: 2,
+                      borderRadius: 2.5,
+                      border: `1px solid ${theme.palette.divider}`,
+                      backgroundColor: theme.palette.background.paper,
+                      transition: 'all 0.25s ease-in-out',
                       display: 'flex',
                       flexDirection: 'column',
-                      alignItems: 'flex-start',
-                      justifyContent: 'space-between',
+                      '&:hover': {
+                        transform: 'translateY(-4px)',
+                        boxShadow:
+                          theme.palette.mode === 'dark'
+                            ? '0 8px 24px rgba(0, 0, 0, 0.4)'
+                            : '0 8px 20px rgba(0, 0, 0, 0.08)',
+                        borderColor: theme.palette.primary.main,
+                        '& .icon-box': {
+                          backgroundColor: theme.palette.action.selected,
+                          color: theme.palette.primary.main,
+                          transform: 'scale(1.05)',
+                        },
+                      },
                     }}
                   >
-                    <Box sx={{ width: '100%' }}>
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          mb: 1,
-                        }}
-                      >
+                    <CardActionArea
+                      onClick={() => handleCardClick(feature)}
+                      sx={{
+                        height: '100%',
+                        p: 2,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'flex-start',
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <Box sx={{ width: '100%' }}>
                         <Box
-                          className="icon-box"
                           sx={{
-                            width: 40,
-                            height: 40,
-                            borderRadius: 2,
                             display: 'flex',
                             alignItems: 'center',
-                            justifyContent: 'center',
-                            backgroundColor: theme.palette.action.hover,
-                            color: theme.palette.primary.main,
-                            transition: 'all 0.25s ease',
+                            justifyContent: 'space-between',
+                            mb: 1,
                           }}
                         >
-                          <IconComponent />
+                          <Box
+                            className="icon-box"
+                            sx={{
+                              width: 40,
+                              height: 40,
+                              borderRadius: 2,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              backgroundColor: theme.palette.action.hover,
+                              color: theme.palette.primary.main,
+                              transition: 'all 0.25s ease',
+                            }}
+                          >
+                            <IconComponent />
+                          </Box>
+                          <Chip
+                            label={feature.category}
+                            size="small"
+                            sx={{
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              borderRadius: 1.5,
+                              backgroundColor:
+                                theme.palette.mode === 'dark'
+                                  ? 'rgba(255, 255, 255, 0.06)'
+                                  : 'rgba(0, 0, 0, 0.04)',
+                              color: theme.palette.text.secondary,
+                            }}
+                          />
                         </Box>
-                        <Chip
-                          label={feature.category}
-                          size="small"
+                        <Typography
+                          variant="h6"
                           sx={{
-                            fontSize: '0.75rem',
-                            fontWeight: 600,
-                            borderRadius: 1.5,
-                            backgroundColor:
-                              theme.palette.mode === 'dark'
-                                ? 'rgba(255, 255, 255, 0.06)'
-                                : 'rgba(0, 0, 0, 0.04)',
-                            color: theme.palette.text.secondary,
+                            fontWeight: 700,
+                            fontSize: '1.1rem',
+                            color: theme.palette.text.primary,
+                            mb: 0.8,
                           }}
-                        />
+                        >
+                          {feature.title}
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          sx={{
+                            lineHeight: 1.4,
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                          }}
+                        >
+                          {feature.description}
+                        </Typography>
                       </Box>
-                      <Typography
-                        variant="h6"
-                        sx={{
-                          fontWeight: 700,
-                          fontSize: '1.1rem',
-                          color: theme.palette.text.primary,
-                          mb: 0.8,
-                        }}
+                    </CardActionArea>
+                  </Card>
+                </Grid>
+              );
+            })}
+          </Grid>
+        </Box>
+
+        {/* Bottom Panels: Recent Projects & Active Connections */}
+        <Grid container spacing={2.5}>
+          {/* Recent Projects */}
+          <Grid item xs={isPageFitToWindow ? 6 : 12} md={6}>
+            <Paper
+              elevation={0}
+              data-tour="tour-recent-projects"
+              sx={{
+                px: 2.5,
+                pt: 1.5,
+                pb: 1.125,
+                borderRadius: 2.5,
+                border: `1px solid ${theme.palette.divider}`,
+                backgroundColor: theme.palette.background.paper,
+                height: '100%',
+              }}
+            >
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  mb: 1.25,
+                }}
+              >
+                <Typography
+                  variant="subtitle1"
+                  sx={{
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+                  }}
+                >
+                  <FolderOpenIcon sx={{ color: theme.palette.primary.main }} />
+                  Recent Projects ({projects.length})
+                </Typography>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<AddIcon />}
+                  onClick={() => {
+                    setIsSidebarOpen(true);
+                    navigate('/app/select-project', {
+                      state: { startNewProject: true },
+                    });
+                  }}
+                  data-tour="tour-open-project-btn"
+                  sx={outlinedButtonSx}
+                >
+                  New Project
+                </Button>
+              </Box>
+              <Divider sx={{ mb: 1 }} />
+              {projects.length === 0 ? (
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ py: 3, textAlign: 'center' }}
+                >
+                  No recent projects found.
+                </Typography>
+              ) : (
+                <List disablePadding>
+                  {mostRecentlyOpenedProjects.map((p: any) => (
+                    <ListItemButton
+                      key={p.id || p.path}
+                      onClick={() => handleOpenProject(String(p.id))}
+                      sx={{
+                        borderRadius: 1.5,
+                        py: 0.25,
+                        '&:hover': {
+                          backgroundColor: theme.palette.action.hover,
+                        },
+                      }}
+                    >
+                      <ListItemIcon
+                        sx={{ minWidth: 36, color: theme.palette.primary.main }}
                       >
-                        {feature.title}
-                      </Typography>
-                      <Typography
-                        variant="body2"
-                        color="text.secondary"
-                        sx={{
-                          lineHeight: 1.4,
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical',
-                          overflow: 'hidden',
+                        <ProjectTypeIcon connectionType={p.connection?.type} />
+                      </ListItemIcon>
+                      <ListItemText
+                        sx={{ my: 0 }}
+                        primary={p.name}
+                        secondary={p.path}
+                        primaryTypographyProps={{
+                          fontWeight: 600,
+                          fontSize: '0.9rem',
                         }}
+                        secondaryTypographyProps={{
+                          fontSize: '0.78rem',
+                          noWrap: true,
+                        }}
+                      />
+                    </ListItemButton>
+                  ))}
+                </List>
+              )}
+              {projects.length > panelRowsShownCount && (
+                <>
+                  <Divider sx={{ mt: 1.5, mb: 1.125 }} />
+                  <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() => navigate('/app/select-project')}
+                      sx={manageAllButtonSx}
+                    >
+                      Manage All Projects
+                    </Button>
+                  </Box>
+                </>
+              )}
+            </Paper>
+          </Grid>
+
+          {/* Database Connections */}
+          <Grid item xs={isPageFitToWindow ? 6 : 12} md={6}>
+            <Paper
+              elevation={0}
+              data-tour="tour-configured-connections"
+              sx={{
+                px: 2.5,
+                pt: 1.5,
+                pb: 1.125,
+                borderRadius: 2.5,
+                border: `1px solid ${theme.palette.divider}`,
+                backgroundColor: theme.palette.background.paper,
+                height: '100%',
+              }}
+            >
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  mb: 1.25,
+                }}
+              >
+                <Typography
+                  variant="subtitle1"
+                  sx={{
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+                  }}
+                >
+                  <ElectricalServicesIcon
+                    sx={{ color: theme.palette.primary.main }}
+                  />
+                  Configured Connections ({connections.length})
+                </Typography>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<AddIcon />}
+                  onClick={() => handleFeatureClick('/app/add-connection')}
+                  sx={outlinedButtonSx}
+                >
+                  New Connection
+                </Button>
+              </Box>
+              <Divider sx={{ mb: 1 }} />
+              {connections.length === 0 ? (
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ py: 3, textAlign: 'center' }}
+                >
+                  No connections configured yet.
+                </Typography>
+              ) : (
+                <List disablePadding>
+                  {connections.slice(0, panelRowsShownCount).map((c: any) => (
+                    <ListItemButton
+                      key={c.id}
+                      onClick={() => handleFeatureClick('/app/connections')}
+                      sx={{
+                        borderRadius: 1.5,
+                        py: 0.25,
+                        '&:hover': {
+                          backgroundColor: theme.palette.action.hover,
+                        },
+                      }}
+                    >
+                      <ListItemIcon
+                        sx={{ minWidth: 36, color: theme.palette.primary.main }}
                       >
-                        {feature.description}
-                      </Typography>
-                    </Box>
-                  </CardActionArea>
-                </Card>
-              </Grid>
-            );
-          })}
+                        <ProjectTypeIcon connectionType={c.connection?.type} />
+                      </ListItemIcon>
+                      <ListItemText
+                        sx={{ my: 0 }}
+                        primary={c.connection?.name || c.name || 'Connection'}
+                        secondary={c.connection?.type || 'Database'}
+                        primaryTypographyProps={{
+                          fontWeight: 600,
+                          fontSize: '0.9rem',
+                        }}
+                        secondaryTypographyProps={{
+                          fontSize: '0.78rem',
+                        }}
+                      />
+                    </ListItemButton>
+                  ))}
+                </List>
+              )}
+              {connections.length > panelRowsShownCount && (
+                <>
+                  <Divider sx={{ mt: 1.5, mb: 1.125 }} />
+                  <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() => handleFeatureClick('/app/connections')}
+                      sx={manageAllButtonSx}
+                    >
+                      Manage All Connections
+                    </Button>
+                  </Box>
+                </>
+              )}
+            </Paper>
+          </Grid>
         </Grid>
       </Box>
-
-      {/* Bottom Panels: Recent Projects & Active Connections */}
-      <Grid container spacing={2.5}>
-        {/* Recent Projects */}
-        <Grid item xs={12} md={6}>
-          <Paper
-            elevation={0}
-            data-tour="tour-recent-projects"
-            sx={{
-              px: 2.5,
-              pt: 1.5,
-              pb: 1.125,
-              borderRadius: 2.5,
-              border: `1px solid ${theme.palette.divider}`,
-              backgroundColor: theme.palette.background.paper,
-              height: '100%',
-            }}
-          >
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                mb: 1.25,
-              }}
-            >
-              <Typography
-                variant="subtitle1"
-                sx={{
-                  fontWeight: 700,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1,
-                }}
-              >
-                <FolderOpenIcon sx={{ color: theme.palette.primary.main }} />
-                Recent Projects ({projects.length})
-              </Typography>
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={<AddIcon />}
-                onClick={() => {
-                  setIsSidebarOpen(true);
-                  navigate('/app/select-project', {
-                    state: { startNewProject: true },
-                  });
-                }}
-                data-tour="tour-open-project-btn"
-                sx={outlinedButtonSx}
-              >
-                New Project
-              </Button>
-            </Box>
-            <Divider sx={{ mb: 1 }} />
-            {projects.length === 0 ? (
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ py: 3, textAlign: 'center' }}
-              >
-                No recent projects found.
-              </Typography>
-            ) : (
-              <List disablePadding>
-                {mostRecentlyOpenedProjects.map((p: any) => (
-                  <ListItemButton
-                    key={p.id || p.path}
-                    onClick={() => handleOpenProject(String(p.id))}
-                    sx={{
-                      borderRadius: 1.5,
-                      py: 0.25,
-                      '&:hover': {
-                        backgroundColor: theme.palette.action.hover,
-                      },
-                    }}
-                  >
-                    <ListItemIcon
-                      sx={{ minWidth: 36, color: theme.palette.primary.main }}
-                    >
-                      <ProjectTypeIcon connectionType={p.connection?.type} />
-                    </ListItemIcon>
-                    <ListItemText
-                      sx={{ my: 0 }}
-                      primary={p.name}
-                      secondary={p.path}
-                      primaryTypographyProps={{
-                        fontWeight: 600,
-                        fontSize: '0.9rem',
-                      }}
-                      secondaryTypographyProps={{
-                        fontSize: '0.78rem',
-                        noWrap: true,
-                      }}
-                    />
-                  </ListItemButton>
-                ))}
-              </List>
-            )}
-            {projects.length > panelRowsShownCount && (
-              <>
-                <Divider sx={{ mt: 1.5, mb: 1.125 }} />
-                <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    onClick={() => navigate('/app/select-project')}
-                    sx={manageAllButtonSx}
-                  >
-                    Manage All Projects
-                  </Button>
-                </Box>
-              </>
-            )}
-          </Paper>
-        </Grid>
-
-        {/* Database Connections */}
-        <Grid item xs={12} md={6}>
-          <Paper
-            elevation={0}
-            data-tour="tour-configured-connections"
-            sx={{
-              px: 2.5,
-              pt: 1.5,
-              pb: 1.125,
-              borderRadius: 2.5,
-              border: `1px solid ${theme.palette.divider}`,
-              backgroundColor: theme.palette.background.paper,
-              height: '100%',
-            }}
-          >
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                mb: 1.25,
-              }}
-            >
-              <Typography
-                variant="subtitle1"
-                sx={{
-                  fontWeight: 700,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1,
-                }}
-              >
-                <ElectricalServicesIcon
-                  sx={{ color: theme.palette.primary.main }}
-                />
-                Configured Connections ({connections.length})
-              </Typography>
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={<AddIcon />}
-                onClick={() => handleFeatureClick('/app/add-connection')}
-                sx={outlinedButtonSx}
-              >
-                New Connection
-              </Button>
-            </Box>
-            <Divider sx={{ mb: 1 }} />
-            {connections.length === 0 ? (
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ py: 3, textAlign: 'center' }}
-              >
-                No connections configured yet.
-              </Typography>
-            ) : (
-              <List disablePadding>
-                {connections.slice(0, panelRowsShownCount).map((c: any) => (
-                  <ListItemButton
-                    key={c.id}
-                    onClick={() => handleFeatureClick('/app/connections')}
-                    sx={{
-                      borderRadius: 1.5,
-                      py: 0.25,
-                      '&:hover': {
-                        backgroundColor: theme.palette.action.hover,
-                      },
-                    }}
-                  >
-                    <ListItemIcon
-                      sx={{ minWidth: 36, color: theme.palette.primary.main }}
-                    >
-                      <ProjectTypeIcon connectionType={c.connection?.type} />
-                    </ListItemIcon>
-                    <ListItemText
-                      sx={{ my: 0 }}
-                      primary={c.connection?.name || c.name || 'Connection'}
-                      secondary={c.connection?.type || 'Database'}
-                      primaryTypographyProps={{
-                        fontWeight: 600,
-                        fontSize: '0.9rem',
-                      }}
-                      secondaryTypographyProps={{
-                        fontSize: '0.78rem',
-                      }}
-                    />
-                  </ListItemButton>
-                ))}
-              </List>
-            )}
-            {connections.length > panelRowsShownCount && (
-              <>
-                <Divider sx={{ mt: 1.5, mb: 1.125 }} />
-                <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    onClick={() => handleFeatureClick('/app/connections')}
-                    sx={manageAllButtonSx}
-                  >
-                    Manage All Connections
-                  </Button>
-                </Box>
-              </>
-            )}
-          </Paper>
-        </Grid>
-      </Grid>
       <Dialog
         open={isPipelineChoiceOpen}
         onClose={() => setIsPipelineChoiceOpen(false)}
