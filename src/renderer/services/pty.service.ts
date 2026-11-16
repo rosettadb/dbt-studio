@@ -24,6 +24,9 @@ export const listPtySessions = (): Promise<PtySessionInfo[]> =>
 export const getPtySnapshot = (id: string): Promise<PtySnapshot | null> =>
   window.electron.ipcRenderer.invoke('pty:snapshot', id);
 
+export const clearPtySnapshot = (id: string): Promise<boolean> =>
+  window.electron.ipcRenderer.invoke('pty:clear', id);
+
 export const killPtySession = (id: string): Promise<boolean> =>
   window.electron.ipcRenderer.invoke('pty:kill', id);
 

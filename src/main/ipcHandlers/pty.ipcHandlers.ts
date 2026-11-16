@@ -1,5 +1,6 @@
 import fs from 'fs';
 import { app, BrowserWindow, ipcMain } from 'electron';
+import type { IpcMainEvent, IpcMainInvokeEvent } from 'electron';
 import type {
   PtyAckRequest,
   PtyCreateRequest,
@@ -13,12 +14,14 @@ import {
 } from '../services/pty.service';
 import SettingsService from '../services/settings.service';
 import { buildShellEnvironment } from '../utils/shellEnvironment';
+import { resolveHtmlPath } from '../utils/setupHelpers';
 
 const handlerChannels = [
   'pty:profiles',
   'pty:create',
   'pty:list',
   'pty:snapshot',
+  'pty:clear',
   'pty:kill',
   'pty:rename',
 ];
@@ -54,6 +57,7 @@ const buildEnv = async (): Promise<Record<string, string>> => {
 const ptyService = new PtyService(createDefaultPtyServiceDeps(buildEnv));
 
 let quitHookInstalled = false;
+let quittingAfterPtys = false;
 
 const removePtyIpcHandlers = () => {
   handlerChannels.forEach((channel) => ipcMain.removeHandler(channel));
@@ -62,6 +66,25 @@ const removePtyIpcHandlers = () => {
 
 const registerPtyHandlers = (mainWindow: BrowserWindow) => {
   removePtyIpcHandlers();
+  const allowed = new URL(resolveHtmlPath('index.html', 'app'));
+  const trusted = (event: IpcMainEvent | IpcMainInvokeEvent) => {
+    if (
+      event.sender !== mainWindow.webContents ||
+      event.senderFrame !== mainWindow.webContents.mainFrame
+    )
+      return false;
+    try {
+      const actual = new URL(event.senderFrame.url);
+      return (
+        actual.origin === allowed.origin && actual.pathname === allowed.pathname
+      );
+    } catch {
+      return false;
+    }
+  };
+  const requireTrusted = (event: IpcMainInvokeEvent) => {
+    if (!trusted(event)) throw new Error('Untrusted PTY sender');
+  };
 
   ptyService.setEventSink((channel: string, payload: unknown) => {
     if (mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) {
@@ -70,33 +93,52 @@ const registerPtyHandlers = (mainWindow: BrowserWindow) => {
     mainWindow.webContents.send(channel, payload);
   });
 
-  ipcMain.handle('pty:profiles', () => ptyService.getProfiles());
+  ipcMain.handle('pty:profiles', (event) => {
+    requireTrusted(event);
+    return ptyService.getProfiles();
+  });
 
-  ipcMain.handle('pty:create', (_event, request: PtyCreateRequest) =>
-    ptyService.create(request),
-  );
+  ipcMain.handle('pty:create', (event, request: PtyCreateRequest) => {
+    requireTrusted(event);
+    return ptyService.create(request);
+  });
 
-  ipcMain.handle('pty:list', () => ptyService.list());
+  ipcMain.handle('pty:list', (event) => {
+    requireTrusted(event);
+    return ptyService.list();
+  });
 
-  ipcMain.handle('pty:snapshot', (_event, id: string) =>
-    ptyService.snapshot(id),
-  );
+  ipcMain.handle('pty:snapshot', (event, id: string) => {
+    requireTrusted(event);
+    return ptyService.snapshot(id);
+  });
+  ipcMain.handle('pty:clear', (event, id: string) => {
+    requireTrusted(event);
+    return ptyService.clear(id);
+  });
 
-  ipcMain.handle('pty:kill', (_event, id: string) => ptyService.kill(id));
+  ipcMain.handle('pty:kill', (event, id: string) => {
+    requireTrusted(event);
+    return ptyService.kill(id);
+  });
 
-  ipcMain.handle('pty:rename', (_event, request: PtyRenameRequest) =>
-    ptyService.rename(request?.id, request?.title),
-  );
+  ipcMain.handle('pty:rename', (event, request: PtyRenameRequest) => {
+    requireTrusted(event);
+    return ptyService.rename(request?.id, request?.title);
+  });
 
-  ipcMain.on('pty:write', (_event, request: PtyWriteRequest) => {
+  ipcMain.on('pty:write', (event, request: PtyWriteRequest) => {
+    if (!trusted(event)) return;
     ptyService.write(request?.id, request?.data, request?.binary === true);
   });
 
-  ipcMain.on('pty:resize', (_event, request: PtyResizeRequest) => {
+  ipcMain.on('pty:resize', (event, request: PtyResizeRequest) => {
+    if (!trusted(event)) return;
     ptyService.resize(request?.id, request?.cols, request?.rows);
   });
 
-  ipcMain.on('pty:ack', (_event, request: PtyAckRequest) => {
+  ipcMain.on('pty:ack', (event, request: PtyAckRequest) => {
+    if (!trusted(event)) return;
     ptyService.acknowledge(request?.id, request?.chars);
   });
 
@@ -105,8 +147,16 @@ const registerPtyHandlers = (mainWindow: BrowserWindow) => {
     // Shells are children of a pseudo terminal, not of Studio's process
     // tree: without this they (and whatever runs in them) would be left
     // running after the app closes.
-    app.on('before-quit', () => ptyService.killAll());
-    app.on('will-quit', () => ptyService.killAll());
+    app.on('before-quit', async (event) => {
+      if (quittingAfterPtys) return;
+      event.preventDefault();
+      try {
+        await ptyService.killAll();
+      } finally {
+        quittingAfterPtys = true;
+        app.quit();
+      }
+    });
   }
 };
 

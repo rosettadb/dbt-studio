@@ -1,4 +1,5 @@
 import React from 'react';
+import { toast } from 'react-toastify';
 import {
   Box,
   Divider,
@@ -118,17 +119,17 @@ export const ShellTerminalView: React.FC<Props> = ({ sessionId }) => {
 
   const handleAskAi = () => {
     if (aiPrompt) openChatWithMessage(aiPrompt);
-    closeMenu();
+    setContextMenu(null);
   };
 
   const handleClear = () => {
-    shellSessions.clear(sessionId);
+    shellSessions.clear(sessionId).catch(() => undefined);
     closeMenu();
   };
 
   const handleKill = () => {
     setContextMenu(null);
-    shellSessions.kill(sessionId).catch(() => undefined);
+    shellSessions.kill(sessionId).catch((error) => toast.error(String(error)));
   };
 
   const background = shellBackground(theme);

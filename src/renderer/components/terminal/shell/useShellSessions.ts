@@ -70,6 +70,11 @@ export const useProjectShellSessions = (project: Project) => {
     const active =
       sessions.find((session) => session.id === activeId) ??
       sessions[sessions.length - 1];
-    return { sessions, active, ready: state.ready };
+    return {
+      sessions,
+      active,
+      ready: state.ready,
+      restoreError: state.restoreError,
+    };
   }, [state, project.id]);
 };

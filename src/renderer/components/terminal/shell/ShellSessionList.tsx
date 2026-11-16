@@ -1,4 +1,5 @@
 import React from 'react';
+import { toast } from 'react-toastify';
 import {
   Box,
   IconButton,
@@ -80,7 +81,10 @@ export const ShellSessionList: React.FC<Props> = ({
               onClick={() => select(session)}
               onDoubleClick={() => onRename(session)}
               onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
+                if (
+                  event.target === event.currentTarget &&
+                  (event.key === 'Enter' || event.key === ' ')
+                ) {
                   event.preventDefault();
                   select(session);
                 }
@@ -134,7 +138,9 @@ export const ShellSessionList: React.FC<Props> = ({
                 aria-label={`Kill terminal ${session.title}`}
                 onClick={(event) => {
                   event.stopPropagation();
-                  shellSessions.kill(session.id).catch(() => undefined);
+                  shellSessions
+                    .kill(session.id)
+                    .catch((error) => toast.error(String(error)));
                 }}
                 sx={{ padding: 0.25, color: 'inherit' }}
               >
@@ -173,7 +179,9 @@ export const ShellSessionList: React.FC<Props> = ({
           dense
           onClick={() => {
             if (menu) {
-              shellSessions.kill(menu.session.id).catch(() => undefined);
+              shellSessions
+                .kill(menu.session.id)
+                .catch((error) => toast.error(String(error)));
             }
             setMenu(null);
           }}

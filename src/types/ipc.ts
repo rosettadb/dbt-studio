@@ -275,6 +275,7 @@ export type PtyChannels =
   | 'pty:create'
   | 'pty:list'
   | 'pty:snapshot'
+  | 'pty:clear'
   | 'pty:kill'
   | 'pty:rename'
   | 'pty:write' // renderer → main (send)

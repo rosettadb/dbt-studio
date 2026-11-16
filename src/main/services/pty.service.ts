@@ -97,6 +97,9 @@ interface Session {
   unackedChars: number;
   paused: boolean;
   disposables: Array<{ dispose: () => void }>;
+  termination?: Promise<boolean>;
+  resolveTermination?: (result: boolean) => void;
+  terminationTimers?: Array<ReturnType<typeof setTimeout>>;
 }
 
 const clampInt = (
@@ -163,10 +166,27 @@ export class PtyService {
         ? request.cwd
         : this.deps.homedir();
     const env = await this.deps.buildEnv();
+    // macOS login startup runs path_helper, which can move managed tools
+    // behind system paths. Restore the intended order after login setup.
+    const loginShell =
+      this.deps.platform === 'darwin' &&
+      profile.args.includes('-l') &&
+      profile.shortName !== 'pwsh';
+    if (loginShell) {
+      env.STUDIO_TERMINAL_PATH = env.PATH || '';
+      env.STUDIO_TERMINAL_SHELL = profile.path;
+    }
+    const args = loginShell
+      ? [
+          '-l',
+          '-c',
+          'env PATH="$STUDIO_TERMINAL_PATH" "$STUDIO_TERMINAL_SHELL" -i',
+        ]
+      : profile.args;
 
     let pty: PtyProcess;
     try {
-      pty = this.deps.spawn(profile.path, profile.args, {
+      pty = this.deps.spawn(profile.path, args, {
         name: 'xterm-256color',
         cols,
         rows,
@@ -272,6 +292,15 @@ export class PtyService {
     };
   }
 
+  clear(id: string): boolean {
+    const session = this.sessions.get(id);
+    if (!session) return false;
+    this.flush(session);
+    session.scrollback = [];
+    session.scrollbackChars = 0;
+    return true;
+  }
+
   rename(id: string, title: string): PtySessionInfo | null {
     const session = this.sessions.get(id);
     if (!session) return null;
@@ -288,25 +317,54 @@ export class PtyService {
     return { ...session.info };
   }
 
-  /** Ends the shell (and what runs in it) and forgets the session. */
-  kill(id: string): boolean {
+  /** Ends the shell and waits for its exit before forgetting it. */
+  kill(id: string): Promise<boolean> {
     const session = this.sessions.get(id);
-    if (!session) return false;
-    this.sessions.delete(id);
-    this.release(session);
-    if (!session.info.exited) {
-      try {
-        session.pty.kill();
-      } catch {
-        // Already gone.
-      }
+    if (!session) return Promise.resolve(false);
+    if (session.info.exited) {
+      this.forgetSession(session);
+      return Promise.resolve(true);
     }
-    if (this.sessions.size === 0) this.stopTitlePolling();
-    return true;
+    if (session.termination) return session.termination;
+    session.termination = new Promise<boolean>((resolve) => {
+      session.resolveTermination = resolve;
+    });
+    try {
+      session.pty.kill();
+    } catch {
+      /* Exit may already be in flight. */
+    }
+    const term = setTimeout(() => {
+      if (!session.info.exited) {
+        try {
+          session.pty.kill('SIGTERM');
+        } catch {
+          /* Try forced termination next. */
+        }
+      }
+    }, 500);
+    const force = setTimeout(() => {
+      if (!session.info.exited) {
+        try {
+          session.pty.kill('SIGKILL');
+        } catch {
+          /* Preserve ownership on failure. */
+        }
+      }
+    }, 1500);
+    const deadline = setTimeout(() => {
+      if (!session.info.exited) {
+        session.resolveTermination?.(false);
+        session.resolveTermination = undefined;
+        session.termination = undefined;
+      }
+    }, 3000);
+    session.terminationTimers = [term, force, deadline];
+    return session.termination;
   }
 
-  killAll(): void {
-    [...this.sessions.keys()].forEach((id) => this.kill(id));
+  async killAll(): Promise<void> {
+    await Promise.all([...this.sessions.keys()].map((id) => this.kill(id)));
   }
 
   private handleData(session: Session, data: string): void {
@@ -369,18 +427,31 @@ export class PtyService {
     session: Session,
     event: { exitCode: number; signal?: number },
   ): void {
-    // Killed by the user: the session is already forgotten.
     if (!this.sessions.has(session.info.id)) return;
     this.flush(session);
     session.info.exited = true;
     session.info.exitCode =
       typeof event.exitCode === 'number' ? event.exitCode : null;
     this.release(session);
-    this.sink?.('pty:exit', {
-      id: session.info.id,
-      exitCode: session.info.exitCode,
-      signal: typeof event.signal === 'number' ? event.signal : null,
-    });
+    const terminating = Boolean(session.termination);
+    if (terminating) {
+      this.forgetSession(session);
+      session.resolveTermination?.(true);
+      session.resolveTermination = undefined;
+    }
+    if (!terminating)
+      this.sink?.('pty:exit', {
+        id: session.info.id,
+        exitCode: session.info.exitCode,
+        signal: typeof event.signal === 'number' ? event.signal : null,
+      });
+  }
+
+  private forgetSession(session: Session): void {
+    session.terminationTimers?.forEach(clearTimeout);
+    this.sessions.delete(session.info.id);
+    this.release(session);
+    if (this.sessions.size === 0) this.stopTitlePolling();
   }
 
   // eslint-disable-next-line class-methods-use-this

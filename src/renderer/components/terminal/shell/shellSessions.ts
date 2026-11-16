@@ -35,6 +35,7 @@ export interface ShellSessionsState {
   activeByProject: Record<string, string | undefined>;
   /** False until the sessions that survived a window reload were restored. */
   ready: boolean;
+  restoreError?: string;
 }
 
 export interface ShellAppearance {
@@ -49,6 +50,7 @@ export type ShellPtyApi = Pick<
   | 'createPtySession'
   | 'listPtySessions'
   | 'getPtySnapshot'
+  | 'clearPtySnapshot'
   | 'killPtySession'
   | 'renamePtySession'
   | 'writeToPty'
@@ -128,6 +130,8 @@ export class ShellSessionManager {
 
   private initPromise: Promise<void> | null = null;
 
+  private listening = false;
+
   private appearance: ShellAppearance = defaultAppearance;
 
   private lastSize = { cols: DEFAULT_COLS, rows: DEFAULT_ROWS };
@@ -154,13 +158,22 @@ export class ShellSessionManager {
   init(): Promise<void> {
     if (this.initPromise) return this.initPromise;
 
-    this.deps.api.onPtyData((event) => this.handleData(event));
-    this.deps.api.onPtyExit((event) => this.handleExit(event));
-    this.deps.api.onPtyTitle((event) => this.handleTitle(event));
+    if (!this.listening) {
+      this.deps.api.onPtyData((event) => this.handleData(event));
+      this.deps.api.onPtyExit((event) => this.handleExit(event));
+      this.deps.api.onPtyTitle((event) => this.handleTitle(event));
+      this.listening = true;
+    }
 
     this.initPromise = this.restore()
-      .catch(() => undefined)
-      .then(() => this.setState({ ready: true }));
+      .then(() => this.setState({ ready: true, restoreError: undefined }))
+      .catch((error) => {
+        this.initPromise = null;
+        this.setState({
+          restoreError: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      });
     return this.initPromise;
   }
 
@@ -212,8 +225,9 @@ export class ShellSessionManager {
 
   /** Ends the shell and removes the session everywhere. */
   async kill(id: string): Promise<void> {
+    const killed = await this.deps.api.killPtySession(id);
+    if (!killed) throw new Error('Could not terminate the shell.');
     this.forget(id);
-    await this.deps.api.killPtySession(id).catch(() => undefined);
   }
 
   async killAll(projectId: string): Promise<void> {
@@ -268,7 +282,8 @@ export class ShellSessionManager {
     this.runtimes.get(id)?.terminal.focus();
   }
 
-  clear(id: string): void {
+  async clear(id: string): Promise<void> {
+    await this.deps.api.clearPtySnapshot(id);
     this.runtimes.get(id)?.terminal.clear();
   }
 
@@ -337,15 +352,22 @@ export class ShellSessionManager {
 
     // Register first (live output is queued), then replay each snapshot.
     sessions.forEach((info) => this.register(info, true));
-    this.setState({ sessions: [...this.state.sessions, ...sessions] });
+    this.setState({
+      sessions: [
+        ...this.state.sessions,
+        ...sessions.filter(
+          (info) =>
+            !this.state.sessions.some((existing) => existing.id === info.id),
+        ),
+      ],
+    });
 
     await Promise.all(
       sessions.map(async (info) => {
         const runtime = this.runtimes.get(info.id);
         if (!runtime) return;
-        const snapshot = await this.deps.api
-          .getPtySnapshot(info.id)
-          .catch(() => null);
+        if (runtime.queued === null) return;
+        const snapshot = await this.deps.api.getPtySnapshot(info.id);
         if (snapshot) {
           runtime.dropBefore = snapshot.endOffset;
           // Restored output was acknowledged by the snapshot itself.
@@ -509,7 +531,7 @@ export class ShellSessionManager {
         return consume();
       }
       if (key === 'k') {
-        terminal.clear();
+        this.clear(runtime.id).catch(() => undefined);
         return consume();
       }
       return true;

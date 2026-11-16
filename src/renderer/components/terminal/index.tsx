@@ -145,10 +145,11 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
     if (isMaximizedRef.current) {
       setIsMaximized(false);
       const layoutHeight = getLayoutHeight();
-      setSizes([
-        layoutHeight - lastTerminalHeight.current,
-        lastTerminalHeight.current,
-      ]);
+      const terminalHeight = Math.max(
+        0,
+        Math.min(lastTerminalHeight.current, layoutHeight),
+      );
+      setSizes([layoutHeight - terminalHeight, terminalHeight]);
       return;
     }
     const [, currentTerminalHeight] = sizesRef.current;

@@ -379,13 +379,27 @@ describe('PtyService', () => {
       const { service, ptys, eventsOn } = setup();
       const info = await service.create(request);
 
-      expect(service.kill(info.id)).toBe(true);
+      const killed = service.kill(info.id);
       ptys[0].exit(1);
+      expect(await killed).toBe(true);
 
       expect(ptys[0].killed).toBe(true);
       expect(service.list()).toEqual([]);
       expect(eventsOn('pty:exit')).toEqual([]);
-      expect(service.kill(info.id)).toBe(false);
+      expect(await service.kill(info.id)).toBe(false);
+    });
+
+    it('keeps ownership when a shell ignores hangup and escalates', async () => {
+      const { service, ptys } = setup();
+      const info = await service.create(request);
+      const killed = service.kill(info.id);
+      expect(service.list()).toHaveLength(1);
+      jest.advanceTimersByTime(1500);
+      expect(ptys[0].killed).toBe(true);
+      expect(service.list()).toHaveLength(1);
+      ptys[0].exit(137);
+      expect(await killed).toBe(true);
+      expect(service.list()).toEqual([]);
     });
 
     it('does not signal a shell that already exited', async () => {
@@ -393,7 +407,7 @@ describe('PtyService', () => {
       const info = await service.create(request);
       ptys[0].exit(0);
 
-      service.kill(info.id);
+      await service.kill(info.id);
 
       expect(ptys[0].killed).toBe(false);
       expect(service.list()).toEqual([]);
@@ -405,6 +419,7 @@ describe('PtyService', () => {
       await service.create(request);
 
       service.killAll();
+      ptys.forEach((pty) => pty.exit(0));
 
       expect(ptys.map((pty) => pty.killed)).toEqual([true, true]);
       expect(service.list()).toEqual([]);

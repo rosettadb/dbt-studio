@@ -188,6 +188,7 @@ const setup = (
     }),
     listPtySessions: jest.fn(async () => options.existing ?? []),
     getPtySnapshot: jest.fn(async (id) => options.snapshots?.[id] ?? null),
+    clearPtySnapshot: jest.fn<Promise<boolean>, [string]>(async () => true),
     killPtySession: jest.fn<Promise<boolean>, [string]>(async () => true),
     renamePtySession: jest.fn(async (id, title) =>
       session({ id, title: title || 'zsh', customTitle: Boolean(title) }),
@@ -398,13 +399,27 @@ describe('ShellSessionManager', () => {
     expect(terminals[0].written).toContain('[Process exited with code 2]');
   });
 
-  it('becomes ready even when the sessions cannot be listed', async () => {
+  it('retries when the sessions cannot be listed', async () => {
     const { manager, api } = setup();
     api.listPtySessions.mockRejectedValueOnce(new Error('ipc down'));
 
+    await expect(manager.init()).rejects.toThrow('ipc down');
+    expect(manager.getState().ready).toBe(false);
     await manager.init();
+    expect(manager.getState().ready).toBe(true);
+  });
 
-    expect(manager.getState()).toMatchObject({ ready: true, sessions: [] });
+  it('retries a failed snapshot without treating it as restored', async () => {
+    const { manager, api, terminals } = setup({
+      existing: [session({ id: 'a' })],
+      snapshots: { a: { data: 'prompt', endOffset: 6 } },
+    });
+    api.getPtySnapshot.mockRejectedValueOnce(new Error('snapshot failed'));
+    await expect(manager.init()).rejects.toThrow('snapshot failed');
+    expect(manager.getState().ready).toBe(false);
+    await manager.init();
+    expect(manager.getState().ready).toBe(true);
+    expect(terminals[0].written).toBe('prompt');
   });
 
   it('closes a session whose shell exited normally', async () => {
@@ -620,6 +635,7 @@ describe('ShellSessionManager', () => {
       expect(terminal.pasted).toEqual(['ls']);
 
       expect(press(key({ key: 'k', metaKey: true }))).toBe(false);
+      await flushPromises();
       expect(terminal.cleared).toBe(1);
     });
 

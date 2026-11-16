@@ -48,7 +48,8 @@ import type { TerminalPanelContext, TerminalPanelDefinition } from './types';
  */
 const ShellPanelBody: React.FC<TerminalPanelContext> = ({ project }) => {
   const theme = useTheme();
-  const { sessions, active, ready } = useProjectShellSessions(project);
+  const { sessions, active, ready, restoreError } =
+    useProjectShellSessions(project);
   const [renaming, setRenaming] = React.useState<PtySessionInfo | null>(null);
   const [starting, setStarting] = React.useState(false);
 
@@ -93,9 +94,20 @@ const ShellPanelBody: React.FC<TerminalPanelContext> = ({ project }) => {
         backgroundColor: shellBackground(theme),
       }}
     >
-      {active ? (
+      {restoreError && !ready && (
+        <Box sx={{ p: 2 }}>
+          <Typography>
+            Could not restore terminal sessions: {restoreError}
+          </Typography>
+          <Button onClick={() => shellSessions.init().catch(() => undefined)}>
+            Retry
+          </Button>
+        </Box>
+      )}
+      {!restoreError && active && (
         <ShellTerminalView key={active.id} sessionId={active.id} />
-      ) : (
+      )}
+      {!restoreError && !active && (
         <Box
           sx={{
             flex: 1,
@@ -215,7 +227,10 @@ const ShellHeaderActions: React.FC<TerminalPanelContext> = ({ project }) => {
             sx={actionButtonSx}
             disabled={!active}
             onClick={() => {
-              if (active) shellSessions.kill(active.id).catch(() => undefined);
+              if (active)
+                shellSessions
+                  .kill(active.id)
+                  .catch((error) => toast.error(String(error)));
             }}
           >
             <KillIcon sx={actionIconSx} />
