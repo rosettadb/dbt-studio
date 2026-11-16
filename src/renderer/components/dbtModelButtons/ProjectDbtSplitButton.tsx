@@ -405,13 +405,26 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
           'Generate Docs',
           'Deps',
           'Seed',
+          'Raw Layer',
+          'Staging Layer',
+          'Incremental/Enhanced Layer',
         ].includes(item.name),
       )
-      .map((item) => ({
-        id: `dbt.project.${item.name.toLowerCase().replace(/\s+/g, '-')}`,
-        label: `dbt: ${item.name} project`,
-        run: item.onClick,
-      })),
+      .map((item) => {
+        const isRosettaLayer =
+          item.name === 'Raw Layer' ||
+          item.name === 'Staging Layer' ||
+          item.name === 'Incremental/Enhanced Layer';
+        return {
+          id: isRosettaLayer
+            ? `rosetta.layer.${item.name.toLowerCase().replace(/[^a-z]+/g, '-')}`
+            : `dbt.project.${item.name.toLowerCase().replace(/\s+/g, '-')}`,
+          label: isRosettaLayer
+            ? `Rosetta: Generate ${item.name}`
+            : `dbt: ${item.name} project`,
+          run: item.onClick,
+        };
+      }),
     !isRunningDbt &&
       !isRunningRosettaDbt &&
       !isCloudRunActive &&
