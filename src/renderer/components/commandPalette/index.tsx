@@ -138,6 +138,29 @@ const getFolderInsideProject = (
 // palette to jump to a screen, switch project, open a file or show a folder by
 // name or path, or find text inside the project's files. The last search stays
 // until the project changes, so reopening goes on to the next match.
+// The Dashboard scales its page up with CSS zoom on big monitors. Chromium
+// before 128 (Electron 31) reports positions inside a zoomed page divided by
+// the zoom, so the icon's tooltip would aim at the wrong spot. This gives the
+// tooltip the icon's true position. Chromium 128+ reports true positions and
+// has Element.currentCSSZoom, so the correction switches itself off there.
+const reportsZoomedPositions =
+  typeof Element !== 'undefined' && !('currentCSSZoom' in Element.prototype);
+const getTrueScreenRect = (element: Element): DOMRect => {
+  const rect = element.getBoundingClientRect();
+  if (!reportsZoomedPositions) return rect;
+  let zoom = 1;
+  for (let node: Element | null = element; node; node = node.parentElement) {
+    zoom *= parseFloat(getComputedStyle(node).getPropertyValue('zoom')) || 1;
+  }
+  if (zoom === 1) return rect;
+  return new DOMRect(
+    rect.x * zoom,
+    rect.y * zoom,
+    rect.width * zoom,
+    rect.height * zoom,
+  );
+};
+
 export const CommandPalette: React.FC = () => {
   const theme = useTheme();
   const navigate = useNavigate();
@@ -156,6 +179,16 @@ export const CommandPalette: React.FC = () => {
   const [collapsedFilePaths, setCollapsedFilePaths] = React.useState<
     Set<string>
   >(new Set());
+  const searchIconRef = React.useRef<HTMLButtonElement>(null);
+  const searchIconTooltipAnchor = React.useMemo(
+    () => ({
+      getBoundingClientRect: () => getTrueScreenRect(searchIconRef.current!),
+      get contextElement() {
+        return searchIconRef.current ?? undefined;
+      },
+    }),
+    [],
+  );
   const itemRefs = React.useRef<(HTMLDivElement | null)[]>([]);
   const listboxRef = React.useRef<HTMLDivElement>(null);
   // Left and right only fold files once the list is being walked with up and
@@ -528,8 +561,15 @@ export const CommandPalette: React.FC = () => {
 
   return (
     <>
-      <Tooltip title="Search (Ctrl+K)">
-        <IconButton size="small" onClick={() => setOpen(true)}>
+      <Tooltip
+        title="Search (Ctrl+K)"
+        slotProps={{ popper: { anchorEl: searchIconTooltipAnchor } }}
+      >
+        <IconButton
+          size="small"
+          ref={searchIconRef}
+          onClick={() => setOpen(true)}
+        >
           <SearchIcon sx={{ fontSize: 20 }} />
         </IconButton>
       </Tooltip>
