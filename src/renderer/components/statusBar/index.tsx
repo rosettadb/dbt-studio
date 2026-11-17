@@ -1,8 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Box, Tooltip, Typography, Divider } from '@mui/material';
-import StorageIcon from '@mui/icons-material/Storage';
-import TerminalIcon from '@mui/icons-material/Terminal';
 import PendingActionsIcon from '@mui/icons-material/PendingActions';
 import {
   useGetSelectedProject,
@@ -11,7 +9,8 @@ import {
 import { useGetRepoInfo } from '../../controllers/git.controller';
 import { useTaskManager } from '../../context';
 import { Icon } from '../icon';
-import { icons } from '../../../../assets';
+import { DbtMonoIcon } from '../icon/DbtMonoIcon';
+import { icons, rosettaIcon } from '../../../../assets';
 import { PythonMonoIcon } from '../notebook/NotebookKindIcon';
 
 const FS = 12; // base font size for all items
@@ -180,7 +179,7 @@ export const StatusBar: React.FC = () => {
 
       {/* Right */}
       <Item
-        icon={<TerminalIcon sx={{ fontSize: FS }} />}
+        icon={<DbtMonoIcon sx={{ fontSize: FS }} />}
         label="dbt"
         value={dbtVersion}
         tooltip="dbt Core version"
@@ -196,7 +195,14 @@ export const StatusBar: React.FC = () => {
 
       <Sep />
       <Item
-        icon={<StorageIcon sx={{ fontSize: FS }} />}
+        icon={
+          <Icon
+            src={icons.duckdb}
+            width={FS}
+            height={FS}
+            style={{ display: 'flex' }}
+          />
+        }
         label="DuckDB"
         value={duckdbPkgVersion}
         tooltip="DuckDB node-api version"
@@ -206,6 +212,18 @@ export const StatusBar: React.FC = () => {
         <>
           <Sep />
           <Item
+            icon={
+              // The Rosetta logo is an orange PNG; using it as a mask paints
+              // its shape in the text color so it matches the other logos.
+              <Box
+                sx={{
+                  width: FS,
+                  height: FS,
+                  bgcolor: 'currentColor',
+                  mask: `url(${rosettaIcon}) center / contain no-repeat`,
+                }}
+              />
+            }
             label="Rosetta"
             value={rosettaVersion}
             tooltip="Rosetta CLI version"

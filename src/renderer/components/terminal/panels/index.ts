@@ -1,5 +1,6 @@
 import { registerTerminalPanel } from './registry';
 import { terminalPanel } from './TerminalPanel';
+import { shellPanel } from './ShellPanel';
 import { lineagePanel } from './LineagePanel';
 import { processPanel } from './ProcessPanel';
 import { queryResultsPanel } from './QueryResultsPanel';
@@ -10,6 +11,7 @@ import { runnerLogsPanel } from './RunnerLogsPanel';
 // Registration order is tab order. Adding a bottom panel = one module
 // exporting a TerminalPanelDefinition + one line here.
 registerTerminalPanel(terminalPanel);
+registerTerminalPanel(shellPanel);
 registerTerminalPanel(lineagePanel);
 registerTerminalPanel(processPanel);
 registerTerminalPanel(queryResultsPanel);

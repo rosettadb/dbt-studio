@@ -361,9 +361,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
       name: 'Run Pipeline (Local Runner)',
       onClick: () => {
         if (!settings?.runnerPath) {
-          toast.info(
-            'Install the local runner first (Settings > Local Runner)',
-          );
+          toast.info('The local runner is not available on this machine');
           return;
         }
         setLocalPipelineModal(true);

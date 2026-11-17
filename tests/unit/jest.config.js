@@ -12,6 +12,8 @@ module.exports = {
     '^fs-extra$': '<rootDir>/node_modules/fs-extra',
     // monaco-editor only ships an ESM `module` entry; jest cannot resolve it.
     '^monaco-editor$': '<rootDir>/tests/unit/__setup__/monacoEditor.mock.ts',
+    // The real xterm bundle needs a canvas 2D context at import time.
+    '^@xterm/xterm$': '<rootDir>/tests/unit/__setup__/xterm.mock.ts',
     'file-icons-js': '<rootDir>/.erb/mocks/file-icons-js.js',
     '^split-pane-react$': '<rootDir>/.erb/mocks/split-pane-react.js',
     '^electron$': '<rootDir>/tests/unit/__setup__/electron.mock.ts',

@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   Button,
   Box,
-  Chip,
   Typography,
   Alert,
   Dialog,
@@ -21,22 +20,15 @@ import {
   Launch,
   HelpOutline,
   TerminalOutlined,
-  ListAltOutlined,
   ExtensionOutlined,
-  WarningAmberOutlined,
   Info,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import {
-  SettingsType,
-  RunnerVersionInfo,
-  RunnerPluginId,
-} from '../../../types/backend';
+import { SettingsType, RunnerPluginId } from '../../../types/backend';
 import { ConfirmationModal } from '../modals';
 import { useIsTaskTypeActive } from '../../hooks';
 import { isInstallCancelledError } from '../../../shared/installTasks';
 import {
-  SettingsRefreshButton,
   SettingsRow,
   SettingsSection,
   SettingsSectionBody,
@@ -44,9 +36,6 @@ import {
   SettingsStatus,
 } from './SettingsLayout';
 import {
-  useCheckRunnerVersions,
-  useInstallRunnerVersion,
-  useUninstallRunnerVersion,
   useCheckRunnerPluginDependencies,
   useCheckKisqlVersion,
   useInstallKisql,
@@ -89,9 +78,6 @@ const MANUAL_INSTALL_HELP: Partial<
   },
 };
 
-// Versions shown before "Show older versions" is clicked.
-const LATEST_RUNNER_VERSIONS_SHOWN = 4;
-
 function describeJavaRequirement(
   version?: string,
   available?: boolean,
@@ -111,15 +97,6 @@ interface RunnerSettingsProps {
 
 export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
   const navigate = useNavigate();
-  const [versionInfo, setVersionInfo] = useState<RunnerVersionInfo | null>(
-    null,
-  );
-  const [installingVersion, setInstallingVersion] = useState<string | null>(
-    null,
-  );
-  const [showOlderVersions, setShowOlderVersions] = useState(false);
-  const [showUninstallConfirmation, setShowUninstallConfirmation] =
-    useState(false);
   const [showKisqlUninstallConfirmation, setShowKisqlUninstallConfirmation] =
     useState(false);
   const [
@@ -135,13 +112,6 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
     id: RunnerPluginId;
   } | null>(null);
 
-  const checkVersions = useCheckRunnerVersions({
-    onSuccess: (data) => setVersionInfo(data),
-    onError: (error) => {
-      toast.error(`Failed to check runner versions: ${error.message}`);
-    },
-  });
-
   const pluginDependencies = useCheckRunnerPluginDependencies({
     onError: (error) => {
       toast.error(`Failed to check plugin dependencies: ${error.message}`);
@@ -150,38 +120,6 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
   const javaStatus = pluginDependencies.data?.find(
     (dependency) => dependency.id === 'pyspark',
   )?.java;
-
-  const installVersion = useInstallRunnerVersion({
-    onSuccess: (result) => {
-      setInstallingVersion(null);
-      if (result.success) {
-        toast.success(`Local runner ${result.version} installed`);
-        result.warnings?.forEach((warning) => toast.warning(warning));
-        checkVersions.mutate();
-        pluginDependencies.mutate();
-      } else {
-        toast.error(`Installation failed: ${result.error}`);
-      }
-    },
-    onError: (error) => {
-      setInstallingVersion(null);
-      // A cancelled install never started, so it did not fail.
-      if (isInstallCancelledError(error)) return;
-      toast.error(`Installation failed: ${error.message}`);
-    },
-  });
-
-  const uninstallRunner = useUninstallRunnerVersion({
-    onSuccess: () => {
-      toast.success('Local runner uninstalled');
-      setVersionInfo(null);
-    },
-    onError: (error) => {
-      // A cancelled install never started, so it did not fail.
-      if (isInstallCancelledError(error)) return;
-      toast.error(`Uninstall failed: ${error.message}`);
-    },
-  });
 
   // KiSQL hooks
   const checkKisql = useCheckKisqlVersion({
@@ -243,15 +181,9 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
   });
 
   useEffect(() => {
-    checkVersions.mutate();
     pluginDependencies.mutate();
     checkKisql.mutate();
   }, []);
-
-  const handleInstallVersion = (version: string) => {
-    setInstallingVersion(version);
-    installVersion.mutate(version);
-  };
 
   const confirmPySparkUninstall = () => {
     setShowPySparkUninstallConfirmation(false);
@@ -262,26 +194,9 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
     installKisql.mutate();
   };
 
-  const confirmUninstall = () => {
-    setShowUninstallConfirmation(false);
-    uninstallRunner.mutate();
-  };
-
   const confirmKisqlUninstall = () => {
     setShowKisqlUninstallConfirmation(false);
     uninstallKisql.mutate();
-  };
-
-  const getButtonText = (version: {
-    version: string;
-    isNewer: boolean;
-    isOlder: boolean;
-  }) => {
-    if (version.version === versionInfo?.currentVersion) return 'Installed';
-    if (installingVersion === version.version) return 'Installing...';
-    if (version.isNewer) return 'Upgrade';
-    if (version.isOlder) return 'Downgrade';
-    return 'Install';
   };
 
   const getKisqlButtonLabel = (
@@ -295,13 +210,6 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
     return 'Install';
   };
 
-  const availableVersions = versionInfo?.availableVersions ?? [];
-  const shownVersions = showOlderVersions
-    ? availableVersions
-    : availableVersions.slice(0, LATEST_RUNNER_VERSIONS_SHOWN);
-  const hasOlderVersions =
-    availableVersions.length > LATEST_RUNNER_VERSIONS_SHOWN;
-
   return (
     <SettingsStack>
       <SettingsSection
@@ -313,7 +221,7 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
           label="Status"
           description={
             settings.runnerPath ||
-            'The local runner is not installed. Install a version below to enable running pipelines locally.'
+            'The local runner is not available on this machine. It comes with the dbt Studio installer.'
           }
         >
           {settings.runnerPath ? (
@@ -324,101 +232,6 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
             <SettingsStatus tone="warning">Not installed</SettingsStatus>
           )}
         </SettingsRow>
-      </SettingsSection>
-
-      <SettingsSection
-        title="Available Versions"
-        icon={<ListAltOutlined />}
-        action={
-          <SettingsRefreshButton
-            title="Refresh versions"
-            onClick={() => checkVersions.mutate()}
-            loading={checkVersions.isLoading}
-          />
-        }
-      >
-        {(!versionInfo || versionInfo.availableVersions.length === 0) && (
-          <SettingsRow
-            label={
-              (checkVersions.isLoading && 'Loading available versions...') ||
-              (versionInfo
-                ? 'No versions available.'
-                : 'No version information yet.')
-            }
-          />
-        )}
-        {shownVersions.length > 0 && (
-          <Box
-            sx={(theme) => ({
-              maxHeight: showOlderVersions ? 320 : 'none',
-              overflowY: 'auto',
-              '& > * + *': { borderTop: `1px solid ${theme.palette.divider}` },
-            })}
-          >
-            {shownVersions.map((version) => (
-              <SettingsRow
-                key={version.version}
-                label={
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    {version.version}
-                    {version.version === versionInfo?.latestStable && (
-                      <Chip label="Latest" size="small" variant="outlined" />
-                    )}
-                  </Box>
-                }
-                description={`Released: ${new Date(
-                  version.releaseDate,
-                ).toLocaleDateString()}`}
-              >
-                {version.releaseNotes && (
-                  <Tooltip title="View release notes">
-                    <IconButton
-                      size="small"
-                      onClick={() =>
-                        window.open(
-                          `https://github.com/rosettadb/dbt-studio/releases/tag/${version.version}`,
-                          '_blank',
-                        )
-                      }
-                    >
-                      <Info fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                )}
-                <Button
-                  size="small"
-                  variant="outlined"
-                  onClick={() => handleInstallVersion(version.version)}
-                  disabled={
-                    version.version === versionInfo?.currentVersion ||
-                    installingVersion === version.version ||
-                    installVersion.isLoading ||
-                    isInstallTaskActive
-                  }
-                  startIcon={
-                    installingVersion === version.version ? (
-                      <CircularProgress size={14} />
-                    ) : (
-                      <Download />
-                    )
-                  }
-                >
-                  {getButtonText(version)}
-                </Button>
-              </SettingsRow>
-            ))}
-          </Box>
-        )}
-        {hasOlderVersions && (
-          <Box sx={{ px: 1.75, py: 0.75, textAlign: 'center' }}>
-            <Button
-              size="small"
-              onClick={() => setShowOlderVersions((value) => !value)}
-            >
-              {showOlderVersions ? 'Show fewer' : 'Show older versions'}
-            </Button>
-          </Box>
-        )}
       </SettingsSection>
 
       <SettingsSection
@@ -606,42 +419,6 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
           </SettingsRow>
         ))}
       </SettingsSection>
-
-      {settings.runnerPath && (
-        <SettingsSection title="Danger Zone" icon={<WarningAmberOutlined />}>
-          <SettingsRow
-            label="Uninstall Local Runner"
-            description="You will need to reinstall it to run pipelines locally again."
-          >
-            <Button
-              size="small"
-              variant="outlined"
-              color="error"
-              onClick={() => setShowUninstallConfirmation(true)}
-              disabled={uninstallRunner.isLoading || isInstallTaskActive}
-              startIcon={
-                uninstallRunner.isLoading ? (
-                  <CircularProgress size={14} />
-                ) : (
-                  <Delete />
-                )
-              }
-            >
-              {uninstallRunner.isLoading
-                ? 'Uninstalling...'
-                : 'Uninstall Local Runner'}
-            </Button>
-          </SettingsRow>
-        </SettingsSection>
-      )}
-
-      <ConfirmationModal
-        isOpen={showUninstallConfirmation}
-        onClose={() => setShowUninstallConfirmation(false)}
-        onConfirm={confirmUninstall}
-        title="Uninstall Local Runner"
-        question="Are you sure you want to uninstall the local runner? You will need to reinstall it to run pipelines locally again."
-      />
 
       <ConfirmationModal
         isOpen={showKisqlUninstallConfirmation}

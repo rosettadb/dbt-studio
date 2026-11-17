@@ -31,9 +31,6 @@ const handlerChannels: SettingsChannels[] = [
   'version:python:uninstall',
   'version:python:versions:check',
   'version:python:versions:install',
-  'version:runner:check',
-  'version:runner:install',
-  'version:runner:uninstall',
   'runner:plugins:check',
   'runner:pyspark:install',
   'runner:pyspark:uninstall',
@@ -181,25 +178,6 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
       );
     },
   );
-
-  // Local runner binary version management handlers
-  ipcMain.handle('version:runner:check', async () => {
-    return RunnerService.checkRunnerVersions();
-  });
-
-  ipcMain.handle('version:runner:install', async (_event, version: string) => {
-    return runInstallTask(
-      'install:runner',
-      `Installing local runner ${version}`,
-      () => RunnerService.installRunnerVersion(version),
-    );
-  });
-
-  ipcMain.handle('version:runner:uninstall', async () => {
-    return runInstallTask('install:runner', 'Uninstalling local runner', () =>
-      RunnerService.uninstallRunnerVersion(),
-    );
-  });
 
   ipcMain.handle('runner:plugins:check', async () => {
     return RunnerService.checkPluginDependencies();

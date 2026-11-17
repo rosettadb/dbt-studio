@@ -136,7 +136,7 @@ const registerRunnerHandlers = (mainWindow: BrowserWindow) => {
             return {
               success: false,
               error:
-                'PySpark requires runner 1.7.6 or newer. Upgrade the local runner in Settings.',
+                'PySpark requires runner 1.7.6 or newer. Update dbt Studio to get a newer local runner.',
             };
           }
           const java = await RunnerService.checkJavaRuntime(toolEnv);
