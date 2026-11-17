@@ -2,6 +2,7 @@ import React from 'react';
 import { v4 as uuidV4 } from 'uuid';
 import type {
   SqlTabId,
+  SqlTabSource,
   SqlTabState,
   SqlPendingCloseState,
 } from '../../types/editor';
@@ -111,6 +112,18 @@ export interface UseSqlTabManagerReturn {
   reorderTabs: (fromIndex: number, toIndex: number) => void;
   reset: () => void;
   getTabByConnectionId: (connectionId: string) => SqlTabState | undefined;
+  /**
+   * Link the tab to the saved query whose text it now shows (selected in the
+   * sidebar, or just saved), or unlink it. Save updates the linked query.
+   */
+  setTabSource: (tabId: SqlTabId, source?: SqlTabSource) => void;
+  /** A saved query was renamed or moved: keep the tabs linked to it. */
+  renameSource: (
+    matches: (source: SqlTabSource) => boolean,
+    next: (source: SqlTabSource) => SqlTabSource,
+  ) => void;
+  /** Saved queries were deleted: unlink the tabs (their text stays). */
+  clearSource: (matches: (source: SqlTabSource) => boolean) => void;
   // Unsaved changes dialog support
   pendingClose: SqlPendingCloseState | null;
   onSaveAndClose: (tabId: SqlTabId) => Promise<void>;
@@ -329,6 +342,42 @@ const useSqlTabManager = (): UseSqlTabManagerReturn => {
     clearPersistedState();
   }, []);
 
+  const setTabSource = React.useCallback(
+    (tabId: SqlTabId, source?: SqlTabSource) => {
+      updateTab(tabId, (tab) => ({ ...tab, source }));
+    },
+    [updateTab],
+  );
+
+  const renameSource = React.useCallback(
+    (
+      matches: (source: SqlTabSource) => boolean,
+      next: (source: SqlTabSource) => SqlTabSource,
+    ) => {
+      setTabs((current) =>
+        current.map((tab) =>
+          tab.source && matches(tab.source)
+            ? { ...tab, source: next(tab.source) }
+            : tab,
+        ),
+      );
+    },
+    [],
+  );
+
+  const clearSource = React.useCallback(
+    (matches: (source: SqlTabSource) => boolean) => {
+      setTabs((current) =>
+        current.map((tab) =>
+          tab.source && matches(tab.source)
+            ? { ...tab, source: undefined }
+            : tab,
+        ),
+      );
+    },
+    [],
+  );
+
   const getTabByConnectionId = React.useCallback(
     (connectionId: string) =>
       tabsRef.current.find((tab) => tab.connectionId === connectionId),
@@ -450,6 +499,9 @@ const useSqlTabManager = (): UseSqlTabManagerReturn => {
     reorderTabs,
     reset,
     getTabByConnectionId,
+    setTabSource,
+    renameSource,
+    clearSource,
     pendingClose,
     onSaveAndClose,
     onDiscardAndClose,

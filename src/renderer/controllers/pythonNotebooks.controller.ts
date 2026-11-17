@@ -12,6 +12,7 @@ import {
 } from '../services/pythonNotebooks.service';
 import { projectsServices } from '../services';
 import { QUERY_KEYS } from '../config/constants';
+import { isProjectNotebookId } from '../../shared/projectNotebooks';
 import type { FileNode } from '../../types/backend';
 import { notebooksKeys } from './notebooks.controller';
 import type {
@@ -44,6 +45,15 @@ export const pythonNotebooksKeys = {
     [...pythonNotebooksKeys.all, 'packages', notebookId] as const,
   runtimes: () => [...pythonNotebooksKeys.all, 'runtimes'] as const,
 };
+
+/**
+ * A project notebook is a file: the sidebar's notebooks/ tree and the Project
+ * screen's Explorer read the folder listing, not the notebook list, so a
+ * create, rename, copy or delete must refresh the listings too.
+ */
+const refreshProjectFileTrees = (
+  queryClient: ReturnType<typeof useQueryClient>,
+) => queryClient.invalidateQueries([QUERY_KEYS.GET_FILE_STRUCTURE]);
 
 /* ------------------------------------------------------------------ */
 /* Runtimes                                                              */
@@ -138,6 +148,7 @@ export function useCreatePythonProjectNotebook() {
       pythonNotebooksService.createInProject(projectId, connectionId, input),
     onSuccess: (notebook, { projectId }) => {
       queryClient.invalidateQueries(pythonNotebooksKeys.projectList(projectId));
+      refreshProjectFileTrees(queryClient);
       toast.success(
         `Notebook "${notebook.name}" created in ${notebook.project?.relativePath ?? 'the project'}`,
       );
@@ -216,9 +227,11 @@ export function useRenamePythonNotebook() {
       notebookId: string;
       newName: string;
     }) => pythonNotebooksService.rename(connectionId, notebookId, newName),
-    onSuccess: (notebook, { connectionId }) => {
+    onSuccess: (notebook, { connectionId, notebookId }) => {
       queryClient.invalidateQueries(pythonNotebooksKeys.list(connectionId));
       queryClient.invalidateQueries(pythonNotebooksKeys.projectLists());
+      // Renaming a project notebook renames its file
+      if (isProjectNotebookId(notebookId)) refreshProjectFileTrees(queryClient);
       toast.success(`Notebook renamed to "${notebook.name}"`);
     },
     onError: (error: Error) => {
@@ -239,9 +252,10 @@ export function useDuplicatePythonNotebook() {
       notebookId: string;
       newName?: string;
     }) => pythonNotebooksService.duplicate(connectionId, notebookId, newName),
-    onSuccess: (notebook, { connectionId }) => {
+    onSuccess: (notebook, { connectionId, notebookId }) => {
       queryClient.invalidateQueries(pythonNotebooksKeys.list(connectionId));
       queryClient.invalidateQueries(pythonNotebooksKeys.projectLists());
+      if (isProjectNotebookId(notebookId)) refreshProjectFileTrees(queryClient);
       toast.success(`Notebook duplicated as "${notebook.name}"`);
     },
     onError: (error: Error) => {
@@ -266,6 +280,7 @@ export function useDeletePythonNotebook() {
       );
       queryClient.invalidateQueries(pythonNotebooksKeys.list(connectionId));
       queryClient.invalidateQueries(pythonNotebooksKeys.projectLists());
+      if (isProjectNotebookId(notebookId)) refreshProjectFileTrees(queryClient);
       toast.success('Notebook deleted');
     },
     onError: (error: Error) => {

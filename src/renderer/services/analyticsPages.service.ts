@@ -3,6 +3,7 @@ import {
   NewAnalyticsPage,
   UpdateAnalyticsPage,
 } from '../../types/analyticsPages';
+import type { SaveLocation } from '../../shared/projectFolders';
 
 export class AnalyticsPagesService {
   static async list(connectionId: string): Promise<AnalyticsPage[]> {
@@ -29,10 +30,13 @@ export class AnalyticsPagesService {
   static async create(
     connectionId: string,
     data: NewAnalyticsPage,
+    /** 'project': a Markdown file in the linked project's analytics/ folder. */
+    location?: SaveLocation,
   ): Promise<AnalyticsPage> {
     return window.electron.ipcRenderer.invoke('analyticsPages:create', {
       connectionId,
       data,
+      location,
     });
   }
 

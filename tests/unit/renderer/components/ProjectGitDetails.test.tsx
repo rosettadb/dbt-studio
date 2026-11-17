@@ -43,12 +43,12 @@ describe('ProjectGitDetails', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('says the project is not a Git repository, without a branch icon', () => {
+  it('says Git is not initialized, without a branch icon', () => {
     mockSummary(null);
 
     renderDetails();
 
-    expect(screen.getByText('Not a Git repository')).toBeInTheDocument();
+    expect(screen.getByText('Git not initialized')).toBeInTheDocument();
     expect(screen.queryByTestId('git-icon')).not.toBeInTheDocument();
   });
 

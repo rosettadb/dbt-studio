@@ -77,7 +77,6 @@ import {
   ProjectDetailLine,
   ProjectGridCard,
   ProjectGridCardHeader,
-  ProjectIcon,
   ProjectInfo,
   ProjectMuiIcon,
   ProjectPath,
@@ -204,58 +203,35 @@ const SelectProject: React.FC = () => {
 
   const { mutate: updateProject } = useUpdateProject();
 
-  const getConnectionIcon = (project: Project) => {
-    const connType = project?.connection?.type;
-
-    if (!connType) {
-      return null;
-    }
-
-    return connectionIcon(connType);
+  // The project's type (dbt, Analytics) starts the title; its name shows on
+  // hover. The connection's own logo is on the connection chip instead.
+  const renderProjectIcon = (project: Project) => {
+    const { Icon: TypeIcon } = projectTypeUiOf(project);
+    return (
+      <Tooltip title={projectTypeOf(project).title}>
+        <ProjectMuiIcon data-testid={`project-type-icon-${project.name}`}>
+          <TypeIcon size={22} />
+        </ProjectMuiIcon>
+      </Tooltip>
+    );
   };
 
-  const renderProjectIcon = (project: Project) => {
-    const projectIconSrc = getConnectionIcon(project);
-
-    if (projectIconSrc) {
+  // The connection's logo (DuckDB, Postgres...) on its chip; the database
+  // cylinder when the type has no logo or there is no connection
+  const renderConnectionChipIcon = (connType?: string) => {
+    const src = connType ? connectionIcon(connType) : undefined;
+    if (src) {
       return (
-        <ProjectIcon
-          src={projectIconSrc}
-          alt={project?.dbtConnection?.type || 'database'}
+        <Box
+          component="img"
+          src={src}
+          alt={connType}
+          data-testid="connection-chip-logo"
+          sx={{ width: 16, height: 16, mr: 0.75, objectFit: 'contain' }}
         />
       );
     }
-    return (
-      <ProjectMuiIcon>
-        <DatabaseIcon />
-      </ProjectMuiIcon>
-    );
-  };
-
-  const renderTypeChip = (project: Project) => {
-    const { Icon: TypeIcon } = projectTypeUiOf(project);
-    return (
-      <Chip
-        label={
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <TypeIcon size={12} />
-            {projectTypeOf(project).title}
-          </Box>
-        }
-        size="small"
-        sx={{
-          mr: 1,
-          fontWeight: 500,
-          fontSize: 12,
-          bgcolor: 'background.paper',
-          color: 'text.secondary',
-          border: '1px solid',
-          borderColor: 'divider',
-        }}
-        title="Project type"
-        data-testid={`project-type-chip-${project.name}`}
-      />
-    );
+    return <DatabaseCylinderIcon sx={{ fontSize: 16, mr: 0.75 }} />;
   };
 
   const renderConnectionIcon = (connType: string) => {
@@ -476,7 +452,7 @@ const SelectProject: React.FC = () => {
         <Chip
           label={
             <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <DatabaseCylinderIcon sx={{ fontSize: 12, mr: 0.5 }} />
+              {renderConnectionChipIcon(project.connection.type)}
               {project.connection.name}
             </Box>
           }
@@ -499,7 +475,7 @@ const SelectProject: React.FC = () => {
       <Chip
         label={
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <DatabaseCylinderIcon sx={{ fontSize: 12, mr: 0.5 }} />
+            <DatabaseCylinderIcon sx={{ fontSize: 16, mr: 0.75 }} />
             No connection
           </Box>
         }
@@ -554,7 +530,6 @@ const SelectProject: React.FC = () => {
         </ProjectInfo>
       </ProjectCardContent>
       <ProjectActions>
-        {renderTypeChip(project)}
         {renderConnectionChip(project)}
         {renderProjectOptionsButton(project)}
       </ProjectActions>
@@ -584,10 +559,7 @@ const SelectProject: React.FC = () => {
         {project.path || 'No path specified'}
       </ProjectPath>
       <ProjectGitDetails projectPath={project.path} />
-      <Box sx={{ mt: 'auto', pt: 1 }}>
-        {renderTypeChip(project)}
-        {renderConnectionChip(project)}
-      </Box>
+      <Box sx={{ mt: 'auto', pt: 1 }}>{renderConnectionChip(project)}</Box>
       <ProjectDetailLine sx={{ mt: 1 }}>
         {getProjectDatesLine(project)}
       </ProjectDetailLine>

@@ -2015,8 +2015,8 @@ const Notebooks = () => {
             )}
             {!createInProject && connectionProject && (
               <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
-                Saved in Studio with this connection&apos;s notebooks, not in
-                the project folder.
+                Saved locally in Studio with this connection&apos;s notebooks,
+                not in the project or Git.
               </Typography>
             )}
             <TextField

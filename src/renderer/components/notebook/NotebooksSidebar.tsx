@@ -113,7 +113,7 @@ interface NotebooksSidebarProps {
   /**
    * Folder tree of the linked project's notebooks, given the search text.
    * When set, it opens the Notebooks tab and the notebooks above follow it
-   * in a "Saved in Studio" folder.
+   * in a "Local" folder.
    */
   renderProjectNotebooks?: (filter: string) => React.ReactNode;
 
@@ -464,8 +464,8 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
                 <Description fontSize="small" />
               </ListItemIcon>
               <ListItemText
-                primary="New Notebook in Studio"
-                secondary="Saved with this connection's notebooks"
+                primary="New Local Notebook"
+                secondary="Only in Studio, not in the project or Git"
                 secondaryTypographyProps={{ fontSize: 11.5 }}
               />
             </MenuItem>,
@@ -507,10 +507,11 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
                 scroll together */}
             <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', pt: 0.5 }}>
               {renderProjectNotebooks && (
-                <>
+                // No divider before the Local folder: the line sits under the
+                // project name in the project tree's header
+                <Box sx={{ mb: 0.5 }}>
                   {renderProjectNotebooks(searchQuery)}
-                  <Divider sx={{ mt: 1.5, mb: 0.5 }} />
-                </>
+                </Box>
               )}
               <NotebooksTreeView
                 notebooks={notebooks}
@@ -525,13 +526,9 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
                 onDeleteArchivedNotebook={onDeleteArchivedNotebook}
                 getConnectionName={getConnectionName}
                 filter={searchQuery}
-                rootLabel={
-                  renderProjectNotebooks ? 'Saved in Studio' : undefined
-                }
+                rootLabel={renderProjectNotebooks ? 'Local' : undefined}
                 emptyText={
-                  renderProjectNotebooks
-                    ? 'No notebooks saved in Studio for this connection.'
-                    : undefined
+                  renderProjectNotebooks ? 'No notebooks yet.' : undefined
                 }
                 activeNotebookId={activeNotebookId}
                 onCreateNotebook={() => onCreateNotebook('studio')}

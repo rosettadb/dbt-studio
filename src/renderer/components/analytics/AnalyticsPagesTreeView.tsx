@@ -17,7 +17,11 @@ import {
   TextField,
   Tooltip,
   LinearProgress,
+  FormControlLabel,
+  Radio,
+  RadioGroup,
 } from '@mui/material';
+import { useQueryClient } from 'react-query';
 import {
   NoteAdd,
   Description,
@@ -28,13 +32,30 @@ import {
   FolderOpen as FolderOpenIcon,
   OpenInBrowser as OpenInBrowserIcon,
   DeleteOutline,
+  FolderOutlined,
+  Storage as StorageIcon,
 } from '@mui/icons-material';
 import {
+  ANALYTICS_PAGES_KEYS,
   useGetAnalyticsPages,
   useCreateAnalyticsPage,
   useUpdateAnalyticsPage,
   useDeleteAnalyticsPage,
 } from '../../controllers/analyticsPages.controller';
+import {
+  ProjectFolderTree,
+  SavedInStudioHeading,
+  useConnectionProject,
+} from '../projectFolders/ProjectFolderTree';
+import { path as nodePath, toPosix } from '../../lib/path';
+import {
+  PROJECT_ANALYTICS_DIR,
+  isProjectPageId,
+  parseProjectPageId,
+  projectPageId,
+  routeFromPagePath,
+  type SaveLocation,
+} from '../../../shared/projectFolders';
 import {
   useGetStaticSiteState,
   useDeleteStaticSiteBuild,
@@ -70,12 +91,37 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
   onOpenPage,
   onDeletePage,
 }) => {
+  const queryClient = useQueryClient();
   const { data: pages = [], isLoading } = useGetAnalyticsPages(connectionId);
   const createPageMutation = useCreateAnalyticsPage();
   const updatePageMutation = useUpdateAnalyticsPage();
   const deletePageMutation = useDeleteAnalyticsPage();
 
-  const treeNodes = useMemo(() => buildAnalyticsTree(pages), [pages]);
+  // Pages can also be Markdown files in the analytics/ folder of the
+  // connection's project (plan 95d): that folder is listed first, as a file
+  // tree, and the pages saved in Studio below it.
+  const project = useConnectionProject(connectionId);
+  const analyticsRoot = project
+    ? nodePath.join(project.path, PROJECT_ANALYTICS_DIR)
+    : '';
+  const studioPages = useMemo(
+    () => pages.filter((page) => !isProjectPageId(page.id)),
+    [pages],
+  );
+  const projectPages = useMemo(
+    () => pages.filter((page) => isProjectPageId(page.id)),
+    [pages],
+  );
+  const treeNodes = useMemo(
+    () => buildAnalyticsTree(studioPages),
+    [studioPages],
+  );
+  const activeProjectPage = activePageId
+    ? parseProjectPageId(activePageId)
+    : null;
+  const refreshPages = useCallback(() => {
+    queryClient.invalidateQueries(ANALYTICS_PAGES_KEYS.list(connectionId));
+  }, [queryClient, connectionId]);
 
   // ── Static site state ─────────────────────────────────────────────────────
   const { data: siteState, refetch: refetchSiteState } =
@@ -120,6 +166,9 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
   // Dialog state: Create Page
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newTitle, setNewTitle] = useState('');
+  const [newLocation, setNewLocation] = useState<SaveLocation>('studio');
+  // Route prefix of the project folder "New file" was clicked in, e.g. /sales
+  const [newRoutePrefix, setNewRoutePrefix] = useState('');
 
   // Dialog state: Rename Page
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
@@ -177,8 +226,13 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
   );
 
   // Create Handlers
-  const handleOpenCreateDialog = () => {
+  const handleOpenCreateDialog = (
+    location: SaveLocation = project ? 'project' : 'studio',
+    routePrefix = '',
+  ) => {
     setNewTitle('');
+    setNewLocation(location);
+    setNewRoutePrefix(routePrefix);
     setCreateDialogOpen(true);
   };
 
@@ -188,12 +242,14 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/(^-|-$)+/g, '') || 'untitled';
-    const existingRoutes = new Set(pages.map((page) => page.routePath));
-    let route = `/${slug}`;
+    const sameLocation = newLocation === 'project' ? projectPages : studioPages;
+    const existingRoutes = new Set(sameLocation.map((page) => page.routePath));
+    const prefix = newLocation === 'project' ? newRoutePrefix : '';
+    let route = `${prefix}/${slug}`;
     let suffix = 2;
 
     while (existingRoutes.has(route)) {
-      route = `/${slug}-${suffix}`;
+      route = `${prefix}/${slug}-${suffix}`;
       suffix += 1;
     }
 
@@ -214,6 +270,7 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
           routePath: route,
           markdownContent: `---\ntitle: "${trimmedTitle.replace(/"/g, '\\"').replace(/\n/g, ' ')}"\n---\n\nStart building your analytics page here.`,
         },
+        location: project ? newLocation : 'studio',
       },
       {
         onSuccess: (newPage: { id: string }) => {
@@ -371,12 +428,76 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
 
       {/* Tree Content */}
       <Box sx={{ flex: 1, overflow: 'auto', py: 1 }}>
+        {project && (
+          <>
+            <ProjectFolderTree
+              project={project}
+              folderName={PROJECT_ANALYTICS_DIR}
+              fileExtension=".md"
+              filter=""
+              selectedPath={
+                activeProjectPage
+                  ? nodePath.join(analyticsRoot, activeProjectPage.relativePath)
+                  : undefined
+              }
+              onOpenFile={(file) =>
+                onOpenPage(
+                  projectPageId(
+                    project.id,
+                    toPosix(nodePath.relative(analyticsRoot, file.path)),
+                  ),
+                )
+              }
+              onCreateFile={(parentPath) => {
+                const folder = toPosix(
+                  nodePath.relative(analyticsRoot, parentPath),
+                );
+                const prefix =
+                  folder && !folder.startsWith('..')
+                    ? routeFromPagePath(`${folder}/index.md`)
+                    : '';
+                handleOpenCreateDialog('project', prefix === '/' ? '' : prefix);
+              }}
+              onFilesChanged={refreshPages}
+              onDeleted={(deletedPath) => {
+                if (!activeProjectPage || !activePageId) return;
+                const activeFile = toPosix(
+                  nodePath.join(analyticsRoot, activeProjectPage.relativePath),
+                );
+                const deleted = toPosix(deletedPath);
+                if (
+                  activeFile === deleted ||
+                  activeFile.startsWith(`${deleted}/`)
+                ) {
+                  onDeletePage?.(activePageId);
+                }
+              }}
+              emptyText="No pages yet."
+              testId="project-analytics-pages"
+            />
+            <SavedInStudioHeading
+              onCreate={() => handleOpenCreateDialog('studio')}
+              createTitle="New Local Page"
+            />
+          </>
+        )}
         {isLoading && (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
             <CircularProgress size={24} />
           </Box>
         )}
-        {!isLoading && treeNodes.length === 0 && (
+        {/* Under a project folder the Studio list is a section, so its
+            empty state is one short line like the folder's */}
+        {!isLoading && treeNodes.length === 0 && project && (
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ px: 2, py: 1 }}
+          >
+            No pages yet.
+          </Typography>
+        )}
+        {!isLoading && treeNodes.length === 0 && !project && (
           <Box
             sx={{ textAlign: 'center', px: 2, py: 4, color: 'text.secondary' }}
           >
@@ -485,6 +606,42 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
                 if (e.key === 'Enter') handleCreateSubmit();
               }}
             />
+            {project && (
+              <RadioGroup
+                value={newLocation}
+                onChange={(e) => setNewLocation(e.target.value as SaveLocation)}
+              >
+                <FormControlLabel
+                  value="project"
+                  control={<Radio size="small" />}
+                  label={
+                    <Box
+                      sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}
+                    >
+                      <FolderOutlined sx={{ fontSize: 16 }} />
+                      <Typography sx={{ fontSize: 13 }}>
+                        {project.name}/{PROJECT_ANALYTICS_DIR}
+                        {newRoutePrefix}/ (a Markdown file in the project)
+                      </Typography>
+                    </Box>
+                  }
+                />
+                <FormControlLabel
+                  value="studio"
+                  control={<Radio size="small" />}
+                  label={
+                    <Box
+                      sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}
+                    >
+                      <StorageIcon sx={{ fontSize: 16 }} />
+                      <Typography sx={{ fontSize: 13 }}>
+                        Local (only in Studio, not in Git)
+                      </Typography>
+                    </Box>
+                  }
+                />
+              </RadioGroup>
+            )}
           </Box>
         </DialogContent>
         <DialogActions>

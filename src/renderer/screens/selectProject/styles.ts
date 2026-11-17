@@ -198,15 +198,6 @@ export const TaglineText = styled(Typography)`
   color: ${({ theme }) => theme.palette.primary.main};
 `;
 
-export const ProjectIcon = styled('img')`
-  width: 24px;
-  height: 24px;
-  margin-right: 12px;
-  flex-shrink: 0;
-  border-radius: 4px;
-  object-fit: contain;
-`;
-
 export const ProjectMuiIcon = styled(Box)`
   width: 24px;
   height: 24px;

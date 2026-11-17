@@ -165,6 +165,9 @@ const Sql = () => {
     setTabError,
     markTabSaved,
     reorderTabs,
+    setTabSource,
+    renameSource,
+    clearSource,
   } = tabManager;
 
   // Extract only stable connection-identity fields from the active tab.
@@ -1328,11 +1331,17 @@ const Sql = () => {
             <Box sx={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
               <SavedQueriesList
                 connectionId={activeConnectionId}
-                onOpenQuery={(query) => {
+                // The query's text replaces the connection tab's text, and
+                // the tab stays linked to it so Save updates it (plan 95d)
+                onOpenQuery={(source, query) => {
                   if (activeTabId) {
                     updateTabQuery(activeTabId, query);
+                    setTabSource(activeTabId, source);
                   }
                 }}
+                selectedSource={activeTab?.source}
+                onQueryRenamed={renameSource}
+                onQueriesDeleted={clearSource}
               />
             </Box>
           )}
@@ -1449,6 +1458,10 @@ const Sql = () => {
                               .then(() => markTabSaved(activeTab.id))
                               .catch(() => {});
                           }}
+                          source={activeTab.source}
+                          onSavedAs={(source) =>
+                            setTabSource(activeTab.id, source)
+                          }
                         />
                       )
                     }

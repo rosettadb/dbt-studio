@@ -4,6 +4,7 @@ import {
   NewAnalyticsPage,
   UpdateAnalyticsPage,
 } from '../../types/analyticsPages';
+import type { SaveLocation } from '../../shared/projectFolders';
 
 export const registerAnalyticsPagesHandlers = () => {
   ipcMain.handle('analyticsPages:list', async (_event, connectionId: string) =>
@@ -22,8 +23,16 @@ export const registerAnalyticsPagesHandlers = () => {
     'analyticsPages:create',
     async (
       _event,
-      { connectionId, data }: { connectionId: string; data: NewAnalyticsPage },
-    ) => AnalyticsPagesService.create(connectionId, data),
+      {
+        connectionId,
+        data,
+        location,
+      }: {
+        connectionId: string;
+        data: NewAnalyticsPage;
+        location?: SaveLocation;
+      },
+    ) => AnalyticsPagesService.create(connectionId, data, location),
   );
 
   ipcMain.handle(

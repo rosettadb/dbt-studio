@@ -60,12 +60,25 @@ export interface PendingCloseState {
 // SQL Tab types for connection-based SQL tool
 export type SqlTabId = string;
 
+/**
+ * A saved query (plan 95d): a `.sql` file in the project's queries/ folder,
+ * or a Local query kept in Studio for the connection.
+ */
+export type SqlTabSource =
+  | { kind: 'project'; filePath: string; name: string }
+  | { kind: 'local'; queryId: string; name: string };
+
 export interface SqlTabState {
   id: SqlTabId;
   connectionId: string;
   connectionName: string;
   connectionType: string;
   query: string;
+  /**
+   * The saved query last selected in the sidebar, whose text the tab now
+   * shows: Save updates it. Absent while the tab holds the user's own text.
+   */
+  source?: SqlTabSource;
   results?: any;
   isModified: boolean;
   isLoading: boolean;

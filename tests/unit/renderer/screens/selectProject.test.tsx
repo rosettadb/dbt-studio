@@ -47,8 +47,10 @@ jest.mock('../../../../src/renderer/layouts', () => ({
   AppLayout: ({ children }: { children: React.ReactNode }) => children,
 }));
 
+// Only DuckDB has a logo here, so a Postgres chip falls back to the cylinder
 jest.mock('../../../../src/connections/registry.renderer', () => ({
-  connectionIcon: () => undefined,
+  connectionIcon: (type?: string) =>
+    type === 'duckdb' ? 'duckdb-logo.svg' : undefined,
 }));
 
 jest.mock('../../../../assets', () => ({
@@ -212,7 +214,7 @@ describe('Manage Projects screen', () => {
         const card = within(screen.getByTestId('project-card-alpha_project'));
 
         expect(card.getByText('/projects/alpha_project')).toBeInTheDocument();
-        expect(card.getByText('Not a Git repository')).toBeInTheDocument();
+        expect(card.getByText('Git not initialized')).toBeInTheDocument();
         expect(card.getByText(/^Added Nov \d, 2026$/)).toBeInTheDocument();
       },
     );
@@ -248,7 +250,33 @@ describe('Manage Projects screen', () => {
     };
 
     it.each(['list', 'card'])(
-      'shows the database cylinder on a named connection chip in %s view',
+      'shows the connection’s own logo on its chip in %s view',
+      (view) => {
+        localStorage.setItem(VIEW_STORAGE_KEY, view);
+        (useGetProjects as jest.Mock).mockReturnValue({
+          data: [
+            {
+              ...projects[0],
+              connection: { type: 'duckdb', name: 'jaffle_shop_duckdb' },
+            },
+          ],
+        });
+
+        render(<SelectProject />);
+
+        const chip = screen.getByTitle('Connection Name');
+        expect(chip).toHaveTextContent('jaffle_shop_duckdb');
+        expect(
+          within(chip).getByTestId('connection-chip-logo'),
+        ).toHaveAttribute('src', 'duckdb-logo.svg');
+        expect(
+          within(chip).queryByTestId('database-cylinder-icon'),
+        ).not.toBeInTheDocument();
+      },
+    );
+
+    it.each(['list', 'card'])(
+      'shows the database cylinder on a chip whose connection has no logo in %s view',
       (view) => {
         localStorage.setItem(VIEW_STORAGE_KEY, view);
         (useGetProjects as jest.Mock).mockReturnValue({
@@ -284,7 +312,7 @@ describe('Manage Projects screen', () => {
     );
 
     it.each(['list', 'card'])(
-      'keeps the stacked database icon for projects without a logo in %s view',
+      'starts the title with the project type icon, with no type chip, in %s view',
       (view) => {
         localStorage.setItem(VIEW_STORAGE_KEY, view);
         (useGetProjects as jest.Mock).mockReturnValue({
@@ -294,7 +322,14 @@ describe('Manage Projects screen', () => {
         render(<SelectProject />);
 
         const card = screen.getByTestId('project-card-alpha_project');
-        expect(within(card).getByTestId('StorageIcon')).toBeInTheDocument();
+        expect(
+          within(card).getByTestId('project-type-icon-alpha_project'),
+        ).toBeInTheDocument();
+        expect(
+          within(card).queryByTestId('StorageIcon'),
+        ).not.toBeInTheDocument();
+        expect(within(card).queryByText('dbt Project')).not.toBeInTheDocument();
+        // The only database icon left is the connection chip's
         expect(
           within(card).getAllByTestId('database-cylinder-icon'),
         ).toHaveLength(1);

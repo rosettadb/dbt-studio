@@ -5,6 +5,20 @@ import {
   NewAnalyticsPage,
   UpdateAnalyticsPage,
 } from '../../types/analyticsPages';
+import {
+  isProjectPageId,
+  type SaveLocation,
+} from '../../shared/projectFolders';
+import { QUERY_KEYS } from '../config/constants';
+
+/**
+ * A project page is a Markdown file: the sidebar's analytics/ tree and the
+ * Project screen's Explorer read the folder listing, so creating or deleting
+ * one must refresh the listings too (plan 95d).
+ */
+const refreshProjectFileTrees = (
+  queryClient: ReturnType<typeof useQueryClient>,
+) => queryClient.invalidateQueries([QUERY_KEYS.GET_FILE_STRUCTURE]);
 
 export const ANALYTICS_PAGES_KEYS = {
   all: ['analyticsPages'] as const,
@@ -39,14 +53,17 @@ export const useCreateAnalyticsPage = () => {
     mutationFn: ({
       connectionId,
       data,
+      location,
     }: {
       connectionId: string;
       data: NewAnalyticsPage;
-    }) => AnalyticsPagesService.create(connectionId, data),
+      location?: SaveLocation;
+    }) => AnalyticsPagesService.create(connectionId, data, location),
     onSuccess: (data: AnalyticsPage, variables) => {
       queryClient.invalidateQueries({
         queryKey: ANALYTICS_PAGES_KEYS.list(variables.connectionId),
       });
+      if (isProjectPageId(data.id)) refreshProjectFileTrees(queryClient);
     },
   });
 };
@@ -93,6 +110,9 @@ export const useDeleteAnalyticsPage = () => {
       queryClient.invalidateQueries({
         queryKey: ANALYTICS_PAGES_KEYS.list(variables.connectionId),
       });
+      if (isProjectPageId(variables.pageId)) {
+        refreshProjectFileTrees(queryClient);
+      }
     },
   });
 };

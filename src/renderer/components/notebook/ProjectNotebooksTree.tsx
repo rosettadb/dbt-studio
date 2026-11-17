@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   Box,
   Chip,
@@ -9,7 +9,6 @@ import {
 import { useQueryClient } from 'react-query';
 import { ArboristTree } from '../fileTreeViewer/ArboristTree';
 import type { FileStatuses } from '../fileTreeViewer/types';
-import { NewFileModal } from '../modals';
 import { projectsServices } from '../../services';
 import { useGetFileStatuses, useGitIsInitialized } from '../../controllers';
 import {
@@ -69,7 +68,6 @@ export const ProjectNotebooksTree: React.FC<ProjectNotebooksTreeProps> = ({
 }) => {
   const queryClient = useQueryClient();
   const refreshProjectFiles = useRefreshProjectFiles();
-  const [folderModalPath, setFolderModalPath] = useState<string>();
 
   const folderPath = nodePath.join(project.path, PROJECT_NOTEBOOKS_DIR);
   const { data: folder, isLoading } = useProjectNotebooksFolder(folderPath);
@@ -158,13 +156,23 @@ export const ProjectNotebooksTree: React.FC<ProjectNotebooksTreeProps> = ({
     [notebookByPath, onNotebooksDeleted],
   );
 
+  // A notebooks/ folder that doesn't exist yet still shows its row, empty,
+  // like the Local folder; its hover buttons create the first notebook or
+  // folder in it
   const treeData = useMemo(() => {
-    if (!folder) return null;
+    const source: FileNode = folder ?? {
+      id: folderPath,
+      name: PROJECT_NOTEBOOKS_DIR,
+      path: folderPath,
+      type: 'folder',
+      children: [],
+    };
     const query = filter.trim().toLowerCase();
-    if (!query) return folder;
-    const pruned = pruneTree(folder, query);
-    return pruned ?? { ...folder, children: [] };
-  }, [folder, filter]);
+    if (!query) return source;
+    const pruned = pruneTree(source, query);
+    return pruned ?? { ...source, children: [] };
+  }, [folder, filter, folderPath]);
+  const isEmpty = !folder?.children?.length;
 
   // The project the notebooks folder belongs to, above the tree: its type
   // badge (the project cards' chip, smaller), then its name
@@ -178,13 +186,17 @@ export const ProjectNotebooksTree: React.FC<ProjectNotebooksTreeProps> = ({
         data-testid="notebooks-linked-project"
         sx={{
           px: '10px',
-          pt: '2px',
-          pb: '6px',
+          // Chip and name are both 18px high, centred in the row
+          height: 30,
           display: 'flex',
           alignItems: 'center',
           gap: 0.75,
           minWidth: 0,
           flexShrink: 0,
+          // Full-width line under the project name; none before the Local folder
+          borderBottom: 1,
+          borderColor: 'divider',
+          mb: 0.5,
         }}
       >
         <Chip
@@ -208,36 +220,28 @@ export const ProjectNotebooksTree: React.FC<ProjectNotebooksTreeProps> = ({
             '& .MuiChip-label': { px: '6px' },
           }}
         />
-        <Typography noWrap sx={{ fontSize: 12, fontWeight: 500, minWidth: 0 }}>
+        <Typography
+          noWrap
+          sx={{
+            fontSize: 12,
+            fontWeight: 500,
+            minWidth: 0,
+            lineHeight: '18px',
+          }}
+        >
           {project.name}
         </Typography>
       </Box>
     </Tooltip>
   );
 
-  if (isLoading || !treeData) {
+  if (isLoading) {
     return (
       <Box>
         {header}
-        {isLoading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
-            <CircularProgress size={20} />
-          </Box>
-        ) : (
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            sx={{
-              px: 2,
-              py: 1,
-              whiteSpace: 'normal',
-              overflowWrap: 'anywhere',
-            }}
-          >
-            No notebooks in {project.name}/{PROJECT_NOTEBOOKS_DIR}/ yet. Click
-            the + button to create one.
-          </Typography>
-        )}
+        <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+          <CircularProgress size={20} />
+        </Box>
       </Box>
     );
   }
@@ -255,7 +259,8 @@ export const ProjectNotebooksTree: React.FC<ProjectNotebooksTreeProps> = ({
         onFileSelect={handleFileSelect}
         onRefresh={refresh}
         onCreateFile={onCreateNotebook}
-        onCreateFolder={setFolderModalPath}
+        // This phase: new notebooks in notebooks/ itself only, no new folders
+        createInRootOnly
         onDeleteSuccess={handleDeleted}
         onRenameSuccess={refresh}
         selectedPath={selectedPath}
@@ -265,17 +270,14 @@ export const ProjectNotebooksTree: React.FC<ProjectNotebooksTreeProps> = ({
           await refresh();
         }}
       />
-      {folderModalPath && (
-        <NewFileModal
-          isOpen
-          type="folder"
-          path={folderModalPath}
-          onClose={() => setFolderModalPath(undefined)}
-          successCallback={() => {
-            setFolderModalPath(undefined);
-            refresh();
-          }}
-        />
+      {isEmpty && (
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ px: 2, py: 1, whiteSpace: 'normal', overflowWrap: 'anywhere' }}
+        >
+          No notebooks yet.
+        </Typography>
       )}
     </Box>
   );

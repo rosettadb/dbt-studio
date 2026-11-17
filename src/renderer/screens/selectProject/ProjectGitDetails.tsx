@@ -18,7 +18,7 @@ const ProjectGitDetails: React.FC<ProjectGitDetailsProps> = ({
   }
 
   if (!gitSummary) {
-    return <ProjectDetailLine>Not a Git repository</ProjectDetailLine>;
+    return <ProjectDetailLine>Git not initialized</ProjectDetailLine>;
   }
 
   const { currentBranch } = gitSummary;

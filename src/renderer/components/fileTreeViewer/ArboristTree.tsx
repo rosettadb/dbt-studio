@@ -1,6 +1,12 @@
 /* eslint-disable react/jsx-props-no-spreading,no-restricted-syntax,no-continue,no-await-in-loop,no-plusplus */
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { MoveHandler, NodeApi, RenameHandler, Tree } from 'react-arborist';
+import {
+  MoveHandler,
+  NodeApi,
+  NodeRendererProps,
+  RenameHandler,
+  Tree,
+} from 'react-arborist';
 import { styled } from '@mui/material/styles';
 import { toast } from 'react-toastify';
 import {
@@ -31,7 +37,13 @@ interface ArboristTreeProps {
   onFileSelect: (file: FileNode) => void;
   onRefresh: () => void;
   onCreateFile: (parentPath: string) => void;
-  onCreateFolder: (parentPath: string) => void;
+  /** Without it, the tree offers no New Folder (hover button or menu). */
+  onCreateFolder?: (parentPath: string) => void;
+  /**
+   * New File only on the root folder row, not in its subfolders (the
+   * project folder trees in Notebooks, Queries and Analytics). Off by default.
+   */
+  createInRootOnly?: boolean;
   onDeleteSuccess: (path: string) => void;
   onRenameSuccess?: (oldPath: string, newPath: string) => void;
   selectedPath?: string;
@@ -76,6 +88,7 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
   onRefresh,
   onCreateFile,
   onCreateFolder,
+  createInRootOnly = false,
   onDeleteSuccess,
   onRenameSuccess,
   selectedPath,
@@ -317,8 +330,11 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
 
   const handleNewFolderFromMenu = useCallback(() => {
     if (!contextMenu) return;
-    onCreateFolder(contextMenu.node.path);
+    onCreateFolder?.(contextMenu.node.path);
   }, [contextMenu, onCreateFolder]);
+
+  const canCreateFileIn = (folderPath: string) =>
+    !createInRootOnly || folderPath === data.path;
 
   // Handle drag over folder with auto-expand
   const handleDragOverFolderChange = useCallback(
@@ -525,12 +541,16 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
             selection={selectedPath}
             idAccessor="id"
           >
-            {(props) => (
+            {(props: NodeRendererProps<FileNode>) => (
               <TreeNode
                 {...props}
                 fileStatuses={fileStatuses}
                 onContextMenu={handleContextMenu}
-                onCreateFile={onCreateFile}
+                onCreateFile={
+                  canCreateFileIn(props.node.data.path)
+                    ? onCreateFile
+                    : undefined
+                }
                 onCreateFolder={onCreateFolder}
                 onDelete={handleDelete}
                 onRefresh={onRefresh}
@@ -553,8 +573,12 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
         onCopy={handleCopy}
         onPaste={handlePaste}
         onCopyPath={handleCopyPath}
-        onNewFile={handleNewFileFromMenu}
-        onNewFolder={handleNewFolderFromMenu}
+        onNewFile={
+          contextMenu && canCreateFileIn(contextMenu.node.path)
+            ? handleNewFileFromMenu
+            : undefined
+        }
+        onNewFolder={onCreateFolder ? handleNewFolderFromMenu : undefined}
       />
 
       <MoveConfirmDialog

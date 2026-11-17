@@ -15,6 +15,7 @@ const mockUseGetAnalyticsPages = jest.fn();
 jest.mock(
   '../../../../src/renderer/controllers/analyticsPages.controller',
   () => ({
+    ANALYTICS_PAGES_KEYS: { list: (id: string) => ['analyticsPages', id] },
     useGetAnalyticsPages: (...args: any[]) => mockUseGetAnalyticsPages(...args),
     useCreateAnalyticsPage: () => ({ mutate: jest.fn(), isLoading: false }),
     useUpdateAnalyticsPage: () => ({ mutate: jest.fn(), isLoading: false }),
@@ -40,6 +41,20 @@ jest.mock(
   '../../../../src/renderer/components/analytics/AnalyticsPageItem',
   () => ({ AnalyticsPageItem: () => null }),
 );
+
+// No project linked to the connection: only the pages saved in Studio show
+jest.mock(
+  '../../../../src/renderer/components/projectFolders/ProjectFolderTree',
+  () => ({
+    ProjectFolderTree: () => null,
+    SavedInStudioHeading: () => null,
+    useConnectionProject: () => undefined,
+  }),
+);
+
+jest.mock('react-query', () => ({
+  useQueryClient: () => ({ invalidateQueries: jest.fn() }),
+}));
 
 const theme = createTheme();
 const renderTreeView = () =>

@@ -26,8 +26,10 @@ interface TreeContextMenuProps {
   onCopy: () => void;
   onPaste: () => void;
   onCopyPath: () => void;
-  onNewFile: () => void;
-  onNewFolder: () => void;
+  /** Omitted when the tree doesn't create files in this folder. */
+  onNewFile?: () => void;
+  /** Omitted when the tree doesn't create folders. */
+  onNewFolder?: () => void;
 }
 
 export const TreeContextMenu: React.FC<TreeContextMenuProps> = ({
@@ -108,22 +110,26 @@ export const TreeContextMenu: React.FC<TreeContextMenuProps> = ({
         <ListItemText>Copy Path</ListItemText>
       </MenuItem>
 
-      {isFolder && (
+      {isFolder && (onNewFile || onNewFolder) && (
         <>
           <Divider />
-          <MenuItem onClick={() => handleMenuItemClick(onNewFile)}>
-            <ListItemIcon>
-              <NewFileIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText>New File</ListItemText>
-          </MenuItem>
+          {onNewFile && (
+            <MenuItem onClick={() => handleMenuItemClick(onNewFile)}>
+              <ListItemIcon>
+                <NewFileIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>New File</ListItemText>
+            </MenuItem>
+          )}
 
-          <MenuItem onClick={() => handleMenuItemClick(onNewFolder)}>
-            <ListItemIcon>
-              <NewFolderIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText>New Folder</ListItemText>
-          </MenuItem>
+          {onNewFolder && (
+            <MenuItem onClick={() => handleMenuItemClick(onNewFolder)}>
+              <ListItemIcon>
+                <NewFolderIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>New Folder</ListItemText>
+            </MenuItem>
+          )}
         </>
       )}
     </Menu>
