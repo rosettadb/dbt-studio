@@ -44,6 +44,21 @@ test.describe('DataLake', () => {
     await expect(window.getByText('No DataLake Instances')).toBeVisible();
   });
 
+  test('should offer only Add instance in the empty instance picker', async ({
+    electronApp,
+  }) => {
+    const window = await openDataLake(electronApp);
+
+    await window.getByTestId('datalake-instance-select').click();
+
+    // With no instances there is no All Instances row, only Add instance
+    const rows = window.getByRole('menu').getByRole('menuitem');
+    await expect(rows).toHaveText(['Add instance']);
+
+    await rows.first().click();
+    await expect(window.getByText('Create New DataLake')).toBeVisible();
+  });
+
   test('should offer lake types with unreleased ones disabled', async ({
     electronApp,
   }) => {

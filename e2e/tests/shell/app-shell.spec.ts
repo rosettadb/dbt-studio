@@ -1,9 +1,9 @@
 /**
  * App Shell Tests
  *
- * The chrome around every screen: the top menu's project switcher and cloud
- * login button, the status bar, and the AI assistant panel (without a
- * configured provider).
+ * The chrome around every screen: the project picker in the side panel
+ * header, the top menu's cloud login button, the status bar, and the AI
+ * assistant panel (without a configured provider).
  */
 
 import { test, expect } from '../../fixtures/electron-seeded.fixture';
@@ -13,14 +13,12 @@ import { NavigationSidebarComponent } from '../../page-objects/components/Naviga
 const PROJECT = 'test_project';
 
 test.describe('App Shell', () => {
-  test('should show the selected project in the top menu', async ({
+  test('should show the selected project in the side panel picker', async ({
     electronApp,
   }) => {
     const window = await openProject(electronApp, PROJECT);
 
-    await expect(
-      window.getByRole('button', { name: new RegExp(PROJECT) }).first(),
-    ).toBeVisible();
+    await expect(window.getByTestId('project-select')).toContainText(PROJECT);
     // The dbt actions split button is only shown once a project is selected
     await expect(
       window.getByRole('button', { name: 'Project', exact: true }),
@@ -34,10 +32,10 @@ test.describe('App Shell', () => {
   }) => {
     const window = await openProject(electronApp, PROJECT);
 
-    await window
-      .getByRole('button', { name: new RegExp(PROJECT) })
-      .first()
-      .click();
+    await window.getByTestId('project-select').click();
+    const rows = window.getByRole('menu').getByRole('menuitem');
+    await expect(rows.first()).toHaveText('All Projects');
+    await expect(rows.last()).toHaveText('Add project');
     await window.getByRole('menuitem', { name: 'All Projects' }).click();
 
     await expect(

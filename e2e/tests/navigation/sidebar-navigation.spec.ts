@@ -86,6 +86,27 @@ test.describe('Sidebar Navigation', () => {
     await nav.expectActiveItem('sql');
   });
 
+  test('should list connections in the SQL editor picker and open the full list', async ({
+    electronApp,
+  }) => {
+    const mainWindow = await findStableWindow(electronApp);
+    const nav = new NavigationSidebarComponent(mainWindow);
+
+    await nav.goToSqlEditor();
+    await mainWindow.getByTestId('sql-connection-select').click();
+
+    // All Connections first, the connections, then Add connection last
+    const rows = mainWindow.getByRole('menu').getByRole('menuitem');
+    await expect(rows.first()).toHaveText('All Connections');
+    await expect(rows.filter({ hasText: 'test_db' })).toHaveCount(1);
+    await expect(rows.last()).toHaveText('Add connection');
+
+    await rows.first().click();
+    await expect(
+      mainWindow.getByRole('heading', { name: 'Connections', exact: true }),
+    ).toBeVisible();
+  });
+
   test('should open Connections and list the seeded connection', async ({
     electronApp,
   }) => {
