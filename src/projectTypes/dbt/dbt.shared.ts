@@ -18,6 +18,7 @@ export const dbtProjectType: ProjectTypeDefinition = {
     runHistory: true,
     pipelines: true,
     datalakeConnections: true,
+    datalakeAsInstance: false,
   },
   acceptsConnection: canUseAsDbtConnection,
   templateItems: [

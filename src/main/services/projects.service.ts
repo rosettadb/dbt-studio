@@ -37,6 +37,7 @@ import {
 import SettingsService from './settings.service';
 import ConnectorsService from './connectors.service';
 import MainDatabaseService from './mainDatabase.service';
+import { projectConnectionLabel } from '../utils/projectConnectionLabel';
 import {
   extractPipelineRequiredEnvVars,
   RequiredEnvVarSource,
@@ -138,17 +139,11 @@ export default class ProjectsService {
     };
 
     sanitizeForStorage(project);
-    const connection = connectionId
-      ? (await ConnectorsService.getConnectionById(connectionId))?.connection
-      : undefined;
     await typeMain.scaffold({
       projectPath: project.path,
       name: project.name,
       include: items,
-      connection: connection && {
-        name: connection.name,
-        type: connection.type,
-      },
+      connection: await projectConnectionLabel(connectionId),
     });
     projects.push(project);
     await this.saveProjects(projects);

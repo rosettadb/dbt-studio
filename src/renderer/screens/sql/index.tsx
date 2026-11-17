@@ -32,7 +32,6 @@ import {
   Refresh,
   Add,
   FilterList,
-  Link as LinkIcon,
   Code as CodeTabIcon,
   InsertChart,
 } from '@mui/icons-material';
@@ -47,6 +46,7 @@ import type { QueryResultSnapshot } from '../../../types/backend';
 import { useLocalStorage } from '../../hooks';
 import { QueryHistoryType } from '../../../types/frontend';
 import { AppLayout } from '../../layouts';
+import { ConnectionProjectBadge } from '../../components/projectFolders/ConnectionProjectBadge';
 import { utils } from '../../helpers';
 import { SchemaViewContainer, SchemaViewGrid } from './styles';
 import { ErrorMessage, SqlEditor } from '../../components';
@@ -897,6 +897,10 @@ const Sql = () => {
                     if (!instance) {
                       return activeTab?.connectionName || 'Select Connection';
                     }
+                    // An Analytics project can be linked to the instance
+                    const instanceProject = projects?.find(
+                      (p) => p.connectionId === selected,
+                    );
 
                     return (
                       <Box
@@ -926,6 +930,17 @@ const Sql = () => {
                         >
                           {instance.name}
                         </span>
+                        {instanceProject && (
+                          <Box sx={{ ml: 'auto', mr: 2, display: 'flex' }}>
+                            <ConnectionProjectBadge
+                              project={instanceProject}
+                              active={
+                                instanceProject.id === selectedProject?.id
+                              }
+                              compact
+                            />
+                          </Box>
+                        )}
                       </Box>
                     );
                   }
@@ -963,20 +978,13 @@ const Sql = () => {
                         {conn.connection.name}
                       </span>
                       {linkedProject && (
-                        <Tooltip title={`Project: ${linkedProject.name}`}>
-                          <LinkIcon
-                            sx={{
-                              ml: 'auto',
-                              fontSize: 16,
-                              color:
-                                linkedProject.id === selectedProject?.id
-                                  ? 'success.main'
-                                  : 'text.disabled',
-                              mr: 2,
-                              transform: 'rotate(-45deg)',
-                            }}
+                        <Box sx={{ ml: 'auto', mr: 2, display: 'flex' }}>
+                          <ConnectionProjectBadge
+                            project={linkedProject}
+                            active={linkedProject.id === selectedProject?.id}
+                            compact
                           />
-                        </Tooltip>
+                        </Box>
                       )}
                     </Box>
                   );
@@ -1021,7 +1029,12 @@ const Sql = () => {
                       }}
                     >
                       <Box
-                        sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1,
+                          minWidth: 0,
+                        }}
                       >
                         <img
                           src={
@@ -1034,21 +1047,23 @@ const Sql = () => {
                             objectFit: 'contain',
                           }}
                         />
-                        {conn.connection.name}
+                        <Box
+                          component="span"
+                          sx={{
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {conn.connection.name}
+                        </Box>
                       </Box>
                       {linkedProject && (
-                        <Tooltip title={`Project: ${linkedProject.name}`}>
-                          <LinkIcon
-                            sx={{
-                              fontSize: 16,
-                              color:
-                                linkedProject.id === selectedProject?.id
-                                  ? 'success.main'
-                                  : 'text.disabled',
-                              transform: 'rotate(-45deg)',
-                            }}
-                          />
-                        </Tooltip>
+                        <ConnectionProjectBadge
+                          project={linkedProject}
+                          active={linkedProject.id === selectedProject?.id}
+                          compact
+                        />
                       )}
                     </MenuItem>
                   );
@@ -1062,38 +1077,54 @@ const Sql = () => {
                     <strong>DuckLake Instances</strong>
                   </MenuItem>
                 )}
-                {duckLakeInstances.map((instance) => (
-                  <MenuItem
-                    key={`ducklake-${instance.id}`}
-                    value={`ducklake-${instance.id}`}
-                    onClick={() => {
-                      handleConnectionSelect({
-                        id: `ducklake-${instance.id}`,
-                        name: instance.name,
-                        type: 'ducklake',
-                      });
-                    }}
-                    sx={{
-                      fontSize: '0.8rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 1,
-                    }}
-                  >
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <img
-                        src={connectionIcons.images.ducklake || defaultIcon}
-                        alt=""
-                        style={{
-                          width: 14,
-                          height: 14,
-                          objectFit: 'contain',
-                        }}
-                      />
-                      {instance.name}
-                    </Box>
-                  </MenuItem>
-                ))}
+                {duckLakeInstances.map((instance) => {
+                  // An Analytics project can be linked to the instance
+                  const instanceProject = projects?.find(
+                    (p) => p.connectionId === `ducklake-${instance.id}`,
+                  );
+                  return (
+                    <MenuItem
+                      key={`ducklake-${instance.id}`}
+                      value={`ducklake-${instance.id}`}
+                      onClick={() => {
+                        handleConnectionSelect({
+                          id: `ducklake-${instance.id}`,
+                          name: instance.name,
+                          type: 'ducklake',
+                        });
+                      }}
+                      sx={{
+                        fontSize: '0.8rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <Box
+                        sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
+                      >
+                        <img
+                          src={connectionIcons.images.ducklake || defaultIcon}
+                          alt=""
+                          style={{
+                            width: 14,
+                            height: 14,
+                            objectFit: 'contain',
+                          }}
+                        />
+                        {instance.name}
+                      </Box>
+                      {instanceProject && (
+                        <ConnectionProjectBadge
+                          project={instanceProject}
+                          active={instanceProject.id === selectedProject?.id}
+                          compact
+                        />
+                      )}
+                    </MenuItem>
+                  );
+                })}
               </Select>
             </FormControl>
 

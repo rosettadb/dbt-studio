@@ -26,6 +26,7 @@ import {
   connectionAccentColor,
 } from '../../../connections/registry.renderer';
 import { projectTypeOf } from '../../../projectTypes/registry.shared';
+import { duckLakeInstanceIdOf } from '../../../shared/duckLakeInstanceIds';
 import { ReactComponent as RouteIcon } from '../../assets/icons/lucide/route.svg';
 import { FileTreeViewer } from '../index';
 import { FileTreeContainer } from '../../screens/projectDetails/styles';
@@ -41,6 +42,7 @@ import {
   useGitIsInitialized,
   useListPipelines,
   useUpdateProject,
+  useDuckLakeInstances,
 } from '../../controllers';
 import {
   AddConnectionModal,
@@ -81,6 +83,13 @@ const ConnectionsTab: React.FC<{ project: Project }> = ({ project }) => {
   const navigate = useNavigate();
   const { data: connection } = useGetConnectionById(project.connectionId);
   const { data: connections = [] } = useGetConnections();
+  // An Analytics project can be linked to a DuckLake instance itself
+  // (`ducklake-<id>`), which has no saved connection (plan 95)
+  const { data: duckLakeInstances = [] } = useDuckLakeInstances();
+  const duckLakeInstanceId = duckLakeInstanceIdOf(project.connectionId);
+  const duckLakeInstance = duckLakeInstanceId
+    ? duckLakeInstances.find((i) => i.id === duckLakeInstanceId)
+    : undefined;
   const { refetch: refetchProject } = useGetSelectedProject();
   const { mutate: updateProject } = useUpdateProject();
   const [isAddOpen, setIsAddOpen] = React.useState(false);
@@ -107,13 +116,15 @@ const ConnectionsTab: React.FC<{ project: Project }> = ({ project }) => {
           setIsRemoveOpen(false);
         }}
         connectionName={
-          connection?.connection?.name || (connection as any)?.name
+          connection?.connection?.name ||
+          (connection as any)?.name ||
+          duckLakeInstance?.name
         }
       />
     </>
   );
 
-  if (!connection) {
+  if (!connection && !duckLakeInstance) {
     return (
       <Box
         sx={{
@@ -150,8 +161,16 @@ const ConnectionsTab: React.FC<{ project: Project }> = ({ project }) => {
     );
   }
 
-  const connType = connection.connection?.type || (connection as any).type;
-  const connName = connection.connection?.name || (connection as any).name;
+  const connType = connection
+    ? connection.connection?.type || (connection as any).type
+    : 'ducklake';
+  const connName = connection
+    ? connection.connection?.name || (connection as any).name
+    : duckLakeInstance?.name;
+  // A linked DuckLake instance is edited on its DataLake page
+  const editPath = connection
+    ? `/app/edit-connection/${connection.id}`
+    : `/app/data-lake/duck-lake/instances/${duckLakeInstanceId}/edit`;
   const iconSrc = connectionIcon(connType);
   const chipBgColor = getConnectionTypeColor(connType);
   const chipTextColor = theme.palette.getContrastText(chipBgColor);
@@ -231,7 +250,7 @@ const ConnectionsTab: React.FC<{ project: Project }> = ({ project }) => {
               size="small"
               variant="outlined"
               startIcon={<Edit sx={{ fontSize: 14 }} />}
-              onClick={() => navigate(`/app/edit-connection/${connection.id}`)}
+              onClick={() => navigate(editPath)}
               sx={{ flex: 1, fontSize: '0.7rem', py: 0.5 }}
             >
               Edit

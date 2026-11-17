@@ -30,7 +30,6 @@ import {
 import {
   Add,
   TableChart,
-  Link as LinkIcon,
   Warning,
   InsertChart,
   Upload,
@@ -41,6 +40,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { connectionIcon } from '../../../connections/registry.renderer';
 import { AppLayout } from '../../layouts';
+import { ConnectionProjectBadge } from '../../components/projectFolders/ConnectionProjectBadge';
 import {
   useGetConnections,
   useDuckLakeInstances,
@@ -1296,20 +1296,13 @@ const Notebooks = () => {
                           {conn.connection.name}
                         </span>
                         {linkedProject && (
-                          <Tooltip title={`Project: ${linkedProject.name}`}>
-                            <LinkIcon
-                              sx={{
-                                ml: 'auto',
-                                fontSize: 16,
-                                color:
-                                  linkedProject.id === selectedProject?.id
-                                    ? 'success.main'
-                                    : 'text.disabled',
-                                mr: 2,
-                                transform: 'rotate(-45deg)',
-                              }}
+                          <Box sx={{ ml: 'auto', mr: 2, display: 'flex' }}>
+                            <ConnectionProjectBadge
+                              project={linkedProject}
+                              active={linkedProject.id === selectedProject?.id}
+                              compact
                             />
-                          </Tooltip>
+                          </Box>
                         )}
                       </Box>
                     );
@@ -1322,6 +1315,10 @@ const Notebooks = () => {
                       (inst) => inst.id === instanceId,
                     );
                     if (instance) {
+                      // An Analytics project can be linked to the instance
+                      const instanceProject = projects?.find(
+                        (p) => p.connectionId === selected,
+                      );
                       return (
                         <Box
                           sx={{
@@ -1350,6 +1347,17 @@ const Notebooks = () => {
                           >
                             {instance.name}
                           </span>
+                          {instanceProject && (
+                            <Box sx={{ ml: 'auto', mr: 2, display: 'flex' }}>
+                              <ConnectionProjectBadge
+                                project={instanceProject}
+                                active={
+                                  instanceProject.id === selectedProject?.id
+                                }
+                                compact
+                              />
+                            </Box>
+                          )}
                         </Box>
                       );
                     }
@@ -1391,7 +1399,12 @@ const Notebooks = () => {
                       }}
                     >
                       <Box
-                        sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1,
+                          minWidth: 0,
+                        }}
                       >
                         <img
                           src={
@@ -1404,21 +1417,23 @@ const Notebooks = () => {
                             objectFit: 'contain',
                           }}
                         />
-                        {conn.connection.name}
+                        <Box
+                          component="span"
+                          sx={{
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {conn.connection.name}
+                        </Box>
                       </Box>
                       {linkedProject && (
-                        <Tooltip title={`Project: ${linkedProject.name}`}>
-                          <LinkIcon
-                            sx={{
-                              fontSize: 16,
-                              color:
-                                linkedProject.id === selectedProject?.id
-                                  ? 'success.main'
-                                  : 'text.disabled',
-                              transform: 'rotate(-45deg)',
-                            }}
-                          />
-                        </Tooltip>
+                        <ConnectionProjectBadge
+                          project={linkedProject}
+                          active={linkedProject.id === selectedProject?.id}
+                          compact
+                        />
                       )}
                     </MenuItem>
                   );
@@ -1432,25 +1447,51 @@ const Notebooks = () => {
                     <strong>DuckLake Instances</strong>
                   </MenuItem>
                 )}
-                {duckLakeInstances.map((instance) => (
-                  <MenuItem
-                    key={`ducklake-${instance.id}`}
-                    value={`ducklake-${instance.id}`}
-                    sx={{
-                      fontSize: '0.8rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 1,
-                    }}
-                  >
-                    <img
-                      src={connectionIcons.images.ducklake || defaultIcon}
-                      alt=""
-                      style={{ width: 14, height: 14, objectFit: 'contain' }}
-                    />
-                    {instance.name}
-                  </MenuItem>
-                ))}
+                {duckLakeInstances.map((instance) => {
+                  const instanceProject = projects?.find(
+                    (p) => p.connectionId === `ducklake-${instance.id}`,
+                  );
+                  return (
+                    <MenuItem
+                      key={`ducklake-${instance.id}`}
+                      value={`ducklake-${instance.id}`}
+                      sx={{
+                        fontSize: '0.8rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1,
+                          minWidth: 0,
+                        }}
+                      >
+                        <img
+                          src={connectionIcons.images.ducklake || defaultIcon}
+                          alt=""
+                          style={{
+                            width: 14,
+                            height: 14,
+                            objectFit: 'contain',
+                          }}
+                        />
+                        {instance.name}
+                      </Box>
+                      {instanceProject && (
+                        <ConnectionProjectBadge
+                          project={instanceProject}
+                          active={instanceProject.id === selectedProject?.id}
+                          compact
+                        />
+                      )}
+                    </MenuItem>
+                  );
+                })}
               </Select>
             </FormControl>
             <Tooltip title="Add Connection">

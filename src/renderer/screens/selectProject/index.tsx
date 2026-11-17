@@ -65,6 +65,10 @@ import {
 } from '../../../projectTypes/registry.shared';
 import { projectTypeUiOf } from '../../../projectTypes/registry.renderer';
 import {
+  duckLakeInstanceConnectionId,
+  duckLakeInstanceIdOf,
+} from '../../../shared/duckLakeInstanceIds';
+import {
   ConnectionIcon,
   EmptyStateContainer,
   EmptyStateDescription,
@@ -347,7 +351,15 @@ const SelectProject: React.FC = () => {
           (dl) => dl.id === selectedConnection,
         );
 
-        if (datalakeInstance) {
+        if (
+          datalakeInstance &&
+          projectTypeOf({ type: newProjectType }).capabilities
+            .datalakeAsInstance
+        ) {
+          // Linked to the instance itself, as the SQL Editor and Notebooks
+          // query it; no saved DuckLake connection (that's for dbt)
+          connectionId = duckLakeInstanceConnectionId(datalakeInstance.id);
+        } else if (datalakeInstance) {
           const sanitizedName =
             `${datalakeInstance.name}_${newProject.name}`.replace(
               /[^a-zA-Z0-9_]/g,
@@ -445,15 +457,32 @@ const SelectProject: React.FC = () => {
       .filter(Boolean)
       .join(' · ');
 
-  const renderConnectionChip = (project: Project) => {
-    // Only show badge if connection name exists
+  // The project's connection: a saved connection, or for an Analytics
+  // project possibly a DuckLake instance linked directly (`ducklake-<id>`)
+  const linkedConnectionOf = (
+    project?: Project,
+  ): { name: string; type: string } | undefined => {
+    if (!project) return undefined;
     if (project.connection?.name) {
+      return { name: project.connection.name, type: project.connection.type };
+    }
+    const instanceId = duckLakeInstanceIdOf(project.connectionId);
+    const instance = instanceId
+      ? datalakeInstances.find((i) => i.id === instanceId)
+      : undefined;
+    return instance ? { name: instance.name, type: 'ducklake' } : undefined;
+  };
+
+  const renderConnectionChip = (project: Project) => {
+    const linked = linkedConnectionOf(project);
+    // Only show badge if connection name exists
+    if (linked) {
       return (
         <Chip
           label={
             <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              {renderConnectionChipIcon(project.connection.type)}
-              {project.connection.name}
+              {renderConnectionChipIcon(linked.type)}
+              {linked.name}
             </Box>
           }
           size="small"
@@ -652,8 +681,9 @@ const SelectProject: React.FC = () => {
             horizontal: 'right',
           }}
         >
-          {!projects.find((p) => p.id === activeProjectId)?.connection
-            ?.name && (
+          {!linkedConnectionOf(
+            projects.find((p) => p.id === activeProjectId),
+          ) && (
             <MenuItem
               onClick={() => {
                 const project = projects.find((p) => p.id === activeProjectId);
@@ -669,7 +699,9 @@ const SelectProject: React.FC = () => {
               <ListItemText>Add Connection</ListItemText>
             </MenuItem>
           )}
-          {projects.find((p) => p.id === activeProjectId)?.connection?.name && (
+          {linkedConnectionOf(
+            projects.find((p) => p.id === activeProjectId),
+          ) && (
             <MenuItem
               onClick={() => {
                 const project = projects.find((p) => p.id === activeProjectId);

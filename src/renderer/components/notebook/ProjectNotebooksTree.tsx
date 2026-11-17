@@ -1,11 +1,5 @@
 import React, { useCallback, useMemo } from 'react';
-import {
-  Box,
-  Chip,
-  CircularProgress,
-  Tooltip,
-  Typography,
-} from '@mui/material';
+import { Box, CircularProgress, Tooltip, Typography } from '@mui/material';
 import { useQueryClient } from 'react-query';
 import { ArboristTree } from '../fileTreeViewer/ArboristTree';
 import type { FileStatuses } from '../fileTreeViewer/types';
@@ -179,14 +173,14 @@ export const ProjectNotebooksTree: React.FC<ProjectNotebooksTreeProps> = ({
   const ProjectIcon = projectTypeUiOf(project).Icon;
   const header = (
     <Tooltip
-      title={`Notebooks in ${project.name}/${PROJECT_NOTEBOOKS_DIR}/`}
+      title={`${projectTypeOf(project).title}: notebooks in ${project.name}/${PROJECT_NOTEBOOKS_DIR}/`}
       placement="right"
     >
       <Box
         data-testid="notebooks-linked-project"
         sx={{
           px: '10px',
-          // Chip and name are both 18px high, centred in the row
+          // Type icon (16px) and name (18px line) are centred in the row
           height: 30,
           display: 'flex',
           alignItems: 'center',
@@ -199,32 +193,18 @@ export const ProjectNotebooksTree: React.FC<ProjectNotebooksTreeProps> = ({
           mb: 0.5,
         }}
       >
-        <Chip
-          size="small"
+        {/* The project's type icon (no type text) and its name */}
+        <Box
+          sx={{ display: 'flex', flexShrink: 0 }}
           data-testid="notebooks-linked-project-type"
-          label={
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <ProjectIcon size={11} />
-              {projectTypeOf(project).shortTitle}
-            </Box>
-          }
-          sx={{
-            height: 18,
-            flexShrink: 0,
-            fontWeight: 500,
-            fontSize: 11,
-            bgcolor: 'background.paper',
-            color: 'text.secondary',
-            border: '1px solid',
-            borderColor: 'divider',
-            '& .MuiChip-label': { px: '6px' },
-          }}
-        />
+        >
+          <ProjectIcon size={16} />
+        </Box>
         <Typography
           noWrap
           sx={{
-            fontSize: 12,
-            fontWeight: 500,
+            fontSize: 13,
+            fontWeight: 600,
             minWidth: 0,
             lineHeight: '18px',
           }}

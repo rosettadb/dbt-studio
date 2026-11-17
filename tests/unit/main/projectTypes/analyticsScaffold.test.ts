@@ -12,6 +12,11 @@ jest.mock('../../../../src/main/services/connectors.service', () => ({
   __esModule: true,
   default: { getConnectionById: jest.fn(), loadConfigurations: jest.fn() },
 }));
+// Names the project connection for the README (saved connection or DuckLake
+// instance); the real one loads the DuckLake service
+jest.mock('../../../../src/main/utils/projectConnectionLabel', () => ({
+  projectConnectionLabel: jest.fn(async () => undefined),
+}));
 jest.mock('../../../../src/main/services/pythonNotebooks.service', () => ({
   __esModule: true,
   default: { createNotebookInProject: jest.fn(async () => ({})) },

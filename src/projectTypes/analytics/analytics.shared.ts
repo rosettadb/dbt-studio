@@ -28,9 +28,11 @@ export const analyticsProjectType: ProjectTypeDefinition = {
     lineage: false,
     runHistory: false,
     pipelines: true,
-    // A saved ducklake connection is only tested through the dbt path; the
-    // notebooks reach DuckLake instances directly (plan 95, section 5).
-    datalakeConnections: false,
+    // Linked to the DuckLake instance itself, as the SQL Editor and
+    // Notebooks query it: a saved DuckLake connection can't run queries
+    // outside dbt (plan 95, section 5).
+    datalakeConnections: true,
+    datalakeAsInstance: true,
   },
   // Notebooks and the SQL editor run on every connection type, including the
   // query-only ones a dbt project can't use.

@@ -379,7 +379,11 @@ export const NewProject: React.FC<NewProjectProps> = ({
               </Box>
             </MenuItem>
             {datalakeInstances.map((datalake) => {
+              // dbt's DuckLake adapter only handles S3 and local storage; a
+              // project linked to the instance itself queries it like the
+              // SQL Editor does, on any storage
               const isSupported =
+                definition.capabilities.datalakeAsInstance ||
                 datalake.storage?.type === 's3' ||
                 datalake.storage?.type === 'local';
               const isDisabled = !isSupported;
@@ -405,8 +409,10 @@ export const NewProject: React.FC<NewProjectProps> = ({
                       opacity: isDisabled ? 0.5 : 1,
                     }}
                   >
+                    {/* The DuckLake logo, like the standard connections show
+                        their database's logo */}
                     <ConnectionIconContainer>
-                      <DatabaseIcon sx={{ fontSize: 20 }} />
+                      {renderConnectionIcon('ducklake')}
                     </ConnectionIconContainer>
                     {datalake.name} - {datalake.storage?.type || 'unknown'}
                     {isDisabled && (

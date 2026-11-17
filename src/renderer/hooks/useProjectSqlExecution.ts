@@ -1,6 +1,8 @@
 import React from 'react';
 import { toast } from 'react-toastify';
-import type { Project } from '../../types/backend';
+import type { Project, QueryResponseType } from '../../types/backend';
+import { DuckLakeService } from '../services/duckLake.service';
+import { duckLakeInstanceIdOf } from '../../shared/duckLakeInstanceIds';
 import { extractModelNameFromPath } from '../helpers/utils';
 import { getConnectionById, queryData } from '../services/connectors.service';
 import type { ProjectQueryPreviewPayload } from '../components/projectQueryResults';
@@ -98,17 +100,34 @@ export const useProjectSqlExecution = ({
           throw new Error('No database connection configured for this project');
         }
 
-        const connection = await getConnectionById(project.connectionId);
-        if (!connection) {
-          throw new Error('Database connection not found');
-        }
+        // An Analytics project can be linked to a DuckLake instance itself
+        // (`ducklake-<id>`), which has no saved connection: run on the
+        // instance, as the SQL Editor does (plan 95)
+        const duckLakeInstanceId = duckLakeInstanceIdOf(project.connectionId);
+        let result: QueryResponseType;
+        if (duckLakeInstanceId) {
+          const response = await DuckLakeService.executeQuery({
+            instanceId: duckLakeInstanceId,
+            query: executableSql,
+            limit,
+            offset: 0,
+          });
+          // DuckLake field types may be names; the results panel reads only
+          // the field names
+          result = response as unknown as QueryResponseType;
+        } else {
+          const connection = await getConnectionById(project.connectionId);
+          if (!connection) {
+            throw new Error('Database connection not found');
+          }
 
-        const result = await queryData({
-          connection: connection.connection,
-          query: executableSql,
-          projectName: project.name,
-          limit,
-        });
+          result = await queryData({
+            connection: connection.connection,
+            query: executableSql,
+            projectName: project.name,
+            limit,
+          });
+        }
         const durationMs = Date.now() - startedAt;
 
         if (!result.success) {

@@ -24,6 +24,12 @@ export interface ProjectTypeCapabilities {
   pipelines: boolean;
   /** The wizard offers DuckLake instances as the project connection. */
   datalakeConnections: boolean;
+  /**
+   * How a DuckLake instance is linked. false: through a saved DuckLake
+   * connection, which dbt's profiles.yml needs. true: the instance itself
+   * (`ducklake-<id>`), the way the SQL Editor and Notebooks query it.
+   */
+  datalakeAsInstance: boolean;
 }
 
 /** One checkbox in the New Project wizard's Include step. */

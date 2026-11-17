@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import ConnectorsService from '../../main/services/connectors.service';
+import { projectConnectionLabel } from '../../main/utils/projectConnectionLabel';
 import PythonNotebooksService from '../../main/services/pythonNotebooks.service';
 import { RECOMMENDED_PYTHON_VERSION } from '../../main/services/settings.service';
 import { PROJECT_NOTEBOOKS_DIR } from '../../shared/projectNotebooks';
@@ -76,14 +76,12 @@ export const analyticsProjectTypeMain: ProjectTypeMain = {
     ) {
       return;
     }
-    const connection = project.connectionId
-      ? await ConnectorsService.getConnectionById(project.connectionId)
-      : undefined;
+    const connection = await projectConnectionLabel(project.connectionId);
     await PythonNotebooksService.createNotebookInProject(
       project.id,
       project.connectionId,
       { name: 'Getting started', pythonVersion: RECOMMENDED_PYTHON_VERSION },
-      starterNotebookCells(connection?.connection?.name),
+      starterNotebookCells(connection?.name),
     );
   },
 
