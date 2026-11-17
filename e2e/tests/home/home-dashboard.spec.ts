@@ -3,7 +3,8 @@
  *
  * The Home header (search, Connect to Cloud, Settings) replaces the top bar,
  * the Recent Projects New Project button opens the new project form, and the
- * page scales to fit the window so it never scrolls. Uses the seeded fixture,
+ * page scales to fit the window so it never scrolls (down to its 70% floor)
+ * and settles without flickering. Uses the seeded fixture,
  * so a project exists and the page fits the window (the quick start tour,
  * shown only with no projects, keeps it unscaled).
  */
@@ -103,19 +104,20 @@ test.describe('Home', () => {
     await expect(window.getByTestId('project-name-input')).toBeVisible();
   });
 
-  test('fits the window without scrolling at every size', async ({
+  test('fits the window without scrolling or flickering at every size', async ({
     electronApp,
   }) => {
     const window = await openHome(electronApp);
 
     // Too short for the page at normal size, so it has to shrink to fit
-    await resizeAppWindow(electronApp, 1280, 520);
+    await resizeAppWindow(electronApp, 1280, 620);
     await expect.poll(() => homePageScale(window)).toBeLessThan(1);
 
+    // All tall enough to fit above the 70% floor; a shorter window scrolls
     // eslint-disable-next-line no-restricted-syntax
     for (const [width, height] of [
-      [1280, 520],
-      [1024, 600],
+      [1280, 620],
+      [1024, 640],
       [1366, 705],
       [1600, 900],
       [900, 900],
@@ -129,6 +131,15 @@ test.describe('Home', () => {
           message: `Home scrolls at ${width}x${height}`,
         })
         .toBe(false);
+      // Once settled it keeps one scale instead of flipping between two
+      // eslint-disable-next-line no-await-in-loop
+      const settledScale = await homePageScale(window);
+      // eslint-disable-next-line no-await-in-loop
+      await window.waitForTimeout(500);
+      // eslint-disable-next-line no-await-in-loop
+      expect(await homePageScale(window), `scale at ${width}x${height}`).toBe(
+        settledScale,
+      );
     }
   });
 });
