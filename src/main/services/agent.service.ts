@@ -24,6 +24,7 @@ import {
 } from './ai/tokenEstimator';
 import MainDatabaseService from './mainDatabase.service';
 import ProjectsService from './projects.service';
+import { projectTypeOf } from '../../shared/projectTypes';
 import SelectedFileContextProvider from './selectedFileContextProvider.service';
 import { buildSessionContextBlock } from './ai/sessionContext.service';
 import type {
@@ -1542,6 +1543,21 @@ COMBINED SUMMARY:`,
         }
       }
 
+      let projectHasDbt = true;
+      if (screenKey === 'project' && projectPath) {
+        try {
+          const projects = await ProjectsService.loadProjects();
+          projectHasDbt = projectTypeOf(
+            projects.find((p) => p.path === projectPath),
+          ).capabilities.dbt;
+        } catch (err) {
+          console.warn(
+            '[AgentService] Could not resolve the project type:',
+            err,
+          );
+        }
+      }
+
       let sessionContextBlock = '';
       let projectPipelineContext: string | undefined;
       const projectAiContext =
@@ -1634,6 +1650,7 @@ COMBINED SUMMARY:`,
             projectPipelineContext,
             sessionContextBlock,
             connectionMeta: projectConnectionMeta,
+            hasDbt: projectHasDbt,
           });
       }
 
