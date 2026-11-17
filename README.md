@@ -102,7 +102,7 @@ Start the app in the `dev` environment:
 npm start
 ```
 
-The local runner ships inside released builds. Under `npm start`, the first start downloads the runner from the latest [dbt Studio release](https://github.com/rosettadb/dbt-studio/releases) into `resources/runner/` (git-ignored) and reuses it after that. To get a newer runner, delete `resources/runner/` and start again.
+The local runner ships inside released builds. Under `npm start`, the first start downloads the runner from the latest [dbt Studio release](https://github.com/rosettadb/dbt-studio/releases) into `resources/runner/` (git-ignored) and reuses it after that. The app runs its own copy from the `runner` folder in its data directory (`%APPDATA%\rosetta-dbt-studio\runner` on Windows, `~/Library/Application Support/rosetta-dbt-studio/runner` on macOS, `~/.config/rosetta-dbt-studio/runner` on Linux). To get a newer runner, delete both `resources/runner/` and that `runner` folder, then start again.
 
 ## Packaging for Production
 
