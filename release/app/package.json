@@ -19,6 +19,7 @@
     "@duckdb/node-api": "^1.5.2-r.1",
     "@google-cloud/spanner": "8.13.0",
     "@grpc/grpc-js": "1.14.6",
+    "@lydell/node-pty": "^1.1.0",
     "better-sqlite3": "^12.2.0",
     "drizzle-orm": "^0.44.4",
     "fs-extra": "^11.4.0",

@@ -51,7 +51,25 @@ export const createMainWindow = (
     Menu.setApplicationMenu(null);
   }
 
-  mainWindow.loadURL(resolveHtmlPath('index.html', 'app'));
+  const studioUrl = new URL(resolveHtmlPath('index.html', 'app'));
+  const isStudioUrl = (url: string) => {
+    try {
+      const target = new URL(url);
+      return (
+        target.origin === studioUrl.origin &&
+        target.pathname === studioUrl.pathname
+      );
+    } catch {
+      return false;
+    }
+  };
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!isStudioUrl(url)) event.preventDefault();
+  });
+  mainWindow.webContents.on('will-frame-navigate', (event) => {
+    if (!isStudioUrl(event.url)) event.preventDefault();
+  });
+  mainWindow.loadURL(studioUrl.href);
 
   mainWindow.on('ready-to-show', () => {
     if (mainWindow) {
