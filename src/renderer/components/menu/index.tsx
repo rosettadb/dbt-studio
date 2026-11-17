@@ -7,17 +7,10 @@ import {
   Button,
   Box,
 } from '@mui/material';
-import {
-  ArrowDownward,
-  Cloud,
-  Computer,
-  FormatListNumbered,
-  OpenInNew,
-} from '@mui/icons-material';
+import { Cloud, Computer, OpenInNew } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import {
-  BranchDropdownToggle,
   IconsContainer,
   StyledToolbar,
   AuthButtonContent,
@@ -31,9 +24,7 @@ import { icons, rosettaIcon } from '../../../../assets';
 import { utils } from '../../helpers';
 import { ROSETTA_CLOUD_BASE_URL } from '../../../main/utils/constants';
 import {
-  useGetProjects,
   useGetSelectedProject,
-  useSelectProject,
   useProfile,
   useProfileSubscription,
   useApiKey,
@@ -43,9 +34,7 @@ import {
   useGetSettings,
   useUpdateSettings,
 } from '../../controllers';
-import { SimpleDropdownMenu } from '../simpleDropdown';
 import { Icon } from '../icon';
-import { LetterAvatar } from '../letterAvatar';
 import { useAppContext } from '../../hooks';
 import { ExpandRightIcon } from '../sidebar/collapse-icons';
 import { CommandPalette } from '../commandPalette';
@@ -55,9 +44,7 @@ type MenuProps = {
 };
 
 export const Menu: React.FC<MenuProps> = ({ actions }) => {
-  const navigate = useNavigate();
   const location = useLocation();
-  const { mutateAsync: selectProject } = useSelectProject();
   const { data: settings } = useGetSettings();
   const { mutate: updateSettings } = useUpdateSettings();
   const theme = useTheme();
@@ -90,12 +77,10 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
   };
 
   const { data: project } = useGetSelectedProject();
-  const { data: projects = [] } = useGetProjects();
 
   const isProjectSelected = Boolean(project?.id);
   const isOnHome = location.pathname === '/app';
   const isOnProjectDetails = location.pathname === '/app/dbt-project';
-  const isOnSelectProject = location.pathname.includes('select-project');
 
   return (
     <StyledToolbar variant="dense">
@@ -116,55 +101,6 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
               </IconButton>
             </Tooltip>
           )}
-        {!isOnHome && !isOnSelectProject && (
-          <SimpleDropdownMenu
-            items={[
-              {
-                value: 'all',
-                label: (
-                  <BranchDropdownToggle>
-                    <FormatListNumbered fontSize="small" />
-                    All Projects
-                  </BranchDropdownToggle>
-                ),
-              },
-              ...projects.map((p) => ({
-                value: String(p.id),
-                label: (
-                  <BranchDropdownToggle>
-                    <LetterAvatar name={p?.name ?? ''} size={16} />
-                    {p?.name}
-                  </BranchDropdownToggle>
-                ),
-              })),
-            ]}
-            onSelect={async (value) => {
-              if (value === 'all') {
-                navigate('/app/select-project');
-              } else {
-                await selectProject({ projectId: value });
-                navigate('/app/dbt-project');
-              }
-            }}
-            selectedItem={project ? String(project.id) : 'all'}
-            anchorElement={
-              <BranchDropdownToggle>
-                {project ? (
-                  <>
-                    <LetterAvatar name={project.name ?? ''} size={16} />
-                    {project.name}
-                  </>
-                ) : (
-                  <>
-                    <FormatListNumbered fontSize="small" />
-                    Select Project
-                  </>
-                )}
-                <ArrowDownward style={{ fontSize: 9 }} />
-              </BranchDropdownToggle>
-            }
-          />
-        )}
       </IconsContainer>
       <IconsContainer sx={{ gap: 2 }}>
         <CommandPalette />

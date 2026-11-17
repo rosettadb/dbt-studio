@@ -10,10 +10,6 @@ import SplitPane, { Pane } from 'split-pane-react';
 import 'split-pane-react/esm/themes/default.css';
 import {
   Box,
-  FormControl,
-  Select,
-  MenuItem,
-  Tooltip,
   Typography,
   useTheme,
   Button,
@@ -23,14 +19,12 @@ import {
   DialogContentText,
   DialogActions,
   TextField,
-  IconButton,
   CircularProgress,
   useMediaQuery,
 } from '@mui/material';
 import {
   Add,
   TableChart,
-  Link as LinkIcon,
   Warning,
   InsertChart,
   Upload,
@@ -39,7 +33,6 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { connectionIcon } from '../../../connections/registry.renderer';
 import { AppLayout } from '../../layouts';
 import {
   useGetConnections,
@@ -59,12 +52,13 @@ import {
   useRenameNotebook,
   useDuplicateNotebook,
 } from '../../controllers/notebooks.controller';
-import connectionIcons, {
-  defaultIcon,
-} from '../../../../assets/connectionIcons';
 import { AppContext } from '../../context';
 import { connectorsServices, DuckLakeService } from '../../services';
 import { notebooksService } from '../../services/notebooks.service';
+import {
+  buildConnectionDropdownItems,
+  PanelHeaderDropdown,
+} from '../../components';
 import { AnalyticsEditor } from '../../components/analytics';
 import { NotebooksSidebar } from '../../components/notebook/NotebooksSidebar';
 import { NotebookTabManager } from '../../components/notebook/NotebookTabManager';
@@ -1153,7 +1147,24 @@ const Notebooks = () => {
   return (
     <AppLayout
       data-testid="notebooks-screen"
-      panelTitle="Notebooks"
+      panelHeaderLeft={
+        <PanelHeaderDropdown
+          data-testid="notebooks-connection-select"
+          items={buildConnectionDropdownItems(
+            connections,
+            duckLakeInstances,
+            projects,
+            selectedProject?.id,
+          )}
+          value={activeConnectionId}
+          onSelect={handleConnectionSelect}
+          placeholder="Select Connection"
+          allLabel="All Connections"
+          onAll={() => navigate('/app/connections')}
+          addLabel="Add connection"
+          onAdd={() => navigate('/app/add-connection')}
+        />
+      }
       sidebarContent={
         <Box
           sx={{
@@ -1163,254 +1174,27 @@ const Notebooks = () => {
             bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
           }}
         >
-          {/* Connection Selection & Actions */}
-          <Box
-            sx={{
-              p: '8px',
-              display: 'flex',
-              gap: '4px',
-              alignItems: 'center',
-              bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
-              borderBottom: `1px solid ${theme.palette.divider}`,
-            }}
+          {/* TODO: Re-enable Notebook AI Assistant in PR 32 */}
+          {/* <Tooltip
+            title={
+              notebooksChatOpen ? 'Close AI Assistant' : 'Open AI Assistant'
+            }
           >
-            <FormControl fullWidth size="small">
-              <Select
-                data-testid="notebooks-connection-select"
-                value={activeConnectionId}
-                onChange={(e) => handleConnectionSelect(e.target.value)}
-                displayEmpty
-                renderValue={(selected) => {
-                  if (!selected) return 'Select Connection';
-                  const conn = connections.find((c) => c.id === selected);
-                  if (conn) {
-                    const icon =
-                      connectionIcon(conn.connection.type) || defaultIcon;
-                    const linkedProject = projects?.find(
-                      (p) => p.connectionId === conn.id,
-                    );
-                    return (
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 1,
-                          width: '100%',
-                        }}
-                      >
-                        <img
-                          src={icon}
-                          alt=""
-                          style={{
-                            width: 14,
-                            height: 14,
-                            objectFit: 'contain',
-                          }}
-                        />
-                        <span
-                          style={{
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            flex: 1,
-                          }}
-                        >
-                          {conn.connection.name}
-                        </span>
-                        {linkedProject && (
-                          <Tooltip title={`Project: ${linkedProject.name}`}>
-                            <LinkIcon
-                              sx={{
-                                ml: 'auto',
-                                fontSize: 16,
-                                color:
-                                  linkedProject.id === selectedProject?.id
-                                    ? 'success.main'
-                                    : 'text.disabled',
-                                mr: 2,
-                                transform: 'rotate(-45deg)',
-                              }}
-                            />
-                          </Tooltip>
-                        )}
-                      </Box>
-                    );
-                  }
-
-                  // Check DuckLake instances
-                  if (selected.startsWith('ducklake-')) {
-                    const instanceId = selected.replace('ducklake-', '');
-                    const instance = duckLakeInstances.find(
-                      (inst) => inst.id === instanceId,
-                    );
-                    if (instance) {
-                      return (
-                        <Box
-                          sx={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 1,
-                            width: '100%',
-                          }}
-                        >
-                          <img
-                            src={connectionIcons.images.ducklake || defaultIcon}
-                            alt=""
-                            style={{
-                              width: 14,
-                              height: 14,
-                              objectFit: 'contain',
-                            }}
-                          />
-                          <span
-                            style={{
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              flex: 1,
-                            }}
-                          >
-                            {instance.name}
-                          </span>
-                        </Box>
-                      );
-                    }
-                  }
-
-                  return 'Select Connection';
-                }}
-                sx={{
-                  height: 28,
-                  bgcolor:
-                    theme.palette.mode === 'dark' ? '#2d2d2d' : '#e0e0e0',
-                  '& .MuiSelect-select': {
-                    py: 0,
-                    px: 1,
-                    fontSize: '0.8rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                  },
-                  '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
-                }}
-              >
-                <MenuItem value="" disabled sx={{ fontSize: '0.8rem' }}>
-                  Select Connection
-                </MenuItem>
-                {connections.map((conn) => {
-                  const linkedProject = projects?.find(
-                    (p) => p.connectionId === conn.id,
-                  );
-                  return (
-                    <MenuItem
-                      key={conn.id}
-                      value={conn.id}
-                      sx={{
-                        fontSize: '0.8rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1,
-                        justifyContent: 'space-between',
-                      }}
-                    >
-                      <Box
-                        sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
-                      >
-                        <img
-                          src={
-                            connectionIcon(conn.connection.type) || defaultIcon
-                          }
-                          alt=""
-                          style={{
-                            width: 14,
-                            height: 14,
-                            objectFit: 'contain',
-                          }}
-                        />
-                        {conn.connection.name}
-                      </Box>
-                      {linkedProject && (
-                        <Tooltip title={`Project: ${linkedProject.name}`}>
-                          <LinkIcon
-                            sx={{
-                              fontSize: 16,
-                              color:
-                                linkedProject.id === selectedProject?.id
-                                  ? 'success.main'
-                                  : 'text.disabled',
-                              transform: 'rotate(-45deg)',
-                            }}
-                          />
-                        </Tooltip>
-                      )}
-                    </MenuItem>
-                  );
-                })}
-                {/* DuckLake Instances */}
-                {duckLakeInstances.length > 0 && (
-                  <MenuItem
-                    disabled
-                    sx={{ fontSize: '0.75rem', opacity: 0.6, mt: 1 }}
-                  >
-                    <strong>DuckLake Instances</strong>
-                  </MenuItem>
-                )}
-                {duckLakeInstances.map((instance) => (
-                  <MenuItem
-                    key={`ducklake-${instance.id}`}
-                    value={`ducklake-${instance.id}`}
-                    sx={{
-                      fontSize: '0.8rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 1,
-                    }}
-                  >
-                    <img
-                      src={connectionIcons.images.ducklake || defaultIcon}
-                      alt=""
-                      style={{ width: 14, height: 14, objectFit: 'contain' }}
-                    />
-                    {instance.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <Tooltip title="Add Connection">
-              <IconButton
-                size="small"
-                onClick={() => navigate('/app/add-connection')}
-                sx={{
-                  width: 28,
-                  height: 28,
-                  bgcolor: 'transparent',
-                  '&:hover': { bgcolor: 'rgba(0,0,0,0.05)' },
-                }}
-              >
-                <Add sx={{ fontSize: 16 }} />
-              </IconButton>
-            </Tooltip>
-            {/* TODO: Re-enable Notebook AI Assistant in PR 32 */}
-            {/* <Tooltip
-              title={
-                notebooksChatOpen ? 'Close AI Assistant' : 'Open AI Assistant'
-              }
+            <IconButton
+              id="notebooks-ai-chat-toggle-btn"
+              size="small"
+              onClick={() => setNotebooksChatOpen((open) => !open)}
+              color={notebooksChatOpen ? 'primary' : 'default'}
+              sx={{
+                width: 28,
+                height: 28,
+                bgcolor: 'transparent',
+                '&:hover': { bgcolor: 'rgba(0,0,0,0.05)' },
+              }}
             >
-              <IconButton
-                id="notebooks-ai-chat-toggle-btn"
-                size="small"
-                onClick={() => setNotebooksChatOpen((open) => !open)}
-                color={notebooksChatOpen ? 'primary' : 'default'}
-                sx={{
-                  width: 28,
-                  height: 28,
-                  bgcolor: 'transparent',
-                  '&:hover': { bgcolor: 'rgba(0,0,0,0.05)' },
-                }}
-              >
-                <ChatBubbleOutline sx={{ fontSize: 16 }} />
-              </IconButton>
-            </Tooltip> */}
-          </Box>
+              <ChatBubbleOutline sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip> */}
 
           {/* Tabbed Sidebar */}
           {!activeConnectionId ? (

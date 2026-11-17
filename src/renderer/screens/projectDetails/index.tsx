@@ -5,7 +5,9 @@ import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Badge, Box, Tab, TabProps, Tabs, Tooltip } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import {
+  LetterAvatar,
   Loader,
+  PanelHeaderDropdown,
   ProjectDbtSplitButton,
   TerminalLayout,
 } from '../../components';
@@ -19,8 +21,10 @@ import { TabManager } from '../../components/editor/tabManager';
 import { ActiveFileView } from '../../components/fileViews';
 import {
   useGetFileStatuses,
+  useGetProjects,
   useGetSelectedProject,
   useGitIsInitialized,
+  useSelectProject,
 } from '../../controllers';
 import { useTabs } from '../../context/TabsProvider';
 import { Content, EditorContainer, Header, NoFileSelected } from './styles';
@@ -99,6 +103,8 @@ const ProjectDetails: React.FC = () => {
 
   const { isChatOpen, setIsSidebarOpen } = useAppContext();
   const { data: project, isLoading } = useGetSelectedProject();
+  const { data: projects = [] } = useGetProjects();
+  const { mutateAsync: selectProject } = useSelectProject();
   const { data: isInitialized } = useGitIsInitialized(project?.path, {
     enabled: !!project?.path,
   });
@@ -146,7 +152,29 @@ const ProjectDetails: React.FC = () => {
   return (
     <AppLayout
       topMenuActions={<ProjectDbtSplitButton project={project} />}
-      panelTitle="DBT Studio"
+      panelHeaderLeft={
+        <PanelHeaderDropdown
+          data-testid="project-select"
+          items={projects.map((p) => ({
+            value: String(p.id),
+            label: p.name,
+            icon: <LetterAvatar name={p.name ?? ''} size={16} />,
+          }))}
+          value={String(project.id)}
+          onSelect={async (value) => {
+            await selectProject({ projectId: value });
+          }}
+          placeholder="Select Project"
+          allLabel="All Projects"
+          onAll={() => navigate('/app/select-project')}
+          addLabel="Add project"
+          onAdd={() =>
+            navigate('/app/select-project', {
+              state: { startNewProject: true },
+            })
+          }
+        />
+      }
       sidebarContent={
         <Box
           sx={{
