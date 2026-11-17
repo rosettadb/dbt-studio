@@ -4,6 +4,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import { app } from 'electron';
 import { execFile } from 'child_process';
+import AdmZip from 'adm-zip';
 import { downloadForInstall } from '../utils/installTask';
 import {
   InstallResult,
@@ -41,10 +42,23 @@ function getRunnerBinaryFileName(): string {
   return process.platform === 'win32' ? 'rosetta-runner.exe' : 'rosetta-runner';
 }
 
+// The runner files each dbt Studio release carries, per platform and arch.
+const RUNNER_ASSET_NAMES: Record<string, Record<string, string>> = {
+  darwin: {
+    arm64: 'rosetta-runner-darwin-arm64',
+    x64: 'rosetta-runner-darwin-amd64',
+  },
+  linux: { x64: 'rosetta-runner-linux-amd64' },
+  win32: { x64: 'rosetta-runner-windows-amd64.exe' },
+};
+
+const LATEST_RUNNER_RELEASE_URL =
+  'https://github.com/rosettadb/dbt-studio/releases/latest/download';
+
 // The publish workflow puts the runner binary and its unzipped plugins into
 // resources/runner, which electron-builder ships inside the installed app.
-// Under npm start the same folder is read from the project itself, where a
-// developer copies a runner by hand (it is git-ignored).
+// Under npm start the same folder is read from the project itself (it is
+// git-ignored); downloadRunnerForDevelopment fills it the first time.
 function getBundledRunnerDir(): string {
   return app.isPackaged
     ? path.join(process.resourcesPath, 'resources', 'runner')
@@ -156,12 +170,54 @@ export default class RunnerService {
     });
   }
 
+  // npm start has no runner inside the app, so - like Rosetta and Python - the
+  // first start downloads the latest released runner into the project's
+  // resources/runner, and copyBundledRunnerToUserData sets it up from there.
+  // Later starts (and factory resets) reuse that folder without downloading.
+  static async downloadRunnerForDevelopment(
+    onDownloadStart: () => Promise<void>,
+  ): Promise<void> {
+    if (app.isPackaged) return;
+    const runnerDir = getBundledRunnerDir();
+    const assetName = RUNNER_ASSET_NAMES[process.platform]?.[process.arch];
+    if (
+      !assetName ||
+      (await fs.pathExists(path.join(runnerDir, getRunnerBinaryFileName())))
+    ) {
+      return;
+    }
+
+    await onDownloadStart();
+    const [binaryResponse, pluginsResponse] = await Promise.all([
+      downloadForInstall(`${LATEST_RUNNER_RELEASE_URL}/${assetName}`, {
+        responseType: 'arraybuffer',
+      }),
+      downloadForInstall(
+        `${LATEST_RUNNER_RELEASE_URL}/rosetta-runner-plugins.zip`,
+        { responseType: 'arraybuffer' },
+      ),
+    ]);
+
+    // Fill a staging folder and rename it into place, so a failed download
+    // never leaves a half-filled resources/runner that later starts trust.
+    const stagingDir = `${runnerDir}.partial`;
+    await fs.remove(stagingDir);
+    const binaryPath = path.join(stagingDir, getRunnerBinaryFileName());
+    await fs.outputFile(binaryPath, Buffer.from(binaryResponse.data));
+    await fs.chmod(binaryPath, 0o755);
+    new AdmZip(Buffer.from(pluginsResponse.data)).extractAllTo(
+      path.join(stagingDir, 'plugins-home'),
+      true,
+    );
+    await fs.move(stagingDir, runnerDir, { overwrite: true });
+  }
+
   // Copies the runner that ships inside the app into userData/runner/<app
   // version> and points settings at it. It is copied rather than run in place
   // because the install folder is read-only on macOS and Linux. Runs on every
   // start but only copies after an app update (or when the copy is missing).
-  // Without a bundled runner (unsupported platforms, or npm start with an
-  // empty project resources/runner) whatever runner is already saved is kept.
+  // Without a bundled runner (unsupported platforms, or npm start when the
+  // download failed) whatever runner is already saved is kept.
   static async copyBundledRunnerToUserData(): Promise<void> {
     const bundledDir = getBundledRunnerDir();
     if (
