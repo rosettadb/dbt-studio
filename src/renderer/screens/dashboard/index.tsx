@@ -193,6 +193,13 @@ const features = [
 // How many rows each bottom panel lists; its Manage All button only shows when
 // there are more than this.
 const panelRowsShownCount = 3;
+// Each panel always keeps room for that many rows and for its Manage All
+// button, so the page is the same height, and so gets the same scale, however
+// many projects or connections there are. A row with a name and a path is
+// about 43.5px; the Manage All area is its divider with margins (22px) plus
+// the 26px button.
+const panelRowsReservedHeight = panelRowsShownCount * 44;
+const panelManageAllReservedHeight = 48;
 
 // Below this scale the text gets too small to read, so a smaller window than
 // that scrolls instead of shrinking the page further.
@@ -217,7 +224,7 @@ const usePageScaleThatFitsWindow = (isScalingAllowed: boolean) => {
     }
     const windowBox = windowRef.current!;
     const page = pageRef.current!;
-    const fitPageToWindow = () => {
+    const fitPageToWindow = (isGrowingAllowed: boolean) => {
       const currentScale =
         parseFloat(getComputedStyle(page).getPropertyValue('zoom')) || 1;
       const unscaledPageHeight = getTrueScreenRect(page).height / currentScale;
@@ -230,20 +237,30 @@ const usePageScaleThatFitsWindow = (isScalingAllowed: boolean) => {
         smallestReadablePageScale,
         Math.floor(scaleThatFits * 1000) / 1000,
       );
-      // Rescaling rewraps some text, which changes the page's height a little,
-      // so this runs again after each change. Shrinking always applies, so the
-      // page never stays too tall; a tiny grow is skipped so it settles.
+      // Rescaling rewraps some text, which changes the page's height, so this
+      // runs again after each change. Shrinking always applies, so the page
+      // never stays too tall. Growing only follows a window resize: growing
+      // because a rewrap made the page shorter can make it wrap back and get
+      // too tall again, and the page would flicker between the two scales. A
+      // tiny grow is skipped too, so it settles.
       setPageScale((previousScale) =>
-        nextScale > previousScale && nextScale - previousScale < 0.005
+        nextScale > previousScale &&
+        (!isGrowingAllowed || nextScale - previousScale < 0.005)
           ? previousScale
           : nextScale,
       );
     };
     // Fits once before the first paint, so Home doesn't flash at the wrong
     // size, then refits when the window resizes or the page's content changes
-    fitPageToWindow();
-    const resizeObserver = new ResizeObserver(fitPageToWindow);
-    resizeObserver.observe(windowBox);
+    fitPageToWindow(true);
+    const resizeObserver = new ResizeObserver((resizedBoxes) =>
+      fitPageToWindow(
+        resizedBoxes.some((resizedBox) => resizedBox.target === windowBox),
+      ),
+    );
+    // Its outer (border) size, which a scrollbar appearing doesn't change, so
+    // only a real window resize counts
+    resizeObserver.observe(windowBox, { box: 'border-box' });
     resizeObserver.observe(page);
     return () => resizeObserver.disconnect();
   }, [isScalingAllowed]);
@@ -643,65 +660,81 @@ const Dashboard: React.FC = () => {
                 </Button>
               </Box>
               <Divider sx={{ mb: 1 }} />
-              {projects.length === 0 ? (
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ py: 3, textAlign: 'center' }}
-                >
-                  No recent projects found.
-                </Typography>
-              ) : (
-                <List disablePadding>
-                  {mostRecentlyOpenedProjects.map((p: any) => (
-                    <ListItemButton
-                      key={p.id || p.path}
-                      onClick={() => handleOpenProject(String(p.id))}
-                      sx={{
-                        borderRadius: 1.5,
-                        py: 0.25,
-                        '&:hover': {
-                          backgroundColor: theme.palette.action.hover,
-                        },
-                      }}
-                    >
-                      <ListItemIcon
-                        sx={{ minWidth: 36, color: theme.palette.primary.main }}
+              <Box sx={{ minHeight: panelRowsReservedHeight }}>
+                {projects.length === 0 ? (
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ py: 3, textAlign: 'center' }}
+                  >
+                    No recent projects found.
+                  </Typography>
+                ) : (
+                  <List disablePadding>
+                    {mostRecentlyOpenedProjects.map((p: any) => (
+                      <ListItemButton
+                        key={p.id || p.path}
+                        onClick={() => handleOpenProject(String(p.id))}
+                        sx={{
+                          borderRadius: 1.5,
+                          py: 0.25,
+                          '&:hover': {
+                            backgroundColor: theme.palette.action.hover,
+                          },
+                        }}
                       >
-                        <ProjectTypeIcon connectionType={p.connection?.type} />
-                      </ListItemIcon>
-                      <ListItemText
-                        sx={{ my: 0 }}
-                        primary={p.name}
-                        secondary={p.path}
-                        primaryTypographyProps={{
-                          fontWeight: 600,
-                          fontSize: '0.9rem',
-                        }}
-                        secondaryTypographyProps={{
-                          fontSize: '0.78rem',
-                          noWrap: true,
-                        }}
-                      />
-                    </ListItemButton>
-                  ))}
-                </List>
-              )}
-              {projects.length > panelRowsShownCount && (
-                <>
-                  <Divider sx={{ mt: 1.5, mb: 1.125 }} />
-                  <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      onClick={() => navigate('/app/select-project')}
-                      sx={manageAllButtonSx}
-                    >
-                      Manage All Projects
-                    </Button>
-                  </Box>
-                </>
-              )}
+                        <ListItemIcon
+                          sx={{
+                            minWidth: 36,
+                            color: theme.palette.primary.main,
+                          }}
+                        >
+                          <ProjectTypeIcon
+                            connectionType={p.connection?.type}
+                          />
+                        </ListItemIcon>
+                        <ListItemText
+                          sx={{ my: 0 }}
+                          primary={p.name}
+                          secondary={p.path}
+                          primaryTypographyProps={{
+                            fontWeight: 600,
+                            fontSize: '0.9rem',
+                          }}
+                          secondaryTypographyProps={{
+                            fontSize: '0.78rem',
+                            noWrap: true,
+                          }}
+                        />
+                      </ListItemButton>
+                    ))}
+                  </List>
+                )}
+              </Box>
+              {/* A flex column, so the divider's margins stay inside this box */}
+              <Box
+                sx={{
+                  height: panelManageAllReservedHeight,
+                  display: 'flex',
+                  flexDirection: 'column',
+                }}
+              >
+                {projects.length > panelRowsShownCount && (
+                  <>
+                    <Divider sx={{ mt: 1.5, mb: 1.125 }} />
+                    <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => navigate('/app/select-project')}
+                        sx={manageAllButtonSx}
+                      >
+                        Manage All Projects
+                      </Button>
+                    </Box>
+                  </>
+                )}
+              </Box>
             </Paper>
           </Grid>
 
@@ -753,64 +786,80 @@ const Dashboard: React.FC = () => {
                 </Button>
               </Box>
               <Divider sx={{ mb: 1 }} />
-              {connections.length === 0 ? (
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ py: 3, textAlign: 'center' }}
-                >
-                  No connections configured yet.
-                </Typography>
-              ) : (
-                <List disablePadding>
-                  {connections.slice(0, panelRowsShownCount).map((c: any) => (
-                    <ListItemButton
-                      key={c.id}
-                      onClick={() => handleFeatureClick('/app/connections')}
-                      sx={{
-                        borderRadius: 1.5,
-                        py: 0.25,
-                        '&:hover': {
-                          backgroundColor: theme.palette.action.hover,
-                        },
-                      }}
-                    >
-                      <ListItemIcon
-                        sx={{ minWidth: 36, color: theme.palette.primary.main }}
+              <Box sx={{ minHeight: panelRowsReservedHeight }}>
+                {connections.length === 0 ? (
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ py: 3, textAlign: 'center' }}
+                  >
+                    No connections configured yet.
+                  </Typography>
+                ) : (
+                  <List disablePadding>
+                    {connections.slice(0, panelRowsShownCount).map((c: any) => (
+                      <ListItemButton
+                        key={c.id}
+                        onClick={() => handleFeatureClick('/app/connections')}
+                        sx={{
+                          borderRadius: 1.5,
+                          py: 0.25,
+                          '&:hover': {
+                            backgroundColor: theme.palette.action.hover,
+                          },
+                        }}
                       >
-                        <ProjectTypeIcon connectionType={c.connection?.type} />
-                      </ListItemIcon>
-                      <ListItemText
-                        sx={{ my: 0 }}
-                        primary={c.connection?.name || c.name || 'Connection'}
-                        secondary={c.connection?.type || 'Database'}
-                        primaryTypographyProps={{
-                          fontWeight: 600,
-                          fontSize: '0.9rem',
-                        }}
-                        secondaryTypographyProps={{
-                          fontSize: '0.78rem',
-                        }}
-                      />
-                    </ListItemButton>
-                  ))}
-                </List>
-              )}
-              {connections.length > panelRowsShownCount && (
-                <>
-                  <Divider sx={{ mt: 1.5, mb: 1.125 }} />
-                  <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      onClick={() => handleFeatureClick('/app/connections')}
-                      sx={manageAllButtonSx}
-                    >
-                      Manage All Connections
-                    </Button>
-                  </Box>
-                </>
-              )}
+                        <ListItemIcon
+                          sx={{
+                            minWidth: 36,
+                            color: theme.palette.primary.main,
+                          }}
+                        >
+                          <ProjectTypeIcon
+                            connectionType={c.connection?.type}
+                          />
+                        </ListItemIcon>
+                        <ListItemText
+                          sx={{ my: 0 }}
+                          primary={c.connection?.name || c.name || 'Connection'}
+                          secondary={c.connection?.type || 'Database'}
+                          primaryTypographyProps={{
+                            fontWeight: 600,
+                            fontSize: '0.9rem',
+                          }}
+                          secondaryTypographyProps={{
+                            fontSize: '0.78rem',
+                          }}
+                        />
+                      </ListItemButton>
+                    ))}
+                  </List>
+                )}
+              </Box>
+              {/* A flex column, so the divider's margins stay inside this box */}
+              <Box
+                sx={{
+                  height: panelManageAllReservedHeight,
+                  display: 'flex',
+                  flexDirection: 'column',
+                }}
+              >
+                {connections.length > panelRowsShownCount && (
+                  <>
+                    <Divider sx={{ mt: 1.5, mb: 1.125 }} />
+                    <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => handleFeatureClick('/app/connections')}
+                        sx={manageAllButtonSx}
+                      >
+                        Manage All Connections
+                      </Button>
+                    </Box>
+                  </>
+                )}
+              </Box>
             </Paper>
           </Grid>
         </Grid>
