@@ -12,12 +12,34 @@ import {
 const mockNavigate = jest.fn();
 
 // The Dashboard watches its size to fit the window; jsdom has no
-// ResizeObserver, so this one lets a test say "the window was resized".
-let refitDashboardToWindow: () => void = () => {};
-window.ResizeObserver = jest.fn((callback: () => void) => {
-  refitDashboardToWindow = callback;
-  return { observe: jest.fn(), disconnect: jest.fn() };
+// ResizeObserver, so this one lets a test say which box was resized: the
+// window, or only the page.
+let reportResizedBoxes: (
+  resizedBoxes: { target: Element }[],
+) => void = () => {};
+const observeBox = jest.fn();
+window.ResizeObserver = jest.fn((callback) => {
+  reportResizedBoxes = callback;
+  return { observe: observeBox, disconnect: jest.fn() };
 }) as unknown as typeof ResizeObserver;
+
+// The window box is the one watched by its outer (border) size
+const windowBox = () =>
+  observeBox.mock.calls.find(
+    ([, options]) => options?.box === 'border-box',
+  )![0];
+const resizeWindow = () =>
+  act(() => reportResizedBoxes([{ target: windowBox() }]));
+const pageChangedSize = () =>
+  act(() =>
+    reportResizedBoxes([
+      {
+        target: screen
+          .getByText('Workspace Overview')
+          .closest('[data-tour="tour-workspace-overview"]')!.parentElement!,
+      },
+    ]),
+  );
 
 jest.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate,
@@ -107,6 +129,23 @@ const isBefore = (first: HTMLElement, second: HTMLElement) =>
 
 const getRow = (text: string) =>
   screen.getByText(text).closest('[role="button"]') as HTMLElement;
+
+// A value from the element's own style rule; jsdom lays nothing out, so the
+// rule is what can be checked
+const styleRuleValue = (element: Element, property: string) => {
+  const selectors = Array.from(element.classList).map((name) => `.${name}`);
+  const value = Array.from(document.styleSheets)
+    .flatMap((sheet) => Array.from(sheet.cssRules))
+    .filter(
+      (rule) =>
+        rule instanceof CSSStyleRule && selectors.includes(rule.selectorText),
+    )
+    .map((rule) =>
+      rule.cssText.match(new RegExp(`(?:^|[ ;{])${property}: ([^;]+);`)),
+    )
+    .find(Boolean);
+  return value ? value[1] : undefined;
+};
 
 describe('Dashboard panels', () => {
   beforeEach(() => {
@@ -311,22 +350,13 @@ describe('Dashboard panels', () => {
     // The zoom in the page's style rule (the box around the header, modules
     // and panels)
     const pageScale = () => {
-      const page = screen
-        .getByText('Workspace Overview')
-        .closest('[data-tour="tour-workspace-overview"]')!.parentElement!;
-      const pageSelectors = Array.from(page.classList).map(
-        (name) => `.${name}`,
+      const zoom = styleRuleValue(
+        screen
+          .getByText('Workspace Overview')
+          .closest('[data-tour="tour-workspace-overview"]')!.parentElement!,
+        'zoom',
       );
-      const zoom = Array.from(document.styleSheets)
-        .flatMap((sheet) => Array.from(sheet.cssRules))
-        .filter(
-          (rule) =>
-            rule instanceof CSSStyleRule &&
-            pageSelectors.includes(rule.selectorText),
-        )
-        .map((rule) => rule.cssText.match(/zoom: ([\d.]+)/))
-        .find(Boolean);
-      return zoom ? Number(zoom[1]) : undefined;
+      return zoom ? Number(zoom) : undefined;
     };
 
     const moduleCard = () =>
@@ -370,7 +400,7 @@ describe('Dashboard panels', () => {
       renderDashboard();
 
       setSizes({ windowHeight: 1000, windowWidth: 2000, pageHeight: 800 });
-      act(() => refitDashboardToWindow());
+      resizeWindow();
 
       expect(pageScale()).toBe(1.25);
     });
@@ -381,13 +411,55 @@ describe('Dashboard panels', () => {
 
       // Wants 0.7509: less than 0.005 bigger, so it stays put
       setSizes({ windowHeight: 600, windowWidth: 2000, pageHeight: 799 });
-      act(() => refitDashboardToWindow());
+      resizeWindow();
       expect(pageScale()).toBe(0.75);
 
       // Wants 0.7317, rounded down: any shrink applies
       setSizes({ windowHeight: 600, windowWidth: 2000, pageHeight: 820 });
-      act(() => refitDashboardToWindow());
+      resizeWindow();
       expect(pageScale()).toBe(0.731);
+    });
+
+    it('only shrinks when the page itself changes size, so it cannot flicker', () => {
+      setSizes({ windowHeight: 600, windowWidth: 2000, pageHeight: 800 });
+      renderDashboard();
+
+      // Text unwrapped and the page got shorter: growing could rewrap it and
+      // loop, so it stays put
+      setSizes({ windowHeight: 600, windowWidth: 2000, pageHeight: 700 });
+      pageChangedSize();
+      expect(pageScale()).toBe(0.75);
+
+      // Text wrapped and the page got taller: it still shrinks to fit
+      setSizes({ windowHeight: 600, windowWidth: 2000, pageHeight: 820 });
+      pageChangedSize();
+      expect(pageScale()).toBe(0.731);
+    });
+
+    it("watches the window's outer size, so a scrollbar appearing is not a resize", () => {
+      setSizes({ windowHeight: 600, windowWidth: 2000, pageHeight: 800 });
+
+      renderDashboard();
+
+      expect(windowBox()).toBeInstanceOf(HTMLElement);
+      expect(observeBox).toHaveBeenCalledWith(windowBox(), {
+        box: 'border-box',
+      });
+    });
+
+    it('keeps room for 3 rows and the Manage All button with only 1 project, so the size stays the same', () => {
+      setSizes({ windowHeight: 600, windowWidth: 2000, pageHeight: 800 });
+
+      renderDashboard({ projects: buildProjects(1) });
+
+      const projectRows = screen
+        .getByText('Recent Projects (1)')
+        .closest('[data-tour="tour-recent-projects"]')!
+        .querySelector('.MuiList-root')!.parentElement!;
+      expect(styleRuleValue(projectRows, 'min-height')).toBe('132px');
+      expect(styleRuleValue(projectRows.nextElementSibling!, 'height')).toBe(
+        '48px',
+      );
     });
 
     it('keeps 4 cards per row and the panels side by side', () => {
