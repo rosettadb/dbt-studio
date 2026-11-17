@@ -1,18 +1,20 @@
 import type React from 'react';
-import type { Project } from '../types/backend';
-import { dbtProjectType } from './dbt/dbt.shared';
-import { analyticsProjectType } from './analytics/analytics.shared';
+import type { Project } from './backend';
 
 /**
  * Project types (plan 95a). A project's type decides what Studio creates in
  * its folder, which connections it accepts and which parts of the project
- * workspace it shows. Type-specific behaviour lives only in
- * `src/projectTypes/<type>/` and is read through the registries; screens,
- * services and hooks never compare `project.type` themselves.
+ * workspace it shows. The type is stored only in Studio (`Project.type` in
+ * database.json); the project folder has no marker file.
  *
- * The type is stored only in Studio (`Project.type` in database.json); the
- * project folder has no marker file. Clone and import work it out from the
- * folder with `detectProjectType` (registry.main.ts).
+ * - Definitions and lookups: src/shared/projectTypes.ts
+ * - Main process (scaffold, connection changes, clone/import detection):
+ *   src/main/services/projectTypes.service.ts
+ * - Renderer (type icons, top bar actions):
+ *   src/renderer/components/projectTypes/
+ *
+ * Screens, services and hooks never compare `project.type`; they read the
+ * type's capabilities or go through those three modules.
  */
 
 /** Every project type. A project saved without `type` is a dbt project. */
@@ -69,7 +71,7 @@ export interface ScaffoldInput {
   connectionId?: string;
 }
 
-/** Main-process behaviour of one project type, read through registry.main.ts. */
+/** Main-process behaviour of one project type (projectTypes.service.ts). */
 export interface ProjectTypeMain {
   /** Write the new project's files. Runs before the project is saved. */
   scaffold(input: ScaffoldInput): Promise<void>;
@@ -84,59 +86,10 @@ export interface ProjectTypeMain {
   detectRoot(folder: string): Promise<string | null>;
 }
 
-/** Renderer side of one project type, read through registry.renderer.ts. */
+/** Renderer side of one project type (components/projectTypes). */
 export interface ProjectTypeUi {
   /** Type icon at `size` px. */
   Icon: React.ComponentType<{ size?: number }>;
   /** Actions in the project workspace's top bar; none when absent. */
   TopMenuActions?: React.ComponentType<{ project: Project }>;
-}
-
-// --- Registry ------------------------------------------------------------
-
-/** One definition per type. A missing key fails tsc. */
-const definitions: { readonly [K in ProjectType]: ProjectTypeDefinition } = {
-  dbt: dbtProjectType,
-  analytics: analyticsProjectType,
-};
-
-/** Wizard order. */
-const ORDER: ProjectType[] = ['dbt', 'analytics'];
-
-export const DEFAULT_PROJECT_TYPE: ProjectType = 'dbt';
-
-export function isProjectType(value: unknown): value is ProjectType {
-  return typeof value === 'string' && value in definitions;
-}
-
-/** The project's type; projects saved before plan 95a have none and are dbt. */
-export function getProjectType(
-  project?: { type?: ProjectType | string } | null,
-): ProjectType {
-  const type = project?.type;
-  return isProjectType(type) ? type : DEFAULT_PROJECT_TYPE;
-}
-
-export function getProjectTypeDefinition(
-  type: ProjectType,
-): ProjectTypeDefinition {
-  return definitions[type] ?? definitions[DEFAULT_PROJECT_TYPE];
-}
-
-/** Shorthand for getProjectTypeDefinition(getProjectType(project)). */
-export function projectTypeOf(
-  project?: { type?: ProjectType | string } | null,
-): ProjectTypeDefinition {
-  return getProjectTypeDefinition(getProjectType(project));
-}
-
-export function listProjectTypes(): ProjectTypeDefinition[] {
-  return ORDER.map((type) => definitions[type]);
-}
-
-/** The Include items that are on when the wizard opens for this type. */
-export function defaultTemplateItems(type: ProjectType): string[] {
-  return getProjectTypeDefinition(type)
-    .templateItems.filter((item) => item.defaultOn)
-    .map((item) => item.id);
 }

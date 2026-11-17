@@ -6,7 +6,7 @@ import type {
 } from '../connections/registry.shared';
 import { CloudConnection, RecentItem } from './frontend';
 import type { IcebergInstanceConfig } from './iceberg';
-import type { ProjectType } from '../projectTypes/registry.shared';
+import type { ProjectType } from './projectTypes';
 
 export type {
   ConnectionInput,

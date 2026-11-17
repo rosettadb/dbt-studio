@@ -16,7 +16,7 @@ import { AI_PROMPTS } from '../../config/constants';
 import { utils } from '../../helpers';
 import { path as nodePath } from '../../lib/path';
 import type { SupportedConnectionTypes } from '../../../types/backend';
-import { projectTypeOf } from '../../../projectTypes/registry.shared';
+import { projectTypeOf } from '../../../shared/projectTypes';
 import type { FileViewDefinition, FileViewProps } from './types';
 
 type EditorTabsProps = Pick<FileViewProps, 'project'>;

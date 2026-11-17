@@ -10,7 +10,7 @@ import {
   EnhanceModelResponseType,
   CliProcessEnvironment,
 } from '../../types/backend';
-import type { ProjectType } from '../../projectTypes/registry.shared';
+import type { ProjectType } from '../../types/projectTypes';
 
 export const getProjects = async (): Promise<Project[]> => {
   const { data } = await client.get<Project[]>('project:list');

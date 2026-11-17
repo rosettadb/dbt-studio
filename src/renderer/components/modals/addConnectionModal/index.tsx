@@ -15,7 +15,7 @@ import {
 } from '@mui/material';
 import { toast } from 'react-toastify';
 import { Project, ConnectionModel } from '../../../../types/backend';
-import { projectTypeOf } from '../../../../projectTypes/registry.shared';
+import { projectTypeOf } from '../../../../shared/projectTypes';
 import { useDuckLakeInstances } from '../../../controllers';
 import { duckLakeInstanceConnectionId } from '../../../../shared/duckLakeInstanceIds';
 

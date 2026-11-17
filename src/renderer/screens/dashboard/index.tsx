@@ -30,8 +30,8 @@ import DatabaseIcon from '@mui/icons-material/Storage';
 
 import { icons, rosettaIcon } from '../../../../assets';
 import { connectionIcon } from '../../../connections/registry.renderer';
-import { getProjectTypeUi } from '../../../projectTypes/registry.renderer';
-import type { ProjectType } from '../../../projectTypes/registry.shared';
+import { getProjectTypeUi } from '../../components/projectTypes';
+import type { ProjectType } from '../../../types/projectTypes';
 import { ProjectMenuIcon } from '../../components/sidebar/icons';
 import { ReactComponent as RouteIcon } from '../../assets/icons/lucide/route.svg';
 import { useAppContext } from '../../hooks';

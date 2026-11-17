@@ -1,7 +1,8 @@
 /**
- * Project types (plan 95a): the registry defaults, which connections each
- * type accepts, how clone and import detect a folder's type, what each
- * scaffold writes, and the DuckLake instance ids Analytics projects link to.
+ * Project types (plan 95a): the shared definitions (defaults, accepted
+ * connections), ProjectTypesService (what each scaffold writes, how clone
+ * and import detect a folder's type) and the DuckLake instance ids Analytics
+ * projects link to.
  */
 
 import fs from 'fs-extra';
@@ -39,21 +40,15 @@ jest.mock('../../../../src/main/services/duckLake.service', () => ({
 }));
 
 // eslint-disable-next-line import/first
-import { analyticsProjectTypeMain } from '../../../../src/projectTypes/analytics/analytics.main';
-// eslint-disable-next-line import/first
-import { ANALYTICS_ITEMS } from '../../../../src/projectTypes/analytics/analytics.shared';
-// eslint-disable-next-line import/first
-import { dbtProjectTypeMain } from '../../../../src/projectTypes/dbt/dbt.main';
-// eslint-disable-next-line import/first
-import { DBT_TEMPLATE_FOLDERS_ITEM } from '../../../../src/projectTypes/dbt/dbt.shared';
-// eslint-disable-next-line import/first
-import { detectProjectType } from '../../../../src/projectTypes/registry.main';
+import ProjectTypesService from '../../../../src/main/services/projectTypes.service';
 // eslint-disable-next-line import/first
 import {
+  ANALYTICS_ITEMS,
+  DBT_TEMPLATE_FOLDERS_ITEM,
   defaultTemplateItems,
   getProjectType,
   projectTypeOf,
-} from '../../../../src/projectTypes/registry.shared';
+} from '../../../../src/shared/projectTypes';
 // eslint-disable-next-line import/first
 import {
   duckLakeInstanceConnectionId,
@@ -77,7 +72,7 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
-describe('project type registry', () => {
+describe('project type definitions', () => {
   it('treats projects saved without a type as dbt', () => {
     expect(getProjectType({})).toBe('dbt');
     expect(getProjectType({ type: 'unknown' })).toBe('dbt');
@@ -102,10 +97,12 @@ describe('project type registry', () => {
   });
 });
 
-describe('detectProjectType (clone and import)', () => {
+describe('detectType (clone and import)', () => {
   it('is dbt, at the dbt_project.yml folder, when one is found', async () => {
     findDbtProjectRoot.mockResolvedValue('/repos/shop/transform');
-    await expect(detectProjectType('/repos/shop')).resolves.toEqual({
+    await expect(
+      ProjectTypesService.detectType('/repos/shop'),
+    ).resolves.toEqual({
       type: 'dbt',
       root: '/repos/shop/transform',
     });
@@ -114,7 +111,9 @@ describe('detectProjectType (clone and import)', () => {
 
   it('is Analytics, at the folder itself, without dbt_project.yml', async () => {
     findDbtProjectRoot.mockResolvedValue(null);
-    await expect(detectProjectType('/repos/notes')).resolves.toEqual({
+    await expect(
+      ProjectTypesService.detectType('/repos/notes'),
+    ).resolves.toEqual({
       type: 'analytics',
       root: '/repos/notes',
     });
@@ -123,7 +122,7 @@ describe('detectProjectType (clone and import)', () => {
 
 describe('dbt scaffold', () => {
   it('runs the same helpers, in the same order, as before project types', async () => {
-    await dbtProjectTypeMain.scaffold({
+    await ProjectTypesService.scaffold('dbt', {
       projectPath: '/p/shop',
       name: 'shop',
       include: [DBT_TEMPLATE_FOLDERS_ITEM],
@@ -140,7 +139,7 @@ describe('dbt scaffold', () => {
   });
 
   it('skips the template folders when they are not included', async () => {
-    await dbtProjectTypeMain.scaffold({
+    await ProjectTypesService.scaffold('dbt', {
       projectPath: '/p/shop',
       name: 'shop',
       include: [],
@@ -167,7 +166,7 @@ describe('Analytics scaffold', () => {
     getConnectionById.mockResolvedValue({
       connection: { name: 'warehouse', type: 'postgres' },
     });
-    await analyticsProjectTypeMain.scaffold({
+    await ProjectTypesService.scaffold('analytics', {
       projectPath,
       name: 'sales_analysis',
       include: defaultTemplateItems('analytics'),
@@ -193,7 +192,7 @@ describe('Analytics scaffold', () => {
 
   it('names a linked DuckLake instance in the README', async () => {
     getInstance.mockResolvedValue({ id: 'i1', name: 'lake' });
-    await analyticsProjectTypeMain.scaffold({
+    await ProjectTypesService.scaffold('analytics', {
       projectPath,
       name: 'lake_analysis',
       include: [ANALYTICS_ITEMS.readme],
@@ -207,7 +206,7 @@ describe('Analytics scaffold', () => {
   });
 
   it('creates an empty folder when nothing is included', async () => {
-    await analyticsProjectTypeMain.scaffold({
+    await ProjectTypesService.scaffold('analytics', {
       projectPath,
       name: 'bare',
       include: [],
@@ -216,7 +215,7 @@ describe('Analytics scaffold', () => {
   });
 
   it('keeps the optional folders in Git with .gitkeep', async () => {
-    await analyticsProjectTypeMain.scaffold({
+    await ProjectTypesService.scaffold('analytics', {
       projectPath,
       name: 'with_data',
       include: [ANALYTICS_ITEMS.data, ANALYTICS_ITEMS.pipelines],
@@ -229,7 +228,7 @@ describe('Analytics scaffold', () => {
 
   it('writes nothing when the connection changes', async () => {
     await fs.mkdirp(projectPath);
-    await analyticsProjectTypeMain.onConnectionChanged({
+    await ProjectTypesService.onConnectionChanged({
       id: '1',
       name: 'x',
       path: projectPath,

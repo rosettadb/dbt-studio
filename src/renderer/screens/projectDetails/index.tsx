@@ -5,8 +5,8 @@ import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Badge, Box, Tab, TabProps, Tabs, Tooltip } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { Loader, TerminalLayout } from '../../components';
-import { projectTypeOf } from '../../../projectTypes/registry.shared';
-import { projectTypeUiOf } from '../../../projectTypes/registry.renderer';
+import { projectTypeOf } from '../../../shared/projectTypes';
+import { projectTypeUiOf } from '../../components/projectTypes';
 import {
   ProjectSidebar,
   SidebarTab,

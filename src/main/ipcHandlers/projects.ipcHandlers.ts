@@ -2,7 +2,7 @@ import { ipcMain } from 'electron';
 import { ProjectsService } from '../services';
 import { AIProviderManager } from '../services/ai/providerManager.service';
 import { Project } from '../../types/backend';
-import type { ProjectType } from '../../projectTypes/registry.shared';
+import type { ProjectType } from '../../types/projectTypes';
 import {
   CompletionResponse,
   JSONSchema,

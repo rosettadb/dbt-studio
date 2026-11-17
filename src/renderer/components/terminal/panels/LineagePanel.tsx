@@ -3,7 +3,7 @@ import { LineageModal, LineageView } from '../../lineage';
 import { useCurrentModelId } from '../../../controllers';
 import { useTabs } from '../../../context/TabsProvider';
 import type { TerminalPanelContext, TerminalPanelDefinition } from './types';
-import { projectTypeOf } from '../../../../projectTypes/registry.shared';
+import { projectTypeOf } from '../../../../shared/projectTypes';
 
 const isSqlModel = (filePath?: string) =>
   !!filePath && filePath.toLowerCase().split('.').pop() === 'sql';

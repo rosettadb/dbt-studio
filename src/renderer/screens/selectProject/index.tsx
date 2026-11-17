@@ -62,9 +62,9 @@ import {
   DEFAULT_PROJECT_TYPE,
   defaultTemplateItems,
   projectTypeOf,
-  type ProjectType,
-} from '../../../projectTypes/registry.shared';
-import { projectTypeUiOf } from '../../../projectTypes/registry.renderer';
+} from '../../../shared/projectTypes';
+import type { ProjectType } from '../../../types/projectTypes';
+import { projectTypeUiOf } from '../../components/projectTypes';
 import {
   duckLakeInstanceConnectionId,
   duckLakeInstanceIdOf,

@@ -45,7 +45,7 @@ import {
 } from '../../controllers';
 import { SimpleDropdownMenu } from '../simpleDropdown';
 import { Icon } from '../icon';
-import { projectTypeUiOf } from '../../../projectTypes/registry.renderer';
+import { projectTypeUiOf } from '../projectTypes';
 import { useAppContext } from '../../hooks';
 import { ExpandRightIcon } from '../sidebar/collapse-icons';
 import { CommandPalette } from '../commandPalette';

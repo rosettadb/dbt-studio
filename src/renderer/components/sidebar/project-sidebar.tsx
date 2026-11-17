@@ -25,7 +25,7 @@ import {
   connectionLabel,
   connectionAccentColor,
 } from '../../../connections/registry.renderer';
-import { projectTypeOf } from '../../../projectTypes/registry.shared';
+import { projectTypeOf } from '../../../shared/projectTypes';
 import { duckLakeInstanceIdOf } from '../../../shared/duckLakeInstanceIds';
 import { ReactComponent as RouteIcon } from '../../assets/icons/lucide/route.svg';
 import { FileTreeViewer } from '../index';

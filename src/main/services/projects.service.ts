@@ -34,14 +34,10 @@ import {
   defaultTemplateItems,
   getProjectType,
   getProjectTypeDefinition,
-  type ProjectType,
-} from '../../projectTypes/registry.shared';
-import {
-  detectProjectType,
-  getProjectTypeMain,
-  projectTypeMainOf,
-} from '../../projectTypes/registry.main';
+} from '../../shared/projectTypes';
+import type { ProjectType } from '../../types/projectTypes';
 import SettingsService from './settings.service';
+import ProjectTypesService from './projectTypes.service';
 import ConnectorsService from './connectors.service';
 import MainDatabaseService from './mainDatabase.service';
 import {
@@ -86,7 +82,7 @@ export default class ProjectsService {
       // regenerating them
       try {
         const fromFiles =
-          await projectTypeMainOf(project).readConnectionFiles(project);
+          await ProjectTypesService.readConnectionFiles(project);
         return { ...project, ...fromFiles };
       } catch {
         // If parsing fails, return project without these properties
@@ -131,7 +127,6 @@ export default class ProjectsService {
     const items =
       include ??
       (createTemplateFolders ? defaultTemplateItems(projectType) : []);
-    const typeMain = getProjectTypeMain(projectType);
 
     const project: Project = {
       id: Date.now().toString(),
@@ -145,7 +140,7 @@ export default class ProjectsService {
     };
 
     sanitizeForStorage(project);
-    await typeMain.scaffold({
+    await ProjectTypesService.scaffold(projectType, {
       projectPath: project.path,
       name: project.name,
       include: items,
@@ -157,7 +152,7 @@ export default class ProjectsService {
     // If connection is selected, let the type write its config files
     // (dbt: profiles.yml and rosetta/main.conf)
     if (connectionId) {
-      await typeMain.onConnectionChanged(project);
+      await ProjectTypesService.onConnectionChanged(project);
     }
 
     return (await this.getProject(project.id)) ?? project;
@@ -174,7 +169,7 @@ export default class ProjectsService {
   }) {
     // A clone with dbt_project.yml is a dbt project (git.service already
     // points `path` at it); any other repo is an Analytics project
-    const { type } = await detectProjectType(projectPath);
+    const { type } = await ProjectTypesService.detectType(projectPath);
     const hasDbt = getProjectTypeDefinition(type).capabilities.dbt;
     const dbtProjectYmlPath = path.join(projectPath, 'dbt_project.yml');
 
@@ -249,7 +244,7 @@ export default class ProjectsService {
 
     // If connection is selected, let the type write its config files
     if (connectionId) {
-      await getProjectTypeMain(type).onConnectionChanged(project);
+      await ProjectTypesService.onConnectionChanged(project);
     } else if (hasDbt) {
       // Don't create empty profiles.yml - it will be generated when connection is configured
       // For existing profiles.yml, update project name if needed
@@ -529,7 +524,7 @@ export default class ProjectsService {
       // A folder with dbt_project.yml (at the root or nested) is a dbt
       // project; any other folder imports as an Analytics project once the
       // user confirms (plan 95a, D2)
-      const detected = await detectProjectType(projectPath);
+      const detected = await ProjectTypesService.detectType(projectPath);
       const hasDbt = getProjectTypeDefinition(detected.type).capabilities.dbt;
       if (!hasDbt && !confirmed) {
         // The screen asks in its own dialog, then calls again with `confirmed`
@@ -734,9 +729,7 @@ export default class ProjectsService {
     // Only regenerate config files if the connection changed
     // This is a full regeneration because it's switching to a different connection
     if (connectionChanged && project.connectionId) {
-      await projectTypeMainOf(updatedProject).onConnectionChanged(
-        updatedProject,
-      );
+      await ProjectTypesService.onConnectionChanged(updatedProject);
     }
 
     return projects;

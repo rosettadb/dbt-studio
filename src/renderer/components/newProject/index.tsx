@@ -36,9 +36,9 @@ import {
   defaultTemplateItems,
   getProjectTypeDefinition,
   listProjectTypes,
-  type ProjectType,
-} from '../../../projectTypes/registry.shared';
-import { getProjectTypeUi } from '../../../projectTypes/registry.renderer';
+} from '../../../shared/projectTypes';
+import type { ProjectType } from '../../../types/projectTypes';
+import { getProjectTypeUi } from '../projectTypes';
 
 const AddProjectForm = styled(Box)(({ theme }) => ({
   width: '100%',
