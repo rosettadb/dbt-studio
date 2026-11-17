@@ -13,7 +13,6 @@ import {
   FileDialogProperties,
   SettingsType,
   RosettaVersionInfo,
-  RunnerVersionInfo,
   RunnerPluginStatus,
   InstallResult,
   PythonInstallInfo,
@@ -312,64 +311,6 @@ export const useInstallPythonVersion = (
   return useMutation({
     mutationFn: async (version: string) => {
       return settingsServices.installPythonVersion(version);
-    },
-    onSuccess: async (...args) => {
-      await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
-      onCustomSuccess?.(...args);
-    },
-    onError: (...args) => {
-      onCustomError?.(...args);
-    },
-  });
-};
-
-export const useCheckRunnerVersions = (
-  customOptions?: UseMutationOptions<RunnerVersionInfo, CustomError, void>,
-): UseMutationResult<RunnerVersionInfo, CustomError, void> => {
-  const { onSuccess: onCustomSuccess, onError: onCustomError } =
-    customOptions || {};
-  return useMutation({
-    mutationFn: async () => {
-      return settingsServices.checkRunnerVersions();
-    },
-    onSuccess: (...args) => {
-      onCustomSuccess?.(...args);
-    },
-    onError: (...args) => {
-      onCustomError?.(...args);
-    },
-  });
-};
-
-export const useInstallRunnerVersion = (
-  customOptions?: UseMutationOptions<InstallResult, CustomError, string>,
-): UseMutationResult<InstallResult, CustomError, string> => {
-  const { onSuccess: onCustomSuccess, onError: onCustomError } =
-    customOptions || {};
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (version: string) => {
-      return settingsServices.installRunnerVersion(version);
-    },
-    onSuccess: async (...args) => {
-      await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
-      onCustomSuccess?.(...args);
-    },
-    onError: (...args) => {
-      onCustomError?.(...args);
-    },
-  });
-};
-
-export const useUninstallRunnerVersion = (
-  customOptions?: UseMutationOptions<void, CustomError, void>,
-): UseMutationResult<void, CustomError, void> => {
-  const { onSuccess: onCustomSuccess, onError: onCustomError } =
-    customOptions || {};
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async () => {
-      return settingsServices.uninstallRunnerVersion();
     },
     onSuccess: async (...args) => {
       await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);

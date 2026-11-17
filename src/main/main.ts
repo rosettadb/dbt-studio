@@ -14,6 +14,7 @@ import {
   RosettaCloudService,
   DuckLakeConnectionManager,
   FlowfileService,
+  RunnerService,
 } from './services';
 import { copyAssetsToUserData } from './utils/fileHelper';
 import { MCPClientManager } from './services/ai/mcp/mcpClientManager';
@@ -196,6 +197,15 @@ if (!gotTheLock) {
             } catch (e) {
               console.error('Failed to install Python:', e);
             }
+          }
+
+          try {
+            await RunnerService.downloadRunnerForDevelopment(() =>
+              updateMessage('Downloading the local runner...'),
+            );
+            await RunnerService.copyBundledRunnerToUserData();
+          } catch (e) {
+            console.error('Failed to set up the local runner:', e);
           }
 
           const fakeStages = [

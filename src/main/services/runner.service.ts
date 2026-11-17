@@ -8,7 +8,6 @@ import AdmZip from 'adm-zip';
 import { downloadForInstall } from '../utils/installTask';
 import {
   InstallResult,
-  RunnerVersionInfo,
   RunnerPluginId,
   RunnerPluginStatus,
 } from '../../types/backend';
@@ -39,66 +38,35 @@ async function getKisqlLatestSha(): Promise<string> {
   return String(response.data).trim().slice(0, 7);
 }
 
-const RUNNER_RELEASES_API =
-  'https://api.github.com/repos/rosettadb/dbt-studio/releases';
+function getRunnerBinaryFileName(): string {
+  return process.platform === 'win32' ? 'rosetta-runner.exe' : 'rosetta-runner';
+}
 
+// The runner files each dbt Studio release carries, per platform and arch.
 const RUNNER_ASSET_NAMES: Record<string, Record<string, string>> = {
   darwin: {
     arm64: 'rosetta-runner-darwin-arm64',
     x64: 'rosetta-runner-darwin-amd64',
   },
-  linux: {
-    x64: 'rosetta-runner-linux-amd64',
-  },
-  win32: {
-    x64: 'rosetta-runner-windows-amd64.exe',
-  },
+  linux: { x64: 'rosetta-runner-linux-amd64' },
+  win32: { x64: 'rosetta-runner-windows-amd64.exe' },
 };
 
-function getRunnerAssetName(): string {
-  const { platform, arch } = process;
-  const assetName = RUNNER_ASSET_NAMES[platform]?.[arch];
-  if (!assetName) {
-    throw new Error(
-      `Unsupported OS or architecture for the local runner: ${platform}-${arch}`,
-    );
-  }
-  return assetName;
-}
+const LATEST_RUNNER_RELEASE_URL =
+  'https://github.com/rosettadb/dbt-studio/releases/latest/download';
 
-function getRunnerBinaryFileName(): string {
-  return process.platform === 'win32' ? 'rosetta-runner.exe' : 'rosetta-runner';
-}
-
-const RUNNER_PLUGINS_ASSET_NAME = 'rosetta-runner-plugins.zip';
-
-// Versions come from GitHub release tag names and are also accepted as-is
-// over IPC, so this guards against path traversal (e.g. "../../etc") before
-// the value is ever used to build a filesystem path or download URL.
-const RUNNER_VERSION_PATTERN = /^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/;
-
-function assertValidRunnerVersion(version: string): void {
-  if (!RUNNER_VERSION_PATTERN.test(version)) {
-    throw new Error(`Invalid runner version: ${version}`);
-  }
+// The publish workflow puts the runner binary and its unzipped plugins into
+// resources/runner, which electron-builder ships inside the installed app.
+// Under npm start the same folder is read from the project itself (it is
+// git-ignored); downloadRunnerForDevelopment fills it the first time.
+function getBundledRunnerDir(): string {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'resources', 'runner')
+    : path.join(app.getAppPath(), 'resources', 'runner');
 }
 
 function getRunnerRoot(): string {
   return path.join(app.getPath('userData'), 'runner');
-}
-
-// Only remove a previous install directory if it actually lives under the
-// runner root - settings.runnerPath is persisted/loaded as plain JSON, so a
-// corrupted or tampered value must never drive an arbitrary fs.remove.
-async function removeRunnerInstallDir(runnerPath: string): Promise<void> {
-  const runnerRoot = getRunnerRoot();
-  const dir = path.resolve(path.dirname(runnerPath));
-  const relative = path.relative(runnerRoot, dir);
-  const isInsideRoot =
-    relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
-  if (isInsideRoot && fs.existsSync(runnerPath)) {
-    await fs.remove(dir);
-  }
 }
 
 // Plugins the runner binary executes, and the external tool (if any) they
@@ -202,160 +170,103 @@ export default class RunnerService {
     });
   }
 
-  static async checkRunnerVersions(): Promise<RunnerVersionInfo> {
-    const settings = await SettingsService.loadSettings();
-    const currentVersion = settings.runnerVersion || null;
-    const currentPath = settings.runnerPath || null;
-
-    try {
-      const assetName = getRunnerAssetName();
-      const response = await axios.get(RUNNER_RELEASES_API);
-      const releases: any[] = response.data;
-
-      const releasesWithRunner = releases.filter((release) =>
-        (release.assets || []).some((a: any) => a.name === assetName),
-      );
-
-      const availableVersions = releasesWithRunner.map((release) => {
-        const version = release.tag_name.replace(/^v/, '');
-        const asset = release.assets.find((a: any) => a.name === assetName);
-        return {
-          version,
-          releaseDate: release.published_at,
-          isPrerelease: release.prerelease,
-          downloadUrl: asset?.browser_download_url || '',
-          isNewer: this.compareVersions(version, currentVersion || '0.0.0') > 0,
-          isOlder: this.compareVersions(version, currentVersion || '0.0.0') < 0,
-          releaseNotes: release.body,
-        };
-      });
-
-      const latestStable =
-        releasesWithRunner
-          .find((r) => !r.prerelease)
-          ?.tag_name.replace(/^v/, '') || '';
-      const latestPrerelease = releasesWithRunner
-        .find((r) => r.prerelease)
-        ?.tag_name.replace(/^v/, '');
-
-      return {
-        currentVersion,
-        currentPath,
-        availableVersions,
-        latestStable,
-        latestPrerelease,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`Failed to check runner versions: ${message}`);
+  // npm start has no runner inside the app, so - like Rosetta and Python - the
+  // first start downloads the latest released runner into the project's
+  // resources/runner, and copyBundledRunnerToUserData sets it up from there.
+  // Later starts (and factory resets) reuse that folder without downloading.
+  static async downloadRunnerForDevelopment(
+    onDownloadStart: () => Promise<void>,
+  ): Promise<void> {
+    if (app.isPackaged) return;
+    const runnerDir = getBundledRunnerDir();
+    const assetName = RUNNER_ASSET_NAMES[process.platform]?.[process.arch];
+    if (
+      !assetName ||
+      (await fs.pathExists(path.join(runnerDir, getRunnerBinaryFileName())))
+    ) {
+      return;
     }
-  }
 
-  static async installRunnerVersion(version: string): Promise<InstallResult> {
-    try {
-      assertValidRunnerVersion(version);
-      const assetName = getRunnerAssetName();
-      const downloadUrl = `https://github.com/rosettadb/dbt-studio/releases/download/${version}/${assetName}`;
-
-      const settings = await SettingsService.loadSettings();
-      const previousRunnerPath = settings.runnerPath;
-
-      // Download and stage the new version into its own directory before
-      // touching the currently installed one, so a failed download or write
-      // never leaves settings pointing at a binary that was already deleted.
-      const installDir = path.join(getRunnerRoot(), version);
-      const binaryPath = path.join(installDir, getRunnerBinaryFileName());
-
-      await fs.mkdirp(installDir);
-      const response = await downloadForInstall(downloadUrl, {
+    await onDownloadStart();
+    const [binaryResponse, pluginsResponse] = await Promise.all([
+      downloadForInstall(`${LATEST_RUNNER_RELEASE_URL}/${assetName}`, {
         responseType: 'arraybuffer',
-      });
-      await fs.writeFile(binaryPath, response.data);
+      }),
+      downloadForInstall(
+        `${LATEST_RUNNER_RELEASE_URL}/rosetta-runner-plugins.zip`,
+        { responseType: 'arraybuffer' },
+      ),
+    ]);
 
-      if (process.platform !== 'win32') {
-        await fs.chmod(binaryPath, 0o755);
-      }
-
-      const warnings: string[] = [];
-      try {
-        settings.runnerHome = await this.installRunnerPlugins(
-          version,
-          installDir,
-        );
-      } catch (pluginsError) {
-        settings.runnerHome = '';
-        warnings.push(
-          `Runner installed, but plugin scripts could not be downloaded: ${
-            pluginsError instanceof Error
-              ? pluginsError.message
-              : 'Unknown error'
-          }`,
-        );
-      }
-
-      settings.runnerVersion = version;
-      settings.runnerPath = binaryPath;
-      await SettingsService.saveSettings(settings);
-
-      if (
-        previousRunnerPath &&
-        path.dirname(previousRunnerPath) !== installDir
-      ) {
-        await removeRunnerInstallDir(previousRunnerPath);
-      }
-
-      return {
-        success: true,
-        version,
-        path: binaryPath,
-        warnings: warnings.length ? warnings : undefined,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        version,
-        path: '',
-        error:
-          error instanceof Error ? error.message : 'Unknown error occurred',
-      };
-    }
+    // Fill a staging folder and rename it into place, so a failed download
+    // never leaves a half-filled resources/runner that later starts trust.
+    const stagingDir = `${runnerDir}.partial`;
+    await fs.remove(stagingDir);
+    const binaryPath = path.join(stagingDir, getRunnerBinaryFileName());
+    await fs.outputFile(binaryPath, Buffer.from(binaryResponse.data));
+    await fs.chmod(binaryPath, 0o755);
+    new AdmZip(Buffer.from(pluginsResponse.data)).extractAllTo(
+      path.join(stagingDir, 'plugins-home'),
+      true,
+    );
+    await fs.move(stagingDir, runnerDir, { overwrite: true });
   }
 
-  // Downloads and extracts rosetta-runner-plugins.zip (shipped as a separate
-  // release asset alongside the platform binaries) and returns the RUNNER_HOME
-  // path - the directory that directly contains plugins.json - so it can be
-  // passed to the runner binary. GitHub zip exports commonly wrap contents in
-  // a single top-level folder, so this checks the extraction root and its
-  // immediate children rather than assuming a fixed layout.
-  private static async installRunnerPlugins(
-    version: string,
-    installDir: string,
-  ): Promise<string> {
-    const pluginsZipUrl = `https://github.com/rosettadb/dbt-studio/releases/download/${version}/${RUNNER_PLUGINS_ASSET_NAME}`;
-    const pluginsHomeDir = path.join(installDir, 'plugins-home');
-    const pluginsZipPath = path.join(installDir, RUNNER_PLUGINS_ASSET_NAME);
-
-    await fs.remove(pluginsHomeDir);
-    await fs.mkdirp(pluginsHomeDir);
-
-    const response = await downloadForInstall(pluginsZipUrl, {
-      responseType: 'arraybuffer',
-    });
-    await fs.writeFile(pluginsZipPath, response.data);
-
-    const zip = new AdmZip(pluginsZipPath);
-    zip.extractAllTo(pluginsHomeDir, true);
-    await fs.remove(pluginsZipPath);
-
-    const runnerHome = await this.locateRunnerHome(pluginsHomeDir);
-    if (!runnerHome) {
-      throw new Error(
-        `Could not find plugins.json in ${RUNNER_PLUGINS_ASSET_NAME}`,
-      );
+  // Copies the runner that ships inside the app into userData/runner/<app
+  // version> and points settings at it. It is copied rather than run in place
+  // because the install folder is read-only on macOS and Linux. Runs on every
+  // start but only copies after an app update (or when the copy is missing).
+  // Without a bundled runner (unsupported platforms, or npm start when the
+  // download failed) whatever runner is already saved is kept.
+  static async copyBundledRunnerToUserData(): Promise<void> {
+    const bundledDir = getBundledRunnerDir();
+    if (
+      !(await fs.pathExists(path.join(bundledDir, getRunnerBinaryFileName())))
+    ) {
+      return;
     }
-    return runnerHome;
+
+    const version = app.getVersion();
+    const settings = await SettingsService.loadSettings();
+    const installDir = path.join(getRunnerRoot(), version);
+    const binaryPath = path.join(installDir, getRunnerBinaryFileName());
+    if (
+      settings.runnerVersion === version &&
+      settings.runnerPath === binaryPath &&
+      (await fs.pathExists(binaryPath))
+    ) {
+      return;
+    }
+
+    // Copy into a staging folder and rename it into place only once the whole
+    // copy succeeded, so installDir is either complete or missing. A failed
+    // copy then leaves no binary behind, and the next start copies again.
+    const stagingDir = `${installDir}.partial`;
+    await fs.remove(stagingDir);
+    await fs.copy(bundledDir, stagingDir);
+    await fs.move(stagingDir, installDir, { overwrite: true });
+
+    settings.runnerVersion = version;
+    settings.runnerPath = binaryPath;
+    settings.runnerHome =
+      (await this.locateRunnerHome(path.join(installDir, 'plugins-home'))) ||
+      '';
+    await SettingsService.saveSettings(settings);
+
+    // Settings now point at the new copy, so every other runner folder
+    // (the previous version, older downloads) is unused.
+    const runnerFolderNames = await fs.readdir(getRunnerRoot());
+    await Promise.all(
+      runnerFolderNames
+        .filter((folderName) => folderName !== version)
+        .map((folderName) => fs.remove(path.join(getRunnerRoot(), folderName))),
+    );
   }
 
+  // Returns the RUNNER_HOME path - the directory that directly contains
+  // plugins.json. GitHub zip exports commonly wrap contents in a single
+  // top-level folder, so this checks the root and its immediate children
+  // rather than assuming a fixed layout.
   private static async locateRunnerHome(root: string): Promise<string | null> {
     if (await fs.pathExists(path.join(root, 'plugins.json'))) {
       return root;
@@ -372,17 +283,6 @@ export default class RunnerService {
       }
     }
     return null;
-  }
-
-  static async uninstallRunnerVersion(): Promise<void> {
-    const settings = await SettingsService.loadSettings();
-    if (settings.runnerPath) {
-      await removeRunnerInstallDir(settings.runnerPath);
-    }
-    settings.runnerVersion = '';
-    settings.runnerPath = '';
-    settings.runnerHome = '';
-    await SettingsService.saveSettings(settings);
   }
 
   static async checkPluginDependencies(): Promise<RunnerPluginStatus[]> {

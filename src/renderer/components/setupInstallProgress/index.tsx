@@ -22,9 +22,7 @@ import { DbtLine } from '../dbtSetup';
 import { PythonMonoIcon } from '../notebook/NotebookKindIcon';
 import { DbtMonoIcon } from '../icon/DbtMonoIcon';
 
-type RowKey = 'python' | 'dbt' | 'runner' | 'flowfile';
-// The local runner is always installed but gets no row.
-type VisibleRowKey = Exclude<RowKey, 'runner'>;
+type RowKey = 'python' | 'dbt' | 'flowfile';
 
 type RowState = {
   status: 'waiting' | 'installing' | 'done' | 'failed';
@@ -39,7 +37,7 @@ type RowState = {
 
 type InstalledItem = { version?: string; path?: string };
 
-const ROW_ICONS: Record<VisibleRowKey, React.ReactElement> = {
+const ROW_ICONS: Record<RowKey, React.ReactElement> = {
   python: <PythonMonoIcon fontSize="small" />,
   dbt: <DbtMonoIcon fontSize="small" />,
   flowfile: <AccountTreeOutlined fontSize="small" />,
@@ -65,9 +63,9 @@ type Props = {
   onRunningChange: (isRunning: boolean) => void;
 };
 
-// Installs Python, dbt, the local runner and (optionally) Flowfile one after
-// another. Python goes first: switching its version wipes everything that
-// was pip-installed into it.
+// Installs Python, dbt and (optionally) Flowfile one after another. Python
+// goes first: switching its version wipes everything that was pip-installed
+// into it. The local runner ships with the app, so it needs no step here.
 export const SetupInstallProgress: React.FC<Props> = ({
   dbtLine,
   dbtVersion,
@@ -78,16 +76,12 @@ export const SetupInstallProgress: React.FC<Props> = ({
   const installKeys: RowKey[] = [
     'python',
     'dbt',
-    'runner',
     ...(includeFlowfile ? (['flowfile'] as RowKey[]) : []),
   ];
-  const visibleKeys = installKeys.filter(
-    (key): key is VisibleRowKey => key !== 'runner',
-  );
   const adapterPackages =
     dbtLine === 'v1' ? selectedAdapters.filter((a) => a !== 'dbt-core') : [];
   const dbtLabel = `dbt ${dbtVersion ?? (dbtLine === 'v1' ? '1.x' : '2.x')}`;
-  const rowLabels: Record<VisibleRowKey, string> = {
+  const rowLabels: Record<RowKey, string> = {
     python: 'Python',
     dbt:
       dbtLine === 'v1'
@@ -99,7 +93,6 @@ export const SetupInstallProgress: React.FC<Props> = ({
   const [rows, setRows] = React.useState<Record<RowKey, RowState>>({
     python: { status: 'waiting' },
     dbt: { status: 'waiting' },
-    runner: { status: 'waiting' },
     flowfile: { status: 'waiting' },
   });
   const [isRunning, setIsRunning] = React.useState(false);
@@ -217,20 +210,6 @@ export const SetupInstallProgress: React.FC<Props> = ({
     return { version: installedVersion, path: dbtResult.dbtPath };
   };
 
-  const installRunnerStep = async (): Promise<InstalledItem> => {
-    const settings = await settingsServices.getSettings();
-    if (settings.runnerPath) {
-      return { version: settings.runnerVersion, path: settings.runnerPath };
-    }
-    const { latestStable } = await settingsServices.checkRunnerVersions();
-    if (!latestStable) {
-      throw new Error('No local runner release is available.');
-    }
-    return toInstalledItem(
-      await settingsServices.installRunnerVersion(latestStable),
-    );
-  };
-
   const installFlowfileStep = async (): Promise<InstalledItem> => {
     const result = await flowfileInstall();
     if (!result.ok) {
@@ -243,7 +222,6 @@ export const SetupInstallProgress: React.FC<Props> = ({
   const installSteps: Record<RowKey, () => Promise<InstalledItem>> = {
     python: installPythonStep,
     dbt: installDbtStep,
-    runner: installRunnerStep,
     flowfile: installFlowfileStep,
   };
 
@@ -390,7 +368,7 @@ export const SetupInstallProgress: React.FC<Props> = ({
     return null;
   };
 
-  const hasFailedRow = visibleKeys.some((key) => rows[key].status === 'failed');
+  const hasFailedRow = installKeys.some((key) => rows[key].status === 'failed');
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -402,7 +380,7 @@ export const SetupInstallProgress: React.FC<Props> = ({
           overflow: 'hidden',
         }}
       >
-        {visibleKeys.map((key, index) => (
+        {installKeys.map((key, index) => (
           <Box
             key={key}
             data-testid={`setup-install-row-${key}`}
@@ -428,16 +406,6 @@ export const SetupInstallProgress: React.FC<Props> = ({
           </Box>
         ))}
       </Box>
-      {rows.runner.status === 'failed' && (
-        <Typography
-          variant="body2"
-          color="text.secondary"
-          data-testid="setup-runner-failed"
-        >
-          The local runner couldn&apos;t be installed. You can install it later
-          in Settings.
-        </Typography>
-      )}
       {hasFailedRow && !isRunning && (
         <Typography variant="body2" color="text.secondary">
           You can also install anything that failed later from Settings.
