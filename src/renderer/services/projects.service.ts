@@ -4,11 +4,13 @@ import {
   ConnectionInput,
   FileNode,
   FileSearchResponse,
+  ImportFolderConfirmation,
   Project,
   Table,
   EnhanceModelResponseType,
   CliProcessEnvironment,
 } from '../../types/backend';
+import type { ProjectType } from '../../projectTypes/registry.shared';
 
 export const getProjects = async (): Promise<Project[]> => {
   const { data } = await client.get<Project[]>('project:list');
@@ -25,15 +27,20 @@ export const getProjectById = async (body: {
   return data;
 };
 
-export const addProject = async (body: {
+type AddProjectBody = {
   name: string;
   connectionId?: string;
   createTemplateFolders?: boolean;
-}): Promise<Project> => {
-  const { data } = await client.post<
-    { name: string; connectionId?: string; createTemplateFolders?: boolean },
-    Project
-  >('project:add', body);
+  type?: ProjectType;
+  /** Ids of the project type's template items to create. */
+  include?: string[];
+};
+
+export const addProject = async (body: AddProjectBody): Promise<Project> => {
+  const { data } = await client.post<AddProjectBody, Project>(
+    'project:add',
+    body,
+  );
   return data;
 };
 
@@ -53,8 +60,20 @@ export const addProjectFromVCS = async (body: {
   return data;
 };
 
-export const addProjectFromFolder = async (): Promise<Project> => {
-  const { data } = await client.get<Project>('project:addFromFolder');
+/**
+ * Import a folder or archive. Without `confirmed` it opens the picker; a
+ * folder without dbt_project.yml comes back as `confirmAnalyticsImport`, and
+ * calling again with that path and `isExtracted` imports it as an Analytics
+ * project.
+ */
+export const addProjectFromFolder = async (confirmed?: {
+  path: string;
+  isExtracted: boolean;
+}): Promise<Project | ImportFolderConfirmation> => {
+  const { data } = await client.post<
+    typeof confirmed,
+    Project | ImportFolderConfirmation
+  >('project:addFromFolder', confirmed);
   return data;
 };
 

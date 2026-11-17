@@ -3,6 +3,7 @@ import { LineageModal, LineageView } from '../../lineage';
 import { useCurrentModelId } from '../../../controllers';
 import { useTabs } from '../../../context/TabsProvider';
 import type { TerminalPanelContext, TerminalPanelDefinition } from './types';
+import { projectTypeOf } from '../../../../projectTypes/registry.shared';
 
 const isSqlModel = (filePath?: string) =>
   !!filePath && filePath.toLowerCase().split('.').pop() === 'sql';
@@ -32,7 +33,9 @@ export const lineagePanel: TerminalPanelDefinition = {
   label: 'LINEAGE',
   useState: ({ project }) => {
     const { activeFilePath } = useTabs();
-    const executable = isSqlModel(activeFilePath);
+    // dbt lineage; a .sql file in a project without dbt isn't a model
+    const executable =
+      projectTypeOf(project).capabilities.lineage && isSqlModel(activeFilePath);
     const { data, isLoading, isError } = useCurrentModelId(
       { projectId: project.id, filePath: activeFilePath },
       { enabled: !!project.id && !!activeFilePath && executable },

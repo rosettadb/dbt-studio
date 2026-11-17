@@ -2,6 +2,7 @@ import React from 'react';
 import { DbtRunHistoryPanel } from '../../dbtRunHistory';
 import { useAppContext } from '../../../hooks';
 import type { TerminalPanelContext, TerminalPanelDefinition } from './types';
+import { projectTypeOf } from '../../../../projectTypes/registry.shared';
 
 const RunHistoryPanel: React.FC<TerminalPanelContext> = ({ project }) => {
   const { openChatWithMessage } = useAppContext();
@@ -16,6 +17,9 @@ const RunHistoryPanel: React.FC<TerminalPanelContext> = ({ project }) => {
 export const runHistoryPanel: TerminalPanelDefinition = {
   id: 'runHistory',
   label: 'RUN HISTORY',
-  useState: () => ({ visible: true }),
+  // dbt run history; projects without dbt have none
+  useState: ({ project }) => ({
+    visible: projectTypeOf(project).capabilities.runHistory,
+  }),
   Component: RunHistoryPanel,
 };

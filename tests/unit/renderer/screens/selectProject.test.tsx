@@ -1,11 +1,18 @@
 import React from 'react';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 
 import SelectProject from '../../../../src/renderer/screens/selectProject';
 import {
   useGetProjectGitSummary,
   useGetProjects,
 } from '../../../../src/renderer/controllers';
+import { projectsServices } from '../../../../src/renderer/services';
 
 const VIEW_STORAGE_KEY = 'selectProject.view';
 
@@ -31,7 +38,7 @@ jest.mock('../../../../src/renderer/controllers', () => {
 });
 
 jest.mock('../../../../src/renderer/services', () => ({
-  projectsServices: {},
+  projectsServices: { addProjectFromFolder: jest.fn() },
   connectorsServices: {},
 }));
 
@@ -47,8 +54,10 @@ jest.mock('../../../../src/renderer/layouts', () => ({
   AppLayout: ({ children }: { children: React.ReactNode }) => children,
 }));
 
+// Only DuckDB has a logo here, so a Postgres chip falls back to the cylinder
 jest.mock('../../../../src/connections/registry.renderer', () => ({
-  connectionIcon: () => undefined,
+  connectionIcon: (type?: string) =>
+    type === 'duckdb' ? 'duckdb-logo.svg' : undefined,
 }));
 
 jest.mock('../../../../assets', () => ({
@@ -248,7 +257,33 @@ describe('Manage Projects screen', () => {
     };
 
     it.each(['list', 'card'])(
-      'shows the database cylinder on a named connection chip in %s view',
+      'shows the connection’s own logo on its chip in %s view',
+      (view) => {
+        localStorage.setItem(VIEW_STORAGE_KEY, view);
+        (useGetProjects as jest.Mock).mockReturnValue({
+          data: [
+            {
+              ...projects[0],
+              connection: { type: 'duckdb', name: 'jaffle_shop_duckdb' },
+            },
+          ],
+        });
+
+        render(<SelectProject />);
+
+        const chip = screen.getByTitle('Connection Name');
+        expect(chip).toHaveTextContent('jaffle_shop_duckdb');
+        expect(
+          within(chip).getByTestId('connection-chip-logo'),
+        ).toHaveAttribute('src', 'duckdb-logo.svg');
+        expect(
+          within(chip).queryByTestId('database-cylinder-icon'),
+        ).not.toBeInTheDocument();
+      },
+    );
+
+    it.each(['list', 'card'])(
+      'shows the database cylinder on a chip whose connection has no logo in %s view',
       (view) => {
         localStorage.setItem(VIEW_STORAGE_KEY, view);
         (useGetProjects as jest.Mock).mockReturnValue({
@@ -284,7 +319,7 @@ describe('Manage Projects screen', () => {
     );
 
     it.each(['list', 'card'])(
-      'keeps the stacked database icon for projects without a logo in %s view',
+      'starts the title with the project type icon, with no type chip, in %s view',
       (view) => {
         localStorage.setItem(VIEW_STORAGE_KEY, view);
         (useGetProjects as jest.Mock).mockReturnValue({
@@ -294,7 +329,14 @@ describe('Manage Projects screen', () => {
         render(<SelectProject />);
 
         const card = screen.getByTestId('project-card-alpha_project');
-        expect(within(card).getByTestId('StorageIcon')).toBeInTheDocument();
+        expect(
+          within(card).getByTestId('project-type-icon-alpha_project'),
+        ).toBeInTheDocument();
+        expect(
+          within(card).queryByTestId('StorageIcon'),
+        ).not.toBeInTheDocument();
+        expect(within(card).queryByText('dbt Project')).not.toBeInTheDocument();
+        // The only database icon left is the connection chip's
         expect(
           within(card).getAllByTestId('database-cylinder-icon'),
         ).toHaveLength(1);
@@ -336,6 +378,59 @@ describe('Manage Projects screen', () => {
       render(<SelectProject />);
 
       expect(getStickyAncestor(screen.getByTestId('project-list'))).toBeNull();
+    });
+  });
+
+  // Plan 95a, D2: the app's own dialog, not a native one
+  describe('import without dbt_project.yml', () => {
+    const importFolder = projectsServices.addProjectFromFolder as jest.Mock;
+    const pending = {
+      confirmAnalyticsImport: {
+        path: '/projects/molini_shoes',
+        name: 'molini_shoes',
+        isExtracted: false,
+      },
+    };
+
+    beforeEach(() => importFolder.mockReset());
+
+    it('asks in a dialog, then imports the folder as an Analytics project', async () => {
+      importFolder
+        .mockResolvedValueOnce(pending)
+        .mockResolvedValueOnce({ id: '9', name: 'molini_shoes' });
+      render(<SelectProject />);
+
+      fireEvent.click(screen.getByTestId('import-project-btn'));
+      const dialog = await screen.findByRole('dialog', {
+        name: /Import as an Analytics project\?/,
+      });
+      expect(within(dialog).getByText(/"molini_shoes"/)).toBeInTheDocument();
+
+      fireEvent.click(within(dialog).getByText('OK'));
+      await waitFor(() =>
+        expect(importFolder).toHaveBeenLastCalledWith({
+          path: '/projects/molini_shoes',
+          isExtracted: false,
+        }),
+      );
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+      );
+    });
+
+    it('imports nothing when the dialog is cancelled', async () => {
+      importFolder.mockResolvedValueOnce(pending);
+      render(<SelectProject />);
+
+      fireEvent.click(screen.getByTestId('import-project-btn'));
+      fireEvent.click(
+        within(await screen.findByRole('dialog')).getByText('Cancel'),
+      );
+
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+      );
+      expect(importFolder).toHaveBeenCalledTimes(1);
     });
   });
 });

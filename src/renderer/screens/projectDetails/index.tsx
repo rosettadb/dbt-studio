@@ -4,11 +4,9 @@ import 'split-pane-react/esm/themes/default.css';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Badge, Box, Tab, TabProps, Tabs, Tooltip } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import {
-  Loader,
-  ProjectDbtSplitButton,
-  TerminalLayout,
-} from '../../components';
+import { Loader, TerminalLayout } from '../../components';
+import { projectTypeOf } from '../../../projectTypes/registry.shared';
+import { projectTypeUiOf } from '../../../projectTypes/registry.renderer';
 import {
   ProjectSidebar,
   SidebarTab,
@@ -143,10 +141,16 @@ const ProjectDetails: React.FC = () => {
       ? theme.palette.primary.main
       : theme.palette.text.secondary;
 
+  // The project type decides the top bar actions (dbt: the dbt / Rosetta
+  // split button; Analytics: none) and the panel title
+  const { TopMenuActions } = projectTypeUiOf(project);
+
   return (
     <AppLayout
-      topMenuActions={<ProjectDbtSplitButton project={project} />}
-      panelTitle="DBT Studio"
+      topMenuActions={
+        TopMenuActions ? <TopMenuActions project={project} /> : undefined
+      }
+      panelTitle={projectTypeOf(project).title}
       sidebarContent={
         <Box
           sx={{
