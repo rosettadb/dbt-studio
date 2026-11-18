@@ -24,6 +24,7 @@ import {
   DropIndicator,
 } from './styles';
 import { EditorTab } from './EditorTab';
+import { usePaletteCommand } from '../../commandPalette/commands';
 
 interface TabManagerProps {
   tabs: EditorTabState[];
@@ -278,6 +279,27 @@ export const TabManager: React.FC<TabManagerProps> = ({
   const hasTabsToRight = contextIndex !== -1 && contextIndex < tabs.length - 1;
   const hasOtherTabs = tabs.length > 1;
   const hasSavedTabs = tabs.some((t) => !t.isModified);
+
+  usePaletteCommand(
+    'file.save-all',
+    'File: Save all',
+    handleSaveAll,
+    canSaveAll,
+  );
+  usePaletteCommand(
+    'file.close-active',
+    'File: Close active tab',
+    () => {
+      if (activeTabId) onClose(activeTabId);
+    },
+    !!activeTabId,
+  );
+  usePaletteCommand(
+    'file.close-saved',
+    'File: Close all saved tabs',
+    () => onCloseSaved?.(),
+    hasSavedTabs && !!onCloseSaved,
+  );
 
   return (
     <TabBar>

@@ -90,7 +90,7 @@ const PipelineFileView: React.FC<FileViewProps> = ({ tab, project }) => {
       return 'dbt Core v2 is in alpha and not yet supported for pipeline runs. Support will be added after the first official v2 release.';
     }
     if (!isCloud && !settings?.runnerPath) {
-      return 'Install the local runner first (Settings > Local Runner)';
+      return 'The local runner is not available on this machine';
     }
     return undefined;
   }, [isDbtV2, isCloud, settings?.runnerPath]);

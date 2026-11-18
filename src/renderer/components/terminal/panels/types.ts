@@ -30,6 +30,9 @@ export interface TerminalPanelDefinition {
   Label?: React.ComponentType<
     TerminalPanelContext & { selected: boolean; onSelect: () => void }
   >;
+  // Buttons shown at the right end of the tab strip while this panel is the
+  // selected one (new terminal, kill, …).
+  HeaderActions?: React.ComponentType<TerminalPanelContext>;
   // Keep the body mounted while hidden (xterm-like panels lose scrollback
   // and input state otherwise). Default: unmount when not selected.
   keepMounted?: boolean;

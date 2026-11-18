@@ -12,6 +12,7 @@ import { SqlEditorComponent } from './editorComponent';
 import { isDuckLakeType } from '../../../connections/ducklake/ducklake.shared';
 import { useAppContext } from '../../hooks';
 import { useSqlEditorBridge } from '../../controllers';
+import { usePaletteCommand } from '../commandPalette/commands';
 import {
   insertTextAtCursor,
   type InsertTextOptions,
@@ -345,6 +346,13 @@ export const SqlEditor = React.forwardRef<SqlEditorHandle, Props>(
         }
       },
       [handleRunQuery],
+    );
+
+    usePaletteCommand(
+      'sql.run',
+      'SQL: Run query',
+      runEditorQuery,
+      !!connectionId || !!selectedProject?.id,
     );
 
     useSqlEditorBridge({

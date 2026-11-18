@@ -6,6 +6,7 @@ import {
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { SplitButton } from '../splitButton';
+import { usePaletteCommands } from '../commandPalette/commands';
 import { icons } from '../../../../assets';
 import { Icon } from '../icon';
 import {
@@ -361,9 +362,7 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
       name: 'Run Pipeline (Local Runner)',
       onClick: () => {
         if (!settings?.runnerPath) {
-          toast.info(
-            'Install the local runner first (Settings > Local Runner)',
-          );
+          toast.info('The local runner is not available on this machine');
           return;
         }
         setLocalPipelineModal(true);
@@ -387,6 +386,48 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
     }
     return !item.cloudOnly;
   });
+
+  usePaletteCommands(
+    filteredMenuItems
+      .filter(
+        (item): item is typeof item & { name: string } =>
+          typeof item.name === 'string',
+      )
+      .filter((item) =>
+        [
+          'Run',
+          'Test',
+          'Build',
+          'Compile',
+          'Debug',
+          'Generate Docs',
+          'Deps',
+          'Seed',
+          'Raw Layer',
+          'Staging Layer',
+          'Incremental/Enhanced Layer',
+        ].includes(item.name),
+      )
+      .map((item) => {
+        const isRosettaLayer =
+          item.name === 'Raw Layer' ||
+          item.name === 'Staging Layer' ||
+          item.name === 'Incremental/Enhanced Layer';
+        return {
+          id: isRosettaLayer
+            ? `rosetta.layer.${item.name.toLowerCase().replace(/[^a-z]+/g, '-')}`
+            : `dbt.project.${item.name.toLowerCase().replace(/\s+/g, '-')}`,
+          label: isRosettaLayer
+            ? `Rosetta: Generate ${item.name}`
+            : `dbt: ${item.name} project`,
+          run: item.onClick,
+        };
+      }),
+    !isRunningDbt &&
+      !isRunningRosettaDbt &&
+      !isCloudRunActive &&
+      !cloudV2Blocked,
+  );
 
   let projectTooltipTitle = '';
   if (cloudV2Blocked) {

@@ -238,22 +238,6 @@ export type RosettaVersionInfo = {
   latestPrerelease?: string;
 };
 
-export type RunnerVersionInfo = {
-  currentVersion: string | null;
-  currentPath: string | null;
-  availableVersions: {
-    version: string;
-    releaseDate: string;
-    isPrerelease: boolean;
-    downloadUrl: string;
-    isNewer: boolean;
-    isOlder: boolean;
-    releaseNotes?: string;
-  }[];
-  latestStable: string;
-  latestPrerelease?: string;
-};
-
 export type RunnerPluginId =
   | 'dbt'
   | 'rosetta'
