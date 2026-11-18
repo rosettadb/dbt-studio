@@ -6,12 +6,7 @@ import yaml from 'js-yaml';
 import { dialog, net, IncomingMessage } from 'electron';
 import AdmZip from 'adm-zip';
 import * as tar from 'tar';
-import {
-  DataBase,
-  ImportFolderConfirmation,
-  Project,
-  Table,
-} from '../../types/backend';
+import { DataBase, Project, Table } from '../../types/backend';
 import {
   createNewFile,
   createNewFolder,
@@ -479,29 +474,18 @@ export default class ProjectsService {
     }
   }
 
-  /**
-   * Import a project folder or archive. A folder without dbt_project.yml
-   * isn't imported straight away: the screen gets `confirmAnalyticsImport`,
-   * asks the user, and calls again with `confirmed` (plan 95a, D2).
-   */
-  static async importProjectFromFolder(confirmed?: {
-    path: string;
-    isExtracted: boolean;
-  }): Promise<Project | ImportFolderConfirmation> {
+  static async importProjectFromFolder(): Promise<Project> {
     const { projectsDirectory } = await SettingsService.loadSettings();
-    // A confirmed folder was already chosen (and extracted) by the first call
-    const result = confirmed
-      ? { canceled: false, filePaths: [confirmed.path] }
-      : await dialog.showOpenDialog({
-          properties: ['openFile', 'openDirectory'],
-          filters: [
-            { name: 'All Supported', extensions: ['*'] },
-            { name: 'Folders', extensions: [''] },
-            { name: 'ZIP Files', extensions: ['zip'] },
-            { name: 'TAR Files', extensions: ['tar', 'tar.gz', 'tgz'] },
-          ],
-          defaultPath: projectsDirectory,
-        });
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile', 'openDirectory'],
+      filters: [
+        { name: 'All Supported', extensions: ['*'] },
+        { name: 'Folders', extensions: [''] },
+        { name: 'ZIP Files', extensions: ['zip'] },
+        { name: 'TAR Files', extensions: ['tar', 'tar.gz', 'tgz'] },
+      ],
+      defaultPath: projectsDirectory,
+    });
 
     if (result.canceled || result.filePaths.length === 0) {
       throw new Error('No file or folder selected');
@@ -509,7 +493,7 @@ export default class ProjectsService {
 
     const selectedPath = result.filePaths[0];
     let projectPath: string = '';
-    let isExtracted = confirmed?.isExtracted ?? false;
+    let isExtracted = false;
 
     try {
       // Handle compressed files
@@ -522,20 +506,9 @@ export default class ProjectsService {
       }
 
       // A folder with dbt_project.yml (at the root or nested) is a dbt
-      // project; any other folder imports as an Analytics project once the
-      // user confirms (plan 95a, D2)
+      // project; any other folder imports as an Analytics project
       const detected = await ProjectTypesService.detectType(projectPath);
       const hasDbt = getProjectTypeDefinition(detected.type).capabilities.dbt;
-      if (!hasDbt && !confirmed) {
-        // The screen asks in its own dialog, then calls again with `confirmed`
-        return {
-          confirmAnalyticsImport: {
-            path: projectPath,
-            name: path.basename(selectedPath),
-            isExtracted,
-          },
-        };
-      }
       projectPath = detected.root;
 
       // Validate the dbt project

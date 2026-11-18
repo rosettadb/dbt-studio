@@ -4,7 +4,6 @@ import {
   ConnectionInput,
   FileNode,
   FileSearchResponse,
-  ImportFolderConfirmation,
   Project,
   Table,
   EnhanceModelResponseType,
@@ -60,20 +59,8 @@ export const addProjectFromVCS = async (body: {
   return data;
 };
 
-/**
- * Import a folder or archive. Without `confirmed` it opens the picker; a
- * folder without dbt_project.yml comes back as `confirmAnalyticsImport`, and
- * calling again with that path and `isExtracted` imports it as an Analytics
- * project.
- */
-export const addProjectFromFolder = async (confirmed?: {
-  path: string;
-  isExtracted: boolean;
-}): Promise<Project | ImportFolderConfirmation> => {
-  const { data } = await client.post<
-    typeof confirmed,
-    Project | ImportFolderConfirmation
-  >('project:addFromFolder', confirmed);
+export const addProjectFromFolder = async (): Promise<Project> => {
+  const { data } = await client.get<Project>('project:addFromFolder');
   return data;
 };
 

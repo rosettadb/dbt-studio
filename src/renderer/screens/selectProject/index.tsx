@@ -53,11 +53,10 @@ import {
   NewProject,
 } from '../../components';
 import { ViewToggle } from '../../components/cloudExplorer/ViewToggle';
-import { ConfirmationModal } from '../../components/modals/confirmationModal';
 import { DatabaseCylinderIcon } from '../../components/icon/DatabaseCylinderIcon';
 import { icons } from '../../../../assets';
 import { AppLayout } from '../../layouts';
-import { ImportFolderConfirmation, Project } from '../../../types/backend';
+import { Project } from '../../../types/backend';
 import {
   DEFAULT_PROJECT_TYPE,
   defaultTemplateItems,
@@ -444,24 +443,9 @@ const SelectProject: React.FC = () => {
     }
   };
 
-  // Import from a folder or archive (plan 95a, D2). A folder without
-  // dbt_project.yml is imported as an Analytics project once the user
-  // confirms in the dialog
-  const [pendingAnalyticsImport, setPendingAnalyticsImport] =
-    React.useState<ImportFolderConfirmation['confirmAnalyticsImport']>();
-
-  const handleImportProject = async (confirmed?: {
-    path: string;
-    isExtracted: boolean;
-  }) => {
+  const handleImportProject = async () => {
     try {
-      const result = await projectsServices.addProjectFromFolder(confirmed);
-      // No dbt_project.yml: ask in the dialog below, which calls this again
-      if (result && 'confirmAnalyticsImport' in result) {
-        setPendingAnalyticsImport(result.confirmAnalyticsImport);
-        return;
-      }
-      const project = result;
+      const project = await projectsServices.addProjectFromFolder();
       if (project && project.id) {
         await selectProject({
           projectId: project.id,
@@ -1033,22 +1017,6 @@ const SelectProject: React.FC = () => {
             onClose={() => setIsCloneModalOpen(false)}
           />
         )}
-        <ConfirmationModal
-          isOpen={!!pendingAnalyticsImport}
-          onClose={() => setPendingAnalyticsImport(undefined)}
-          onConfirm={() => {
-            const pending = pendingAnalyticsImport;
-            setPendingAnalyticsImport(undefined);
-            if (pending) {
-              handleImportProject({
-                path: pending.path,
-                isExtracted: pending.isExtracted,
-              });
-            }
-          }}
-          title="Import as an Analytics project?"
-          question={`No dbt_project.yml was found in "${pendingAnalyticsImport?.name ?? ''}", so it isn't a dbt project. Import it as an Analytics project, which has no dbt files or commands?`}
-        />
         <AddConnectionModal
           isOpen={isAddConnectionModalOpen}
           onClose={handleConnectionModalClose}

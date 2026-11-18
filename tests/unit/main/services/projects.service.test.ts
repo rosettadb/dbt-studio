@@ -303,28 +303,15 @@ describe('ProjectsService (main)', () => {
       expect(copyMainConf).toHaveBeenCalledWith(root);
     });
 
-    it('asks before importing a folder without dbt_project.yml, then imports it as Analytics', async () => {
+    it('imports a folder without dbt_project.yml as Analytics, without asking', async () => {
       (dialog.showOpenDialog as jest.Mock).mockResolvedValue({
         canceled: false,
         filePaths: [root],
       });
 
-      // First call: the screen gets a question, nothing is saved yet
-      await expect(ProjectsService.importProjectFromFolder()).resolves.toEqual({
-        confirmAnalyticsImport: {
-          path: root,
-          name: path.basename(root),
-          isExtracted: false,
-        },
-      });
-      expect(savedProjects()).toEqual([]);
+      const project = await ProjectsService.importProjectFromFolder();
 
-      // Second call after the user confirms: no picker, an Analytics project
-      const project = await ProjectsService.importProjectFromFolder({
-        path: root,
-        isExtracted: false,
-      });
-      expect(dialog.showOpenDialog).toHaveBeenCalledTimes(1);
+      expect(dialog.showMessageBox).not.toHaveBeenCalled();
       expect(project).toEqual(
         expect.objectContaining({ type: 'analytics', path: root }),
       );

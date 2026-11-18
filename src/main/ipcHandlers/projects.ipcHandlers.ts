@@ -60,12 +60,9 @@ const registerProjectHandlers = () => {
     },
   );
 
-  ipcMain.handle(
-    'project:addFromFolder',
-    async (_event, confirmed?: { path: string; isExtracted: boolean }) => {
-      return ProjectsService.importProjectFromFolder(confirmed);
-    },
-  );
+  ipcMain.handle('project:addFromFolder', async () => {
+    return ProjectsService.importProjectFromFolder();
+  });
 
   ipcMain.handle('project:update', async (_event, body: Project) => {
     return ProjectsService.updateProject(body);

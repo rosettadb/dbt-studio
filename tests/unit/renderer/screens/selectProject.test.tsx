@@ -383,54 +383,17 @@ describe('Manage Projects screen', () => {
 
   // Plan 95a, D2: the app's own dialog, not a native one
   describe('import without dbt_project.yml', () => {
-    const importFolder = projectsServices.addProjectFromFolder as jest.Mock;
-    const pending = {
-      confirmAnalyticsImport: {
-        path: '/projects/molini_shoes',
-        name: 'molini_shoes',
-        isExtracted: false,
-      },
-    };
-
-    beforeEach(() => importFolder.mockReset());
-
-    it('asks in a dialog, then imports the folder as an Analytics project', async () => {
-      importFolder
-        .mockResolvedValueOnce(pending)
-        .mockResolvedValueOnce({ id: '9', name: 'molini_shoes' });
+    it('imports the folder straight away, with no dialog', async () => {
+      const importFolder = projectsServices.addProjectFromFolder as jest.Mock;
+      importFolder.mockReset();
+      importFolder.mockResolvedValueOnce({ id: '9', name: 'molini_shoes' });
       render(<SelectProject />);
 
       fireEvent.click(screen.getByTestId('import-project-btn'));
-      const dialog = await screen.findByRole('dialog', {
-        name: /Import as an Analytics project\?/,
-      });
-      expect(within(dialog).getByText(/"molini_shoes"/)).toBeInTheDocument();
 
-      fireEvent.click(within(dialog).getByText('OK'));
-      await waitFor(() =>
-        expect(importFolder).toHaveBeenLastCalledWith({
-          path: '/projects/molini_shoes',
-          isExtracted: false,
-        }),
-      );
-      await waitFor(() =>
-        expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
-      );
-    });
-
-    it('imports nothing when the dialog is cancelled', async () => {
-      importFolder.mockResolvedValueOnce(pending);
-      render(<SelectProject />);
-
-      fireEvent.click(screen.getByTestId('import-project-btn'));
-      fireEvent.click(
-        within(await screen.findByRole('dialog')).getByText('Cancel'),
-      );
-
-      await waitFor(() =>
-        expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
-      );
-      expect(importFolder).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(importFolder).toHaveBeenCalledTimes(1));
+      expect(importFolder).toHaveBeenCalledWith();
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
   });
 });

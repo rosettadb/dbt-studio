@@ -92,16 +92,6 @@ export type Project = {
   pipelineRuns?: Record<string, string>;
 };
 
-/**
- * What importing a folder without dbt_project.yml returns: the screen asks
- * the user, then imports it as an Analytics project by calling again with
- * this path (plan 95a, D2). `name` is what the user picked (folder or
- * archive), `path` the folder to import.
- */
-export type ImportFolderConfirmation = {
-  confirmAnalyticsImport: { path: string; name: string; isExtracted: boolean };
-};
-
 export type CloudDeploymentPayload = {
   id: string;
   title: string;

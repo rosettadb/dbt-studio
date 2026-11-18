@@ -30,9 +30,6 @@ import DatabaseIcon from '@mui/icons-material/Storage';
 
 import { icons, rosettaIcon } from '../../../../assets';
 import { connectionIcon } from '../../../connections/registry.renderer';
-import { getProjectTypeUi } from '../../components/projectTypes';
-import type { ProjectType } from '../../../types/projectTypes';
-import { ProjectMenuIcon } from '../../components/sidebar/icons';
 import { ReactComponent as RouteIcon } from '../../assets/icons/lucide/route.svg';
 import { useAppContext } from '../../hooks';
 import { QuickStartTour, hasSeenTour, markTourSeen } from '../../components';
@@ -42,27 +39,13 @@ import {
   useSelectProject,
 } from '../../controllers';
 
-// The nav rail's Project icon: the card covers every project type
-const ProjectsCardIcon: React.FC = () => <ProjectMenuIcon size={26} />;
-
-// A project type's icon and its words in a line of text, kept on one line
-const ProjectTypeMention: React.FC<{
-  type: ProjectType;
-  children: React.ReactNode;
-}> = ({ type, children }) => {
-  const { Icon } = getProjectTypeUi(type);
-  return (
-    <Box component="span" sx={{ whiteSpace: 'nowrap' }}>
-      <Box
-        component="span"
-        sx={{ display: 'inline-flex', verticalAlign: '-2px', mr: '4px' }}
-      >
-        <Icon size={14} />
-      </Box>
-      {children}
-    </Box>
-  );
-};
+const DbtCardIcon: React.FC = () => (
+  <img
+    src={icons.dbtTm}
+    alt="dbt"
+    style={{ width: 28, height: 28, objectFit: 'contain' }}
+  />
+);
 
 const PipelineCardIcon: React.FC = () => {
   const theme = useTheme();
@@ -132,17 +115,9 @@ const features = [
     id: 'dbt-project',
     title: 'Projects',
     category: 'dbt and Analytics',
-    description: (
-      <>
-        Create and open{' '}
-        <ProjectTypeMention type="dbt">dbt projects</ProjectTypeMention>, or{' '}
-        <ProjectTypeMention type="analytics">
-          Analytics projects
-        </ProjectTypeMention>{' '}
-        for notebooks and SQL.
-      </>
-    ),
-    icon: ProjectsCardIcon,
+    description:
+      'Create and open dbt projects, or Analytics projects for notebooks and SQL.',
+    icon: DbtCardIcon,
     path: '/app/select-project',
   },
   {
