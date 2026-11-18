@@ -388,7 +388,7 @@ const ShellHeaderActions: React.FC<TerminalPanelContext> = ({ project }) => {
 
 export const shellPanel: TerminalPanelDefinition = {
   id: 'shell',
-  label: 'SHELL',
+  label: 'TERMINAL',
   // Never asks for focus on its own; the terminals live outside React, so
   // the body can unmount while another tab is shown without losing them.
   useState: () => ({ visible: true }),

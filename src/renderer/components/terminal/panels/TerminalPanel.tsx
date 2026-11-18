@@ -9,7 +9,7 @@ const TerminalPanelBody: React.FC<TerminalPanelContext> = ({ project }) => (
 
 export const terminalPanel: TerminalPanelDefinition = {
   id: 'terminal',
-  label: 'TERMINAL',
+  label: 'CONSOLE',
   keepMounted: true,
   useState: () => {
     // Any CLI command (dbt, rosetta, python run…) surfaces the terminal.
