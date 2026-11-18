@@ -263,25 +263,32 @@ describe('Analytics scaffold', () => {
     ).toContain('# first');
   });
 
-  describe('when a write fails', () => {
-    let writeSpy: jest.SpyInstance;
+  describe('when a write fails after the file is opened', () => {
+    let openSpy: jest.SpyInstance;
+    const failGitignore = (beforeFailing?: () => Promise<void>) => {
+      const realOpen = nodeFs.promises.open;
+      openSpy = jest.spyOn(nodeFs.promises, 'open').mockImplementation((async (
+        file: unknown,
+        ...rest: unknown[]
+      ) => {
+        const handle = await (
+          realOpen as (
+            ...args: unknown[]
+          ) => Promise<nodeFs.promises.FileHandle>
+        )(file, ...rest);
+        if (!String(file).endsWith('.gitignore')) return handle;
+        await beforeFailing?.();
+        return {
+          writeFile: () => Promise.reject(new Error('disk full')),
+          close: () => handle.close(),
+        };
+      }) as typeof nodeFs.promises.open);
+    };
 
-    beforeEach(() => {
-      const realWriteFile = nodeFs.promises.writeFile;
-      writeSpy = jest
-        .spyOn(nodeFs.promises, 'writeFile')
-        .mockImplementation(((file: unknown, ...rest: unknown[]) =>
-          String(file).endsWith('.gitignore')
-            ? Promise.reject(new Error('disk full'))
-            : (realWriteFile as (...args: unknown[]) => Promise<void>)(
-                file,
-                ...rest,
-              )) as typeof nodeFs.promises.writeFile);
-    });
-
-    afterEach(() => writeSpy.mockRestore());
+    afterEach(() => openSpy?.mockRestore());
 
     it('removes what it created, so the same folder can be retried', async () => {
+      failGitignore();
       const input = {
         projectPath,
         name: 'retry',
@@ -293,12 +300,13 @@ describe('Analytics scaffold', () => {
       ).rejects.toThrow('disk full');
       expect(await fs.pathExists(projectPath)).toBe(false);
 
-      writeSpy.mockRestore();
+      openSpy.mockRestore();
       await ProjectTypesService.scaffold('analytics', input);
       expect(await listFiles(projectPath)).toContain('.gitignore');
     });
 
-    it('keeps a folder that existed before the attempt', async () => {
+    it('keeps a folder that existed before the attempt, with no entries left', async () => {
+      failGitignore();
       await fs.mkdirp(projectPath);
 
       await expect(
@@ -309,7 +317,22 @@ describe('Analytics scaffold', () => {
         }),
       ).rejects.toThrow('disk full');
       expect(await fs.pathExists(projectPath)).toBe(true);
-      expect(await listFiles(projectPath)).toEqual([]);
+      expect(await fs.readdir(projectPath)).toEqual([]);
+    });
+
+    it('keeps files it did not create and says the folder is no longer empty', async () => {
+      failGitignore(() =>
+        fs.writeFile(path.join(projectPath, 'data', 'report.csv'), 'a,b'),
+      );
+
+      await expect(
+        ProjectTypesService.scaffold('analytics', {
+          projectPath,
+          name: 'shared',
+          include: defaultTemplateItems('analytics'),
+        }),
+      ).rejects.toThrow("files Studio didn't create");
+      expect(await listFiles(projectPath)).toEqual(['data/report.csv']);
     });
   });
 

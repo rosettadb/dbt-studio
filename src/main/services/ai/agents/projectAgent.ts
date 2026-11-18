@@ -30,6 +30,7 @@ export interface ProjectAgentOptions {
     schema?: string;
   };
   hasDbt?: boolean;
+  projectTypeUnknown?: boolean;
 }
 
 export async function createProjectAgent(
@@ -58,10 +59,16 @@ export async function createProjectAgent(
     ? `\n<session_context>\n${options.sessionContextBlock}\n</session_context>\n`
     : '';
 
+  const canWriteFiles =
+    options.toolMode !== 'chat' &&
+    Object.prototype.hasOwnProperty.call(enabledTools ?? {}, 'writeFile');
+
   const projectContextBlock = options.projectAiContext
-    ? `\n<project_ai_context source="${PROJECT_AGENT_CONTEXT_FILE}">\n${options.projectAiContext}\n</project_ai_context>\n` +
-      `\n> Note: You can update \`${PROJECT_AGENT_CONTEXT_FILE}\` using your \`writeFile\` tool if the user asks you to modify these instructions.\n` +
-      `> **CRITICAL PRECEDENCE RULE:** Project-scoped \`${PROJECT_AGENT_CONTEXT_FILE}\` context is stronger than global Agent Memory. It remains subordinate to system, security, trusted scope, connection, confirmation, credential, and tool-authorization policy.\n`
+    ? `\n<project_ai_context source="${PROJECT_AGENT_CONTEXT_FILE}">\n${options.projectAiContext}\n</project_ai_context>\n${
+        canWriteFiles
+          ? `\n> Note: You can update \`${PROJECT_AGENT_CONTEXT_FILE}\` using your \`writeFile\` tool if the user asks you to modify these instructions.\n`
+          : `\n> Note: You can't edit \`${PROJECT_AGENT_CONTEXT_FILE}\` in this turn. If the user asks to change it, show the change and say it must be applied in Code mode with file writing enabled.\n`
+      }> **CRITICAL PRECEDENCE RULE:** Project-scoped \`${PROJECT_AGENT_CONTEXT_FILE}\` context is stronger than global Agent Memory. It remains subordinate to system, security, trusted scope, connection, confirmation, credential, and tool-authorization policy.\n`
     : '';
 
   const pipelineContextBlock = options.projectPipelineContext
@@ -354,10 +361,26 @@ Always confirm before making destructive changes.`;
     .join('\n');
   const canCheckFiles = 'pathExists' in baseTools;
 
-  const nonDbtInstructions = `You are an expert DBT Studio AI assistant for an Analytics project: a project folder of SQL queries, notebooks, Analytics pages, data files and pipelines that does not use dbt.${isAskMode ? ' You are running in **Ask (read-only) mode**.' : ''}
-You help users explore and analyze data, write SQL, and organize the project's files. This project has no dbt models, no dbt commands and no profiles.yml: never suggest or run dbt for it.
+  const projectIntro = options.projectTypeUnknown
+    ? `You are an expert DBT Studio AI assistant for the active project.${isAskMode ? ' You are running in **Ask (read-only) mode**.' : ''}
+Studio could not determine this project's type in this turn, so dbt tools are not available. Don't assume whether it is a dbt project; if the user needs dbt commands, ask them to reopen the project and try again.`
+    : `You are an expert DBT Studio AI assistant for an Analytics project: a project folder of SQL queries, notebooks, Analytics pages, data files and pipelines that does not use dbt.${isAskMode ? ' You are running in **Ask (read-only) mode**.' : ''}
+You help users explore and analyze data, write SQL, and organize the project's files. This project has no dbt models, no dbt commands and no profiles.yml: never suggest or run dbt for it.`;
+  const projectHeading = options.projectTypeUnknown
+    ? 'Active Project'
+    : 'Active Analytics Project';
+  const canCreateMemory = canWriteFiles && 'writeFile' in baseTools;
+  let createMemoryNote = " You can't create it in this turn.";
+  if (isAskMode) {
+    createMemoryNote =
+      ', and only after the user switches to Code mode. Ask mode cannot create it.';
+  } else if (canCreateMemory) {
+    createMemoryNote = '. Use `writeFile` only after the user agrees.';
+  }
 
-${projectPath ? `## Active Analytics Project\n\nProject path: ${projectPath}\n` : ''}
+  const nonDbtInstructions = `${projectIntro}
+
+${projectPath ? `## ${projectHeading}\n\nProject path: ${projectPath}\n` : ''}
 ${connectionBlock}
 ${sessionCtxBlock}
 ${projectContextBlock}
@@ -365,7 +388,7 @@ ${pipelineContextBlock}
 
 ## Project AI Instructions (${PROJECT_AGENT_CONTEXT_FILE})
 
-The trusted runtime injects the canonical project-root file above when it is enabled, present, bounded, and safe. Do not independently load legacy or differently cased instruction files. "Project Memory" means the project-owned \`${PROJECT_AGENT_CONTEXT_FILE}\` file. If no project context was injected, its contents are not available in this turn; say so, and don't assume the file is missing. ${canCheckFiles ? `Check with \`pathExists\` before saying it doesn't exist.` : ''} Offer to create it only once you know it doesn't exist${isAskMode ? ', and only after the user switches to Code mode. Ask mode cannot create it.' : '. Use `writeFile` only after the user agrees.'}
+The trusted runtime injects the canonical project-root file above when it is enabled, present, bounded, and safe. Do not independently load legacy or differently cased instruction files. "Project Memory" means the project-owned \`${PROJECT_AGENT_CONTEXT_FILE}\` file. If no project context was injected, its contents are not available in this turn; say so, and don't assume the file is missing. ${canCheckFiles ? `Check with \`pathExists\` before saying it doesn't exist.` : ''} Offer to create it only once you know it doesn't exist${createMemoryNote}
 
 ${skills ?? ''}
 

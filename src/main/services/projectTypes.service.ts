@@ -157,17 +157,28 @@ const readFolder = (folder: string): Promise<string[]> =>
     throw error;
   });
 
-const removeEntry = (entry: string) =>
-  fs.promises
-    .rm(entry, { recursive: true, force: true })
-    .catch(() => undefined);
+const runInOrder = <T>(items: T[], step: (item: T) => Promise<unknown>) =>
+  items.reduce<Promise<unknown>>(
+    (chain, item) => chain.then(() => step(item)),
+    Promise.resolve(),
+  );
 
-const removeInReverse = (entries: string[]) =>
-  [...entries]
-    .reverse()
-    .reduce<
-      Promise<unknown>
-    >((chain, entry) => chain.then(() => removeEntry(entry)), Promise.resolve());
+const rollback = async (files: string[], folders: string[]) => {
+  let keptForeignFiles = false;
+  await runInOrder([...files].reverse(), (file) =>
+    fs.promises.rm(file, { force: true }).catch(() => undefined),
+  );
+  await runInOrder(
+    [...folders].sort((a, b) => b.length - a.length),
+    (folder) =>
+      fs.promises.rmdir(folder).catch((error: { code?: string }) => {
+        if (error.code === 'ENOTEMPTY' || error.code === 'EEXIST') {
+          keptForeignFiles = true;
+        }
+      }),
+  );
+  return keptForeignFiles;
+};
 
 /**
  * Analytics projects hold no dbt files: no dbt_project.yml, profiles.yml or
@@ -182,17 +193,25 @@ const analyticsMain: ProjectTypeMain = {
       throw new Error(`A project is already being created in ${projectPath}.`);
     }
     scaffoldsInProgress.add(target);
-    const created: string[] = [];
+    const createdFiles: string[] = [];
+    const createdFolders: string[] = [];
     const makeFolder = async (folder: string) => {
       const first = await fs.promises.mkdir(folder, { recursive: true });
-      if (first) created.push(first);
+      if (!first) return;
+      let current = folder;
+      while (current.length >= first.length) {
+        createdFolders.push(current);
+        current = path.dirname(current);
+      }
     };
     const createFile = async (filePath: string, content: string) => {
-      await fs.promises.writeFile(filePath, content, {
-        encoding: 'utf8',
-        flag: 'wx',
-      });
-      created.push(filePath);
+      const handle = await fs.promises.open(filePath, 'wx');
+      createdFiles.push(filePath);
+      try {
+        await handle.writeFile(content, 'utf8');
+      } finally {
+        await handle.close();
+      }
     };
 
     try {
@@ -229,7 +248,13 @@ const analyticsMain: ProjectTypeMain = {
         await createFile(path.join(target, '.gitignore'), ANALYTICS_GITIGNORE);
       }
     } catch (error) {
-      await removeInReverse(created);
+      const keptForeignFiles = await rollback(createdFiles, createdFolders);
+      if (keptForeignFiles) {
+        const reason = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `${reason} ${projectPath} now has files Studio didn't create, so they were kept and the folder isn't empty.`,
+        );
+      }
       throw error;
     } finally {
       scaffoldsInProgress.delete(target);

@@ -107,6 +107,8 @@ const build = async (
     hasDbt?: boolean;
     toolMode?: 'chat' | 'agent';
     enabled?: Record<string, unknown>;
+    projectTypeUnknown?: boolean;
+    projectAiContext?: string;
   } = {},
 ) => {
   const agent = (await createProjectAgent(base, {
@@ -115,6 +117,8 @@ const build = async (
     skills: '',
     toolMode: options.toolMode ?? 'agent',
     hasDbt: options.hasDbt,
+    projectTypeUnknown: options.projectTypeUnknown,
+    projectAiContext: options.projectAiContext,
   })) as unknown as {
     config: { instructions: string; tools: Record<string, unknown> };
   };
@@ -194,5 +198,41 @@ describe('createProjectAgent by project type', () => {
     expect(instructions).toContain('not available in this turn');
     expect(instructions).toContain('Check with `pathExists`');
     expect(instructions).toContain('only once you know it doesn');
+  });
+
+  it('does not call a project of unknown type Analytics or give it dbt tools', async () => {
+    const { tools, instructions } = await build({
+      hasDbt: false,
+      projectTypeUnknown: true,
+    });
+
+    DBT_TOOLS.forEach((name) => expect(tools).not.toHaveProperty(name));
+    expect(instructions).toContain('could not determine this project');
+    expect(instructions).toContain('## Active Project');
+    expect(instructions).not.toContain('Analytics project');
+  });
+
+  it('does not suggest writeFile for Project Memory when writing is off', async () => {
+    const enabled = { ...enabledTools };
+    delete enabled.writeFile;
+    const { instructions } = await build({
+      hasDbt: false,
+      enabled,
+      projectAiContext: 'rules',
+    });
+
+    expect(instructions).not.toContain('writeFile');
+    expect(instructions).toContain("You can't edit");
+    expect(instructions).toContain("You can't create it in this turn");
+  });
+
+  it('does not suggest writing Project Memory in Ask mode', async () => {
+    const { instructions } = await build({
+      toolMode: 'chat',
+      projectAiContext: 'rules',
+    });
+
+    expect(instructions).not.toContain('using your `writeFile` tool');
+    expect(instructions).toContain("You can't edit");
   });
 });
