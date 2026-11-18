@@ -130,6 +130,25 @@ test.describe('Home', () => {
     ]) {
       // eslint-disable-next-line no-await-in-loop
       await resizeAppWindow(electronApp, width, height);
+      // Make sure the page really got the new size, so the checks below
+      // aren't looking at the previous one. Within 2px: with display scaling
+      // (e.g. 125%) Windows rounds the size to whole screen pixels.
+      // eslint-disable-next-line no-await-in-loop
+      await expect
+        .poll(
+          async () => {
+            const [pageWidth, pageHeight] = await window.evaluate(() => [
+              document.documentElement.clientWidth,
+              document.documentElement.clientHeight,
+            ]);
+            return (
+              Math.abs(pageWidth - width) <= 2 &&
+              Math.abs(pageHeight - height) <= 2
+            );
+          },
+          { message: `window never reached ${width}x${height}` },
+        )
+        .toBe(true);
       // The page refits over a few steps after a resize (growing can rewrap
       // text and need one shrink), so wait for the same scale twice in a row
       let settledScale = 0;

@@ -208,8 +208,14 @@ describe('Dashboard panels', () => {
     it('lists only the first 3 connections', () => {
       renderDashboard({ connections: buildConnections(4) });
 
-      expect(screen.getByText('connection_3')).toBeInTheDocument();
-      expect(screen.queryByText('connection_4')).not.toBeInTheDocument();
+      const connectionsPanel = screen
+        .getByText(/Configured Connections/)
+        .closest('[data-tour="tour-configured-connections"]') as HTMLElement;
+      expect(
+        within(connectionsPanel)
+          .getAllByText(/^connection_\d$/)
+          .map((name) => name.textContent),
+      ).toEqual(['connection_1', 'connection_2', 'connection_3']);
     });
 
     it('hides Manage All Connections when every connection is already listed', () => {
@@ -409,8 +415,9 @@ describe('Dashboard panels', () => {
       setSizes({ windowHeight: 600, windowWidth: 2000, pageHeight: 800 });
       renderDashboard();
 
-      // Wants 0.7509: less than 0.005 bigger, so it stays put
-      setSizes({ windowHeight: 600, windowWidth: 2000, pageHeight: 799 });
+      // Wants 0.752 (0.7528 rounded down): less than 0.005 bigger, so it
+      // stays put
+      setSizes({ windowHeight: 600, windowWidth: 2000, pageHeight: 797 });
       resizeWindow();
       expect(pageScale()).toBe(0.75);
 
