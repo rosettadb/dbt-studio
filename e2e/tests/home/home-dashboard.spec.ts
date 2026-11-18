@@ -28,6 +28,9 @@ const resizeAppWindow = async (
   await electronApp.evaluate(
     ({ BrowserWindow }, [contentWidth, contentHeight]) => {
       BrowserWindow.getAllWindows().forEach((appWindow) => {
+        // The dev build docks DevTools in the window a moment after start,
+        // which squeezes the page; close it so the page gets the whole size
+        appWindow.webContents.closeDevTools();
         appWindow.unmaximize();
         appWindow.setContentSize(contentWidth, contentHeight);
       });
@@ -36,14 +39,16 @@ const resizeAppWindow = async (
   );
 };
 
+// The scale of the page's transform (1 when it has none)
 const homePageScale = (window: Page) =>
-  window.evaluate(() =>
-    parseFloat(
-      getComputedStyle(
-        document.querySelector('[data-tour="tour-workspace-overview"]')!
-          .parentElement!,
-      ).getPropertyValue('zoom'),
-    ),
+  window.evaluate(
+    () =>
+      new DOMMatrix(
+        getComputedStyle(
+          document.querySelector('[data-tour="tour-workspace-overview"]')!
+            .parentElement!,
+        ).transform,
+      ).a,
   );
 
 // Whether the page, or the app area around it, has a vertical scrollbar
@@ -52,7 +57,8 @@ const homeScrolls = (window: Page) =>
     const page = document.querySelector(
       '[data-tour="tour-workspace-overview"]',
     )!.parentElement!;
-    const pageWindow = page.parentElement!;
+    // page -> box sized to the scaled page -> the scrolling window box
+    const pageWindow = page.parentElement!.parentElement!;
     const appArea = pageWindow.parentElement!;
     return [pageWindow, appArea].some(
       (element) => element.scrollHeight > element.clientHeight,
@@ -124,18 +130,28 @@ test.describe('Home', () => {
     ]) {
       // eslint-disable-next-line no-await-in-loop
       await resizeAppWindow(electronApp, width, height);
-      // The page refits over a few frames after a resize
+      // The page refits over a few steps after a resize (growing can rewrap
+      // text and need one shrink), so wait for the same scale twice in a row
+      let settledScale = 0;
       // eslint-disable-next-line no-await-in-loop
       await expect
-        .poll(() => homeScrolls(window), {
-          message: `Home scrolls at ${width}x${height}`,
-        })
-        .toBe(false);
-      // Once settled it keeps one scale instead of flipping between two
+        .poll(
+          async () => {
+            const scaleBefore = await homePageScale(window);
+            await window.waitForTimeout(500);
+            settledScale = await homePageScale(window);
+            return settledScale === scaleBefore;
+          },
+          { message: `Home never settles at ${width}x${height}` },
+        )
+        .toBe(true);
       // eslint-disable-next-line no-await-in-loop
-      const settledScale = await homePageScale(window);
+      expect(await homeScrolls(window), `scrolls at ${width}x${height}`).toBe(
+        false,
+      );
+      // Once settled it keeps that scale instead of flipping between two
       // eslint-disable-next-line no-await-in-loop
-      await window.waitForTimeout(500);
+      await window.waitForTimeout(1000);
       // eslint-disable-next-line no-await-in-loop
       expect(await homePageScale(window), `scale at ${width}x${height}`).toBe(
         settledScale,
