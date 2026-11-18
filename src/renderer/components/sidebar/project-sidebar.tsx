@@ -425,7 +425,10 @@ const ExplorerTab: React.FC<{
 
 // Source Control Tab Component — git view with a "synchronize" action that
 // reconciles the git status, the open tabs and the file tree.
-const SourceControlTab: React.FC<{ project: Project }> = ({ project }) => {
+const SourceControlTab: React.FC<{ project: Project; active: boolean }> = ({
+  project,
+  active,
+}) => {
   const {
     tabs,
     closeTabByPath,
@@ -443,6 +446,10 @@ const SourceControlTab: React.FC<{ project: Project }> = ({ project }) => {
   );
   const [isSynchronizing, setIsSynchronizing] = React.useState(false);
 
+  React.useEffect(() => {
+    if (active && isInitialized) updateStatuses();
+  }, [active, isInitialized, updateStatuses]);
+
   const handleSynchronizeAll = React.useCallback(async () => {
     setIsSynchronizing(true);
     try {
@@ -454,10 +461,13 @@ const SourceControlTab: React.FC<{ project: Project }> = ({ project }) => {
 
       tabs.forEach((tab) => {
         const fileStatus = currentStatuses.find((s) => s.path === tab.path);
-        if (!fileStatus) {
+        if (
+          fileStatus?.status === 'deleted' ||
+          fileStatus?.status === 'staged-deleted'
+        ) {
           closeTabByPath(tab.path);
           markTabSavedByPath(tab.path);
-        } else if (fileStatus.status === 'modified' && !tab.isModified) {
+        } else if (fileStatus?.status === 'modified' && !tab.isModified) {
           refreshTabContentByPath(tab.path);
         }
       });
@@ -516,7 +526,16 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
             openCreatePipeline={openCreatePipeline}
           />
         )}
-        {activeTab === 'scm' && <SourceControlTab project={project} />}
+        {/* Keep the existing Git handlers mounted across project sidebar tabs so
+            their palette commands remain available throughout DBT Studio. */}
+        <Box
+          sx={{
+            display: activeTab === 'scm' ? 'block' : 'none',
+            height: '100%',
+          }}
+        >
+          <SourceControlTab project={project} active={activeTab === 'scm'} />
+        </Box>
         {activeTab === 'connections' && <ConnectionsTab project={project} />}
       </Box>
     </Box>

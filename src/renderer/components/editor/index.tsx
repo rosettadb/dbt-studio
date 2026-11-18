@@ -22,6 +22,7 @@ import { getOrCreateModel } from '../../lib/monaco/modelStore';
 import { buildCteQuery, detectCtes } from '../../utils/sql/cteDetection';
 import type { EditorTabId, EditorTabState } from '../../../types/editor';
 import useCli from '../../hooks/useCli';
+import { usePaletteCommand } from '../commandPalette/commands';
 import {
   MD_PREVIEW_PREFIX,
   getPreviewSourcePath,
@@ -479,6 +480,13 @@ export const Editor: React.FC<EditorProps> = ({
     onTabError,
     onGitStatusRefresh,
   ]);
+
+  usePaletteCommand(
+    'file.save',
+    'File: Save active file',
+    handleSave,
+    !!activeTab?.isModified && !isSaving,
+  );
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
