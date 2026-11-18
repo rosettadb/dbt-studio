@@ -46,10 +46,11 @@ const openMenu = () => {
   return screen.getByRole('menu');
 };
 
+// All and Add are menu items; the items themselves are radio items
 const menuRowNames = (menu: HTMLElement) =>
-  within(menu)
-    .getAllByRole('menuitem')
-    .map((row) => row.textContent);
+  Array.from(
+    menu.querySelectorAll('[role="menuitem"], [role="menuitemradio"]'),
+  ).map((row) => row.textContent);
 
 describe('PanelHeaderDropdown', () => {
   it('shows the selected item on the button', () => {
@@ -89,11 +90,41 @@ describe('PanelHeaderDropdown', () => {
   it('marks only the selected item with a tick', () => {
     renderDropdown();
     const menu = openMenu();
-    const [, warehouse, analytics] = within(menu).getAllByRole('menuitem');
+    const [warehouse, analytics] = within(menu).getAllByRole('menuitemradio');
     const tickOf = (row: HTMLElement) =>
       row.querySelector('[data-testid="CheckIcon"]') as SVGElement;
     expect(tickOf(analytics)).toHaveStyle({ visibility: 'visible' });
     expect(tickOf(warehouse)).toHaveStyle({ visibility: 'hidden' });
+  });
+
+  it('tells screen readers which item is selected', () => {
+    renderDropdown();
+    const menu = openMenu();
+    expect(
+      within(menu).getByRole('menuitemradio', { name: 'Analytics' }),
+    ).toHaveAttribute('aria-checked', 'true');
+    expect(
+      within(menu).getByRole('menuitemradio', { name: 'Warehouse' }),
+    ).toHaveAttribute('aria-checked', 'false');
+    // All and Add are actions, not choices
+    expect(
+      within(menu).getByRole('menuitem', { name: 'All Connections' }),
+    ).toBeInTheDocument();
+    expect(
+      within(menu).getByRole('menuitem', { name: 'Add connection' }),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps an item whose value looks like an action key apart from Add', () => {
+    renderDropdown({
+      items: [{ value: 'add-item', label: 'Odd name' }],
+      value: undefined,
+    });
+    expect(menuRowNames(openMenu())).toEqual([
+      'All Connections',
+      'Odd name',
+      'Add connection',
+    ]);
   });
 
   it('selects the clicked item and closes the menu', () => {
@@ -156,6 +187,26 @@ describe('buildConnectionDropdownItems', () => {
     expect(result[0].trailing).toBeTruthy();
     expect(result[1].trailing).toBeFalsy();
     expect(result[2].trailing).toBeUndefined();
+  });
+
+  it('names the selected project when several projects share a connection', () => {
+    const sharingProjects = [
+      { id: 'p1', name: 'Shop', connectionId: 'c1' },
+      { id: 'p2', name: 'Finance', connectionId: 'c1' },
+    ] as unknown as Project[];
+    const linkTitle = (selectedProjectId: string | undefined) =>
+      (
+        buildConnectionDropdownItems(
+          connections,
+          [],
+          sharingProjects,
+          selectedProjectId,
+        )[0].trailing as React.ReactElement<{ title: string }>
+      ).props.title;
+
+    expect(linkTitle('p2')).toBe('Project: Finance');
+    // With no matching selection it falls back to the first project
+    expect(linkTitle(undefined)).toBe('Project: Shop');
   });
 
   it('returns nothing when there are no connections or instances', () => {

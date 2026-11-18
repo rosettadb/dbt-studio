@@ -25,7 +25,11 @@ export const buildConnectionDropdownItems = (
   selectedProjectId: string | undefined,
 ): PanelHeaderDropdownItem[] => [
   ...connections.map((conn) => {
-    const linkedProject = projects?.find((p) => p.connectionId === conn.id);
+    // When several projects share the connection, name the selected one
+    const linkedProject =
+      projects?.find(
+        (p) => p.connectionId === conn.id && p.id === selectedProjectId,
+      ) ?? projects?.find((p) => p.connectionId === conn.id);
     return {
       value: conn.id,
       label: conn.connection.name,

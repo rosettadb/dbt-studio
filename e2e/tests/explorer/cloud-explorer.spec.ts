@@ -114,7 +114,9 @@ test.describe('Cloud Explorer source picker', () => {
     await window.getByTestId('object-explorer-source-select').click();
 
     // With no sources there is no All Sources row, only Add source
-    const rows = window.getByRole('menu').getByRole('menuitem');
+    const rows = window
+      .getByRole('menu')
+      .locator('[role="menuitem"], [role="menuitemradio"]');
     await expect(rows).toHaveText(['Add source']);
 
     await rows.first().click();
@@ -128,7 +130,9 @@ test.describe('Cloud Explorer source picker', () => {
     const picker = window.getByTestId('object-explorer-source-select');
 
     await picker.click();
-    const rows = window.getByRole('menu').getByRole('menuitem');
+    const rows = window
+      .getByRole('menu')
+      .locator('[role="menuitem"], [role="menuitemradio"]');
     await expect(rows).toHaveText([
       'All Sources',
       SEEDED_SOURCE.name,

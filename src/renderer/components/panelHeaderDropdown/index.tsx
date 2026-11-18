@@ -75,8 +75,12 @@ export const PanelHeaderDropdown: React.FC<Props> = ({
   items.forEach((item) => {
     menuChildren.push(
       <MenuItem
-        key={item.value}
+        // Prefixed so an item value can never clash with the All/Add keys
+        key={`item:${item.value}`}
         selected={item.value === value}
+        // Tells screen readers which item is the current one
+        role="menuitemradio"
+        aria-checked={item.value === value}
         onClick={() => {
           setAnchorEl(null);
           onSelect(item.value);
@@ -142,6 +146,10 @@ export const PanelHeaderDropdown: React.FC<Props> = ({
           fontWeight: 600,
           color: theme.palette.text.primary,
           '&:hover': { bgcolor: theme.palette.action.hover },
+          '&.Mui-focusVisible': {
+            outline: `2px solid ${theme.palette.primary.main}`,
+            outlineOffset: 1,
+          },
         }}
       >
         {selectedItem?.icon}

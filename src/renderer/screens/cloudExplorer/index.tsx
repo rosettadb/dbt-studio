@@ -1,7 +1,7 @@
 import React from 'react';
 import { Typography, Box } from '@mui/material';
 import { Cable } from '@mui/icons-material';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { AppLayout } from '../../layouts';
 import { PanelHeaderDropdown } from '../../components';
 import { useGetCloudConnections } from '../../controllers/cloudExplorer.controller';
@@ -22,15 +22,16 @@ const CloudExplorer: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { data: sources = [] } = useGetCloudConnections();
+  // The source the page is about: `connectionId` on the bucket routes,
+  // `id` on the edit-connection route, unset on routes without a source
+  const { connectionId, id: editedSourceId } = useParams<{
+    connectionId?: string;
+    id?: string;
+  }>();
+  const selectedSourceId = connectionId ?? editedSourceId;
 
   // Parse the current section from the pathname
   const pathSegments = location.pathname.split('/');
-  const sourceSegmentIndex = Math.max(
-    pathSegments.indexOf('buckets'),
-    pathSegments.indexOf('bucket'),
-  );
-  const selectedSourceId =
-    sourceSegmentIndex >= 0 ? pathSegments[sourceSegmentIndex + 1] : undefined;
   const currentSection = (() => {
     if (pathSegments.includes('edit-connection')) {
       return 'edit-connection';

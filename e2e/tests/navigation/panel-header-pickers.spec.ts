@@ -75,8 +75,9 @@ const testWithNoConnections = seededTest.extend({
   },
 });
 
+// All and Add rows are menu items; the picked-from items are radio items
 const menuRows = (window: Page) =>
-  window.getByRole('menu').getByRole('menuitem');
+  window.getByRole('menu').locator('[role="menuitem"], [role="menuitemradio"]');
 
 const expectNewConnectionPage = async (window: Page) => {
   await expect(window.getByText('Create New Connection')).toBeVisible();

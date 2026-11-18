@@ -18,7 +18,10 @@ test.describe('App Shell', () => {
   }) => {
     const window = await openProject(electronApp, PROJECT);
 
-    await expect(window.getByTestId('project-select')).toContainText(PROJECT);
+    const picker = window.getByTestId('project-select');
+    await expect(picker).toContainText(PROJECT);
+    // On screen, not only in the page (a collapsed panel keeps it mounted)
+    await expect(picker).toBeInViewport();
     // The dbt actions split button is only shown once a project is selected
     await expect(
       window.getByRole('button', { name: 'Project', exact: true }),
@@ -33,7 +36,9 @@ test.describe('App Shell', () => {
     const window = await openProject(electronApp, PROJECT);
 
     await window.getByTestId('project-select').click();
-    const rows = window.getByRole('menu').getByRole('menuitem');
+    const rows = window
+      .getByRole('menu')
+      .locator('[role="menuitem"], [role="menuitemradio"]');
     await expect(rows.first()).toHaveText('All Projects');
     await expect(rows.last()).toHaveText('Add project');
     await window.getByRole('menuitem', { name: 'All Projects' }).click();

@@ -2,6 +2,7 @@ import React from 'react';
 import SplitPane, { Pane } from 'split-pane-react';
 import 'split-pane-react/esm/themes/default.css';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import { Badge, Box, Tab, TabProps, Tabs, Tooltip } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import {
@@ -105,6 +106,8 @@ const ProjectDetails: React.FC = () => {
   const { data: project, isLoading } = useGetSelectedProject();
   const { data: projects = [] } = useGetProjects();
   const { mutateAsync: selectProject } = useSelectProject();
+  // Set while a project switch is loading, so a second pick can't overtake it
+  const isSwitchingProjectRef = React.useRef(false);
   const { data: isInitialized } = useGitIsInitialized(project?.path, {
     enabled: !!project?.path,
   });
@@ -162,7 +165,19 @@ const ProjectDetails: React.FC = () => {
           }))}
           value={String(project.id)}
           onSelect={async (value) => {
-            await selectProject({ projectId: value });
+            if (isSwitchingProjectRef.current) return;
+            isSwitchingProjectRef.current = true;
+            try {
+              await selectProject({ projectId: value });
+            } catch (error) {
+              toast.error(
+                `Could not switch project: ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+              );
+            } finally {
+              isSwitchingProjectRef.current = false;
+            }
           }}
           placeholder="Select Project"
           allLabel="All Projects"

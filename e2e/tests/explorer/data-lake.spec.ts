@@ -30,19 +30,31 @@ const SEEDED_INSTANCE_NAME = 'E2E_Lake';
 
 // Saves an instance through the same IPC call the Create DataLake form uses.
 // The app picks the id, so it is returned for the URL check.
+//
+// Prerequisite: creating an instance first sets up DuckDB's "ducklake"
+// extension, which must be bundled, already installed, or installable from
+// the network on the machine running the tests.
 const seedInstance = async (window: Page, userData: string): Promise<string> =>
   window.evaluate(
     async ([name, metadataPath, dataPath]) => {
-      const instance = await (window as any).electron.ipcRenderer.invoke(
-        'ducklake:instance:create',
-        {
-          name,
-          dataPath,
-          catalog: { type: 'duckdb', duckdb: { metadataPath } },
-          storage: { type: 'local', local: { path: dataPath } },
-        },
-      );
-      return instance.id as string;
+      try {
+        const instance = await (window as any).electron.ipcRenderer.invoke(
+          'ducklake:instance:create',
+          {
+            name,
+            dataPath,
+            catalog: { type: 'duckdb', duckdb: { metadataPath } },
+            storage: { type: 'local', local: { path: dataPath } },
+          },
+        );
+        return instance.id as string;
+      } catch (error) {
+        throw new Error(
+          'Could not create the test DuckLake instance. These tests need ' +
+            "DuckDB's ducklake extension (bundled, installed, or installable " +
+            `from the network): ${(error as Error).message}`,
+        );
+      }
     },
     [
       SEEDED_INSTANCE_NAME,
@@ -91,10 +103,27 @@ test.describe('DataLake', () => {
   }) => {
     const window = await openDataLake(electronApp);
 
+    // Both instance lists load successfully and are empty, so the picker
+    // below shows a real empty list rather than a failed or pending one
+    await expect
+      .poll(() =>
+        window.evaluate(async () => {
+          const { invoke } = (window as any).electron.ipcRenderer;
+          const [duckLake, iceberg] = await Promise.all([
+            invoke('ducklake:instance:list'),
+            invoke('iceberg:list'),
+          ]);
+          return [duckLake.length, iceberg.length];
+        }),
+      )
+      .toEqual([0, 0]);
+
     await window.getByTestId('datalake-instance-select').click();
 
     // With no instances there is no All Instances row, only Add instance
-    const rows = window.getByRole('menu').getByRole('menuitem');
+    const rows = window
+      .getByRole('menu')
+      .locator('[role="menuitem"], [role="menuitemradio"]');
     await expect(rows).toHaveText(['Add instance']);
 
     await rows.first().click();
@@ -112,7 +141,9 @@ test.describe('DataLake', () => {
     const picker = window.getByTestId('datalake-instance-select');
 
     await picker.click();
-    const rows = window.getByRole('menu').getByRole('menuitem');
+    const rows = window
+      .getByRole('menu')
+      .locator('[role="menuitem"], [role="menuitemradio"]');
     await expect(rows).toHaveText([
       'All Instances',
       SEEDED_INSTANCE_NAME,

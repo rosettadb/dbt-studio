@@ -874,7 +874,12 @@ const Sql = () => {
               });
             }
           }}
-          placeholder="Select Connection"
+          // A restored DuckLake tab keeps its saved name until the instance
+          // list has loaded
+          placeholder={
+            (isDuckLakeConnection && activeConnectionDisplayName) ||
+            'Select Connection'
+          }
           allLabel="All Connections"
           onAll={() => navigate('/app/connections')}
           addLabel="Add connection"

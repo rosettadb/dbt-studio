@@ -96,10 +96,14 @@ test.describe('Sidebar Navigation', () => {
     await mainWindow.getByTestId('sql-connection-select').click();
 
     // All Connections first, the connections, then Add connection last
-    const rows = mainWindow.getByRole('menu').getByRole('menuitem');
-    await expect(rows.first()).toHaveText('All Connections');
-    await expect(rows.filter({ hasText: 'test_db' })).toHaveCount(1);
-    await expect(rows.last()).toHaveText('Add connection');
+    const rows = mainWindow
+      .getByRole('menu')
+      .locator('[role="menuitem"], [role="menuitemradio"]');
+    await expect(rows).toHaveText([
+      'All Connections',
+      'test_db',
+      'Add connection',
+    ]);
 
     await rows.first().click();
     await expect(
