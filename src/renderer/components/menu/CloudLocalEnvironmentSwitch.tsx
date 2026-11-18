@@ -3,7 +3,6 @@ import { Box, Tooltip, useTheme } from '@mui/material';
 import { Cloud, Computer } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { useGetSettings, useUpdateSettings } from '../../controllers';
-import { useTrueScreenTooltipAnchor } from '../../hooks/useTrueScreenTooltipAnchor';
 import {
   EnvironmentSwitchContainer,
   EnvironmentSwitch,
@@ -16,17 +15,13 @@ export const CloudLocalEnvironmentSwitch: React.FC = () => {
   const theme = useTheme();
   const { data: settings } = useGetSettings();
   const { mutate: updateSettings } = useUpdateSettings();
-  // Keeps the tooltip on the switch on the Dashboard's scaled page
-  const { ref: switchRef, anchor: switchTooltipAnchor } =
-    useTrueScreenTooltipAnchor<HTMLDivElement>();
 
   return (
     <Box display="flex" gap={0.5}>
       <Tooltip
         title={`Switch to ${settings?.env === 'cloud' ? 'Local' : 'Cloud'} Environment`}
-        slotProps={{ popper: { anchorEl: switchTooltipAnchor } }}
       >
-        <EnvironmentSwitchContainer ref={switchRef}>
+        <EnvironmentSwitchContainer>
           <EnvironmentSwitch
             checked={settings?.env === 'cloud'}
             onChange={(event) => {

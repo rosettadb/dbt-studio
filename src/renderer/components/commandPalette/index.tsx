@@ -26,7 +26,6 @@ import {
   useSelectProject,
 } from '../../controllers';
 import { useTabs } from '../../context/TabsProvider';
-import { useTrueScreenTooltipAnchor } from '../../hooks/useTrueScreenTooltipAnchor';
 import { path as nodePath } from '../../lib/path';
 import { projectsServices } from '../../services';
 import { getBottomElements, getMainElements } from '../sidebar/elements';
@@ -157,9 +156,6 @@ export const CommandPalette: React.FC = () => {
   const [collapsedFilePaths, setCollapsedFilePaths] = React.useState<
     Set<string>
   >(new Set());
-  // Keeps the icon's tooltip under it on the Dashboard's scaled page
-  const { ref: searchIconRef, anchor: searchIconTooltipAnchor } =
-    useTrueScreenTooltipAnchor<HTMLButtonElement>();
   const itemRefs = React.useRef<(HTMLDivElement | null)[]>([]);
   const listboxRef = React.useRef<HTMLDivElement>(null);
   // Left and right only fold files once the list is being walked with up and
@@ -532,15 +528,8 @@ export const CommandPalette: React.FC = () => {
 
   return (
     <>
-      <Tooltip
-        title="Search (Ctrl+K)"
-        slotProps={{ popper: { anchorEl: searchIconTooltipAnchor } }}
-      >
-        <IconButton
-          size="small"
-          ref={searchIconRef}
-          onClick={() => setOpen(true)}
-        >
+      <Tooltip title="Search (Ctrl+K)">
+        <IconButton size="small" onClick={() => setOpen(true)}>
           <SearchIcon sx={{ fontSize: 20 }} />
         </IconButton>
       </Tooltip>

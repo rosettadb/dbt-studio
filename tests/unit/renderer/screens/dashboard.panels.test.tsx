@@ -337,8 +337,8 @@ describe('Dashboard panels', () => {
           .spyOn(Element.prototype, 'clientWidth', 'get')
           .mockReturnValue(sizes.windowWidth),
         jest
-          .spyOn(Element.prototype, 'getBoundingClientRect')
-          .mockReturnValue({ height: sizes.pageHeight } as DOMRect),
+          .spyOn(HTMLElement.prototype, 'offsetHeight', 'get')
+          .mockReturnValue(sizes.pageHeight),
       );
     };
 
@@ -347,16 +347,16 @@ describe('Dashboard panels', () => {
       sizeSpies.splice(0);
     });
 
-    // The zoom in the page's style rule (the box around the header, modules
-    // and panels)
+    // The page: the box around the header, modules and panels
+    const page = () =>
+      screen
+        .getByText('Workspace Overview')
+        .closest('[data-tour="tour-workspace-overview"]')!.parentElement!;
+
+    // The scale in the page's style rule; no transform means unscaled
     const pageScale = () => {
-      const zoom = styleRuleValue(
-        screen
-          .getByText('Workspace Overview')
-          .closest('[data-tour="tour-workspace-overview"]')!.parentElement!,
-        'zoom',
-      );
-      return zoom ? Number(zoom) : undefined;
+      const transform = styleRuleValue(page(), 'transform');
+      return transform ? Number(transform.match(/scale\(([\d.]+)\)/)![1]) : 1;
     };
 
     const moduleCard = () =>
@@ -460,6 +460,20 @@ describe('Dashboard panels', () => {
       expect(styleRuleValue(projectRows.nextElementSibling!, 'height')).toBe(
         '48px',
       );
+    });
+
+    it('lays the page out wider and sizes the box around it to the scaled height, so it fills the window without scrolling', () => {
+      setSizes({ windowHeight: 600, windowWidth: 2000, pageHeight: 800 });
+
+      renderDashboard();
+
+      expect(pageScale()).toBe(0.75);
+      // 100% / 0.75, so once scaled it is exactly as wide as the window
+      expect(styleRuleValue(page(), 'width')).toMatch(/^133\.33+\d*%$/);
+      expect(styleRuleValue(page(), 'transform-origin')).toBe('top left');
+      // 800px tall laid out, 600px once scaled
+      expect(styleRuleValue(page().parentElement!, 'height')).toBe('600px');
+      expect(styleRuleValue(page().parentElement!, 'overflow')).toBe('hidden');
     });
 
     it('keeps 4 cards per row and the panels side by side', () => {
