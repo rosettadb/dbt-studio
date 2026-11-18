@@ -128,7 +128,10 @@ const ORDER: ProjectType[] = ['dbt', 'analytics'];
 export const DEFAULT_PROJECT_TYPE: ProjectType = 'dbt';
 
 export function isProjectType(value: unknown): value is ProjectType {
-  return typeof value === 'string' && value in definitions;
+  return (
+    typeof value === 'string' &&
+    Object.prototype.hasOwnProperty.call(definitions, value)
+  );
 }
 
 /** The project's type; projects saved before plan 95a have none and are dbt. */

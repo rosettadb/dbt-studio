@@ -159,6 +159,45 @@ describe('AddConnectionModal', () => {
     );
   });
 
+  it('clears the selection after a submit, so the next project starts empty', () => {
+    const props = {
+      isOpen: true,
+      onClose: jest.fn(),
+      onUpdateProject: jest.fn(),
+      connections: [],
+    };
+    const { rerender } = renderModal({
+      ...props,
+      project: { id: 'p2', name: 'Lake', type: 'analytics' } as any,
+    });
+
+    act(() => {
+      fireEvent.mouseDown(screen.getByLabelText('Connection'));
+    });
+    act(() => {
+      fireEvent.click(screen.getByText('sales_lake'));
+    });
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Add Connection' }));
+    });
+
+    rerender(
+      <ThemeProvider theme={theme}>
+        <AddConnectionModal
+          isOpen={props.isOpen}
+          onClose={props.onClose}
+          onUpdateProject={props.onUpdateProject}
+          connections={props.connections}
+          project={{ id: 'p3', name: 'Dbt' } as any}
+        />
+      </ThemeProvider>,
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'Add Connection' }),
+    ).toBeDisabled();
+  });
+
   it('does not offer DuckLake instances to a dbt project', () => {
     renderModal({
       isOpen: true,

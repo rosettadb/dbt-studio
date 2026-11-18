@@ -160,6 +160,14 @@ const writeFile = (filePath: string, content: string) =>
  */
 const analyticsMain: ProjectTypeMain = {
   async scaffold({ projectPath, name, include, connectionId }) {
+    const existing = await fs.promises
+      .readdir(projectPath)
+      .catch((): string[] => []);
+    if (existing.length > 0) {
+      throw new Error(
+        `The folder ${projectPath} already exists and isn't empty. Choose another project name or location.`,
+      );
+    }
     await fs.promises.mkdir(projectPath, { recursive: true });
 
     if (include.includes(ANALYTICS_ITEMS.readme)) {

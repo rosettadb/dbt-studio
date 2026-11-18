@@ -79,6 +79,13 @@ describe('project type definitions', () => {
     expect(getProjectType({ type: 'analytics' })).toBe('analytics');
   });
 
+  it('ignores names inherited from Object.prototype', () => {
+    ['constructor', 'toString', '__proto__'].forEach((type) =>
+      expect(getProjectType({ type })).toBe('dbt'),
+    );
+    expect(projectTypeOf({ type: 'constructor' }).id).toBe('dbt');
+  });
+
   it('lets Analytics accept query-only connections that dbt rejects', () => {
     const analytics = projectTypeOf({ type: 'analytics' });
     const dbt = projectTypeOf({});
@@ -203,6 +210,33 @@ describe('Analytics scaffold', () => {
     expect(
       await fs.readFile(path.join(projectPath, 'README.md'), 'utf8'),
     ).toContain('**lake** (DuckLake)');
+  });
+
+  it('refuses a folder that already has files and leaves them untouched', async () => {
+    await fs.mkdirp(projectPath);
+    await fs.writeFile(path.join(projectPath, 'README.md'), 'mine');
+
+    await expect(
+      ProjectTypesService.scaffold('analytics', {
+        projectPath,
+        name: 'sales_analysis',
+        include: defaultTemplateItems('analytics'),
+      }),
+    ).rejects.toThrow("already exists and isn't empty");
+    expect(await listFiles(projectPath)).toEqual(['README.md']);
+    expect(await fs.readFile(path.join(projectPath, 'README.md'), 'utf8')).toBe(
+      'mine',
+    );
+  });
+
+  it('uses a folder that exists but is empty', async () => {
+    await fs.mkdirp(projectPath);
+    await ProjectTypesService.scaffold('analytics', {
+      projectPath,
+      name: 'empty_folder',
+      include: [ANALYTICS_ITEMS.gitignore],
+    });
+    expect(await listFiles(projectPath)).toEqual(['.gitignore']);
   });
 
   it('creates an empty folder when nothing is included', async () => {

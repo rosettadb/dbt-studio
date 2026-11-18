@@ -57,6 +57,7 @@ export const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
 
     toast.success(`Connection added to project ${project.name} successfully!`);
     onSuccess?.();
+    setSelectedConnectionId('');
     onClose();
     setIsLoading(false);
   };

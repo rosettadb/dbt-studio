@@ -57,9 +57,10 @@ const ConnectionIconContainer = styled(Box)`
   margin-right: 8px;
 `;
 
-const TypeCard = styled(Box, {
+const TypeCard = styled('label', {
   shouldForwardProp: (prop) => prop !== 'selected',
 })<{ selected: boolean }>(({ theme, selected }) => ({
+  position: 'relative',
   flex: 1,
   display: 'flex',
   flexDirection: 'column',
@@ -72,7 +73,20 @@ const TypeCard = styled(Box, {
     : theme.palette.background.paper,
   cursor: 'pointer',
   '&:hover': { borderColor: theme.palette.primary.main },
+  '&:has(input:focus-visible)': {
+    outline: `2px solid ${theme.palette.primary.main}`,
+    outlineOffset: 2,
+  },
 }));
+
+const TypeRadio = styled('input')({
+  position: 'absolute',
+  width: 1,
+  height: 1,
+  margin: 0,
+  opacity: 0,
+  pointerEvents: 'none',
+});
 
 type Connection = {
   id: string;
@@ -195,25 +209,43 @@ export const NewProject: React.FC<NewProjectProps> = ({
   const isLastStep = activeStep === STEPS.length - 1;
 
   const renderTypeStep = () => (
-    <Box sx={{ display: 'flex', gap: 2 }} data-testid="project-type-step">
+    <Box
+      sx={{ display: 'flex', gap: 2 }}
+      role="radiogroup"
+      aria-label="Project type"
+      data-testid="project-type-step"
+    >
       {listProjectTypes().map((type) => {
         const { Icon } = getProjectTypeUi(type.id);
         return (
           <TypeCard
             key={type.id}
             selected={type.id === projectType}
-            onClick={() => selectType(type.id)}
-            role="radio"
-            aria-checked={type.id === projectType}
             data-testid={`project-type-${type.id}`}
           >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <TypeRadio
+              type="radio"
+              name="project-type"
+              value={type.id}
+              checked={type.id === projectType}
+              onChange={() => selectType(type.id)}
+            />
+            <Box
+              component="span"
+              sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
+            >
               <Icon size={22} />
-              <Typography sx={{ fontSize: 14, fontWeight: 600 }}>
+              <Typography
+                component="span"
+                sx={{ fontSize: 14, fontWeight: 600 }}
+              >
                 {type.title}
               </Typography>
             </Box>
-            <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+            <Typography
+              component="span"
+              sx={{ fontSize: 12.5, color: 'text.secondary' }}
+            >
               {type.description}
             </Typography>
           </TypeCard>
