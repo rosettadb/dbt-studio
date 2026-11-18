@@ -499,10 +499,7 @@ const Dashboard: React.FC = () => {
 
           {/* Main Studio Modules (7 Cards) */}
           <Box data-tour="tour-modules-area">
-            <Typography
-              variant="h6"
-              sx={{ fontWeight: 700, mb: 1, textAlign: 'center' }}
-            >
+            <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
               Studio Modules
             </Typography>
             <Grid container rowSpacing={2} columnSpacing={2.5} sx={{ mb: 2 }}>
