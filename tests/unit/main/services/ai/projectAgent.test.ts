@@ -103,11 +103,15 @@ const enabledTools = toolSet(
 );
 
 const build = async (
-  options: { hasDbt?: boolean; toolMode?: 'chat' | 'agent' } = {},
+  options: {
+    hasDbt?: boolean;
+    toolMode?: 'chat' | 'agent';
+    enabled?: Record<string, unknown>;
+  } = {},
 ) => {
   const agent = (await createProjectAgent(base, {
     projectPath: '/projects/sales',
-    enabledTools,
+    enabledTools: options.enabled ?? enabledTools,
     skills: '',
     toolMode: options.toolMode ?? 'agent',
     hasDbt: options.hasDbt,
@@ -171,5 +175,24 @@ describe('createProjectAgent by project type', () => {
     expect(tools).not.toHaveProperty('studio_pipeline_generate');
     expect(instructions).toContain('Ask (read-only) mode');
     expect(instructions).not.toContain('- writeFile: Write any text file');
+  });
+
+  it('lists only the tools a project without dbt can call', async () => {
+    const enabled = { ...enabledTools };
+    delete enabled.studio_pipeline_generate;
+    const { tools, instructions } = await build({ hasDbt: false, enabled });
+
+    expect(tools).not.toHaveProperty('studio_pipeline_generate');
+    expect(instructions).not.toContain('studio_pipeline_generate');
+    expect(instructions).toContain('- studio_pipeline_update:');
+    expect(instructions).toContain('- studio_sql_schema_extract:');
+  });
+
+  it('does not call Project Memory missing when it was only not injected', async () => {
+    const { instructions } = await build({ hasDbt: false });
+
+    expect(instructions).toContain('not available in this turn');
+    expect(instructions).toContain('Check with `pathExists`');
+    expect(instructions).toContain('only once you know it doesn');
   });
 });

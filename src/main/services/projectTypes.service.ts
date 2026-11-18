@@ -149,8 +149,25 @@ const analyticsReadme = (
   ].join('\n');
 };
 
-const writeFile = (filePath: string, content: string) =>
-  fs.promises.writeFile(filePath, content, 'utf8');
+const scaffoldsInProgress = new Set<string>();
+
+const readFolder = (folder: string): Promise<string[]> =>
+  fs.promises.readdir(folder).catch((error: { code?: string }) => {
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  });
+
+const removeEntry = (entry: string) =>
+  fs.promises
+    .rm(entry, { recursive: true, force: true })
+    .catch(() => undefined);
+
+const removeInReverse = (entries: string[]) =>
+  [...entries]
+    .reverse()
+    .reduce<
+      Promise<unknown>
+    >((chain, entry) => chain.then(() => removeEntry(entry)), Promise.resolve());
 
 /**
  * Analytics projects hold no dbt files: no dbt_project.yml, profiles.yml or
@@ -160,37 +177,62 @@ const writeFile = (filePath: string, content: string) =>
  */
 const analyticsMain: ProjectTypeMain = {
   async scaffold({ projectPath, name, include, connectionId }) {
-    const existing = await fs.promises
-      .readdir(projectPath)
-      .catch((): string[] => []);
-    if (existing.length > 0) {
-      throw new Error(
-        `The folder ${projectPath} already exists and isn't empty. Choose another project name or location.`,
-      );
+    const target = path.resolve(projectPath);
+    if (scaffoldsInProgress.has(target)) {
+      throw new Error(`A project is already being created in ${projectPath}.`);
     }
-    await fs.promises.mkdir(projectPath, { recursive: true });
+    scaffoldsInProgress.add(target);
+    const created: string[] = [];
+    const makeFolder = async (folder: string) => {
+      const first = await fs.promises.mkdir(folder, { recursive: true });
+      if (first) created.push(first);
+    };
+    const createFile = async (filePath: string, content: string) => {
+      await fs.promises.writeFile(filePath, content, {
+        encoding: 'utf8',
+        flag: 'wx',
+      });
+      created.push(filePath);
+    };
 
-    if (include.includes(ANALYTICS_ITEMS.readme)) {
-      await writeFile(
-        path.join(projectPath, 'README.md'),
-        analyticsReadme(name, include, await connectionLabel(connectionId)),
+    try {
+      if ((await readFolder(target)).length > 0) {
+        throw new Error(
+          `The folder ${projectPath} already exists and isn't empty. Choose another project name or location.`,
+        );
+      }
+      await makeFolder(target);
+
+      if (include.includes(ANALYTICS_ITEMS.readme)) {
+        await createFile(
+          path.join(target, 'README.md'),
+          analyticsReadme(name, include, await connectionLabel(connectionId)),
+        );
+      }
+      // Git doesn't keep empty folders, so each one gets a .gitkeep
+      const folderResults = await Promise.allSettled(
+        ANALYTICS_FOLDERS.filter(({ item }) => include.includes(item)).map(
+          async ({ folder }) => {
+            const folderPath = path.join(target, folder);
+            await makeFolder(folderPath);
+            await createFile(path.join(folderPath, '.gitkeep'), '');
+          },
+        ),
       );
-    }
-    // Git doesn't keep empty folders, so each one gets a .gitkeep
-    await Promise.all(
-      ANALYTICS_FOLDERS.filter(({ item }) => include.includes(item)).map(
-        async ({ folder }) => {
-          const folderPath = path.join(projectPath, folder);
-          await fs.promises.mkdir(folderPath, { recursive: true });
-          await writeFile(path.join(folderPath, '.gitkeep'), '');
-        },
-      ),
-    );
-    if (include.includes(ANALYTICS_ITEMS.gitignore)) {
-      await writeFile(
-        path.join(projectPath, '.gitignore'),
-        ANALYTICS_GITIGNORE,
+      const failedFolder = folderResults.find(
+        (result): result is PromiseRejectedResult =>
+          result.status === 'rejected',
       );
+      if (failedFolder) throw failedFolder.reason;
+
+      if (include.includes(ANALYTICS_ITEMS.gitignore)) {
+        await createFile(path.join(target, '.gitignore'), ANALYTICS_GITIGNORE);
+      }
+    } catch (error) {
+      await removeInReverse(created);
+      throw error;
+    } finally {
+      scaffoldsInProgress.delete(target);
     }
   },
 

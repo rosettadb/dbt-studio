@@ -301,6 +301,22 @@ custom_root:
       expect(context).not.toContain(projectPath);
     });
 
+    it('points dbt projects to profiles.yml and main.conf for connection values', async () => {
+      const context = await buildProjectPipelineContext(projectPath);
+      expect(context).toContain("read the project's `profiles.yml`");
+    });
+
+    it('gives projects without dbt connection guidance that needs no dbt files', async () => {
+      const context = await buildProjectPipelineContext(projectPath, {
+        hasDbt: false,
+      });
+      expect(context).not.toContain("read the project's `profiles.yml`");
+      expect(context).toContain(
+        'This project has no `profiles.yml` or `rosetta/main.conf`',
+      );
+      expect(context).toContain('Existing pipelines:');
+    });
+
     it('describes the exact visual node and plugin authoring contract', async () => {
       const context = await buildProjectPipelineContext(projectPath);
       expect(context).toContain('node represents one YAML step');

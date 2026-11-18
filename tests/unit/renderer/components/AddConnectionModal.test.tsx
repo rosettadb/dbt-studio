@@ -181,6 +181,11 @@ describe('AddConnectionModal', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Add Connection' }));
     });
 
+    expect(props.onUpdateProject).toHaveBeenCalledTimes(1);
+    expect(props.onUpdateProject).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'p2', connectionId: 'ducklake-lake1' }),
+    );
+
     rerender(
       <ThemeProvider theme={theme}>
         <AddConnectionModal

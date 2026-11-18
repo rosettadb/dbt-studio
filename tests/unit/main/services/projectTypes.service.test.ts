@@ -5,6 +5,7 @@
  * projects link to.
  */
 
+import nodeFs from 'fs';
 import fs from 'fs-extra';
 import os from 'os';
 import path from 'path';
@@ -227,6 +228,89 @@ describe('Analytics scaffold', () => {
     expect(await fs.readFile(path.join(projectPath, 'README.md'), 'utf8')).toBe(
       'mine',
     );
+  });
+
+  it('reports a destination it cannot read instead of treating it as empty', async () => {
+    await fs.mkdirp(path.dirname(projectPath));
+    await fs.writeFile(projectPath, 'a file, not a folder');
+
+    await expect(
+      ProjectTypesService.scaffold('analytics', {
+        projectPath,
+        name: 'sales_analysis',
+        include: [ANALYTICS_ITEMS.readme],
+      }),
+    ).rejects.toMatchObject({ code: 'ENOTDIR' });
+    expect(await fs.readFile(projectPath, 'utf8')).toBe('a file, not a folder');
+  });
+
+  it('refuses a second create for the same folder while the first runs', async () => {
+    const input = {
+      projectPath,
+      name: 'first',
+      include: [ANALYTICS_ITEMS.readme, ANALYTICS_ITEMS.gitignore],
+    };
+    const first = ProjectTypesService.scaffold('analytics', input);
+    const second = ProjectTypesService.scaffold('analytics', {
+      ...input,
+      name: 'second',
+    });
+
+    await expect(second).rejects.toThrow('already being created');
+    await first;
+    expect(
+      await fs.readFile(path.join(projectPath, 'README.md'), 'utf8'),
+    ).toContain('# first');
+  });
+
+  describe('when a write fails', () => {
+    let writeSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      const realWriteFile = nodeFs.promises.writeFile;
+      writeSpy = jest
+        .spyOn(nodeFs.promises, 'writeFile')
+        .mockImplementation(((file: unknown, ...rest: unknown[]) =>
+          String(file).endsWith('.gitignore')
+            ? Promise.reject(new Error('disk full'))
+            : (realWriteFile as (...args: unknown[]) => Promise<void>)(
+                file,
+                ...rest,
+              )) as typeof nodeFs.promises.writeFile);
+    });
+
+    afterEach(() => writeSpy.mockRestore());
+
+    it('removes what it created, so the same folder can be retried', async () => {
+      const input = {
+        projectPath,
+        name: 'retry',
+        include: defaultTemplateItems('analytics'),
+      };
+
+      await expect(
+        ProjectTypesService.scaffold('analytics', input),
+      ).rejects.toThrow('disk full');
+      expect(await fs.pathExists(projectPath)).toBe(false);
+
+      writeSpy.mockRestore();
+      await ProjectTypesService.scaffold('analytics', input);
+      expect(await listFiles(projectPath)).toContain('.gitignore');
+    });
+
+    it('keeps a folder that existed before the attempt', async () => {
+      await fs.mkdirp(projectPath);
+
+      await expect(
+        ProjectTypesService.scaffold('analytics', {
+          projectPath,
+          name: 'kept',
+          include: defaultTemplateItems('analytics'),
+        }),
+      ).rejects.toThrow('disk full');
+      expect(await fs.pathExists(projectPath)).toBe(true);
+      expect(await listFiles(projectPath)).toEqual([]);
+    });
   });
 
   it('uses a folder that exists but is empty', async () => {

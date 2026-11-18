@@ -32,7 +32,7 @@ import type {
   ChatMessage,
   ChatImageAttachment,
 } from '../schemas/mainDatabase.schema';
-import type { AISettingsConfig } from '../../types/backend';
+import type { AISettingsConfig, Project } from '../../types/backend';
 import type {
   PythonNotebookAgentArgs,
   PythonNotebookAgentOp,
@@ -1377,10 +1377,11 @@ COMBINED SUMMARY:`,
     // Resolve projectPath and connectionId from selected project if not provided
     let { projectPath, connectionId } = request;
     const screenKey = request.screenKey ?? 'project';
+    let selectedProjectRecord: Project | undefined;
     if (screenKey === 'project' && (!projectPath || !connectionId)) {
-      const selectedProject = await ProjectsService.getSelectedProject();
-      projectPath = projectPath ?? selectedProject?.path;
-      connectionId = connectionId ?? selectedProject?.connectionId;
+      selectedProjectRecord = await ProjectsService.getSelectedProject();
+      projectPath = projectPath ?? selectedProjectRecord?.path;
+      connectionId = connectionId ?? selectedProjectRecord?.connectionId;
     }
 
     try {
@@ -1546,11 +1547,15 @@ COMBINED SUMMARY:`,
       let projectHasDbt = true;
       if (screenKey === 'project' && projectPath) {
         try {
-          const projects = await ProjectsService.loadProjects();
-          projectHasDbt = projectTypeOf(
-            projects.find((p) => p.path === projectPath),
-          ).capabilities.dbt;
+          const project =
+            selectedProjectRecord?.path === projectPath
+              ? selectedProjectRecord
+              : (await ProjectsService.loadProjects()).find(
+                  (p) => p.path === projectPath,
+                );
+          projectHasDbt = projectTypeOf(project).capabilities.dbt;
         } catch (err) {
+          projectHasDbt = false;
           console.warn(
             '[AgentService] Could not resolve the project type:',
             err,
@@ -1565,7 +1570,12 @@ COMBINED SUMMARY:`,
           ? await readProjectAgentContext(projectPath)
           : undefined;
       if (screenKey === 'project' && projectPath) {
-        projectPipelineContext = await buildProjectPipelineContext(projectPath);
+        projectPipelineContext = await buildProjectPipelineContext(
+          projectPath,
+          {
+            hasDbt: projectHasDbt,
+          },
+        );
         try {
           // Derive the selected file path from contextItems (type 'file' entries)
           // The file path is stored in the metadata JSON field as { path: string }
