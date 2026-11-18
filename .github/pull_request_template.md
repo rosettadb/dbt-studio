@@ -26,4 +26,4 @@ Closes #
 
 - [ ] I used AI tools for this pull request: <!-- which tool, and for what -->
 
-I've reviewed and tested every change and can explain it (see [AI_POLICY.md](../AI_POLICY.md)).
+I've reviewed and tested every change and can explain it (see [AI_POLICY.md](https://github.com/rosettadb/dbt-studio/blob/dev/AI_POLICY.md)).

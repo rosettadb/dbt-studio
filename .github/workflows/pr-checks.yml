@@ -37,6 +37,9 @@ jobs:
           npm ci --ignore-scripts
           npm ci --ignore-scripts --prefix release/app
 
+      - name: Link app modules
+        run: npm run link-modules --prefix release/app
+
       - name: Lint
         run: npm run lint
 

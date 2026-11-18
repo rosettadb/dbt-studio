@@ -96,7 +96,7 @@ Pull requests from outside the core team need:
 - [ ] [Signed commits](https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits)
       (GitHub shows "Verified")
 - [ ] A signed [CLA](#contributor-license-agreement)
-- [ ] Passing `PR Checks` (lint, type check, unit tests) and `Integration Tests`
+- [ ] Passing `PR Checks` (lint and type check) and `Integration Tests`
 
 Open the pull request against `dev`. We squash-merge, so the pull request
 title becomes the commit message on `dev`.
