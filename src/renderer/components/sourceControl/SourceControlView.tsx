@@ -18,6 +18,7 @@ import {
 } from '../../controllers';
 import { QUERY_KEYS } from '../../config/constants';
 import { path } from '../../lib/path';
+import { usePaletteCommand } from '../commandPalette/commands';
 
 // Git Init Button Component
 interface GitInitButtonProps {
@@ -235,6 +236,19 @@ export const SourceControlView: React.FC<SourceControlViewProps> = ({
       unstageAllFiles({ path: projectPath });
     }
   };
+
+  usePaletteCommand(
+    'git.stage-all',
+    'Git: Stage all changes',
+    handleStageAll,
+    !!projectPath && !!isInitialized && unstagedFilesCount > 0,
+  );
+  usePaletteCommand(
+    'git.unstage-all',
+    'Git: Unstage all changes',
+    handleUnstageAll,
+    !!projectPath && !!isInitialized && stagedFilesCount > 0,
+  );
 
   const handleDiscard = (filePath: string) => {
     if (projectPath) {

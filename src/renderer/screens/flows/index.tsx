@@ -17,6 +17,7 @@ import {
   FlowfileStatus,
 } from '../../services/flowfile.service';
 import { AppLayout } from '../../layouts';
+import { usePaletteCommand } from '../../components/commandPalette/commands';
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -88,6 +89,24 @@ const Flows: React.FC = () => {
   }, [processRunning, isStopping]);
   const serviceUp = processRunning && (status?.serviceUp ?? false);
   const url = status?.url ?? 'http://127.0.0.1:63578/ui';
+
+  usePaletteCommand(
+    'flowfile.start',
+    'Flowfile: Start service',
+    handleStart,
+    !processRunning && !isStarting,
+  );
+  usePaletteCommand(
+    'flowfile.stop',
+    'Flowfile: Stop service',
+    handleStop,
+    processRunning && !isStopping,
+  );
+  usePaletteCommand(
+    'flowfile.refresh',
+    'Flowfile: Refresh status',
+    fetchStatus,
+  );
 
   return (
     <AppLayout>
