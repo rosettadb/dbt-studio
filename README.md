@@ -122,4 +122,4 @@ Rosetta dbt Studio is licensed under the GNU Affero General Public License v3.0 
 
 ## Contributing
 
-Contributions are welcome. Read [CONTRIBUTING.md](./CONTRIBUTING.md) to get started, and see [SECURITY.md](./SECURITY.md) for reporting security problems.
+Contributions are welcome. Read [CONTRIBUTING.md](./CONTRIBUTING.md) to get started.

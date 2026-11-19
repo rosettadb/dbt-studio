@@ -8,7 +8,6 @@ contributing, you agree that your contribution is licensed the same way and
 that you have the right to submit it.
 
 - Questions and ideas: [GitHub Discussions](https://github.com/rosettadb/dbt-studio/discussions)
-- Security problems: [SECURITY.md](./SECURITY.md) (never a public issue)
 - Behavior in the community: [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
 - Using AI tools to contribute: [AI_POLICY.md](./AI_POLICY.md)
 - What we're working on: [ROADMAP.md](./ROADMAP.md)
