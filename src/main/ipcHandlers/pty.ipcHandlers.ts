@@ -1,4 +1,3 @@
-import fs from 'fs';
 import { app, BrowserWindow, ipcMain } from 'electron';
 import type { IpcMainEvent, IpcMainInvokeEvent } from 'electron';
 import type {
@@ -12,7 +11,6 @@ import {
   PtyService,
   createDefaultPtyServiceDeps,
 } from '../services/pty.service';
-import SettingsService from '../services/settings.service';
 import { buildShellEnvironment } from '../utils/shellEnvironment';
 import { resolveHtmlPath } from '../utils/setupHelpers';
 
@@ -28,29 +26,13 @@ const handlerChannels = [
 
 const listenerChannels = ['pty:write', 'pty:resize', 'pty:ack'];
 
-const directoryExists = (dir: string): boolean => {
-  try {
-    return fs.statSync(dir).isDirectory();
-  } catch {
-    return false;
-  }
-};
-
-const buildEnv = async (): Promise<Record<string, string>> => {
-  // A terminal must still open when settings cannot be read; it just will
-  // not have Studio's tools on PATH.
-  const settings = await SettingsService.loadSettings().catch(() => null);
-  return buildShellEnvironment({
+const buildEnv = async (): Promise<Record<string, string>> =>
+  buildShellEnvironment({
     baseEnv: process.env,
     platform: process.platform,
     isPackaged: app.isPackaged,
     locale: app.getLocale(),
-    pythonPath: settings?.pythonPath,
-    dbtPath: settings?.dbtPath,
-    rosettaPath: settings?.rosettaPath,
-    directoryExists,
   });
-};
 
 // One service for the lifetime of the app: shells outlive handler
 // re-registration (setup window → main window) and renderer reloads.

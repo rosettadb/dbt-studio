@@ -1,49 +1,21 @@
 import { buildShellEnvironment } from '../../../../src/main/utils/shellEnvironment';
 
-const everyDirectoryExists = () => true;
-
 describe('buildShellEnvironment', () => {
-  it('puts the Python environment first and Rosetta last on PATH', () => {
-    const env = buildShellEnvironment({
-      baseEnv: { PATH: '/usr/bin:/bin' },
-      platform: 'linux',
+  it('leaves PATH exactly as Studio received it', () => {
+    const posix = buildShellEnvironment({
+      baseEnv: { PATH: '/opt/homebrew/bin:/usr/bin:/bin' },
+      platform: 'darwin',
       isPackaged: true,
-      pythonPath: '/studio/venv/bin/python',
-      dbtPath: '/studio/venv/bin/dbt',
-      rosettaPath: '/studio/rosetta/bin/rosetta',
-      directoryExists: everyDirectoryExists,
     });
-
-    expect(env.PATH).toBe('/studio/venv/bin:/usr/bin:/bin:/studio/rosetta/bin');
-  });
-
-  it('uses the existing PATH variable name and separator on Windows', () => {
-    const env = buildShellEnvironment({
-      baseEnv: { Path: 'C:\\Windows\\System32;C:\\Studio\\Venv\\Scripts' },
+    const windows = buildShellEnvironment({
+      baseEnv: { Path: 'C:\\Windows\\System32;C:\\Tools' },
       platform: 'win32',
       isPackaged: true,
-      pythonPath: 'C:\\studio\\venv\\Scripts\\python.exe',
-      dbtPath: 'C:\\studio\\venv\\Scripts\\dbt.exe',
-      directoryExists: everyDirectoryExists,
     });
 
-    expect(env.PATH).toBeUndefined();
-    // Listed once, moved to the front, compared case-insensitively.
-    expect(env.Path).toBe('C:\\studio\\venv\\Scripts;C:\\Windows\\System32');
-  });
-
-  it('skips tools that are not installed or whose folder is gone', () => {
-    const env = buildShellEnvironment({
-      baseEnv: { PATH: '/usr/bin' },
-      platform: 'linux',
-      isPackaged: true,
-      pythonPath: '',
-      dbtPath: 'dbt',
-      rosettaPath: '/removed/rosetta/bin/rosetta',
-      directoryExists: (dir) => dir !== '/removed/rosetta/bin',
-    });
-
-    expect(env.PATH).toBe('/usr/bin');
+    expect(posix.PATH).toBe('/opt/homebrew/bin:/usr/bin:/bin');
+    expect(windows.Path).toBe('C:\\Windows\\System32;C:\\Tools');
+    expect(windows.PATH).toBeUndefined();
   });
 
   it('describes the terminal to the programs running in it', () => {
@@ -51,7 +23,6 @@ describe('buildShellEnvironment', () => {
       baseEnv: { PATH: '/usr/bin', TERM: 'dumb' },
       platform: 'linux',
       isPackaged: true,
-      directoryExists: everyDirectoryExists,
     });
 
     expect(env.TERM).toBe('xterm-256color');
@@ -71,7 +42,6 @@ describe('buildShellEnvironment', () => {
       },
       platform: 'linux',
       isPackaged: true,
-      directoryExists: everyDirectoryExists,
     });
 
     expect(env.ELECTRON_RUN_AS_NODE).toBeUndefined();
@@ -92,13 +62,11 @@ describe('buildShellEnvironment', () => {
       baseEnv,
       platform: 'linux',
       isPackaged: false,
-      directoryExists: everyDirectoryExists,
     });
     const packaged = buildShellEnvironment({
       baseEnv,
       platform: 'linux',
       isPackaged: true,
-      directoryExists: everyDirectoryExists,
     });
 
     expect(development.npm_lifecycle_event).toBeUndefined();
@@ -111,7 +79,6 @@ describe('buildShellEnvironment', () => {
     const base = {
       platform: 'darwin' as const,
       isPackaged: true,
-      directoryExists: everyDirectoryExists,
     };
 
     expect(
