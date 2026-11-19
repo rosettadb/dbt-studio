@@ -5,6 +5,10 @@ import { SettingsService, RunnerService } from '../services';
 import { SettingsChannels } from '../../types/ipc';
 import { DbtCoreVersionService } from '../services/dbtCoreVersion.service';
 import {
+  loadPluginDefinitions,
+  resolveProjectMacroDirs,
+} from '../services/pluginManifest.service';
+import {
   isDbtV2SwitchQueued,
   removeQueuedInstalls,
   runInstallTask,
@@ -31,7 +35,9 @@ const handlerChannels: SettingsChannels[] = [
   'version:python:uninstall',
   'version:python:versions:check',
   'version:python:versions:install',
-  'runner:plugins:check',
+  'runner:plugins:manifest',
+  'runner:plugins:macros',
+  'runner:requirements:check',
   'runner:pyspark:install',
   'runner:pyspark:uninstall',
   'settings:reset-factory',
@@ -179,8 +185,20 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
     },
   );
 
-  ipcMain.handle('runner:plugins:check', async () => {
-    return RunnerService.checkPluginDependencies();
+  // The plugins of the local runner, for the pipeline designer.
+  ipcMain.handle('runner:plugins:manifest', async () => {
+    return loadPluginDefinitions();
+  });
+
+  ipcMain.handle(
+    'runner:plugins:macros',
+    async (_event, projectPath: string) => {
+      return resolveProjectMacroDirs(projectPath);
+    },
+  );
+
+  ipcMain.handle('runner:requirements:check', async () => {
+    return RunnerService.checkRequirements();
   });
 
   ipcMain.handle('runner:pyspark:install', async () => {

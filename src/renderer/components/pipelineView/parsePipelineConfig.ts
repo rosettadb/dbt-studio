@@ -3,25 +3,25 @@ import { z } from 'zod';
 import { splitSegments } from '../../lib/path';
 import type { PipelineConfig } from './types';
 
-// Mirrors PipelineStep/PipelineJob/PipelineConfig in ./types. Every field
-// that downstream rendering (PipelineNode, PipelineGraph) accesses without a
-// null-check is required here, so a structurally-broken pipeline.yml is
-// rejected at parse time instead of throwing later during render.
-const pipelineStepSchema = z.object({
-  name: z.string(),
-  plugin: z.string(),
-  command: z.string().optional(),
-  working_dir: z.string().optional(),
-  url: z.string().optional(),
-  branch: z.string().optional(),
-  dest: z.string().optional(),
-});
+// Only what downstream rendering (PipelineNode, PipelineGraph) accesses
+// without a null-check is required here, so a structurally-broken
+// pipeline.yml is rejected at parse time instead of throwing later during
+// render. Every other key of a step or job is kept: step keys are plugin
+// parameters, job keys (e.g. `needs`) are written back unchanged.
+const pipelineStepSchema = z
+  .object({
+    name: z.string(),
+    plugin: z.string(),
+  })
+  .passthrough();
 
-const pipelineJobSchema = z.object({
-  name: z.string(),
-  type: z.string().optional(),
-  steps: z.array(pipelineStepSchema),
-});
+const pipelineJobSchema = z
+  .object({
+    name: z.string(),
+    type: z.string().optional(),
+    steps: z.array(pipelineStepSchema),
+  })
+  .passthrough();
 
 const pipelineConfigSchema = z.object({
   name: z.string(),
@@ -33,7 +33,21 @@ export function parsePipelineConfig(content: string): PipelineConfig | null {
     const parsed = yaml.load(content);
     const result = pipelineConfigSchema.safeParse(parsed);
     if (!result.success) return null;
-    return result.data;
+    return {
+      name: result.data.name,
+      jobs: result.data.jobs.map((job) => {
+        const { name, type, steps, ...extra } = job;
+        return {
+          name,
+          type,
+          extra,
+          steps: steps.map((step) => {
+            const { name: stepName, plugin, ...params } = step;
+            return { name: stepName, plugin, params };
+          }),
+        };
+      }),
+    };
   } catch {
     return null;
   }

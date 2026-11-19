@@ -1,5 +1,9 @@
 import React from 'react';
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
+  Alert,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -14,10 +18,20 @@ import {
   Divider,
   Autocomplete,
   Typography,
-  Box,
 } from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import type { PipelineNodeData } from './PipelineNode';
-import { PLUGIN_DEFS, PLUGIN_MAP } from './pluginDefinitions';
+import { getPluginVisual, usePluginCatalog } from './pluginDefinitions';
+import { StepWidget } from './StepWidgets';
+import {
+  defaultStepParams,
+  isEmptyParam,
+  isWidgetVisible,
+  validateStepParams,
+  type MacroContext,
+  type PluginWidget,
+  type StepParams,
+} from '../../../shared/pluginManifest';
 
 interface StepEditDialogProps {
   open: boolean;
@@ -25,6 +39,9 @@ interface StepEditDialogProps {
   existingJobNames: string[];
   onClose: () => void;
   onSave: (data: Partial<PipelineNodeData>) => void;
+  /** Values for the macros in widget defaults (see defaultStepParams). */
+  macros?: MacroContext;
+  projectPath?: string;
 }
 
 export const StepEditDialog: React.FC<StepEditDialogProps> = ({
@@ -33,52 +50,85 @@ export const StepEditDialog: React.FC<StepEditDialogProps> = ({
   existingJobNames,
   onClose,
   onSave,
+  macros,
+  projectPath,
 }) => {
+  const catalog = usePluginCatalog();
   const [name, setName] = React.useState('');
-  const [plugin, setPlugin] = React.useState('dbt@v1');
+  const [plugin, setPlugin] = React.useState('');
   const [jobName, setJobName] = React.useState('run');
   const [jobType, setJobType] = React.useState('');
-  const [fieldValues, setFieldValues] = React.useState<Record<string, string>>(
-    {},
-  );
+  // The step's parameters as the pipeline file holds them. A value is only
+  // rewritten when its field is edited, so parameters the form does not show
+  // (or shows differently) are saved back untouched.
+  const [params, setParams] = React.useState<StepParams>({});
+  // Changes each time a step is loaded, so fields never keep another
+  // step's typing state.
+  const [formKey, setFormKey] = React.useState(0);
 
   React.useEffect(() => {
     if (!open || !data) return;
     setName(data.name ?? '');
-    setPlugin(data.plugin ?? 'dbt@v1');
+    setPlugin(data.plugin ?? '');
     setJobName(data.jobName ?? 'run');
     setJobType(data.jobType ?? '');
-    const def = PLUGIN_MAP.get(data.plugin);
-    const vals: Record<string, string> = {};
-    const dataAny = data as unknown as Record<string, unknown>;
-    def?.fields.forEach((f) => {
-      vals[f.key] = String(dataAny[f.key] ?? '');
-    });
-    setFieldValues(vals);
+    setParams({ ...(data.params ?? {}) });
+    setFormKey((key) => key + 1);
   }, [open, data]);
 
+  const pluginDef = catalog.byId.get(plugin);
+
+  // Another plugin has other parameters: start from its defaults.
   const handlePluginChange = (newPlugin: string) => {
     setPlugin(newPlugin);
-    const def = PLUGIN_MAP.get(newPlugin);
-    const vals: Record<string, string> = {};
-    def?.fields.forEach((f) => {
-      vals[f.key] = f.defaultValue ?? '';
-    });
-    setFieldValues(vals);
+    const def = catalog.byId.get(newPlugin);
+    setParams(def ? defaultStepParams(def, macros) : {});
   };
 
-  const pluginDef = PLUGIN_MAP.get(plugin);
-
   const handleApply = () => {
+    const saved: StepParams = { ...params };
+    // A field hidden by its visible_when condition does not apply.
+    pluginDef?.widgets.forEach((widget) => {
+      if (!isWidgetVisible(widget, params)) delete saved[widget.key];
+    });
     onSave({
       name,
       plugin,
       jobName: jobName || 'run',
       jobType: jobType || undefined,
-      ...(fieldValues as Partial<PipelineNodeData>),
+      params: saved,
     });
     onClose();
   };
+
+  // Plugins offered for a step: the addable ones, plus this step's own
+  // plugin when it is not among them (kept for existing steps, or unknown).
+  const selectable = catalog.plugins.filter(
+    (p) => p.addable || p.id === plugin,
+  );
+  const pluginIsListed = selectable.some((p) => p.id === plugin);
+
+  const visibleWidgets = (pluginDef?.widgets ?? []).filter((widget) =>
+    isWidgetVisible(widget, params),
+  );
+  const ungrouped = visibleWidgets.filter((widget) => !widget.group);
+  const groups = Array.from(
+    new Set(visibleWidgets.map((widget) => widget.group).filter(Boolean)),
+  ) as string[];
+  const issues = pluginDef ? validateStepParams(pluginDef, params) : [];
+  const ruleIssues = issues.filter((issue) => !issue.key);
+
+  const renderWidget = (widget: PluginWidget) => (
+    <StepWidget
+      key={`${formKey}:${plugin}:${widget.key}`}
+      widget={widget}
+      value={params[widget.key]}
+      projectPath={projectPath}
+      onChange={(value) =>
+        setParams((current) => ({ ...current, [widget.key]: value }))
+      }
+    />
+  );
 
   return (
     <Dialog
@@ -108,7 +158,17 @@ export const StepEditDialog: React.FC<StepEditDialogProps> = ({
               label="Plugin"
               onChange={(e) => handlePluginChange(e.target.value)}
             >
-              {PLUGIN_DEFS.map((p) => (
+              {!pluginIsListed && plugin && (
+                <MenuItem value={plugin}>
+                  <span style={{ fontWeight: 700, marginRight: 8 }}>
+                    {getPluginVisual(undefined, plugin).label}
+                  </span>
+                  <span style={{ color: '#888', fontSize: '0.75rem' }}>
+                    {plugin}
+                  </span>
+                </MenuItem>
+              )}
+              {selectable.map((p) => (
                 <MenuItem key={p.id} value={p.id}>
                   <span
                     style={{ color: p.color, fontWeight: 700, marginRight: 8 }}
@@ -123,61 +183,44 @@ export const StepEditDialog: React.FC<StepEditDialogProps> = ({
             </Select>
           </FormControl>
 
-          {pluginDef?.fields.map((field) =>
-            field.multiline ? (
-              <Box key={field.key}>
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  sx={{ mb: 0.5, display: 'block' }}
-                >
-                  {field.label}
-                  {field.required && ' *'}
-                </Typography>
-                <textarea
-                  value={fieldValues[field.key] ?? ''}
-                  onChange={(e) =>
-                    setFieldValues((v) => ({
-                      ...v,
-                      [field.key]: e.target.value,
-                    }))
-                  }
-                  rows={4}
-                  placeholder={field.placeholder}
-                  style={{
-                    width: '100%',
-                    boxSizing: 'border-box',
-                    fontFamily: 'monospace',
-                    fontSize: '0.85rem',
-                    padding: '8px 12px',
-                    border: '1px solid rgba(0,0,0,0.23)',
-                    borderRadius: 4,
-                    resize: 'vertical',
-                    outline: 'none',
-                    background: 'transparent',
-                    color: 'inherit',
-                    lineHeight: 1.5,
-                  }}
-                />
-              </Box>
-            ) : (
-              <TextField
-                key={field.key}
-                label={field.label}
-                value={fieldValues[field.key] ?? ''}
-                onChange={(e) =>
-                  setFieldValues((v) => ({ ...v, [field.key]: e.target.value }))
-                }
-                fullWidth
-                size="small"
-                required={field.required}
-                placeholder={field.placeholder}
-                InputLabelProps={
-                  field.placeholder ? { shrink: true } : undefined
-                }
-              />
-            ),
+          {plugin && !pluginDef && !catalog.isLoading && (
+            <Alert severity="info" sx={{ py: 0 }}>
+              The local runner does not list this plugin, so its parameters
+              cannot be edited here. They are kept as they are; use the YAML
+              view to change them.
+            </Alert>
           )}
+
+          {ungrouped.map(renderWidget)}
+
+          {groups.map((group) => {
+            const widgets = visibleWidgets.filter(
+              (widget) => widget.group === group,
+            );
+            return (
+              <Accordion
+                key={`${plugin}:${group}`}
+                disableGutters
+                variant="outlined"
+                defaultExpanded={widgets.some(
+                  (widget) => !isEmptyParam(params[widget.key]),
+                )}
+              >
+                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                  <Typography variant="body2">{group}</Typography>
+                </AccordionSummary>
+                <AccordionDetails>
+                  <Stack spacing={2}>{widgets.map(renderWidget)}</Stack>
+                </AccordionDetails>
+              </Accordion>
+            );
+          })}
+
+          {ruleIssues.map((issue) => (
+            <Typography key={issue.message} variant="caption" color="error">
+              {issue.message}
+            </Typography>
+          ))}
 
           <Divider sx={{ my: 0.5 }} />
 
@@ -187,9 +230,9 @@ export const StepEditDialog: React.FC<StepEditDialogProps> = ({
               options={existingJobNames}
               value={jobName}
               onInputChange={(_, val) => setJobName(val)}
-              renderInput={(params) => (
+              renderInput={(inputParams) => (
                 <TextField
-                  {...params} // eslint-disable-line react/jsx-props-no-spreading
+                  {...inputParams} // eslint-disable-line react/jsx-props-no-spreading
                   label="Job Name"
                   size="small"
                   fullWidth

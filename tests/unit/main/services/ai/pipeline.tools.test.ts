@@ -19,6 +19,21 @@ jest.mock('ai', () => ({
   tool: jest.fn((definition) => definition),
 }));
 
+// The plugins come from the runner's plugin manifest; the fixture is a copy
+// of the one the runner ships.
+jest.mock('../../../../../src/main/services/pluginManifest.service', () => {
+  const { parsePluginManifest } = jest.requireActual(
+    '../../../../../src/shared/pluginManifest',
+  );
+  const plugins = parsePluginManifest(
+    jest.requireActual('../../../__fixtures__/plugins.json'),
+  );
+  return {
+    loadPluginDefinitions: jest.fn(async () => plugins),
+    getPluginDefinitions: jest.fn(() => plugins),
+  };
+});
+
 const VALID_PIPELINE = `name: "CI"
 jobs:
   - name: "build"
@@ -220,6 +235,23 @@ custom_root:
         path: 'jobs.0.steps.0.command',
         message: 'command@v1 requires command',
       });
+
+      // pyspark@v1 needs a script or a command (a rule in the manifest).
+      const bareSpark = pipelineWithStep(
+        '      - name: spark\n        plugin: pyspark@v1\n',
+      );
+      expect(
+        validatePipelineContent(bareSpark, { mode: 'generate' }).issues,
+      ).toContainEqual({
+        path: 'jobs.0.steps.0',
+        message: 'pyspark@v1: Provide a script or a command.',
+      });
+      const sparkScript = pipelineWithStep(
+        '      - name: spark\n        plugin: pyspark@v1\n        script: jobs/etl.py\n',
+      );
+      expect(
+        validatePipelineContent(sparkScript, { mode: 'generate' }).valid,
+      ).toBe(true);
 
       const gitClone = pipelineWithStep(
         '      - name: clone\n        plugin: git_clone@v1\n        url: https://example.com/repo.git\n',

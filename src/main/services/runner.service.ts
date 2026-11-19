@@ -8,14 +8,16 @@ import AdmZip from 'adm-zip';
 import { downloadForInstall } from '../utils/installTask';
 import {
   InstallResult,
-  RunnerPluginId,
-  RunnerPluginStatus,
+  RunnerRequirementStatus,
+  SettingsType,
 } from '../../types/backend';
 import SettingsService from './settings.service';
+import { getRunnerToolEnvironment } from './runnerEnvironment';
+import { loadPluginDefinitions } from './pluginManifest.service';
 import {
-  getRunnerJavaCommand,
-  getRunnerToolEnvironment,
-} from './runnerEnvironment';
+  collectRequirements,
+  type RequirementWithPlugins,
+} from '../../shared/pluginManifest';
 
 const KISQL_GITHUB_REPO = 'kineticadb/kisql';
 const KISQL_UNIX_ASSET = 'kisql';
@@ -69,107 +71,41 @@ function getRunnerRoot(): string {
   return path.join(app.getPath('userData'), 'runner');
 }
 
-// Plugins the runner binary executes, and the external tool (if any) they
-// shell out to. dbt/rosetta are already managed elsewhere in Studio, so
-// their status is read from existing settings rather than re-detected here.
-const PLUGIN_DEFINITIONS: {
-  id: RunnerPluginId;
-  label: string;
-  plugin: string;
-  command?: string;
-  versionArgs?: string[];
-  downloadUrl?: string;
-}[] = [
-  { id: 'dbt', label: 'dbt', plugin: 'dbt@v1' },
-  { id: 'rosetta', label: 'Rosetta CLI', plugin: 'rosetta@v1' },
-  {
-    id: 'git',
-    label: 'Git',
-    plugin: 'git_clone@v1',
-    command: 'git',
-    versionArgs: ['--version'],
-    downloadUrl: 'https://git-scm.com/downloads',
-  },
-  {
-    id: 'terraform',
-    label: 'Terraform',
-    plugin: 'terraform@v1',
-    command: 'terraform',
-    versionArgs: ['-version'],
-    downloadUrl: 'https://developer.hashicorp.com/terraform/install',
-  },
-  {
-    id: 's3',
-    label: 'AWS CLI',
-    plugin: 's3@v1',
-    command: 'aws',
-    versionArgs: ['--version'],
-    downloadUrl: 'https://aws.amazon.com/cli/',
-  },
-  {
-    id: 'pyspark',
-    label: 'PySpark (spark-submit)',
-    plugin: 'pyspark@v1',
-    command: 'spark-submit',
-    versionArgs: ['--version'],
-    downloadUrl:
-      'https://spark.apache.org/docs/latest/api/python/getting_started/install.html',
-  },
-  {
-    id: 'kinetica_cli',
-    label: 'Kinetica CLI (KiSQL)',
-    plugin: 'kinetica_cli@v1',
-    // No `command` here — managed by Studio, detected from settings like dbt/rosetta
-  },
-  { id: 'command', label: 'Shell command', plugin: 'command@v1' },
-];
+// Tools Studio installs itself (Settings has their own pages or buttons):
+// where each one's path and version are kept. Which plugins need a tool, how
+// it is checked and how it is installed all come from the runner's plugin
+// manifest (`requires`); this only says where Studio's own installs are.
+const STUDIO_INSTALLED_TOOLS: Record<
+  string,
+  (settings: SettingsType) => { path?: string; version?: string }
+> = {
+  dbt: (settings) => ({
+    path: settings.dbtPath,
+    version: settings.dbtVersion,
+  }),
+  rosetta: (settings) => ({
+    path: settings.rosettaPath,
+    version: settings.rosettaVersion,
+  }),
+  kisql: (settings) => ({
+    path: settings.kisqlPath,
+    version: settings.kisqlVersion,
+  }),
+};
+
+function runTool(
+  command: string,
+  args: string[],
+  env: Record<string, string>,
+): Promise<string | null> {
+  return new Promise((resolve) => {
+    execFile(command, args, { timeout: 5000, env }, (error, stdout, stderr) => {
+      resolve(error ? null : `${stdout}${stderr}`.trim());
+    });
+  });
+}
 
 export default class RunnerService {
-  static supportsPySpark(version?: string | null): boolean {
-    return Boolean(
-      version && this.compareVersions(version.replace(/^v/, ''), '1.7.6') >= 0,
-    );
-  }
-
-  static async checkJavaRuntime(
-    runnerEnv?: Record<string, string | undefined>,
-  ): Promise<{
-    available: boolean;
-    version?: string;
-    requiredVersion: number;
-  }> {
-    const requiredVersion = 17;
-    const env =
-      runnerEnv ||
-      (await getRunnerToolEnvironment(await SettingsService.loadSettings()));
-    const java = getRunnerJavaCommand(env);
-
-    return new Promise((resolve) => {
-      execFile(
-        java,
-        ['-version'],
-        { timeout: 5000, env },
-        (error, stdout, stderr) => {
-          if (error) {
-            resolve({ available: false, requiredVersion });
-            return;
-          }
-          const version = `${stdout}${stderr}`.match(/version "([\d.]+)/)?.[1];
-          const major = Number(
-            version?.split('.')[0] === '1'
-              ? version?.split('.')[1]
-              : version?.split('.')[0],
-          );
-          resolve({
-            available: Number.isFinite(major) && major >= requiredVersion,
-            version,
-            requiredVersion,
-          });
-        },
-      );
-    });
-  }
-
   // npm start has no runner inside the app, so - like Rosetta and Python - the
   // first start downloads the latest released runner into the project's
   // resources/runner, and copyBundledRunnerToUserData sets it up from there.
@@ -285,147 +221,83 @@ export default class RunnerService {
     return null;
   }
 
-  static async checkPluginDependencies(): Promise<RunnerPluginStatus[]> {
+  // The tools the runner's plugins need (the manifest's `requires`), each
+  // with whether it is installed on this machine. Shown in Settings only:
+  // running a pipeline checks nothing, a step fails when its tool is missing.
+  static async checkRequirements(): Promise<RunnerRequirementStatus[]> {
+    const requirements = collectRequirements(await loadPluginDefinitions());
+    if (requirements.length === 0) return [];
     const settings = await SettingsService.loadSettings();
-
+    // The environment the runner itself is started with, so a tool counts
+    // as installed exactly when a pipeline step would find it.
+    const env = await getRunnerToolEnvironment(settings);
     return Promise.all(
-      PLUGIN_DEFINITIONS.map(async (def) => {
-        if (def.id === 'dbt') {
-          return {
-            id: def.id,
-            label: def.label,
-            plugin: def.plugin,
-            available: Boolean(settings.dbtPath && settings.dbtVersion),
-            version: settings.dbtVersion,
-            path: settings.dbtPath,
-            managedInStudio: true,
-          };
-        }
-        if (def.id === 'rosetta') {
-          return {
-            id: def.id,
-            label: def.label,
-            plugin: def.plugin,
-            available: Boolean(settings.rosettaPath && settings.rosettaVersion),
-            version: settings.rosettaVersion,
-            path: settings.rosettaPath,
-            managedInStudio: true,
-          };
-        }
-        if (def.id === 'kinetica_cli') {
-          return {
-            id: def.id,
-            label: def.label,
-            plugin: def.plugin,
-            available: Boolean(settings.kisqlPath && settings.kisqlVersion),
-            version: settings.kisqlVersion,
-            path: settings.kisqlPath,
-            managedInStudio: true,
-          };
-        }
-        if (def.id === 'pyspark') {
-          const java = await this.checkJavaRuntime();
-          const managedSparkSubmit = settings.pythonPath
-            ? path.join(
-                path.dirname(settings.pythonPath),
-                process.platform === 'win32'
-                  ? 'spark-submit.cmd'
-                  : 'spark-submit',
-              )
-            : '';
-          if (managedSparkSubmit && (await fs.pathExists(managedSparkSubmit))) {
-            return {
-              id: def.id,
-              label: def.label,
-              plugin: def.plugin,
-              available: true,
-              path: managedSparkSubmit,
-              managedInStudio: true,
-              downloadUrl: def.downloadUrl,
-              java,
-            };
-          }
-        }
-        if (!def.command) {
-          // command@v1: no external dependency, always usable
-          return {
-            id: def.id,
-            label: def.label,
-            plugin: def.plugin,
-            available: true,
-          };
-        }
-        const detected = await this.detectBinary(
-          def.command,
-          def.versionArgs || ['--version'],
-          def.id === 'pyspark'
-            ? await getRunnerToolEnvironment(settings)
-            : undefined,
-        );
-        return {
-          id: def.id,
-          label: def.label,
-          plugin: def.plugin,
-          available: detected.available,
-          version: detected.version,
-          path: detected.path,
-          downloadUrl: def.downloadUrl,
-          ...(def.id === 'pyspark'
-            ? {
-                java: await this.checkJavaRuntime(
-                  await getRunnerToolEnvironment(settings),
-                ),
-              }
-            : {}),
-        };
-      }),
+      requirements.map((requirement) =>
+        this.checkRequirement(requirement, settings, env),
+      ),
     );
   }
 
-  private static detectBinary(
-    command: string,
-    versionArgs: string[],
-    runnerEnv?: Record<string, string>,
-  ): Promise<{ available: boolean; version?: string; path?: string }> {
-    // On macOS, Electron's PATH often omits Homebrew directories because
-    // the app is launched via launchd rather than a login shell.  Ensure
-    // the standard Homebrew prefixes are present so that tools installed
-    // via Homebrew (terraform, git, aws, etc.) are discoverable.
-    const homebrewDirs =
-      process.platform === 'darwin'
-        ? ['/opt/homebrew/bin', '/usr/local/bin']
-        : [];
-    const extraPath =
-      homebrewDirs.length > 0 ? homebrewDirs.join(path.delimiter) : undefined;
+  private static async checkRequirement(
+    requirement: RequirementWithPlugins,
+    settings: SettingsType,
+    env: Record<string, string>,
+  ): Promise<RunnerRequirementStatus> {
+    const { check, install } = requirement;
 
-    return new Promise((resolve) => {
-      execFile(
-        command,
-        versionArgs,
-        {
-          timeout: 5000,
-          env: runnerEnv || {
-            ...process.env,
-            ...(extraPath
-              ? { PATH: `${extraPath}:${process.env.PATH ?? ''}` }
-              : {}),
-          },
-        },
-        (error, stdout, stderr) => {
-          if (error) {
-            resolve({ available: false });
-            return;
-          }
-          const output = `${stdout}${stderr}`.trim();
-          const versionMatch = output.match(/(\d+\.\d+(?:\.\d+)?)/);
-          resolve({
+    if (install.type === 'auto') {
+      const installed = STUDIO_INSTALLED_TOOLS[requirement.id]?.(settings);
+      if (installed?.path && installed.version) {
+        return {
+          ...requirement,
+          available: true,
+          version: installed.version,
+          path: installed.path,
+          managedInStudio: true,
+        };
+      }
+      // A pip package is installed into Studio's own Python.
+      if (install.method === 'pip' && settings.pythonPath) {
+        const managedCommand = path.join(
+          path.dirname(settings.pythonPath),
+          process.platform === 'win32' ? `${check.command}.cmd` : check.command,
+        );
+        if (await fs.pathExists(managedCommand)) {
+          return {
+            ...requirement,
             available: true,
-            version: versionMatch?.[1],
-            path: command,
-          });
-        },
-      );
-    });
+            path: managedCommand,
+            managedInStudio: true,
+          };
+        }
+      }
+    }
+
+    // Without arguments only the command's presence is checked: running an
+    // unknown tool bare could start something interactive.
+    const output = check.args
+      ? await runTool(check.command, check.args, env)
+      : await runTool(
+          process.platform === 'win32' ? 'where' : 'which',
+          [check.command],
+          env,
+        );
+    if (output === null) return { ...requirement, available: false };
+
+    const version = check.args
+      ? (output.match(/(\d+(?:\.\d+)+)/)?.[1] ??
+        output.match(/version "?(\d+)/i)?.[1])
+      : undefined;
+    const oldEnough =
+      !check.minVersion ||
+      (version !== undefined &&
+        this.compareVersions(version, check.minVersion) >= 0);
+    return {
+      ...requirement,
+      available: oldEnough,
+      version,
+      path: check.args ? check.command : output.split(/\r?\n/)[0],
+    };
   }
 
   // ---------------------------------------------------------------------------

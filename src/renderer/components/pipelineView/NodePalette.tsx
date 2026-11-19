@@ -1,13 +1,15 @@
 import React from 'react';
 import { Box, Tooltip, Typography, useTheme } from '@mui/material';
-import { PLUGIN_DEFS, type PluginDef } from './pluginDefinitions';
+import { getPluginVisual, usePluginCatalog } from './pluginDefinitions';
+import type { PluginDefinition } from '../../../shared/pluginManifest';
 
 const PluginRow: React.FC<{
-  plugin: PluginDef;
+  plugin: PluginDefinition;
   onAdd?: (pluginId: string) => void;
 }> = ({ plugin, onAdd }) => {
   const theme = useTheme();
-  const Icon = plugin.icon;
+  const visual = getPluginVisual(plugin, plugin.id);
+  const Icon = visual.icon;
 
   const onDragStart = (event: React.DragEvent) => {
     event.dataTransfer.setData('application/pipeline-plugin', plugin.id);
@@ -17,7 +19,11 @@ const PluginRow: React.FC<{
 
   return (
     <Tooltip
-      title="Drag to canvas or double-click to add"
+      title={
+        plugin.description
+          ? `${plugin.description} Drag to canvas or double-click to add.`
+          : 'Drag to canvas or double-click to add'
+      }
       placement="right"
       arrow
     >
@@ -40,7 +46,13 @@ const PluginRow: React.FC<{
           '&:active': { cursor: 'grabbing', bgcolor: 'action.selected' },
         }}
       >
-        <Icon sx={{ fontSize: 15, flexShrink: 0, color: plugin.color }} />
+        <Icon
+          sx={{
+            fontSize: 15,
+            flexShrink: 0,
+            color: visual.color ?? theme.palette.primary.main,
+          }}
+        />
         <Typography
           variant="body2"
           sx={{
@@ -62,15 +74,18 @@ const PluginRow: React.FC<{
 export const NodePalette: React.FC<{ onAdd?: (pluginId: string) => void }> = ({
   onAdd,
 }) => {
+  const catalog = usePluginCatalog();
   const categories = React.useMemo(() => {
-    const map = new Map<string, PluginDef[]>();
-    PLUGIN_DEFS.forEach((plugin) => {
-      const list = map.get(plugin.category) ?? [];
-      list.push(plugin);
-      map.set(plugin.category, list);
-    });
+    const map = new Map<string, PluginDefinition[]>();
+    catalog.plugins
+      .filter((plugin) => plugin.addable)
+      .forEach((plugin) => {
+        const list = map.get(plugin.category) ?? [];
+        list.push(plugin);
+        map.set(plugin.category, list);
+      });
     return Array.from(map.entries());
-  }, []);
+  }, [catalog.plugins]);
 
   return (
     <Box
@@ -101,6 +116,14 @@ export const NodePalette: React.FC<{ onAdd?: (pluginId: string) => void }> = ({
       >
         Steps
       </Typography>
+      {categories.length === 0 && !catalog.isLoading && (
+        <Typography
+          sx={{ fontSize: '0.7rem', color: 'text.secondary', px: 1, mt: 0.5 }}
+        >
+          No plugins found. Steps come from the local runner, which is not
+          installed.
+        </Typography>
+      )}
       {categories.map(([category, plugins]) => (
         <Box key={category}>
           {categories.length > 1 && (

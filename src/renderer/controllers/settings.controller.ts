@@ -13,12 +13,13 @@ import {
   FileDialogProperties,
   SettingsType,
   RosettaVersionInfo,
-  RunnerPluginStatus,
+  RunnerRequirementStatus,
   InstallResult,
   PythonInstallInfo,
   PythonVersionInfo,
 } from '../../types/backend';
 import { QUERY_KEYS } from '../config/constants';
+import type { PluginDefinition } from '../../shared/pluginManifest';
 import { useApiKey } from './rosettaCloud.controller';
 
 export const useGetSettings = (
@@ -322,14 +323,27 @@ export const useInstallPythonVersion = (
   });
 };
 
-export const useCheckRunnerPluginDependencies = (
-  customOptions?: UseMutationOptions<RunnerPluginStatus[], CustomError, void>,
-): UseMutationResult<RunnerPluginStatus[], CustomError, void> => {
+// The plugins of the local runner, read from its plugin manifest. The
+// manifest only changes when the runner does (an app update).
+export const useGetRunnerPlugins = () =>
+  useQuery<PluginDefinition[], CustomError>({
+    queryKey: [QUERY_KEYS.GET_RUNNER_PLUGINS],
+    queryFn: () => settingsServices.getRunnerPlugins(),
+    staleTime: Infinity,
+  });
+
+export const useCheckRunnerRequirements = (
+  customOptions?: UseMutationOptions<
+    RunnerRequirementStatus[],
+    CustomError,
+    void
+  >,
+): UseMutationResult<RunnerRequirementStatus[], CustomError, void> => {
   const { onSuccess: onCustomSuccess, onError: onCustomError } =
     customOptions || {};
   return useMutation({
     mutationFn: async () => {
-      return settingsServices.checkRunnerPluginDependencies();
+      return settingsServices.checkRunnerRequirements();
     },
     onSuccess: (...args) => {
       onCustomSuccess?.(...args);

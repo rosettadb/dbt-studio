@@ -1,0 +1,316 @@
+[
+  {
+    "name": "git_clone@v1",
+    "script": "git_clone_v1.sh",
+    "label": "git clone",
+    "description": "Clones a Git repository.",
+    "category": "Generic",
+    "icon": "link",
+    "color": "#F05032",
+    "addable": false,
+    "widgets": [
+      { "key": "url", "type": "input", "label": "URL", "required": true },
+      { "key": "branch", "type": "input", "label": "Branch" },
+      { "key": "dest", "type": "directory", "label": "Destination" }
+    ],
+    "requires": [
+      {
+        "id": "git",
+        "label": "Git",
+        "check": { "command": "git", "args": ["--version"] },
+        "install": {
+          "type": "manual",
+          "url": "https://git-scm.com/downloads",
+          "instructions": {
+            "darwin": ["Run: xcode-select --install", "Or install from https://git-scm.com/downloads"],
+            "linux": ["Debian/Ubuntu: sudo apt install git", "Fedora: sudo dnf install git"],
+            "win32": ["Download the installer from https://git-scm.com/downloads"],
+            "all": ["After installing, restart the app so the new PATH is picked up."]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "dbt@v1",
+    "script": "dbt_v1.sh",
+    "label": "dbt",
+    "description": "Runs dbt commands (dbt deps runs first).",
+    "category": "Generic",
+    "icon": "transform",
+    "color": "#FF694B",
+    "widgets": [
+      {
+        "key": "command",
+        "type": "textarea",
+        "label": "Command",
+        "required": true,
+        "default": "dbt run",
+        "placeholder": "dbt seed && dbt run"
+      },
+      { "key": "working_dir", "type": "directory", "label": "Working Dir", "placeholder": "dbt" }
+    ],
+    "requires": [
+      {
+        "id": "dbt",
+        "label": "dbt",
+        "check": { "command": "dbt", "args": ["--version"] },
+        "install": { "type": "auto", "method": "studio", "url": "https://docs.getdbt.com/docs/core/installation-overview" }
+      }
+    ]
+  },
+  {
+    "name": "rosetta@v1",
+    "script": "rosetta_v1.sh",
+    "label": "rosetta",
+    "description": "Runs Rosetta CLI commands.",
+    "category": "Generic",
+    "icon": "language",
+    "color": "#7C4DFF",
+    "widgets": [
+      {
+        "key": "command",
+        "type": "textarea",
+        "label": "Command",
+        "required": true,
+        "placeholder": "rosetta apply -s bigquery"
+      },
+      {
+        "key": "working_dir",
+        "type": "directory",
+        "label": "Working Dir",
+        "default": "${project.rosetta_dir}",
+        "placeholder": "rosetta"
+      }
+    ],
+    "requires": [
+      {
+        "id": "rosetta",
+        "label": "Rosetta CLI",
+        "check": { "command": "rosetta" },
+        "install": { "type": "auto", "method": "studio", "url": "https://github.com/rosettadb/rosetta/releases" }
+      }
+    ]
+  },
+  {
+    "name": "kinetica_cli@v1",
+    "script": "kinetica_cli_v1.sh",
+    "label": "kinetica",
+    "description": "Runs Kinetica CLI (KiSQL) commands.",
+    "category": "Generic",
+    "icon": "speed",
+    "color": "#00BCD4",
+    "widgets": [
+      {
+        "key": "command",
+        "type": "textarea",
+        "label": "Command",
+        "required": true,
+        "placeholder": "kisql --url http://localhost:9191 --sql \"SELECT 1\""
+      }
+    ],
+    "requires": [
+      {
+        "id": "kisql",
+        "label": "Kinetica CLI (KiSQL)",
+        "check": { "command": "kisql" },
+        "install": {
+          "type": "auto",
+          "method": "download",
+          "url": "https://github.com/kineticadb/kisql",
+          "downloads": {
+            "darwin": "https://raw.githubusercontent.com/kineticadb/kisql/master/kisql",
+            "linux": "https://raw.githubusercontent.com/kineticadb/kisql/master/kisql",
+            "win32": "https://raw.githubusercontent.com/kineticadb/kisql/master/kisql.exe"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "s3@v1",
+    "script": "s3_v1.sh",
+    "label": "s3",
+    "description": "Runs S3 commands with the AWS CLI.",
+    "category": "Generic",
+    "icon": "cloud_upload",
+    "color": "#FF9900",
+    "widgets": [
+      {
+        "key": "command",
+        "type": "textarea",
+        "label": "Command",
+        "required": true,
+        "placeholder": "aws s3 cp results/ s3://my-bucket/ --recursive"
+      }
+    ],
+    "requires": [
+      {
+        "id": "aws",
+        "label": "AWS CLI",
+        "check": { "command": "aws", "args": ["--version"] },
+        "install": {
+          "type": "manual",
+          "url": "https://aws.amazon.com/cli/",
+          "instructions": {
+            "darwin": ["brew install awscli"],
+            "linux": ["Follow the official guide at https://aws.amazon.com/cli/"],
+            "win32": ["Download the MSI installer from https://aws.amazon.com/cli/"],
+            "all": ["After installing, restart the app so the new PATH is picked up."]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "command@v1",
+    "script": "command_v1.sh",
+    "label": "shell",
+    "description": "Runs any shell command.",
+    "category": "Generic",
+    "icon": "terminal",
+    "color": "#455A64",
+    "widgets": [
+      {
+        "key": "command",
+        "type": "textarea",
+        "label": "Command",
+        "required": true,
+        "placeholder": "echo \"hello world\""
+      }
+    ],
+    "requires": []
+  },
+  {
+    "name": "terraform@v1",
+    "script": "terraform_v1.sh",
+    "label": "terraform",
+    "description": "Runs Terraform commands.",
+    "category": "Generic",
+    "icon": "build",
+    "color": "#7B42BC",
+    "widgets": [
+      {
+        "key": "command",
+        "type": "textarea",
+        "label": "Command",
+        "required": true,
+        "default": "terraform init && terraform apply -auto-approve",
+        "placeholder": "terraform init && terraform apply -auto-approve"
+      },
+      { "key": "working_dir", "type": "directory", "label": "Working Dir", "placeholder": "terraform" }
+    ],
+    "requires": [
+      {
+        "id": "terraform",
+        "label": "Terraform",
+        "check": { "command": "terraform", "args": ["-version"] },
+        "install": {
+          "type": "manual",
+          "url": "https://developer.hashicorp.com/terraform/install",
+          "instructions": {
+            "darwin": ["brew tap hashicorp/tap && brew install hashicorp/tap/terraform"],
+            "linux": ["Download the binary from https://developer.hashicorp.com/terraform/install"],
+            "win32": ["Use the installer from https://developer.hashicorp.com/terraform/install"],
+            "all": ["After installing, restart the app so the new PATH is picked up."]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "pyspark@v1",
+    "script": "pyspark_v1.sh",
+    "label": "PySpark",
+    "description": "Runs a PySpark job with spark-submit, or a custom command.",
+    "category": "Generic",
+    "icon": "code",
+    "color": "#E25A1C",
+    "widgets": [
+      {
+        "key": "script",
+        "type": "file",
+        "label": "Script",
+        "description": "PySpark entrypoint, submitted with spark-submit.",
+        "placeholder": "jobs/etl.py"
+      },
+      {
+        "key": "args",
+        "type": "input",
+        "label": "Script arguments",
+        "placeholder": "--date 2024-01-01"
+      },
+      {
+        "key": "command",
+        "type": "textarea",
+        "label": "Command",
+        "description": "Runs instead of Script when set.",
+        "placeholder": "spark-submit jobs/transform.py"
+      },
+      { "key": "working_dir", "type": "directory", "label": "Working Dir", "placeholder": "spark" },
+      {
+        "key": "spark_master",
+        "type": "input",
+        "label": "Spark master",
+        "placeholder": "local[*]",
+        "group": "Advanced"
+      },
+      {
+        "key": "submit_args",
+        "type": "input",
+        "label": "spark-submit options",
+        "placeholder": "--packages org.postgresql:postgresql:42.7.3",
+        "group": "Advanced"
+      },
+      {
+        "key": "requirements",
+        "type": "file",
+        "label": "Requirements file",
+        "placeholder": "requirements.txt",
+        "group": "Advanced"
+      },
+      {
+        "key": "pyspark_version",
+        "type": "input",
+        "label": "PySpark version",
+        "placeholder": "3.5.3",
+        "group": "Advanced"
+      }
+    ],
+    "rules": [
+      {
+        "type": "at_least_one",
+        "keys": ["script", "command"],
+        "message": "Provide a script or a command."
+      }
+    ],
+    "requires": [
+      {
+        "id": "pyspark",
+        "label": "PySpark (spark-submit)",
+        "check": { "command": "spark-submit", "args": ["--version"] },
+        "install": {
+          "type": "auto",
+          "method": "pip",
+          "package": "pyspark",
+          "url": "https://spark.apache.org/docs/latest/api/python/getting_started/install.html"
+        }
+      },
+      {
+        "id": "java",
+        "label": "Java",
+        "check": { "command": "java", "args": ["-version"], "min_version": "17" },
+        "install": {
+          "type": "manual",
+          "url": "https://adoptium.net/temurin/releases/",
+          "instructions": {
+            "all": [
+              "Install a JDK, version 17 or newer, from https://adoptium.net/temurin/releases/",
+              "After installing, restart the app so the new PATH is picked up."
+            ]
+          }
+        }
+      }
+    ]
+  }
+]
