@@ -7,6 +7,7 @@ import {
   PtyService,
   PtyServiceDeps,
   PtySpawn,
+  nodePtyLoadPath,
 } from '../../../../src/main/services/pty.service';
 import type { ShellProfile } from '../../../../src/types/pty';
 
@@ -491,6 +492,45 @@ describe('PtyService', () => {
       expect(eventsOn('pty:title')).toEqual([]);
       expect(service.rename(info.id, '')).toMatchObject({ title: 'zsh' });
       service.killAll();
+    });
+  });
+});
+
+describe('nodePtyLoadPath', () => {
+  const macAsar =
+    '/Applications/Studio.app/Contents/Resources/app.asar/node_modules/@lydell/node-pty/index.js';
+  const linuxAsar =
+    '/opt/Studio/resources/app.asar/node_modules/@lydell/node-pty/index.js';
+  const winAsar =
+    'C:\\Studio\\resources\\app.asar\\node_modules\\@lydell\\node-pty\\index.js';
+  const devPath =
+    '/work/studio/release/app/node_modules/@lydell/node-pty/index.js';
+
+  it('keeps the app.asar path on macOS so node-pty rewrites its helper path once', () => {
+    const exists = jest.fn(() => true);
+    expect(nodePtyLoadPath(macAsar, 'darwin', exists)).toBe(macAsar);
+    expect(exists).not.toHaveBeenCalled();
+  });
+
+  it('loads the unpacked copy on Windows', () => {
+    expect(nodePtyLoadPath(winAsar, 'win32', () => true)).toBe(
+      'C:\\Studio\\resources\\app.asar.unpacked\\node_modules\\@lydell\\node-pty\\index.js',
+    );
+  });
+
+  it('loads the unpacked copy on Linux', () => {
+    expect(nodePtyLoadPath(linuxAsar, 'linux', () => true)).toBe(
+      '/opt/Studio/resources/app.asar.unpacked/node_modules/@lydell/node-pty/index.js',
+    );
+  });
+
+  it('falls back to the resolved path when there is no unpacked copy', () => {
+    expect(nodePtyLoadPath(linuxAsar, 'linux', () => false)).toBe(linuxAsar);
+  });
+
+  it('leaves an unpackaged (development) path untouched on every platform', () => {
+    (['darwin', 'linux', 'win32'] as const).forEach((platform) => {
+      expect(nodePtyLoadPath(devPath, platform, () => true)).toBe(devPath);
     });
   });
 });
