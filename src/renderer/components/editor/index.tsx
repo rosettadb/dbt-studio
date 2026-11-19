@@ -63,6 +63,11 @@ type EditorProps = {
     compileModel?: boolean;
   }) => void | Promise<void>;
   extraActions?: React.ReactNode;
+  /**
+   * Language for `.sql` files. `jinja-sql` (default) has the dbt Jinja,
+   * completion and Execute code lens providers; `sql` is plain SQL.
+   */
+  sqlLanguage?: 'jinja-sql' | 'sql';
   /** Pending cursor position (e.g. from a "find in files" result) to reveal once its tab is active. */
   revealPosition?: {
     path: string;
@@ -78,9 +83,12 @@ type DecorationMode = 'untracked' | 'modified' | 'clean';
 
 const DECORATION_DEBOUNCE_MS = 150;
 
-const computeLanguage = (path: string): string => {
+const computeLanguage = (
+  path: string,
+  sqlLanguage: 'jinja-sql' | 'sql',
+): string => {
   const base = getLanguageFromExtension(path || 'txt');
-  return base === 'sql' ? 'jinja-sql' : base;
+  return base === 'sql' ? sqlLanguage : base;
 };
 
 /**
@@ -105,6 +113,7 @@ export const Editor: React.FC<EditorProps> = ({
   onExecuteQuery,
   onExecuteCte,
   extraActions,
+  sqlLanguage = 'jinja-sql',
   revealPosition,
   onRevealHandled,
 }) => {
@@ -117,7 +126,7 @@ export const Editor: React.FC<EditorProps> = ({
   );
   const activeFilePath = activeTab?.path ?? '';
   const activeContent = activeTab?.content ?? '';
-  const language = computeLanguage(activeFilePath);
+  const language = computeLanguage(activeFilePath, sqlLanguage);
   const isFileEditable = !activeTab?.isReadOnly;
 
   // Whether the current source file has a preview tab open
@@ -231,7 +240,7 @@ export const Editor: React.FC<EditorProps> = ({
       projectId,
       activeTab.path,
       activeTab.content,
-      computeLanguage(activeTab.path),
+      computeLanguage(activeTab.path, sqlLanguage),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab?.id, activeTab?.path, projectId]);

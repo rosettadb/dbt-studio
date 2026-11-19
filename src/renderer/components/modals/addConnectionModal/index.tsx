@@ -11,13 +11,13 @@ import {
   MenuItem,
   Box,
   Typography,
+  ListSubheader,
 } from '@mui/material';
 import { toast } from 'react-toastify';
-import {
-  Project,
-  ConnectionModel,
-  canUseAsDbtConnection,
-} from '../../../../types/backend';
+import { Project, ConnectionModel } from '../../../../types/backend';
+import { projectTypeOf } from '../../../../shared/projectTypes';
+import { useDuckLakeInstances } from '../../../controllers';
+import { duckLakeInstanceConnectionId } from '../../../../shared/duckLakeInstanceIds';
 
 interface AddConnectionModalProps {
   isOpen: boolean;
@@ -36,6 +36,9 @@ export const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
   onSuccess,
   onUpdateProject,
 }) => {
+  const { data: duckLakeInstances = [] } = useDuckLakeInstances();
+  const offersInstances =
+    !!project && projectTypeOf(project).capabilities.datalakeAsInstance;
   const [selectedConnectionId, setSelectedConnectionId] =
     React.useState<string>('');
   const [isLoading, setIsLoading] = React.useState(false);
@@ -54,6 +57,7 @@ export const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
 
     toast.success(`Connection added to project ${project.name} successfully!`);
     onSuccess?.();
+    setSelectedConnectionId('');
     onClose();
     setIsLoading(false);
   };
@@ -84,7 +88,9 @@ export const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
           >
             {connections
               .filter((connection) =>
-                canUseAsDbtConnection(connection.connection.type),
+                projectTypeOf(project).acceptsConnection(
+                  connection.connection.type,
+                ),
               )
               .map((connection) => (
                 <MenuItem key={connection.id} value={connection.id}>
@@ -97,6 +103,30 @@ export const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
                       sx={{ ml: 1, color: 'text.secondary' }}
                     >
                       ({connection.connection.type})
+                    </Typography>
+                  </Box>
+                </MenuItem>
+              ))}
+            {/* Project types linked to a DuckLake instance itself (Analytics)
+                also list the instances, as the SQL Editor does (plan 95) */}
+            {offersInstances && duckLakeInstances.length > 0 && (
+              <ListSubheader sx={{ lineHeight: '32px' }}>
+                DuckLake Instances
+              </ListSubheader>
+            )}
+            {offersInstances &&
+              duckLakeInstances.map((instance) => (
+                <MenuItem
+                  key={instance.id}
+                  value={duckLakeInstanceConnectionId(instance.id)}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Typography variant="body2">{instance.name}</Typography>
+                    <Typography
+                      variant="caption"
+                      sx={{ ml: 1, color: 'text.secondary' }}
+                    >
+                      (DuckLake)
                     </Typography>
                   </Box>
                 </MenuItem>

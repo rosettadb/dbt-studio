@@ -113,10 +113,10 @@ const ProjectTypeIcon: React.FC<{ connectionType?: string }> = ({
 const features = [
   {
     id: 'dbt-project',
-    title: 'DBT Project',
-    category: 'dbt Core',
+    title: 'Projects',
+    category: 'dbt and Analytics',
     description:
-      'Manage and explore your dbt models, sources, and documentation.',
+      'Create and open dbt projects, or Analytics projects for notebooks and SQL.',
     icon: DbtCardIcon,
     path: '/app/select-project',
   },
