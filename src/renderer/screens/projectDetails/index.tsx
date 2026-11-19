@@ -5,12 +5,7 @@ import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { Badge, Box, Tab, TabProps, Tabs, Tooltip } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import {
-  LetterAvatar,
-  Loader,
-  PanelHeaderDropdown,
-  TerminalLayout,
-} from '../../components';
+import { Loader, PanelHeaderDropdown, TerminalLayout } from '../../components';
 import { projectTypeUiOf } from '../../components/projectTypes';
 import {
   ProjectSidebar,
@@ -164,11 +159,15 @@ const ProjectDetails: React.FC = () => {
       panelHeaderLeft={
         <PanelHeaderDropdown
           data-testid="project-select"
-          items={projects.map((p) => ({
-            value: String(p.id),
-            label: p.name,
-            icon: <LetterAvatar name={p.name ?? ''} size={16} />,
-          }))}
+          items={projects.map((p) => {
+            // Each project shows its type's icon (dbt logo, Analytics folder)
+            const TypeIcon = projectTypeUiOf(p).Icon;
+            return {
+              value: String(p.id),
+              label: p.name,
+              icon: <TypeIcon size={16} />,
+            };
+          })}
           value={String(project.id)}
           onSelect={async (value) => {
             if (isSwitchingProjectRef.current) return;

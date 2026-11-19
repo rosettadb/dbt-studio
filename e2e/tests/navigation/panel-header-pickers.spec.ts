@@ -94,8 +94,8 @@ seededTest.describe('dbt project picker', () => {
 
       await picker.click();
       await expect(menuRows(window)).toHaveText([
-        // Project rows also hold the letter badge (e.g. "TP"), so match the
-        // name at the end of the row
+        // Project rows also hold the project type icon, so match the name at
+        // the end of the row
         'All Projects',
         new RegExp(`${PROJECT}$`),
         new RegExp(`${SECOND_PROJECT}$`),

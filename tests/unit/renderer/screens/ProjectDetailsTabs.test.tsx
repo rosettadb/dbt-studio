@@ -9,7 +9,6 @@ const mockSetIsSidebarOpen = jest.fn();
 let mockRevealedFolderPath: string | null = null;
 
 jest.mock('../../../../src/renderer/components', () => ({
-  LetterAvatar: () => null,
   Loader: () => null,
   PanelHeaderDropdown: () => null,
   ProjectDbtSplitButton: () => null,
