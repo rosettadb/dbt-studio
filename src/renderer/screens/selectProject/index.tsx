@@ -102,7 +102,8 @@ const SelectProject: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   // Set by the Dashboard Pipeline card: the project picked or created here
-  // opens with the Create Pipeline dialog.
+  // opens with the Create Pipeline dialog. The Dashboard New Project button
+  // sets only startNewProject, to open the new project form.
   const [pipelineNavigationState] = React.useState(() => {
     const state = location.state as {
       forPipeline?: boolean;
@@ -119,8 +120,9 @@ const SelectProject: React.FC = () => {
     : undefined;
 
   // Clear the nav state so a back-navigation doesn't re-enter pipeline mode
+  // or reopen the new project form
   React.useEffect(() => {
-    if (forPipeline) {
+    if (forPipeline || pipelineNavigationState.startNewProject) {
       navigate(location.pathname, { replace: true, state: {} });
     }
   }, []);

@@ -10,7 +10,6 @@
 import { test, expect } from '../../fixtures/electron.fixture';
 import { openHome } from '../../helpers/window.helper';
 import { QuickStartTourComponent } from '../../page-objects/components/QuickStartTour';
-import { ProjectSelectionPage } from '../../page-objects/screens/ProjectSelection';
 
 test.describe('Quick Start Tour', () => {
   test.use({ skipQuickStartTour: false });
@@ -34,22 +33,20 @@ test.describe('Quick Start Tour', () => {
   }) => {
     const window = await openHome(electronApp);
     const tour = new QuickStartTourComponent(window);
-    const projectSelection = new ProjectSelectionPage(window);
 
     await tour.expectVisible();
 
-    // The overlay intercepts pointer events, so a normal click never lands
-    const openProjectBtn = window.locator('[data-tour="tour-open-project-btn"]');
-    await expect(
-      openProjectBtn.click({ timeout: 1500 }),
-    ).rejects.toThrow();
+    // The overlay intercepts pointer events, so a normal click never lands.
+    // The tour's last step points at the Recent Projects New Project button.
+    const newProjectBtn = window.locator('[data-tour="tour-open-project-btn"]');
+    await expect(newProjectBtn.click({ timeout: 1500 })).rejects.toThrow();
 
     await tour.skip();
     await tour.expectHidden();
 
-    // Now the page is interactive again
-    await openProjectBtn.click();
-    await expect(projectSelection.container).toBeVisible();
+    // Now the page is interactive again: New Project opens the new project form
+    await newProjectBtn.click();
+    await expect(window.getByTestId('project-name-input')).toBeVisible();
   });
 
   test('should step forward and back through the tour', async ({

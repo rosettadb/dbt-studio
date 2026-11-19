@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, CssBaseline } from '@mui/material';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar, StatusBar, Menu } from '../../components';
 import { Content, Main, Root, ContentColumn } from './styles';
 import { AppLayoutContext, AppLayoutSlots } from './context';
@@ -9,6 +9,9 @@ export const AppShell: React.FC = () => {
   const [slots, setSlots] = React.useState<AppLayoutSlots>({});
 
   const ctxValue = React.useMemo(() => ({ setSlots }), []);
+  // Home has no top bar, so its page area also gets the top bar's 37px
+  // (36px bar + 1px border) that Main's height normally leaves out.
+  const isOnHome = useLocation().pathname === '/app';
 
   return (
     <AppLayoutContext.Provider value={ctxValue}>
@@ -23,7 +26,9 @@ export const AppShell: React.FC = () => {
           <ContentColumn>
             <Menu actions={slots.topMenuActions} />
             <Content>
-              <Main>
+              <Main
+                sx={isOnHome ? { height: 'calc(100vh - 27px)' } : undefined}
+              >
                 <Outlet />
               </Main>
             </Content>

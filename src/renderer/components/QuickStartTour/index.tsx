@@ -105,7 +105,7 @@ const TOUR_STEPS: TourStep[] = [
     targetId: 'tour-open-project-btn',
     title: "You're All Set! 🚀",
     description:
-      'Start by creating your first project or importing an existing one — the Open Project button takes you to the project manager. Happy building!',
+      'Start by creating your first project with the New Project button. Happy building!',
     icon: <RocketLaunchIcon sx={{ fontSize: 28, color: '#4caf50' }} />,
     placement: 'bottom',
     padding: 8,

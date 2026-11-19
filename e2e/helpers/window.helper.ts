@@ -58,7 +58,8 @@ export const openHome = async (
 /**
  * Land on the project selection screen with setup skipped. The app opens on
  * the Home screen, so when the selection screen is not already mounted we take
- * the "Open Project" shortcut from Home.
+ * the DBT Project card from Home. (The Recent Projects "New Project" button
+ * opens the new project form instead of the list.)
  */
 export const openProjectSelection = async (
   electronApp: ElectronApplication,
@@ -79,7 +80,7 @@ export const openProjectSelection = async (
 
   if (await home.isVisible().catch(() => false)) {
     await appHelper.dismissQuickStartTourIfPresent();
-    await window.locator('[data-tour="tour-open-project-btn"]').click();
+    await window.getByText('DBT Project', { exact: true }).click();
   }
 
   await window.waitForSelector('[data-testid="project-selection"]', {
