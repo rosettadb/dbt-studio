@@ -75,9 +75,12 @@ const registerPtyHandlers = (mainWindow: BrowserWindow) => {
       return false;
     try {
       const actual = new URL(event.senderFrame.url);
-      return (
-        actual.origin === allowed.origin && actual.pathname === allowed.pathname
-      );
+      if (actual.origin !== allowed.origin) return false;
+      // In dev mode the webpack-dev-server serves index.html at '/', so
+      // actual.pathname is '/' while allowed.pathname is '/index.html'.
+      // Both are valid; we allow either as long as the origin matches.
+      const allowedPaths = new Set([allowed.pathname, '/']);
+      return allowedPaths.has(actual.pathname);
     } catch {
       return false;
     }
