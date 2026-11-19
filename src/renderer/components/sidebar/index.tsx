@@ -240,6 +240,9 @@ export const Sidebar: React.FC<Props> = ({
                   alignItems: 'center',
                   gap: 0.5,
                   ml: 0.5,
+                  // Lets a long picker name shrink to an ellipsis
+                  flex: 1,
+                  minWidth: 0,
                 }}
               >
                 {panelHeaderLeft}
@@ -266,7 +269,12 @@ export const Sidebar: React.FC<Props> = ({
               <IconButton
                 size="small"
                 onClick={() => setIsSidebarOpen(false)}
-                sx={{ ml: 'auto', opacity: 0.6, '&:hover': { opacity: 1 } }}
+                sx={{
+                  ml: 'auto',
+                  flexShrink: 0,
+                  opacity: 0.6,
+                  '&:hover': { opacity: 1 },
+                }}
               >
                 <CollapseLeftIcon />
               </IconButton>

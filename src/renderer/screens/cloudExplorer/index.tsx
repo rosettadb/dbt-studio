@@ -1,7 +1,11 @@
 import React from 'react';
 import { Typography, Box } from '@mui/material';
-import { useLocation } from 'react-router-dom';
+import { Cable } from '@mui/icons-material';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { AppLayout } from '../../layouts';
+import { PanelHeaderDropdown } from '../../components';
+import { useGetCloudConnections } from '../../controllers/cloudExplorer.controller';
+import { cloudStorageImages } from '../../../../assets/connectionIcons';
 import { cloudExplorerSx } from '../../components/cloudExplorer/styles';
 import {
   ExplorerSidebar,
@@ -16,6 +20,15 @@ import {
 
 const CloudExplorer: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { data: sources = [] } = useGetCloudConnections();
+  // The source the page is about: `connectionId` on the bucket routes,
+  // `id` on the edit-connection route, unset on routes without a source
+  const { connectionId, id: editedSourceId } = useParams<{
+    connectionId?: string;
+    id?: string;
+  }>();
+  const selectedSourceId = connectionId ?? editedSourceId;
 
   // Parse the current section from the pathname
   const pathSegments = location.pathname.split('/');
@@ -61,7 +74,31 @@ const CloudExplorer: React.FC = () => {
   return (
     <AppLayout
       sidebarContent={<ExplorerSidebar />}
-      panelTitle="Object Explorer"
+      panelHeaderLeft={
+        <PanelHeaderDropdown
+          data-testid="object-explorer-source-select"
+          items={sources.map((source) => ({
+            value: source.id,
+            label: source.name,
+            icon: cloudStorageImages[source.provider] ? (
+              <img
+                src={cloudStorageImages[source.provider]}
+                alt=""
+                style={{ width: 14, height: 14, objectFit: 'contain' }}
+              />
+            ) : (
+              <Cable sx={{ fontSize: 14 }} />
+            ),
+          }))}
+          value={selectedSourceId}
+          onSelect={(id) => navigate(`/app/cloud-explorer/buckets/${id}`)}
+          placeholder="Select Source"
+          allLabel="All Sources"
+          onAll={() => navigate('/app/cloud-explorer/connections')}
+          addLabel="Add source"
+          onAdd={() => navigate('/app/cloud-explorer/new-connection')}
+        />
+      }
     >
       <Box sx={cloudExplorerSx}>{renderContent()}</Box>
     </AppLayout>

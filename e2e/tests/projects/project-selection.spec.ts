@@ -40,8 +40,10 @@ const findStableWindow = async (
   });
 };
 
-const errorToast = (page: Page, text: string) =>
-  page.locator('.Toastify__toast--error').filter({ hasText: text });
+// The New Project wizard shows a name error under the field when Next is
+// pressed on its Details step
+const nameError = (page: Page, text: string) =>
+  page.locator('.MuiFormHelperText-root.Mui-error').filter({ hasText: text });
 
 test.describe('Project Selection', () => {
   test.beforeEach(async ({ electronApp }) => {
@@ -67,14 +69,14 @@ test.describe('Project Selection', () => {
 
       await projectSelection.clickCreateProject();
       await expect(
-        stableWindow.locator('[data-testid="project-name-input"]'),
+        stableWindow.locator('[data-testid="project-type-step"]'),
       ).toBeVisible();
 
       await stableWindow.getByRole('button', { name: 'Cancel' }).click();
 
       await expect(projectSelection.createProjectBtn).toBeVisible();
       await expect(
-        stableWindow.locator('[data-testid="project-name-input"]'),
+        stableWindow.locator('[data-testid="project-type-step"]'),
       ).toBeHidden();
     });
 
@@ -84,18 +86,18 @@ test.describe('Project Selection', () => {
       const stableWindow = await findStableWindow(electronApp);
       const projectSelection = new ProjectSelectionPage(stableWindow);
 
-      await projectSelection.clickCreateProject();
+      await projectSelection.openNewProjectDetails();
       await stableWindow
         .locator('[data-testid="project-name-input"]')
         .fill('ab');
       await stableWindow
-        .locator('[data-testid="project-create-confirm-btn"]')
+        .locator('[data-testid="project-wizard-next-btn"]')
         .click();
 
       await expect(
-        errorToast(stableWindow, 'at least 3 characters'),
+        nameError(stableWindow, 'at least 3 characters'),
       ).toBeVisible();
-      // Still on the form
+      // Still on the Details step
       await expect(
         stableWindow.locator('[data-testid="project-name-input"]'),
       ).toBeVisible();
@@ -107,16 +109,16 @@ test.describe('Project Selection', () => {
       const stableWindow = await findStableWindow(electronApp);
       const projectSelection = new ProjectSelectionPage(stableWindow);
 
-      await projectSelection.clickCreateProject();
+      await projectSelection.openNewProjectDetails();
       await stableWindow
         .locator('[data-testid="project-name-input"]')
         .fill('my project');
       await stableWindow
-        .locator('[data-testid="project-create-confirm-btn"]')
+        .locator('[data-testid="project-wizard-next-btn"]')
         .click();
 
       await expect(
-        errorToast(stableWindow, 'must start with a letter'),
+        nameError(stableWindow, 'must start with a letter'),
       ).toBeVisible();
     });
   });
@@ -171,15 +173,15 @@ test.describe('Project Selection', () => {
       const stableWindow = await findStableWindow(electronApp);
       const projectSelection = new ProjectSelectionPage(stableWindow);
 
-      await projectSelection.clickCreateProject();
+      await projectSelection.openNewProjectDetails();
       await stableWindow
         .locator('[data-testid="project-name-input"]')
         .fill('alpha_project');
       await stableWindow
-        .locator('[data-testid="project-create-confirm-btn"]')
+        .locator('[data-testid="project-wizard-next-btn"]')
         .click();
 
-      await expect(errorToast(stableWindow, 'already exists')).toBeVisible();
+      await expect(nameError(stableWindow, 'already exists')).toBeVisible();
     });
 
     test('should remove a project from the list without deleting its folder', async ({

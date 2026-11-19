@@ -26,13 +26,6 @@ export const Logo = styled('img')(() => ({
   cursor: 'pointer',
 }));
 
-export const BranchDropdownToggle = styled('div')(({ theme }) => ({
-  display: 'flex',
-  alignItems: 'center',
-  gap: 10,
-  color: theme.palette.text.primary,
-}));
-
 export const EnvironmentSwitchContainer = styled(Box)(() => ({
   position: 'relative',
   display: 'inline-flex',

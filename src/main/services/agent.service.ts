@@ -24,6 +24,7 @@ import {
 } from './ai/tokenEstimator';
 import MainDatabaseService from './mainDatabase.service';
 import ProjectsService from './projects.service';
+import { projectTypeOf } from '../../shared/projectTypes';
 import SelectedFileContextProvider from './selectedFileContextProvider.service';
 import { buildSessionContextBlock } from './ai/sessionContext.service';
 import type {
@@ -31,7 +32,7 @@ import type {
   ChatMessage,
   ChatImageAttachment,
 } from '../schemas/mainDatabase.schema';
-import type { AISettingsConfig } from '../../types/backend';
+import type { AISettingsConfig, Project } from '../../types/backend';
 import type {
   PythonNotebookAgentArgs,
   PythonNotebookAgentOp,
@@ -1385,10 +1386,11 @@ COMBINED SUMMARY:`,
     // Resolve projectPath and connectionId from selected project if not provided
     let { projectPath, connectionId } = request;
     const screenKey = request.screenKey ?? 'project';
+    let selectedProjectRecord: Project | undefined;
     if (screenKey === 'project' && (!projectPath || !connectionId)) {
-      const selectedProject = await ProjectsService.getSelectedProject();
-      projectPath = projectPath ?? selectedProject?.path;
-      connectionId = connectionId ?? selectedProject?.connectionId;
+      selectedProjectRecord = await ProjectsService.getSelectedProject();
+      projectPath = projectPath ?? selectedProjectRecord?.path;
+      connectionId = connectionId ?? selectedProjectRecord?.connectionId;
     }
 
     try {
@@ -1551,6 +1553,32 @@ COMBINED SUMMARY:`,
         }
       }
 
+      let projectHasDbt = true;
+      let projectTypeUnknown = false;
+      if (screenKey === 'project' && projectPath) {
+        try {
+          const project =
+            selectedProjectRecord?.path === projectPath
+              ? selectedProjectRecord
+              : (await ProjectsService.loadProjects()).find(
+                  (p) => p.path === projectPath,
+                );
+          if (project) {
+            projectHasDbt = projectTypeOf(project).capabilities.dbt;
+          } else {
+            projectHasDbt = false;
+            projectTypeUnknown = true;
+          }
+        } catch (err) {
+          projectHasDbt = false;
+          projectTypeUnknown = true;
+          console.warn(
+            '[AgentService] Could not resolve the project type:',
+            err,
+          );
+        }
+      }
+
       let sessionContextBlock = '';
       let projectPipelineContext: string | undefined;
       let projectChartsContext: string | undefined;
@@ -1559,7 +1587,12 @@ COMBINED SUMMARY:`,
           ? await readProjectAgentContext(projectPath)
           : undefined;
       if (screenKey === 'project' && projectPath) {
-        projectPipelineContext = await buildProjectPipelineContext(projectPath);
+        projectPipelineContext = await buildProjectPipelineContext(
+          projectPath,
+          {
+            hasDbt: projectHasDbt || projectTypeUnknown,
+          },
+        );
         try {
           projectChartsContext = await buildProjectChartsContext(projectPath);
         } catch (err) {
@@ -1655,6 +1688,8 @@ COMBINED SUMMARY:`,
             projectChartsContext,
             sessionContextBlock,
             connectionMeta: projectConnectionMeta,
+            hasDbt: projectHasDbt,
+            projectTypeUnknown,
           });
       }
 

@@ -16,6 +16,7 @@ import { AI_PROMPTS } from '../../config/constants';
 import { utils } from '../../helpers';
 import { path as nodePath } from '../../lib/path';
 import type { SupportedConnectionTypes } from '../../../types/backend';
+import { projectTypeOf } from '../../../shared/projectTypes';
 import type { FileViewDefinition, FileViewProps } from './types';
 
 type EditorTabsProps = Pick<FileViewProps, 'project'>;
@@ -48,6 +49,10 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({ project }) => {
   const filePath = activeTab?.path;
   const fileContent = activeTab?.content;
   const isSqlFile = !!filePath?.endsWith('.sql');
+  // .sql files are dbt SQL (Jinja, Execute code lenses, AI transformations,
+  // the model split button) only in project types with dbt. Elsewhere they
+  // are plain SQL files with no run commands (plan 95a, D6).
+  const hasDbt = projectTypeOf(project).capabilities.dbt;
 
   // --- SQL execution from code lenses -----------------------------------
   const handleExecuteQuery = React.useCallback(
@@ -217,7 +222,7 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({ project }) => {
   };
 
   const menuItems = React.useMemo(() => {
-    if (!filePath || !fileContent || !isSqlFile) {
+    if (!filePath || !fileContent || !isSqlFile || !hasDbt) {
       return [];
     }
     const items = [
@@ -268,7 +273,7 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({ project }) => {
       });
     }
     return items;
-  }, [filePath, fileContent]);
+  }, [filePath, fileContent, hasDbt]);
 
   return (
     <>
@@ -283,8 +288,10 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({ project }) => {
         onGitStatusRefresh={refreshProjectFiles}
         onOpenFile={openFile}
         onTogglePreviewTab={togglePreview}
-        onExecuteQuery={handleExecuteQuery}
-        onExecuteCte={handleExecuteCte}
+        // Without the handlers the editor registers no Execute code lenses
+        sqlLanguage={hasDbt ? 'jinja-sql' : 'sql'}
+        onExecuteQuery={hasDbt ? handleExecuteQuery : undefined}
+        onExecuteCte={hasDbt ? handleExecuteCte : undefined}
         revealPosition={revealPosition}
         onRevealHandled={clearRevealPosition}
         extraActions={
@@ -297,7 +304,7 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({ project }) => {
                 menuItems={menuItems}
               />
             )}
-            {filePath && isSqlFile && filePath.includes('models') && (
+            {hasDbt && filePath && isSqlFile && filePath.includes('models') && (
               <ModelSplitButton
                 modelPath={filePath}
                 project={project}

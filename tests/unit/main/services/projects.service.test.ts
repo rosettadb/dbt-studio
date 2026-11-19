@@ -1,5 +1,9 @@
 // Stub @aws-sdk (pulled in via cloudExplorer.service in the import graph;
 // the real dist-cjs bundle cannot be parsed by jest).
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { dialog } from 'electron';
 import ProjectsService from '../../../../src/main/services/projects.service';
 import databaseStore from '../../../../src/main/database';
 import ConnectorsService from '../../../../src/main/services/connectors.service';
@@ -202,6 +206,137 @@ describe('ProjectsService (main)', () => {
 
       const result = await ProjectsService.getProject('p1');
       expect(result).toEqual(expect.objectContaining({ id: 'p1' }));
+    });
+  });
+
+  // Plan 95a: create, edit, clone and import for dbt and Analytics projects
+  describe('project types', () => {
+    let root: string;
+    let copyMainConf: jest.SpyInstance;
+    const savedProjects = (): Project[] => {
+      const call = (databaseStore.updateField as jest.Mock).mock.calls.find(
+        ([field]) => field === 'projects',
+      );
+      return call ? call[1]() : [];
+    };
+    const filesIn = (folder: string) => fs.readdirSync(folder).sort();
+
+    beforeEach(() => {
+      root = fs.mkdtempSync(path.join(os.tmpdir(), 'rosetta-types-'));
+      copyMainConf = jest
+        .spyOn(ProjectsService, 'copyRosettaMainConf')
+        .mockResolvedValue(undefined);
+    });
+
+    afterEach(() => {
+      copyMainConf.mockRestore();
+      fs.rmSync(root, { recursive: true, force: true });
+    });
+
+    it('creates an Analytics project with no dbt files', async () => {
+      const projectPath = path.join(root, 'sales_analysis');
+      const project = await ProjectsService.addProject(
+        projectPath,
+        'c1',
+        true,
+        'analytics',
+        ['readme', 'queries'],
+      );
+
+      expect(project.type).toBe('analytics');
+      expect(savedProjects()[0]).toEqual(
+        expect.objectContaining({ type: 'analytics', connectionId: 'c1' }),
+      );
+      expect(filesIn(projectPath)).toEqual(['README.md', 'queries']);
+      expect(copyMainConf).not.toHaveBeenCalled();
+      expect(loadConfigurations).not.toHaveBeenCalled();
+    });
+
+    it('writes no config files when an Analytics project changes connection', async () => {
+      fakeDb.projects = [
+        { id: 'p1', name: 'a', path: root, createdAt: '', type: 'analytics' },
+      ];
+      await ProjectsService.updateProject({
+        id: 'p1',
+        name: 'a',
+        path: root,
+        createdAt: '',
+        type: 'analytics',
+        connectionId: 'sqlite-1',
+      });
+      expect(loadConfigurations).not.toHaveBeenCalled();
+    });
+
+    it('still regenerates dbt config files when a dbt project changes connection', async () => {
+      fakeDb.projects = [{ id: 'p1', name: 'd', path: root, createdAt: '' }];
+      await ProjectsService.updateProject({
+        id: 'p1',
+        name: 'd',
+        path: root,
+        createdAt: '',
+        connectionId: 'pg-1',
+      });
+      expect(loadConfigurations).toHaveBeenCalledWith('p1');
+    });
+
+    it('clones a repo without dbt_project.yml as an Analytics project', async () => {
+      const project = await ProjectsService.addProjectFromVCS({
+        path: root,
+        name: 'notes',
+      });
+      expect(project).toEqual(
+        expect.objectContaining({ type: 'analytics', path: root }),
+      );
+      expect(copyMainConf).not.toHaveBeenCalled();
+      expect(filesIn(root)).toEqual([]);
+    });
+
+    it('clones a repo with dbt_project.yml as a dbt project, as before', async () => {
+      fs.writeFileSync(path.join(root, 'dbt_project.yml'), 'name: shop\n');
+      const project = await ProjectsService.addProjectFromVCS({
+        path: root,
+        name: 'shop-repo',
+      });
+      expect(project).toEqual(
+        expect.objectContaining({ type: 'dbt', name: 'shop_repo' }),
+      );
+      expect(copyMainConf).toHaveBeenCalledWith(root);
+    });
+
+    it('imports a folder without dbt_project.yml as Analytics, without asking', async () => {
+      (dialog.showOpenDialog as jest.Mock).mockResolvedValue({
+        canceled: false,
+        filePaths: [root],
+      });
+
+      const project = await ProjectsService.importProjectFromFolder();
+
+      expect(dialog.showMessageBox).not.toHaveBeenCalled();
+      expect(project).toEqual(
+        expect.objectContaining({ type: 'analytics', path: root }),
+      );
+      expect(copyMainConf).not.toHaveBeenCalled();
+      expect(filesIn(root)).toEqual([]);
+    });
+
+    it('imports a dbt folder without asking, as before', async () => {
+      const dbtRoot = path.join(root, 'shop');
+      fs.mkdirSync(dbtRoot);
+      fs.writeFileSync(
+        path.join(dbtRoot, 'dbt_project.yml'),
+        'name: shop\nprofile: shop\n',
+      );
+      (dialog.showOpenDialog as jest.Mock).mockResolvedValue({
+        canceled: false,
+        filePaths: [root],
+      });
+
+      const project = await ProjectsService.importProjectFromFolder();
+
+      expect(project).toEqual(
+        expect.objectContaining({ type: 'dbt', path: dbtRoot, name: 'shop' }),
+      );
+      expect(copyMainConf).toHaveBeenCalledWith(dbtRoot);
     });
   });
 });

@@ -170,27 +170,10 @@ export class PtyService {
         : this.deps.homedir();
     const env = await this.deps.buildEnv();
     if (this.shuttingDown) throw new Error('Terminal shutdown is in progress.');
-    // macOS login startup runs path_helper, which can move managed tools
-    // behind system paths. Restore the intended order after login setup.
-    const loginShell =
-      this.deps.platform === 'darwin' &&
-      profile.args.includes('-l') &&
-      profile.shortName !== 'pwsh';
-    if (loginShell) {
-      env.STUDIO_TERMINAL_PATH = env.PATH || '';
-      env.STUDIO_TERMINAL_SHELL = profile.path;
-    }
-    const args = loginShell
-      ? [
-          '-l',
-          '-c',
-          'env PATH="$STUDIO_TERMINAL_PATH" "$STUDIO_TERMINAL_SHELL" -i',
-        ]
-      : profile.args;
 
     let pty: PtyProcess;
     try {
-      pty = this.deps.spawn(profile.path, args, {
+      pty = this.deps.spawn(profile.path, profile.args, {
         name: 'xterm-256color',
         cols,
         rows,
@@ -541,22 +524,43 @@ type NodePtyModule = { spawn: PtySpawn };
 let nodePtyModule: NodePtyModule | null = null;
 
 /**
- * Loads node-pty lazily (a missing/broken native binary must only break the
- * terminal, not app start-up) and, in a packaged app, from the unpacked copy
- * next to app.asar: node-pty starts helper executables, a worker thread and
- * a forked script from its own folder, and none of those can be started
- * from inside an asar archive.
+ * Where node-pty must be required from, given where Node resolved it.
+ *
+ * In a packaged Windows/Linux app that is the unpacked copy next to
+ * app.asar: on Windows node-pty starts a worker thread and a forked script
+ * from its own folder, and neither can be started from inside an asar
+ * archive.
+ *
+ * macOS keeps the resolved (app.asar) path: node-pty rewrites its
+ * spawn-helper path to app.asar.unpacked itself, so loading it from the
+ * unpacked copy makes that rewrite happen twice
+ * (app.asar.unpacked.unpacked) and no shell can be started.
  */
-export const loadNodePty = (): NodePtyModule => {
-  if (nodePtyModule) return nodePtyModule;
-  const nativeRequire = getNativeRequire();
-  const resolved = nativeRequire.resolve('@lydell/node-pty');
+export const nodePtyLoadPath = (
+  resolved: string,
+  platform: typeof process.platform,
+  exists: (filePath: string) => boolean,
+): string => {
+  if (platform === 'darwin') return resolved;
   const unpacked = resolved.replace(
     /([\\/])app\.asar([\\/])/,
     '$1app.asar.unpacked$2',
   );
-  const target =
-    unpacked !== resolved && fs.existsSync(unpacked) ? unpacked : resolved;
+  return unpacked !== resolved && exists(unpacked) ? unpacked : resolved;
+};
+
+/**
+ * Loads node-pty lazily: a missing/broken native binary must only break the
+ * terminal, not app start-up.
+ */
+export const loadNodePty = (): NodePtyModule => {
+  if (nodePtyModule) return nodePtyModule;
+  const nativeRequire = getNativeRequire();
+  const target = nodePtyLoadPath(
+    nativeRequire.resolve('@lydell/node-pty'),
+    process.platform,
+    fs.existsSync,
+  );
   nodePtyModule = nativeRequire(target) as NodePtyModule;
   return nodePtyModule;
 };

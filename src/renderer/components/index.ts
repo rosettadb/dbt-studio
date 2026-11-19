@@ -15,6 +15,7 @@ export * from './overflowTip';
 export * from './shimmer';
 export * from './splitButton';
 export * from './simpleDropdown';
+export * from './panelHeaderDropdown';
 export * from './icon';
 export * from './letterAvatar';
 export * from './sqlEditor';

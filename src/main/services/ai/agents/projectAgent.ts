@@ -31,6 +31,8 @@ export interface ProjectAgentOptions {
     database?: string;
     schema?: string;
   };
+  hasDbt?: boolean;
+  projectTypeUnknown?: boolean;
 }
 
 export async function createProjectAgent(
@@ -59,10 +61,16 @@ export async function createProjectAgent(
     ? `\n<session_context>\n${options.sessionContextBlock}\n</session_context>\n`
     : '';
 
+  const canWriteFiles =
+    options.toolMode !== 'chat' &&
+    Object.prototype.hasOwnProperty.call(enabledTools ?? {}, 'writeFile');
+
   const projectContextBlock = options.projectAiContext
-    ? `\n<project_ai_context source="${PROJECT_AGENT_CONTEXT_FILE}">\n${options.projectAiContext}\n</project_ai_context>\n` +
-      `\n> Note: You can update \`${PROJECT_AGENT_CONTEXT_FILE}\` using your \`writeFile\` tool if the user asks you to modify these instructions.\n` +
-      `> **CRITICAL PRECEDENCE RULE:** Project-scoped \`${PROJECT_AGENT_CONTEXT_FILE}\` context is stronger than global Agent Memory. It remains subordinate to system, security, trusted scope, connection, confirmation, credential, and tool-authorization policy.\n`
+    ? `\n<project_ai_context source="${PROJECT_AGENT_CONTEXT_FILE}">\n${options.projectAiContext}\n</project_ai_context>\n${
+        canWriteFiles
+          ? `\n> Note: You can update \`${PROJECT_AGENT_CONTEXT_FILE}\` using your \`writeFile\` tool if the user asks you to modify these instructions.\n`
+          : `\n> Note: You can't edit \`${PROJECT_AGENT_CONTEXT_FILE}\` in this turn. If the user asks to change it, show the change and say it must be applied in Code mode with file writing enabled.\n`
+      }> **CRITICAL PRECEDENCE RULE:** Project-scoped \`${PROJECT_AGENT_CONTEXT_FILE}\` context is stronger than global Agent Memory. It remains subordinate to system, security, trusted scope, connection, confirmation, credential, and tool-authorization policy.\n`
     : '';
 
   const pipelineContextBlock = options.projectPipelineContext
@@ -74,8 +82,9 @@ export async function createProjectAgent(
     : '';
 
   const isAskMode = options.toolMode === 'chat';
+  const hasDbt = options.hasDbt ?? true;
 
-  const systemInstructions = isAskMode
+  const dbtInstructions = isAskMode
     ? `You are an expert dbt Studio AI assistant. You are running in **Ask (read-only) mode**.
 You help users with dbt model development, debugging, and data operations by answering questions.
 
@@ -267,12 +276,16 @@ Always confirm before making destructive changes.`;
 
   const allBaseTools = projectPath
     ? {
-        ...createDbtTools(projectPath, onFileWritten, base.mainWindow),
-        ...createStudioCliTools({
-          projectPath,
-          conversationId: options.conversationId,
-          mainWindow: base.mainWindow,
-        }),
+        ...(hasDbt
+          ? {
+              ...createDbtTools(projectPath, onFileWritten, base.mainWindow),
+              ...createStudioCliTools({
+                projectPath,
+                conversationId: options.conversationId,
+                mainWindow: base.mainWindow,
+              }),
+            }
+          : {}),
         ...createStudioSqlTools(options.conversationId ?? 0, {
           forceSchemaExtract: true,
         }),
@@ -281,7 +294,7 @@ Always confirm before making destructive changes.`;
         ...createStudioChartsTools(projectPath),
         ...createStudioKeystoreTools(),
       }
-    : { ...dbtTools, ...filesystemTools };
+    : { ...(hasDbt ? dbtTools : {}), ...filesystemTools };
 
   const enabledToolNames = new Set(Object.keys(enabledTools ?? {}));
   if (
@@ -332,6 +345,86 @@ Always confirm before making destructive changes.`;
       }
     }
   });
+
+  const NON_DBT_TOOL_DESCRIPTIONS: Array<[string, string]> = [
+    ['listDirectory', 'Explore project structure'],
+    ['readFile', 'Read any text file'],
+    ['writeFile', 'Write any text file'],
+    ['pathExists', 'Check if a file or directory exists'],
+    ['studio_pipeline_list', 'List pipeline YAML files in the active project'],
+    [
+      'studio_pipeline_read',
+      'Read and validate a pipeline and return its content hash',
+    ],
+    [
+      'studio_pipeline_generate',
+      'Generate a new validated pipeline under rosetta/pipelines without overwriting',
+    ],
+    [
+      'studio_pipeline_update',
+      'Update an existing validated pipeline using the hash returned by studio_pipeline_read',
+    ],
+    [
+      'studio_keystore_register_placeholder',
+      'Register a placeholder keystore entry (never a real secret) for an env var a pipeline step needs',
+    ],
+    [
+      'studio_sql_schema_extract',
+      'Extract schema (tables, views, columns) for the project connection',
+    ],
+  ];
+  const callableToolList = NON_DBT_TOOL_DESCRIPTIONS.filter(
+    ([name]) =>
+      name in baseTools && (!isAskMode || READ_ONLY_TOOLS.includes(name)),
+  )
+    .map(([name, description]) => `- ${name}: ${description}`)
+    .join('\n');
+  const canCheckFiles = 'pathExists' in baseTools;
+
+  const projectIntro = options.projectTypeUnknown
+    ? `You are an expert DBT Studio AI assistant for the active project.${isAskMode ? ' You are running in **Ask (read-only) mode**.' : ''}
+Studio could not determine this project's type in this turn, so dbt tools are not available. Don't assume whether it is a dbt project; if the user needs dbt commands, ask them to reopen the project and try again.`
+    : `You are an expert DBT Studio AI assistant for an Analytics project: a project folder of SQL queries, notebooks, Analytics pages, data files and pipelines that does not use dbt.${isAskMode ? ' You are running in **Ask (read-only) mode**.' : ''}
+You help users explore and analyze data, write SQL, and organize the project's files. This project has no dbt models, no dbt commands and no profiles.yml: never suggest or run dbt for it.`;
+  const projectHeading = options.projectTypeUnknown
+    ? 'Active Project'
+    : 'Active Analytics Project';
+  const canCreateMemory = canWriteFiles && 'writeFile' in baseTools;
+  let createMemoryNote = " You can't create it in this turn.";
+  if (isAskMode) {
+    createMemoryNote =
+      ', and only after the user switches to Code mode. Ask mode cannot create it.';
+  } else if (canCreateMemory) {
+    createMemoryNote = '. Use `writeFile` only after the user agrees.';
+  }
+
+  const nonDbtInstructions = `${projectIntro}
+
+${projectPath ? `## ${projectHeading}\n\nProject path: ${projectPath}\n` : ''}
+${connectionBlock}
+${sessionCtxBlock}
+${projectContextBlock}
+${pipelineContextBlock}
+
+## Project AI Instructions (${PROJECT_AGENT_CONTEXT_FILE})
+
+The trusted runtime injects the canonical project-root file above when it is enabled, present, bounded, and safe. Do not independently load legacy or differently cased instruction files. "Project Memory" means the project-owned \`${PROJECT_AGENT_CONTEXT_FILE}\` file. If no project context was injected, its contents are not available in this turn; say so, and don't assume the file is missing. ${canCheckFiles ? `Check with \`pathExists\` before saying it doesn't exist.` : ''} Offer to create it only once you know it doesn't exist${createMemoryNote}
+
+${skills ?? ''}
+
+## Guidelines
+
+- Read before writing, and confirm with the user before overwriting existing files.
+- Prefer the smallest change that solves the user's problem, and touch only the files the task needs.
+- Before each tool call, briefly say what you are about to do and why.
+- Database connections are user-owned: never edit connection settings or credentials. If a connection fails, explain the likely cause and ask the user to fix it in DBT Studio Connections.
+${isAskMode ? '- You are in **Ask mode**: you can only read and analyze. If the user asks you to write a file, show what you would write and ask them to switch to **Code mode**.\n' : ''}
+## Available Tools
+
+${callableToolList}
+${mcpToolsList}`;
+
+  const systemInstructions = hasDbt ? dbtInstructions : nonDbtInstructions;
 
   const runtime = composeAgentRuntime(base, systemInstructions, baseTools);
 

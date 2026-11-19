@@ -16,6 +16,12 @@ import {
 
 const mockNavigate = jest.fn();
 
+// The Dashboard watches its size to fit the window; jsdom has no ResizeObserver
+window.ResizeObserver = jest.fn(() => ({
+  observe: jest.fn(),
+  disconnect: jest.fn(),
+})) as unknown as typeof ResizeObserver;
+
 jest.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate,
 }));
@@ -24,7 +30,20 @@ jest.mock('../../../../src/renderer/controllers', () => ({
   useGetProjects: jest.fn(),
   useGetConnections: jest.fn(),
   useSelectProject: jest.fn(),
+  useApiKey: () => ({ data: undefined, isLoading: false }),
+  useAuthLogin: () => ({ mutate: jest.fn(), isLoading: false }),
+  useProfile: () => ({ data: undefined }),
 }));
+
+// The Dashboard header's search and Cloud / Local switch have their own tests
+jest.mock('../../../../src/renderer/components/commandPalette', () => ({
+  CommandPalette: () => null,
+}));
+
+jest.mock(
+  '../../../../src/renderer/components/menu/CloudLocalEnvironmentSwitch',
+  () => ({ CloudLocalEnvironmentSwitch: () => null }),
+);
 
 jest.mock('../../../../src/renderer/hooks', () => ({
   useAppContext: () => ({

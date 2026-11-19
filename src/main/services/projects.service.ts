@@ -25,7 +25,14 @@ import {
   getConnector,
   sanitizeForStorage,
 } from '../../connections/registry.main';
+import {
+  defaultTemplateItems,
+  getProjectType,
+  getProjectTypeDefinition,
+} from '../../shared/projectTypes';
+import type { ProjectType } from '../../types/projectTypes';
 import SettingsService from './settings.service';
+import ProjectTypesService from './projectTypes.service';
 import ConnectorsService from './connectors.service';
 import MainDatabaseService from './mainDatabase.service';
 import {
@@ -65,16 +72,13 @@ export default class ProjectsService {
         ...project,
         lastOpenedAt: Date.now(),
       });
-      // Parse config files to populate rosettaConnection and dbtConnection
-      // without regenerating the files
+      // The project type reads its own config files (dbt: profiles.yml and
+      // main.conf for rosettaConnection / dbtConnection) without
+      // regenerating them
       try {
-        const parsedConfig =
-          await ConnectorsService.parseProjectConnectionFiles(project.path);
-        return {
-          ...project,
-          rosettaConnection: parsedConfig.rosettaConnection,
-          dbtConnection: parsedConfig.dbtConnection,
-        };
+        const fromFiles =
+          await ProjectTypesService.readConnectionFiles(project);
+        return { ...project, ...fromFiles };
       } catch {
         // If parsing fails, return project without these properties
         return project;
@@ -108,33 +112,42 @@ export default class ProjectsService {
     projectPath: string,
     connectionId?: string,
     createTemplateFolders?: boolean,
+    type?: ProjectType,
+    include?: string[],
   ) {
     const projects = await this.loadProjects();
     const name = path.basename(projectPath);
+    const projectType = getProjectType({ type });
+    // Callers from before project types send only createTemplateFolders
+    const items =
+      include ??
+      (createTemplateFolders ? defaultTemplateItems(projectType) : []);
 
     const project: Project = {
       id: Date.now().toString(),
       name,
       createdAt: new Date().toISOString(),
       path: projectPath,
+      type: projectType,
       isExtracted: false,
       connectionId,
       createTemplateFolders,
     };
 
     sanitizeForStorage(project);
-    await this.copyDbtTemplateFiles(project.path, project.name);
-    // Always copy main.conf template (rosetta requires it), but profiles.yml is excluded from template
-    await this.copyRosettaMainConf(project.path);
-    if (createTemplateFolders) {
-      await this.createDbtTemplateFolderStructure(project.path);
-    }
+    await ProjectTypesService.scaffold(projectType, {
+      projectPath: project.path,
+      name: project.name,
+      include: items,
+      connectionId,
+    });
     projects.push(project);
     await this.saveProjects(projects);
 
-    // If connection is selected, generate config files
+    // If connection is selected, let the type write its config files
+    // (dbt: profiles.yml and rosetta/main.conf)
     if (connectionId) {
-      await ConnectorsService.loadConfigurations(project.id);
+      await ProjectTypesService.onConnectionChanged(project);
     }
 
     return (await this.getProject(project.id)) ?? project;
@@ -149,6 +162,10 @@ export default class ProjectsService {
     name: string;
     connectionId?: string;
   }) {
+    // A clone with dbt_project.yml is a dbt project (git.service already
+    // points `path` at it); any other repo is an Analytics project
+    const { type } = await ProjectTypesService.detectType(projectPath);
+    const hasDbt = getProjectTypeDefinition(type).capabilities.dbt;
     const dbtProjectYmlPath = path.join(projectPath, 'dbt_project.yml');
 
     let newName: string;
@@ -201,6 +218,7 @@ export default class ProjectsService {
       name: finalProjectName,
       createdAt: new Date().toISOString(),
       path: projectPath,
+      type,
       isExtracted: false,
       connectionId,
     };
@@ -212,17 +230,17 @@ export default class ProjectsService {
     try {
       await fs.promises.access(rosettaPath);
     } catch {
-      // Always copy main.conf template (rosetta requires it)
-      await this.copyRosettaMainConf(projectPath);
+      // Always copy main.conf template for dbt (rosetta requires it)
+      if (hasDbt) await this.copyRosettaMainConf(projectPath);
     }
 
     projects.push(project);
     await this.saveProjects(projects);
 
-    // If connection is selected, generate config files
+    // If connection is selected, let the type write its config files
     if (connectionId) {
-      await ConnectorsService.loadConfigurations(project.id);
-    } else {
+      await ProjectTypesService.onConnectionChanged(project);
+    } else if (hasDbt) {
       // Don't create empty profiles.yml - it will be generated when connection is configured
       // For existing profiles.yml, update project name if needed
       const profilesYmlPath = path.join(projectPath, 'profiles.yml');
@@ -487,17 +505,16 @@ export default class ProjectsService {
         isExtracted = true;
       }
 
-      // Find the actual dbt project root (handles nested directories)
-      const dbtRoot = await this.findDbtProjectRoot(projectPath);
-      if (!dbtRoot) {
-        throw new Error(
-          'No dbt_project.yml found. Please ensure this is a valid dbt project.',
-        );
-      }
-      projectPath = dbtRoot;
+      // A folder with dbt_project.yml (at the root or nested) is a dbt
+      // project; any other folder imports as an Analytics project
+      const detected = await ProjectTypesService.detectType(projectPath);
+      const hasDbt = getProjectTypeDefinition(detected.type).capabilities.dbt;
+      projectPath = detected.root;
 
       // Validate the dbt project
-      const validation = await this.validateDbtProject(projectPath);
+      const validation = hasDbt
+        ? await this.validateDbtProject(projectPath)
+        : { isValid: true, errors: [], projectName: undefined };
       if (!validation.isValid) {
         throw new Error(`Invalid dbt project: ${validation.errors.join(', ')}`);
       }
@@ -559,29 +576,31 @@ export default class ProjectsService {
 
       // Update dbt_project.yml to use the correct project name and profile
       const dbtProjectYmlPath = path.join(projectPath, 'dbt_project.yml');
-      try {
-        const content = await fs.promises.readFile(dbtProjectYmlPath, 'utf8');
-        const parsed = yaml.load(content) as {
-          name?: string;
-          profile?: string;
-        };
+      if (hasDbt) {
+        try {
+          const content = await fs.promises.readFile(dbtProjectYmlPath, 'utf8');
+          const parsed = yaml.load(content) as {
+            name?: string;
+            profile?: string;
+          };
 
-        if (parsed) {
-          parsed.name = finalProjectName;
-          parsed.profile = finalProjectName; // Set profile to match the project name
-          await fs.promises.writeFile(
-            dbtProjectYmlPath,
-            yaml.dump(parsed),
-            'utf8',
-          );
+          if (parsed) {
+            parsed.name = finalProjectName;
+            parsed.profile = finalProjectName; // Set profile to match the project name
+            await fs.promises.writeFile(
+              dbtProjectYmlPath,
+              yaml.dump(parsed),
+              'utf8',
+            );
+            // eslint-disable-next-line no-console
+            console.log(
+              `Updated dbt_project.yml: name='${finalProjectName}', profile='${finalProjectName}'`,
+            );
+          }
+        } catch (error) {
           // eslint-disable-next-line no-console
-          console.log(
-            `Updated dbt_project.yml: name='${finalProjectName}', profile='${finalProjectName}'`,
-          );
+          console.error('Failed to update dbt_project.yml:', error);
         }
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error('Failed to update dbt_project.yml:', error);
       }
 
       const newProject: Project = {
@@ -589,12 +608,13 @@ export default class ProjectsService {
         name: finalProjectName,
         createdAt: new Date().toISOString(),
         path: projectPath,
+        type: detected.type,
         isExtracted,
       };
 
-      // Always copy main.conf template if rosetta folder doesn't exist (rosetta requires it)
+      // Always copy main.conf template for dbt if rosetta folder doesn't exist (rosetta requires it)
       const rosettaPath = path.join(projectPath, 'rosetta');
-      if (!fs.existsSync(rosettaPath)) {
+      if (hasDbt && !fs.existsSync(rosettaPath)) {
         await this.copyRosettaMainConf(projectPath);
       }
 
@@ -604,7 +624,7 @@ export default class ProjectsService {
       // Don't create empty profiles.yml - it will be generated when connection is configured
       // For existing profiles.yml, update project name if needed
       const profilesYmlPath = path.join(projectPath, 'profiles.yml');
-      if (fs.existsSync(profilesYmlPath)) {
+      if (hasDbt && fs.existsSync(profilesYmlPath)) {
         await this.updateProfilesYmlProjectName(projectPath, finalProjectName);
       }
 
@@ -682,7 +702,7 @@ export default class ProjectsService {
     // Only regenerate config files if the connection changed
     // This is a full regeneration because it's switching to a different connection
     if (connectionChanged && project.connectionId) {
-      await ConnectorsService.loadConfigurations(project.id);
+      await ProjectTypesService.onConnectionChanged(updatedProject);
     }
 
     return projects;

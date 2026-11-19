@@ -1,8 +1,8 @@
 /**
  * OS Shell Terminal Tests
  *
- * The SHELL tab of the bottom panel: real shells running in the project
- * folder, next to the built-in command terminal (TERMINAL tab).
+ * The TERMINAL tab of the bottom panel: real shells running in the project
+ * folder, next to the built-in command console (CONSOLE tab).
  */
 
 import { Page } from '@playwright/test';
@@ -12,7 +12,7 @@ import { openProject } from '../../helpers/window.helper';
 const PROJECT = 'test_project';
 
 const shellTab = (window: Page) =>
-  window.getByRole('button', { name: 'SHELL', exact: true });
+  window.getByRole('button', { name: 'TERMINAL', exact: true });
 const terminal = (window: Page) => window.getByTestId('shell-terminal');
 const sessionList = (window: Page) =>
   window.getByRole('listbox', { name: 'Open terminals' });
@@ -32,9 +32,9 @@ test.describe('Shell terminal', () => {
   }) => {
     const window = await openProject(electronApp, PROJECT);
 
-    // The built-in command terminal is still the default tab.
+    // The built-in command console is still the default tab.
     await expect(
-      window.getByRole('button', { name: 'TERMINAL', exact: true }),
+      window.getByRole('button', { name: 'CONSOLE', exact: true }),
     ).toBeVisible();
     await expect(
       window.getByPlaceholder('Type a rosetta or dbt command...'),
@@ -116,7 +116,7 @@ test.describe('Shell terminal', () => {
     await newTerminal(window).click();
     await expect(sessionList(window).getByRole('option')).toHaveCount(2);
 
-    await window.getByRole('button', { name: 'TERMINAL', exact: true }).click();
+    await window.getByRole('button', { name: 'CONSOLE', exact: true }).click();
     await expect(terminal(window)).toHaveCount(0);
 
     // Coming back shows the same terminals instead of starting a new one.

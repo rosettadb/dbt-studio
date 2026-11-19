@@ -39,6 +39,7 @@ import {
 import { toast } from 'react-toastify';
 import { v4 as uuidv4 } from 'uuid';
 import type { editor } from 'monaco-editor';
+import { usePaletteCommand } from '../../commandPalette/commands';
 import type { Notebook } from '../../../../types/notebooks';
 import type {
   ExecuteCellResult,
@@ -474,6 +475,23 @@ export const PythonNotebookEditor = forwardRef<
     [commitCells, focusCell],
   );
 
+  usePaletteCommand(
+    'notebook.python.add-code',
+    'Notebook: Add Python cell',
+    () => {
+      insertCell('code', cellsRef.current.length);
+    },
+    !!notebook,
+  );
+  usePaletteCommand(
+    'notebook.python.add-markdown',
+    'Notebook: Add Markdown cell',
+    () => {
+      insertCell('markdown', cellsRef.current.length);
+    },
+    !!notebook,
+  );
+
   const deleteCell = useCallback(
     (cellId: string) => {
       const index = cellsRef.current.findIndex((c) => c.id === cellId);
@@ -876,6 +894,13 @@ export const PythonNotebookEditor = forwardRef<
       setIsRunningAll(false);
     }
   }, [runCell]);
+
+  usePaletteCommand(
+    'notebook.python.run-all',
+    'Notebook: Run all Python cells',
+    handleRunAll,
+    !!notebook && !isRunningAll,
+  );
 
   /** "Install pandas" from a SQL cell's fallback notice: pip install, re-run. */
   const handleInstallPandas = useCallback(

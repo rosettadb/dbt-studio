@@ -28,6 +28,7 @@ import { Icon } from '../icon';
 import { icons } from '../../../../assets';
 import { QUERY_KEYS } from '../../config/constants';
 import { GitUiError, SshPassphraseModal } from '../modals';
+import { usePaletteCommand } from '../commandPalette/commands';
 
 function isSshUrl(url: string): boolean {
   return url.startsWith('git@') || url.startsWith('ssh://');
@@ -305,6 +306,25 @@ export const RepositoryHeader: React.FC<RepositoryHeaderProps> = ({
     }
   };
 
+  usePaletteCommand(
+    'git.refresh',
+    'Git: Refresh status',
+    handleSynchronize,
+    !!projectPath && !isSynchronizing,
+  );
+  usePaletteCommand(
+    'git.pull',
+    'Git: Pull',
+    handlePull,
+    !!projectPath && hasRemote && !isPulling,
+  );
+  usePaletteCommand(
+    'git.push',
+    'Git: Push',
+    handlePush,
+    !!projectPath && hasRemote && !isPushing,
+  );
+
   const guardPendingChanges = (actionDescription: string) => {
     if (!hasPendingChanges) {
       return true;
@@ -355,6 +375,19 @@ export const RepositoryHeader: React.FC<RepositoryHeaderProps> = ({
     setBranchDialogOpen(true);
     handleBranchMenuClose();
   };
+
+  usePaletteCommand(
+    'git.switch-branch',
+    'Git: Switch branch',
+    handleSwitchBranch,
+    !!projectPath && !isSwitching && !isCreating && !isDeleting && !isRenaming,
+  );
+  usePaletteCommand(
+    'git.create-branch',
+    'Git: Create branch',
+    handleCreateBranch,
+    !!projectPath && !isCreating && !isDeleting && !isRenaming,
+  );
 
   const handleBranchActionConfirm = () => {
     if (!projectPath || !branchInput) return;

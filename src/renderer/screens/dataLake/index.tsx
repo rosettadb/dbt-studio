@@ -16,6 +16,7 @@ import { ArrowBack, Close, Delete } from '@mui/icons-material';
 import { useLocation, useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { AppLayout } from '../../layouts';
+import { PanelHeaderDropdown } from '../../components';
 import {
   DataLakeDashboard,
   DataLakeSidebar,
@@ -54,6 +55,9 @@ import {
   useEnsureIcebergInstalledOnMount,
 } from '../../controllers/icebergDatalake.controller';
 import { DuckLakeService } from '../../services';
+import connectionIcons, {
+  defaultIcon,
+} from '../../../../assets/connectionIcons';
 import type {
   CreateIcebergInstanceDTO,
   IcebergCatalogType,
@@ -634,7 +638,41 @@ const DataLake: React.FC = () => {
           icebergInstances={icebergInstances}
         />
       }
-      panelTitle="DataLake"
+      panelHeaderLeft={
+        <PanelHeaderDropdown
+          data-testid="datalake-instance-select"
+          items={[
+            ...instances.map((instance) => ({
+              value: `duck-lake/${instance.id}`,
+              label: instance.name,
+              icon: (
+                <img
+                  src={connectionIcons.images.ducklake || defaultIcon}
+                  alt=""
+                  style={{ width: 14, height: 14, objectFit: 'contain' }}
+                />
+              ),
+            })),
+            ...icebergInstances.map((instance) => ({
+              value: `iceberg/${instance.id}`,
+              label: instance.name,
+              icon: <IcebergIcon size={14} />,
+            })),
+          ]}
+          value={type && instanceId ? `${type}/${instanceId}` : undefined}
+          onSelect={(value) => {
+            const [lakeType, selectedInstanceId] = value.split('/');
+            navigate(
+              `/app/data-lake/${lakeType}/instances/${selectedInstanceId}`,
+            );
+          }}
+          placeholder="Select Instance"
+          allLabel="All Instances"
+          onAll={() => navigate('/app/data-lake/instances')}
+          addLabel="Add instance"
+          onAdd={() => navigate('/app/data-lake/new-instance')}
+        />
+      }
     >
       <Box
         sx={[
