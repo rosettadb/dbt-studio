@@ -6,15 +6,10 @@ import {
   CircularProgress,
   Button,
 } from '@mui/material';
-import {
-  ArrowDownward,
-  FormatListNumbered,
-  OpenInNew,
-} from '@mui/icons-material';
+import { OpenInNew } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import {
-  BranchDropdownToggle,
   IconsContainer,
   StyledToolbar,
   AuthButtonContent,
@@ -25,9 +20,7 @@ import { icons, rosettaIcon } from '../../../../assets';
 import { utils } from '../../helpers';
 import { ROSETTA_CLOUD_BASE_URL } from '../../../main/utils/constants';
 import {
-  useGetProjects,
   useGetSelectedProject,
-  useSelectProject,
   useProfile,
   useProfileSubscription,
   useApiKey,
@@ -35,9 +28,7 @@ import {
   useAuthLogout,
   useAuthSubscription,
 } from '../../controllers';
-import { SimpleDropdownMenu } from '../simpleDropdown';
 import { Icon } from '../icon';
-import { projectTypeUiOf } from '../projectTypes';
 import { useAppContext } from '../../hooks';
 import { ExpandRightIcon } from '../sidebar/collapse-icons';
 import { CommandPalette } from '../commandPalette';
@@ -48,9 +39,7 @@ type MenuProps = {
 };
 
 export const Menu: React.FC<MenuProps> = ({ actions }) => {
-  const navigate = useNavigate();
   const location = useLocation();
-  const { mutateAsync: selectProject } = useSelectProject();
   const theme = useTheme();
   const { isChatOpen, setIsChatOpen, isSidebarOpen, setIsSidebarOpen } =
     useAppContext();
@@ -81,14 +70,10 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
   };
 
   const { data: project } = useGetSelectedProject();
-  const { data: projects = [] } = useGetProjects();
 
   const isProjectSelected = Boolean(project?.id);
   const isOnHome = location.pathname === '/app';
   const isOnProjectDetails = location.pathname === '/app/dbt-project';
-  const isOnSelectProject = location.pathname.includes('select-project');
-  // Each project starts with its type's icon (dbt, Analytics)
-  const ProjectTypeIcon = project ? projectTypeUiOf(project).Icon : null;
 
   // Home has no top bar: its search and cloud controls are in the Dashboard
   // header. The sign-in hooks above still run, so logging in from Home works.
@@ -113,58 +98,6 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
               </IconButton>
             </Tooltip>
           )}
-        {!isOnHome && !isOnSelectProject && (
-          <SimpleDropdownMenu
-            items={[
-              {
-                value: 'all',
-                label: (
-                  <BranchDropdownToggle>
-                    <FormatListNumbered fontSize="small" />
-                    All Projects
-                  </BranchDropdownToggle>
-                ),
-              },
-              ...projects.map((p) => {
-                const TypeIcon = projectTypeUiOf(p).Icon;
-                return {
-                  value: String(p.id),
-                  label: (
-                    <BranchDropdownToggle>
-                      <TypeIcon size={16} />
-                      {p?.name}
-                    </BranchDropdownToggle>
-                  ),
-                };
-              }),
-            ]}
-            onSelect={async (value) => {
-              if (value === 'all') {
-                navigate('/app/select-project');
-              } else {
-                await selectProject({ projectId: value });
-                navigate('/app/dbt-project');
-              }
-            }}
-            selectedItem={project ? String(project.id) : 'all'}
-            anchorElement={
-              <BranchDropdownToggle>
-                {project && ProjectTypeIcon ? (
-                  <>
-                    <ProjectTypeIcon size={16} />
-                    {project.name}
-                  </>
-                ) : (
-                  <>
-                    <FormatListNumbered fontSize="small" />
-                    Select Project
-                  </>
-                )}
-                <ArrowDownward style={{ fontSize: 9 }} />
-              </BranchDropdownToggle>
-            }
-          />
-        )}
       </IconsContainer>
       <IconsContainer sx={{ gap: 2 }}>
         <CommandPalette />

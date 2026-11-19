@@ -2,10 +2,10 @@ import React from 'react';
 import SplitPane, { Pane } from 'split-pane-react';
 import 'split-pane-react/esm/themes/default.css';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import { Badge, Box, Tab, TabProps, Tabs, Tooltip } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import { Loader, TerminalLayout } from '../../components';
-import { projectTypeOf } from '../../../shared/projectTypes';
+import { Loader, PanelHeaderDropdown, TerminalLayout } from '../../components';
 import { projectTypeUiOf } from '../../components/projectTypes';
 import {
   ProjectSidebar,
@@ -17,8 +17,10 @@ import { TabManager } from '../../components/editor/tabManager';
 import { ActiveFileView } from '../../components/fileViews';
 import {
   useGetFileStatuses,
+  useGetProjects,
   useGetSelectedProject,
   useGitIsInitialized,
+  useSelectProject,
 } from '../../controllers';
 import { useTabs } from '../../context/TabsProvider';
 import { Content, EditorContainer, Header, NoFileSelected } from './styles';
@@ -97,6 +99,10 @@ const ProjectDetails: React.FC = () => {
 
   const { isChatOpen, setIsSidebarOpen } = useAppContext();
   const { data: project, isLoading } = useGetSelectedProject();
+  const { data: projects = [] } = useGetProjects();
+  const { mutateAsync: selectProject } = useSelectProject();
+  // Set while a project switch is loading, so a second pick can't overtake it
+  const isSwitchingProjectRef = React.useRef(false);
   const { data: isInitialized } = useGitIsInitialized(project?.path, {
     enabled: !!project?.path,
   });
@@ -142,7 +148,7 @@ const ProjectDetails: React.FC = () => {
       : theme.palette.text.secondary;
 
   // The project type decides the top bar actions (dbt: the dbt / Rosetta
-  // split button; Analytics: none) and the panel title
+  // split button; Analytics: none)
   const { TopMenuActions } = projectTypeUiOf(project);
 
   return (
@@ -150,7 +156,45 @@ const ProjectDetails: React.FC = () => {
       topMenuActions={
         TopMenuActions ? <TopMenuActions project={project} /> : undefined
       }
-      panelTitle={projectTypeOf(project).title}
+      panelHeaderLeft={
+        <PanelHeaderDropdown
+          data-testid="project-select"
+          items={projects.map((p) => {
+            // Each project shows its type's icon (dbt logo, Analytics folder)
+            const TypeIcon = projectTypeUiOf(p).Icon;
+            return {
+              value: String(p.id),
+              label: p.name,
+              icon: <TypeIcon size={16} />,
+            };
+          })}
+          value={String(project.id)}
+          onSelect={async (value) => {
+            if (isSwitchingProjectRef.current) return;
+            isSwitchingProjectRef.current = true;
+            try {
+              await selectProject({ projectId: value });
+            } catch (error) {
+              toast.error(
+                `Could not switch project: ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+              );
+            } finally {
+              isSwitchingProjectRef.current = false;
+            }
+          }}
+          placeholder="Select Project"
+          allLabel="All Projects"
+          onAll={() => navigate('/app/select-project')}
+          addLabel="Add project"
+          onAdd={() =>
+            navigate('/app/select-project', {
+              state: { startNewProject: true },
+            })
+          }
+        />
+      }
       sidebarContent={
         <Box
           sx={{
