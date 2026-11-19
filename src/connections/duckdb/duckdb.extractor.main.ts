@@ -271,14 +271,13 @@ export default class DuckDBSchemaExtractor {
   }
 
   async extractSchema(): Promise<{ tables: Table[] }> {
-    const [tableRefsRaw, viewRefsRaw] = await Promise.all([
-      this.getTables(),
-      this.getViews(),
-    ]);
+    // Read one after the other: each read opens the file, and on Windows a
+    // second open while the first is still open fails on the file lock, so
+    // that list came back empty.
+    const tableRefsRaw = await this.getTables();
+    const viewRefsRaw = await this.getViews();
 
-    // Deduplicate defensively: concurrent connections against the same
-    // database file (opened separately for the tables and views queries)
-    // have been observed to yield repeated rows on Windows.
+    // Deduplicate defensively against repeated rows.
     const tableRefs = uniqueRefs(tableRefsRaw);
     // Tables and views are read as two separate snapshots, so a name that
     // was replaced (table -> view or vice versa) mid-refresh could show up

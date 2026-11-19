@@ -38,22 +38,30 @@ test.describe('Project Lifecycle', () => {
     const stableWindow = await findStableWindow(electronApp);
     const projectSelection = new ProjectSelectionPage(stableWindow);
 
-    await projectSelection.clickCreateProject();
-
-    // Fill project creation form
-    const nameInput = stableWindow.locator(
-      '[data-testid="project-name-input"]',
-    );
-    await nameInput.fill('Test_Project');
-
-    const createBtn = stableWindow.locator(
-      '[data-testid="project-create-confirm-btn"]',
-    );
-    await createBtn.click();
+    // New Project wizard: Type (dbt) → Details → Include → Create
+    await projectSelection.createProject('Test_Project');
 
     // Verify project was created and app loaded (sidebar visible)
     const sidebar = stableWindow.locator('[data-testid="sidebar"]');
     await expect(sidebar).toBeVisible();
+  });
+
+  test('should create an Analytics project without dbt commands', async ({
+    electronApp,
+  }) => {
+    const stableWindow = await findStableWindow(electronApp);
+    const projectSelection = new ProjectSelectionPage(stableWindow);
+
+    await projectSelection.createProject('Sales_Analysis', 'analytics');
+
+    const sidebar = stableWindow.locator('[data-testid="sidebar"]');
+    await expect(sidebar).toBeVisible();
+    await expect(stableWindow.getByText('Analytics Project')).toBeVisible();
+    // No dbt "Project" split button in the top bar, no Run History panel
+    await expect(
+      stableWindow.getByRole('button', { name: 'Project', exact: true }),
+    ).toHaveCount(0);
+    await expect(stableWindow.getByText('RUN HISTORY')).toHaveCount(0);
   });
 
   test.describe('with an existing project seeded', () => {

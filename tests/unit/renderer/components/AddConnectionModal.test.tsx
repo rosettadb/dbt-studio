@@ -5,6 +5,13 @@ import { toast } from 'react-toastify';
 
 import { AddConnectionModal } from '../../../../src/renderer/components/modals/addConnectionModal';
 
+// Analytics projects also list DuckLake instances
+jest.mock('../../../../src/renderer/controllers', () => ({
+  useDuckLakeInstances: () => ({
+    data: [{ id: 'lake1', name: 'sales_lake' }],
+  }),
+}));
+
 jest.mock('react-toastify', () => {
   return {
     toast: {
@@ -125,5 +132,90 @@ describe('AddConnectionModal', () => {
     expect(toast.error).toHaveBeenCalledWith('Please select a connection');
     expect(onUpdateProject).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('links an Analytics project to a DuckLake instance itself', () => {
+    const onUpdateProject = jest.fn();
+    renderModal({
+      isOpen: true,
+      onClose: jest.fn(),
+      onUpdateProject,
+      project: { id: 'p2', name: 'Lake', type: 'analytics' } as any,
+      connections: [],
+    });
+
+    act(() => {
+      fireEvent.mouseDown(screen.getByLabelText('Connection'));
+    });
+    act(() => {
+      fireEvent.click(screen.getByText('sales_lake'));
+    });
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Add Connection' }));
+    });
+
+    expect(onUpdateProject).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'p2', connectionId: 'ducklake-lake1' }),
+    );
+  });
+
+  it('clears the selection after a submit, so the next project starts empty', () => {
+    const props = {
+      isOpen: true,
+      onClose: jest.fn(),
+      onUpdateProject: jest.fn(),
+      connections: [],
+    };
+    const { rerender } = renderModal({
+      ...props,
+      project: { id: 'p2', name: 'Lake', type: 'analytics' } as any,
+    });
+
+    act(() => {
+      fireEvent.mouseDown(screen.getByLabelText('Connection'));
+    });
+    act(() => {
+      fireEvent.click(screen.getByText('sales_lake'));
+    });
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Add Connection' }));
+    });
+
+    expect(props.onUpdateProject).toHaveBeenCalledTimes(1);
+    expect(props.onUpdateProject).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'p2', connectionId: 'ducklake-lake1' }),
+    );
+
+    rerender(
+      <ThemeProvider theme={theme}>
+        <AddConnectionModal
+          isOpen={props.isOpen}
+          onClose={props.onClose}
+          onUpdateProject={props.onUpdateProject}
+          connections={props.connections}
+          project={{ id: 'p3', name: 'Dbt' } as any}
+        />
+      </ThemeProvider>,
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'Add Connection' }),
+    ).toBeDisabled();
+  });
+
+  it('does not offer DuckLake instances to a dbt project', () => {
+    renderModal({
+      isOpen: true,
+      onClose: jest.fn(),
+      onUpdateProject: jest.fn(),
+      project: { id: 'p3', name: 'Dbt' } as any,
+      connections: [],
+    });
+
+    act(() => {
+      fireEvent.mouseDown(screen.getByLabelText('Connection'));
+    });
+
+    expect(screen.queryByText('sales_lake')).not.toBeInTheDocument();
   });
 });

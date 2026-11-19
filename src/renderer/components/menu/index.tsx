@@ -5,9 +5,8 @@ import {
   useTheme,
   CircularProgress,
   Button,
-  Box,
 } from '@mui/material';
-import { Cloud, Computer, OpenInNew } from '@mui/icons-material';
+import { OpenInNew } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { useLocation } from 'react-router-dom';
 import {
@@ -16,9 +15,6 @@ import {
   AuthButtonContent,
   AuthIcon,
   AuthLabel,
-  EnvironmentSwitchContainer,
-  EnvironmentSwitch,
-  SwitchIcon,
 } from './styles';
 import { icons, rosettaIcon } from '../../../../assets';
 import { utils } from '../../helpers';
@@ -31,13 +27,12 @@ import {
   useAuthLogin,
   useAuthLogout,
   useAuthSubscription,
-  useGetSettings,
-  useUpdateSettings,
 } from '../../controllers';
 import { Icon } from '../icon';
 import { useAppContext } from '../../hooks';
 import { ExpandRightIcon } from '../sidebar/collapse-icons';
 import { CommandPalette } from '../commandPalette';
+import { CloudLocalEnvironmentSwitch } from './CloudLocalEnvironmentSwitch';
 
 type MenuProps = {
   actions?: React.ReactNode;
@@ -45,8 +40,6 @@ type MenuProps = {
 
 export const Menu: React.FC<MenuProps> = ({ actions }) => {
   const location = useLocation();
-  const { data: settings } = useGetSettings();
-  const { mutate: updateSettings } = useUpdateSettings();
   const theme = useTheme();
   const { isChatOpen, setIsChatOpen, isSidebarOpen, setIsSidebarOpen } =
     useAppContext();
@@ -82,6 +75,10 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
   const isOnHome = location.pathname === '/app';
   const isOnProjectDetails = location.pathname === '/app/dbt-project';
 
+  // Home has no top bar: its search and cloud controls are in the Dashboard
+  // header. The sign-in hooks above still run, so logging in from Home works.
+  if (isOnHome) return null;
+
   return (
     <StyledToolbar variant="dense">
       <IconsContainer>
@@ -105,8 +102,8 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
       <IconsContainer sx={{ gap: 2 }}>
         <CommandPalette />
         {isProjectSelected && !isOnHome && actions}
-        {/* Authentication - Only show when not logged in */}
-        {!apiKey && (
+        {/* Authentication - Only show when not logged in (on Home it's in the Dashboard header) */}
+        {!isOnHome && !apiKey && (
           <Tooltip
             title="Run your DBT Studio pipelines on Google Cloud Run, AWS, or Azure with ease."
             enterDelay={800}
@@ -142,8 +139,8 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
           </Tooltip>
         )}
 
-        {/* Link to Rosetta Cloud Dashboard - Only show when logged in */}
-        {apiKey && (
+        {/* Link to Rosetta Cloud Dashboard - Only show when logged in (on Home it's in the Dashboard header) */}
+        {!isOnHome && apiKey && (
           <Tooltip
             title="Open Rosetta Cloud Dashboard"
             enterDelay={800}
@@ -179,63 +176,7 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
             </Button>
           </Tooltip>
         )}
-        {profile && (
-          <Box display="flex" gap={0.5}>
-            <Tooltip
-              title={`Switch to ${settings?.env === 'cloud' ? 'Local' : 'Cloud'} Environment`}
-            >
-              <EnvironmentSwitchContainer>
-                <EnvironmentSwitch
-                  checked={settings?.env === 'cloud'}
-                  onChange={(event) => {
-                    const newEnv = event.target.checked ? 'cloud' : 'local';
-                    updateSettings({
-                      ...settings!,
-                      env: newEnv,
-                    });
-                    toast.info(
-                      `Switched to ${newEnv === 'cloud' ? 'Cloud' : 'Local'} environment`,
-                    );
-                  }}
-                  inputProps={{ 'aria-label': 'Environment switcher' }}
-                />
-                <SwitchIcon
-                  className={
-                    settings?.env === 'cloud' ? 'checked' : 'unchecked'
-                  }
-                >
-                  {settings?.env === 'cloud' ? (
-                    <Cloud
-                      sx={{
-                        fontSize: 12,
-                        color: theme.palette.primary.contrastText,
-                      }}
-                    />
-                  ) : (
-                    <Computer
-                      sx={{
-                        fontSize: 12,
-                        color: theme.palette.primary.contrastText,
-                      }}
-                    />
-                  )}
-                </SwitchIcon>
-              </EnvironmentSwitchContainer>
-            </Tooltip>
-            <span
-              style={{
-                fontSize: '12px',
-                color: theme.palette.text.secondary,
-                fontWeight: 500,
-                display: 'flex',
-                alignItems: 'center',
-                height: '100%',
-              }}
-            >
-              {settings?.env === 'cloud' ? 'Cloud' : 'Local'}
-            </span>
-          </Box>
-        )}
+        {profile && <CloudLocalEnvironmentSwitch />}
         {((isProjectSelected && isOnProjectDetails) ||
           location.pathname === '/app/sql' ||
           location.pathname.startsWith('/app/notebooks')) && (

@@ -9,9 +9,9 @@ import {
   LetterAvatar,
   Loader,
   PanelHeaderDropdown,
-  ProjectDbtSplitButton,
   TerminalLayout,
 } from '../../components';
+import { projectTypeUiOf } from '../../components/projectTypes';
 import {
   ProjectSidebar,
   SidebarTab,
@@ -152,9 +152,15 @@ const ProjectDetails: React.FC = () => {
       ? theme.palette.primary.main
       : theme.palette.text.secondary;
 
+  // The project type decides the top bar actions (dbt: the dbt / Rosetta
+  // split button; Analytics: none)
+  const { TopMenuActions } = projectTypeUiOf(project);
+
   return (
     <AppLayout
-      topMenuActions={<ProjectDbtSplitButton project={project} />}
+      topMenuActions={
+        TopMenuActions ? <TopMenuActions project={project} /> : undefined
+      }
       panelHeaderLeft={
         <PanelHeaderDropdown
           data-testid="project-select"
