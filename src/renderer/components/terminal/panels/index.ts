@@ -7,6 +7,7 @@ import { queryResultsPanel } from './QueryResultsPanel';
 import { runHistoryPanel } from './RunHistoryPanel';
 import { cloudLogsPanel } from './CloudLogsPanel';
 import { runnerLogsPanel } from './RunnerLogsPanel';
+import { chartsServerPanel } from '../../dbtCharts/ChartsServerPanel';
 
 // Registration order is tab order. Adding a bottom panel = one module
 // exporting a TerminalPanelDefinition + one line here.
@@ -18,6 +19,7 @@ registerTerminalPanel(queryResultsPanel);
 registerTerminalPanel(runHistoryPanel);
 registerTerminalPanel(cloudLogsPanel);
 registerTerminalPanel(runnerLogsPanel);
+registerTerminalPanel(chartsServerPanel);
 
 export {
   registerTerminalPanel,
