@@ -42,6 +42,37 @@ export class ProjectSelectionPage extends BasePage {
   }
 
   /**
+   * Open the New Project wizard and go to its Details step (name,
+   * connection) for the given project type
+   */
+  async openNewProjectDetails(
+    type: 'dbt' | 'analytics' = 'dbt',
+  ): Promise<void> {
+    await this.clickCreateProject();
+    await this.page.locator(`[data-testid="project-type-${type}"]`).click();
+    await this.page.locator('[data-testid="project-wizard-next-btn"]').click();
+  }
+
+  /**
+   * Create a project through the New Project wizard:
+   * Type → Details (name) → Include (defaults) → Create
+   */
+  async createProject(
+    projectName: string,
+    type: 'dbt' | 'analytics' = 'dbt',
+  ): Promise<void> {
+    await this.openNewProjectDetails(type);
+    await this.page
+      .locator('[data-testid="project-name-input"]')
+      .fill(projectName);
+    await this.page.locator('[data-testid="project-wizard-next-btn"]').click();
+
+    await this.page
+      .locator('[data-testid="project-create-confirm-btn"]')
+      .click();
+  }
+
+  /**
    * Click the Import Project button
    */
   async clickImportProject(): Promise<void> {
@@ -112,17 +143,12 @@ export class ProjectSelectionPage extends BasePage {
    * Create and select a project in one go
    * Useful for setting up test state
    */
-  async createAndSelectProject(projectName: string): Promise<void> {
+  async createAndSelectProject(
+    projectName: string,
+    type: 'dbt' | 'analytics' = 'dbt',
+  ): Promise<void> {
     await this.expectToBeVisible();
-    await this.clickCreateProject();
-
-    const nameInput = this.page.locator('[data-testid="project-name-input"]');
-    await nameInput.fill(projectName);
-
-    const createBtn = this.page.locator(
-      '[data-testid="project-create-confirm-btn"]',
-    );
-    await createBtn.click();
+    await this.createProject(projectName, type);
 
     // Wait for navigation or sidebar to appear indicating success
     await this.page.waitForSelector('[data-testid="sidebar"]', {

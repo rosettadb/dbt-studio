@@ -34,11 +34,11 @@ const clickNodeAction = async (
 
 /**
  * The tree does not reliably re-read the directory after a create, so use
- * the explorer's refresh control (a tooltip-labelled icon) before asserting
- * on new nodes.
+ * the refresh icon on the project folder row (always shown, found by its
+ * title) before asserting on new nodes.
  */
 const refreshTree = async (window: Page) => {
-  await window.getByLabel('Refresh directories').click();
+  await window.getByTitle('Refresh directories', { exact: true }).click();
 };
 
 /** Expand a folder row if it is collapsed (clicking a label toggles it) */

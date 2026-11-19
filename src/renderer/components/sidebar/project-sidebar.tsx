@@ -25,6 +25,8 @@ import {
   connectionLabel,
   connectionAccentColor,
 } from '../../../connections/registry.renderer';
+import { projectTypeOf } from '../../../shared/projectTypes';
+import { duckLakeInstanceIdOf } from '../../../shared/duckLakeInstanceIds';
 import { ReactComponent as RouteIcon } from '../../assets/icons/lucide/route.svg';
 import { FileTreeViewer } from '../index';
 import { FileTreeContainer } from '../../screens/projectDetails/styles';
@@ -40,6 +42,7 @@ import {
   useGitIsInitialized,
   useListPipelines,
   useUpdateProject,
+  useDuckLakeInstances,
 } from '../../controllers';
 import {
   AddConnectionModal,
@@ -80,6 +83,13 @@ const ConnectionsTab: React.FC<{ project: Project }> = ({ project }) => {
   const navigate = useNavigate();
   const { data: connection } = useGetConnectionById(project.connectionId);
   const { data: connections = [] } = useGetConnections();
+  // An Analytics project can be linked to a DuckLake instance itself
+  // (`ducklake-<id>`), which has no saved connection (plan 95)
+  const { data: duckLakeInstances = [] } = useDuckLakeInstances();
+  const duckLakeInstanceId = duckLakeInstanceIdOf(project.connectionId);
+  const duckLakeInstance = duckLakeInstanceId
+    ? duckLakeInstances.find((i) => i.id === duckLakeInstanceId)
+    : undefined;
   const { refetch: refetchProject } = useGetSelectedProject();
   const { mutate: updateProject } = useUpdateProject();
   const [isAddOpen, setIsAddOpen] = React.useState(false);
@@ -106,13 +116,15 @@ const ConnectionsTab: React.FC<{ project: Project }> = ({ project }) => {
           setIsRemoveOpen(false);
         }}
         connectionName={
-          connection?.connection?.name || (connection as any)?.name
+          connection?.connection?.name ||
+          (connection as any)?.name ||
+          duckLakeInstance?.name
         }
       />
     </>
   );
 
-  if (!connection) {
+  if (!connection && !duckLakeInstance) {
     return (
       <Box
         sx={{
@@ -149,8 +161,16 @@ const ConnectionsTab: React.FC<{ project: Project }> = ({ project }) => {
     );
   }
 
-  const connType = connection.connection?.type || (connection as any).type;
-  const connName = connection.connection?.name || (connection as any).name;
+  const connType = connection
+    ? connection.connection?.type || (connection as any).type
+    : 'ducklake';
+  const connName = connection
+    ? connection.connection?.name || (connection as any).name
+    : duckLakeInstance?.name;
+  // A linked DuckLake instance is edited on its DataLake page
+  const editPath = connection
+    ? `/app/edit-connection/${connection.id}`
+    : `/app/data-lake/duck-lake/instances/${duckLakeInstanceId}/edit`;
   const iconSrc = connectionIcon(connType);
   const chipBgColor = getConnectionTypeColor(connType);
   const chipTextColor = theme.palette.getContrastText(chipBgColor);
@@ -230,7 +250,7 @@ const ConnectionsTab: React.FC<{ project: Project }> = ({ project }) => {
               size="small"
               variant="outlined"
               startIcon={<Edit sx={{ fontSize: 14 }} />}
-              onClick={() => navigate(`/app/edit-connection/${connection.id}`)}
+              onClick={() => navigate(editPath)}
               sx={{ flex: 1, fontSize: '0.7rem', py: 0.5 }}
             >
               Edit
@@ -360,36 +380,38 @@ const ExplorerTab: React.FC<{
         )}
       </Box>
 
-      {/* Create Pipeline button — always visible */}
-      <Box
-        sx={{
-          px: 1,
-          pb: 1,
-          pt: 0.75,
-          flexShrink: 0,
-          borderTop: `1px solid ${theme.palette.divider}`,
-        }}
-      >
-        <Tooltip
-          title="Create a pipeline to run jobs on the cloud"
-          placement="top"
-          arrow
+      {/* Create Pipeline button — shown for every project type with pipelines */}
+      {projectTypeOf(project).capabilities.pipelines && (
+        <Box
+          sx={{
+            px: 1,
+            pb: 1,
+            pt: 0.75,
+            flexShrink: 0,
+            borderTop: `1px solid ${theme.palette.divider}`,
+          }}
         >
-          <Button
-            fullWidth
-            variant="contained"
-            size="small"
-            startIcon={<RouteIcon width={16} height={16} />}
-            onClick={() => setCreatePipelineOpen(true)}
-            sx={{
-              fontSize: '0.72rem',
-              py: 0.75,
-            }}
+          <Tooltip
+            title="Create a pipeline to run jobs on the cloud"
+            placement="top"
+            arrow
           >
-            Create Pipeline
-          </Button>
-        </Tooltip>
-      </Box>
+            <Button
+              fullWidth
+              variant="contained"
+              size="small"
+              startIcon={<RouteIcon width={16} height={16} />}
+              onClick={() => setCreatePipelineOpen(true)}
+              sx={{
+                fontSize: '0.72rem',
+                py: 0.75,
+              }}
+            >
+              Create Pipeline
+            </Button>
+          </Tooltip>
+        </Box>
+      )}
 
       <CreatePipelineModal
         isOpen={createPipelineOpen}
@@ -425,7 +447,10 @@ const ExplorerTab: React.FC<{
 
 // Source Control Tab Component — git view with a "synchronize" action that
 // reconciles the git status, the open tabs and the file tree.
-const SourceControlTab: React.FC<{ project: Project }> = ({ project }) => {
+const SourceControlTab: React.FC<{ project: Project; active: boolean }> = ({
+  project,
+  active,
+}) => {
   const {
     tabs,
     closeTabByPath,
@@ -443,6 +468,10 @@ const SourceControlTab: React.FC<{ project: Project }> = ({ project }) => {
   );
   const [isSynchronizing, setIsSynchronizing] = React.useState(false);
 
+  React.useEffect(() => {
+    if (active && isInitialized) updateStatuses();
+  }, [active, isInitialized, updateStatuses]);
+
   const handleSynchronizeAll = React.useCallback(async () => {
     setIsSynchronizing(true);
     try {
@@ -454,10 +483,13 @@ const SourceControlTab: React.FC<{ project: Project }> = ({ project }) => {
 
       tabs.forEach((tab) => {
         const fileStatus = currentStatuses.find((s) => s.path === tab.path);
-        if (!fileStatus) {
+        if (
+          fileStatus?.status === 'deleted' ||
+          fileStatus?.status === 'staged-deleted'
+        ) {
           closeTabByPath(tab.path);
           markTabSavedByPath(tab.path);
-        } else if (fileStatus.status === 'modified' && !tab.isModified) {
+        } else if (fileStatus?.status === 'modified' && !tab.isModified) {
           refreshTabContentByPath(tab.path);
         }
       });
@@ -516,7 +548,16 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
             openCreatePipeline={openCreatePipeline}
           />
         )}
-        {activeTab === 'scm' && <SourceControlTab project={project} />}
+        {/* Keep the existing Git handlers mounted across project sidebar tabs so
+            their palette commands remain available throughout DBT Studio. */}
+        <Box
+          sx={{
+            display: activeTab === 'scm' ? 'block' : 'none',
+            height: '100%',
+          }}
+        >
+          <SourceControlTab project={project} active={activeTab === 'scm'} />
+        </Box>
         {activeTab === 'connections' && <ConnectionsTab project={project} />}
       </Box>
     </Box>

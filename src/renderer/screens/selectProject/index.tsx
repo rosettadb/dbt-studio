@@ -56,7 +56,18 @@ import { ViewToggle } from '../../components/cloudExplorer/ViewToggle';
 import { DatabaseCylinderIcon } from '../../components/icon/DatabaseCylinderIcon';
 import { icons } from '../../../../assets';
 import { AppLayout } from '../../layouts';
-import { Project, canUseAsDbtConnection } from '../../../types/backend';
+import { Project } from '../../../types/backend';
+import {
+  DEFAULT_PROJECT_TYPE,
+  defaultTemplateItems,
+  projectTypeOf,
+} from '../../../shared/projectTypes';
+import type { ProjectType } from '../../../types/projectTypes';
+import { projectTypeUiOf } from '../../components/projectTypes';
+import {
+  duckLakeInstanceConnectionId,
+  duckLakeInstanceIdOf,
+} from '../../../shared/duckLakeInstanceIds';
 import {
   ConnectionIcon,
   EmptyStateContainer,
@@ -70,7 +81,6 @@ import {
   ProjectDetailLine,
   ProjectGridCard,
   ProjectGridCardHeader,
-  ProjectIcon,
   ProjectInfo,
   ProjectMuiIcon,
   ProjectPath,
@@ -92,7 +102,8 @@ const SelectProject: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   // Set by the Dashboard Pipeline card: the project picked or created here
-  // opens with the Create Pipeline dialog.
+  // opens with the Create Pipeline dialog. The Dashboard New Project button
+  // sets only startNewProject, to open the new project form.
   const [pipelineNavigationState] = React.useState(() => {
     const state = location.state as {
       forPipeline?: boolean;
@@ -109,8 +120,9 @@ const SelectProject: React.FC = () => {
     : undefined;
 
   // Clear the nav state so a back-navigation doesn't re-enter pipeline mode
+  // or reopen the new project form
   React.useEffect(() => {
-    if (forPipeline) {
+    if (forPipeline || pipelineNavigationState.startNewProject) {
       navigate(location.pathname, { replace: true, state: {} });
     }
   }, []);
@@ -144,6 +156,11 @@ const SelectProject: React.FC = () => {
     name: '',
     createTemplateFolders: true,
   });
+  const [newProjectType, setNewProjectType] =
+    React.useState<ProjectType>(DEFAULT_PROJECT_TYPE);
+  const [newProjectInclude, setNewProjectInclude] = React.useState<string[]>(
+    () => defaultTemplateItems(DEFAULT_PROJECT_TYPE),
+  );
   const [connectionType, setConnectionType] = React.useState<
     'standard' | 'datalake'
   >('standard');
@@ -192,32 +209,35 @@ const SelectProject: React.FC = () => {
 
   const { mutate: updateProject } = useUpdateProject();
 
-  const getConnectionIcon = (project: Project) => {
-    const connType = project?.connection?.type;
-
-    if (!connType) {
-      return null;
-    }
-
-    return connectionIcon(connType);
+  // The project's type (dbt, Analytics) starts the title; its name shows on
+  // hover. The connection's own logo is on the connection chip instead.
+  const renderProjectIcon = (project: Project) => {
+    const { Icon: TypeIcon } = projectTypeUiOf(project);
+    return (
+      <Tooltip title={projectTypeOf(project).title}>
+        <ProjectMuiIcon data-testid={`project-type-icon-${project.name}`}>
+          <TypeIcon size={22} />
+        </ProjectMuiIcon>
+      </Tooltip>
+    );
   };
 
-  const renderProjectIcon = (project: Project) => {
-    const projectIconSrc = getConnectionIcon(project);
-
-    if (projectIconSrc) {
+  // The connection's logo (DuckDB, Postgres...) on its chip; the database
+  // cylinder when the type has no logo or there is no connection
+  const renderConnectionChipIcon = (connType?: string) => {
+    const src = connType ? connectionIcon(connType) : undefined;
+    if (src) {
       return (
-        <ProjectIcon
-          src={projectIconSrc}
-          alt={project?.dbtConnection?.type || 'database'}
+        <Box
+          component="img"
+          src={src}
+          alt={connType}
+          data-testid="connection-chip-logo"
+          sx={{ width: 16, height: 16, mr: 0.75, objectFit: 'contain' }}
         />
       );
     }
-    return (
-      <ProjectMuiIcon>
-        <DatabaseIcon />
-      </ProjectMuiIcon>
-    );
+    return <DatabaseCylinderIcon sx={{ fontSize: 16, mr: 0.75 }} />;
   };
 
   const renderConnectionIcon = (connType: string) => {
@@ -333,7 +353,15 @@ const SelectProject: React.FC = () => {
           (dl) => dl.id === selectedConnection,
         );
 
-        if (datalakeInstance) {
+        if (
+          datalakeInstance &&
+          projectTypeOf({ type: newProjectType }).capabilities
+            .datalakeAsInstance
+        ) {
+          // Linked to the instance itself, as the SQL Editor and Notebooks
+          // query it; no saved DuckLake connection (that's for dbt)
+          connectionId = duckLakeInstanceConnectionId(datalakeInstance.id);
+        } else if (datalakeInstance) {
           const sanitizedName =
             `${datalakeInstance.name}_${newProject.name}`.replace(
               /[^a-zA-Z0-9_]/g,
@@ -358,7 +386,9 @@ const SelectProject: React.FC = () => {
       const project = await projectsServices.addProject({
         name: projectPath,
         connectionId,
-        createTemplateFolders: newProject.createTemplateFolders,
+        createTemplateFolders: newProjectInclude.length > 0,
+        type: newProjectType,
+        include: newProjectInclude,
       });
 
       await selectProject({ projectId: project.id });
@@ -366,6 +396,8 @@ const SelectProject: React.FC = () => {
       toast.success(`Project ${project.name} created successfully!`);
       setIsAddingProject(false);
       setNewProject({ name: '', createTemplateFolders: true });
+      setNewProjectType(DEFAULT_PROJECT_TYPE);
+      setNewProjectInclude(defaultTemplateItems(DEFAULT_PROJECT_TYPE));
       setSelectedConnection('');
       setConnectionType('standard');
       navigate('/app/dbt-project', { state: projectScreenState });
@@ -413,6 +445,62 @@ const SelectProject: React.FC = () => {
     }
   };
 
+  const handleImportProject = async () => {
+    try {
+      const project = await projectsServices.addProjectFromFolder();
+      if (project && project.id) {
+        await selectProject({
+          projectId: project.id,
+        });
+        setIsAddingProject(false);
+        setNewProject({
+          name: '',
+          createTemplateFolders: true,
+        });
+
+        // Show different success messages based on whether it was extracted
+        if (project.isExtracted) {
+          toast.success(
+            `Project ${project.name} imported from compressed file successfully!`,
+          );
+        } else {
+          toast.success(`Project ${project.name} loaded successfully!`);
+        }
+
+        navigate('/app/dbt-project', {
+          state: projectScreenState,
+        });
+      } else {
+        toast.error('Failed to import project.');
+      }
+    } catch (error: any) {
+      if (
+        error instanceof Error &&
+        error.message === 'No file or folder selected'
+      ) {
+        return;
+      }
+
+      // Show more specific error messages
+      if (error.message.includes('compressed')) {
+        toast.error(
+          'Failed to extract compressed file. Please ensure it contains a valid dbt project.',
+        );
+      } else if (error.message.includes('validation')) {
+        toast.error(
+          'Invalid dbt project structure. Please ensure the folder contains a valid dbt_project.yml file.',
+        );
+      } else if (
+        error.message.includes('already exists') ||
+        error.message.includes('already imported')
+      ) {
+        toast.error(error.message);
+      } else {
+        toast.error('Failed to import project. Please try again.');
+      }
+    }
+  };
+
   const handleOpenProject = async (project: Project) => {
     await selectProject({ projectId: project.id });
     navigate('/app/dbt-project', { state: projectScreenState });
@@ -427,15 +515,32 @@ const SelectProject: React.FC = () => {
       .filter(Boolean)
       .join(' · ');
 
-  const renderConnectionChip = (project: Project) => {
-    // Only show badge if connection name exists
+  // The project's connection: a saved connection, or for an Analytics
+  // project possibly a DuckLake instance linked directly (`ducklake-<id>`)
+  const linkedConnectionOf = (
+    project?: Project,
+  ): { name: string; type: string } | undefined => {
+    if (!project) return undefined;
     if (project.connection?.name) {
+      return { name: project.connection.name, type: project.connection.type };
+    }
+    const instanceId = duckLakeInstanceIdOf(project.connectionId);
+    const instance = instanceId
+      ? datalakeInstances.find((i) => i.id === instanceId)
+      : undefined;
+    return instance ? { name: instance.name, type: 'ducklake' } : undefined;
+  };
+
+  const renderConnectionChip = (project: Project) => {
+    const linked = linkedConnectionOf(project);
+    // Only show badge if connection name exists
+    if (linked) {
       return (
         <Chip
           label={
             <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <DatabaseCylinderIcon sx={{ fontSize: 12, mr: 0.5 }} />
-              {project.connection.name}
+              {renderConnectionChipIcon(linked.type)}
+              {linked.name}
             </Box>
           }
           size="small"
@@ -457,7 +562,7 @@ const SelectProject: React.FC = () => {
       <Chip
         label={
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <DatabaseCylinderIcon sx={{ fontSize: 12, mr: 0.5 }} />
+            <DatabaseCylinderIcon sx={{ fontSize: 16, mr: 0.75 }} />
             No connection
           </Box>
         }
@@ -634,8 +739,9 @@ const SelectProject: React.FC = () => {
             horizontal: 'right',
           }}
         >
-          {!projects.find((p) => p.id === activeProjectId)?.connection
-            ?.name && (
+          {!linkedConnectionOf(
+            projects.find((p) => p.id === activeProjectId),
+          ) && (
             <MenuItem
               onClick={() => {
                 const project = projects.find((p) => p.id === activeProjectId);
@@ -651,7 +757,9 @@ const SelectProject: React.FC = () => {
               <ListItemText>Add Connection</ListItemText>
             </MenuItem>
           )}
-          {projects.find((p) => p.id === activeProjectId)?.connection?.name && (
+          {linkedConnectionOf(
+            projects.find((p) => p.id === activeProjectId),
+          ) && (
             <MenuItem
               onClick={() => {
                 const project = projects.find((p) => p.id === activeProjectId);
@@ -703,14 +811,17 @@ const SelectProject: React.FC = () => {
             setDefaultProjectPath={setDefaultProjectPath}
             newProject={newProject}
             setNewProject={setNewProject}
+            projectType={newProjectType}
+            setProjectType={setNewProjectType}
+            include={newProjectInclude}
+            setInclude={setNewProjectInclude}
+            validateName={validateProjectName}
             selectedConnection={selectedConnection}
             setSelectedConnection={setSelectedConnection}
             connectionType={connectionType}
             setConnectionType={setConnectionType}
             isLoadingConnections={isLoadingConnections}
-            connections={connections.filter((connection) =>
-              canUseAsDbtConnection(connection.connection.type),
-            )}
+            connections={connections}
             datalakeInstances={datalakeInstances}
             isLoadingDatalakes={isLoadingDatalakes}
             navigate={navigate}
@@ -793,66 +904,7 @@ const SelectProject: React.FC = () => {
                       variant="contained"
                       color="primary"
                       data-testid="import-project-btn"
-                      onClick={async () => {
-                        try {
-                          const project =
-                            await projectsServices.addProjectFromFolder();
-                          if (project && project.id) {
-                            await selectProject({
-                              projectId: project.id,
-                            });
-                            setIsAddingProject(false);
-                            setNewProject({
-                              name: '',
-                              createTemplateFolders: true,
-                            });
-
-                            // Show different success messages based on whether it was extracted
-                            if (project.isExtracted) {
-                              toast.success(
-                                `Project ${project.name} imported from compressed file successfully!`,
-                              );
-                            } else {
-                              toast.success(
-                                `Project ${project.name} loaded successfully!`,
-                              );
-                            }
-
-                            navigate('/app/dbt-project', {
-                              state: projectScreenState,
-                            });
-                          } else {
-                            toast.error('Failed to import project.');
-                          }
-                        } catch (error: any) {
-                          if (
-                            error instanceof Error &&
-                            error.message === 'No file or folder selected'
-                          ) {
-                            return;
-                          }
-
-                          // Show more specific error messages
-                          if (error.message.includes('compressed')) {
-                            toast.error(
-                              'Failed to extract compressed file. Please ensure it contains a valid dbt project.',
-                            );
-                          } else if (error.message.includes('validation')) {
-                            toast.error(
-                              'Invalid dbt project structure. Please ensure the folder contains a valid dbt_project.yml file.',
-                            );
-                          } else if (
-                            error.message.includes('already exists') ||
-                            error.message.includes('already imported')
-                          ) {
-                            toast.error(error.message);
-                          } else {
-                            toast.error(
-                              'Failed to import project. Please try again.',
-                            );
-                          }
-                        }
-                      }}
+                      onClick={() => handleImportProject()}
                     >
                       <DriveFolderUploadIcon
                         sx={{ marginRight: 1 }}
@@ -972,7 +1024,9 @@ const SelectProject: React.FC = () => {
           onClose={handleConnectionModalClose}
           project={selectedProjectForConnection}
           connections={connections.filter((connection) =>
-            canUseAsDbtConnection(connection.connection.type),
+            projectTypeOf(selectedProjectForConnection).acceptsConnection(
+              connection.connection.type,
+            ),
           )}
           onSuccess={() => {
             // Projects will be automatically refreshed via React Query

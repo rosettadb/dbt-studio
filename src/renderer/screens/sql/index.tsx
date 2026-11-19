@@ -14,9 +14,6 @@ import {
   CircularProgress,
   useTheme,
   Typography,
-  FormControl,
-  Select,
-  MenuItem,
   TextField,
   InputAdornment,
   IconButton,
@@ -30,16 +27,13 @@ import {
   Stop,
   TableChart,
   Refresh,
-  Add,
   FilterList,
-  Link as LinkIcon,
   Code as CodeTabIcon,
   InsertChart,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { isDuckLakeType } from '../../../connections/ducklake/ducklake.shared';
-import { connectionIcon } from '../../../connections/registry.renderer';
 import { connectorsServices, DuckLakeService } from '../../services';
 import { QueryResultStore } from './queryResultStore';
 import { registerQueryResultBridge } from '../../services/agentEditorBridge.service';
@@ -49,7 +43,12 @@ import { QueryHistoryType } from '../../../types/frontend';
 import { AppLayout } from '../../layouts';
 import { utils } from '../../helpers';
 import { SchemaViewContainer, SchemaViewGrid } from './styles';
-import { ErrorMessage, SqlEditor } from '../../components';
+import {
+  buildConnectionDropdownItems,
+  ErrorMessage,
+  PanelHeaderDropdown,
+  SqlEditor,
+} from '../../components';
 import type { SqlEditorHandle } from '../../components/sqlEditor';
 import { useSchemaTreeContextMenu } from '../../components/schemaTreeViewer/useSchemaTreeContextMenu';
 import type { SchemaTreeNodeRef } from '../../components/schemaTreeViewer/types';
@@ -77,9 +76,6 @@ import {
 import { SchemaTreeViewerWithSchema } from './SchemaTreeViewerWithSchema';
 import { SavedQueriesList } from '../../components/sqlEditor/SavedQueriesList';
 import { SqlEditorActions } from '../../components/sqlEditor/SqlEditorActions';
-import connectionIcons, {
-  defaultIcon,
-} from '../../../../assets/connectionIcons';
 import { AppContext } from '../../context';
 import {
   generateDuckLakeCompletions,
@@ -845,7 +841,51 @@ const Sql = () => {
   return (
     <AppLayout
       data-testid="sql-editor-screen"
-      panelTitle="SQL Editor"
+      panelHeaderLeft={
+        <PanelHeaderDropdown
+          data-testid="sql-connection-select"
+          items={buildConnectionDropdownItems(
+            connections,
+            duckLakeInstances,
+            projects,
+            selectedProject?.id,
+          )}
+          value={activeTab?.connectionId}
+          onSelect={(value) => {
+            if (value.startsWith('ducklake-')) {
+              const instance = duckLakeInstances.find(
+                (inst) => `ducklake-${inst.id}` === value,
+              );
+              if (instance) {
+                handleConnectionSelect({
+                  id: value,
+                  name: instance.name,
+                  type: 'ducklake',
+                });
+              }
+              return;
+            }
+            const conn = connections.find((c) => c.id === value);
+            if (conn) {
+              handleConnectionSelect({
+                id: conn.id,
+                name: conn.connection.name,
+                type: conn.connection.type,
+              });
+            }
+          }}
+          // A restored DuckLake tab keeps its saved name until the instance
+          // list has loaded
+          placeholder={
+            (isDuckLakeConnection && activeConnectionDisplayName) ||
+            'Select Connection'
+          }
+          allLabel="All Connections"
+          onAll={() => navigate('/app/connections')}
+          addLabel="Add connection"
+          onAdd={() => navigate('/app/add-connection')}
+        />
+      }
       sidebarContent={
         <Box
           sx={{
@@ -855,259 +895,6 @@ const Sql = () => {
             bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
           }}
         >
-          <Box
-            sx={{
-              height: 40,
-              px: '8px',
-              display: 'flex',
-              gap: '4px',
-              alignItems: 'center',
-              bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
-              borderBottom: `1px solid ${theme.palette.divider}`,
-              boxSizing: 'border-box',
-            }}
-          >
-            <FormControl fullWidth size="small">
-              <Select
-                data-testid="sql-connection-select"
-                value={activeTab?.connectionId || ''}
-                onChange={(e) => {
-                  const conn = connections.find((c) => c.id === e.target.value);
-                  if (conn) {
-                    handleConnectionSelect({
-                      id: conn.id,
-                      name: conn.connection.name,
-                      type: conn.connection.type,
-                    });
-                  }
-                }}
-                displayEmpty
-                renderValue={(selected) => {
-                  if (!selected) return 'Select Connection';
-
-                  // Check if it's a DuckLake instance
-                  if (selected.startsWith('ducklake-')) {
-                    const instanceId = selected.replace('ducklake-', '');
-                    const instance = duckLakeInstances.find(
-                      (inst) => inst.id === instanceId,
-                    );
-                    if (!instance) {
-                      return activeTab?.connectionName || 'Select Connection';
-                    }
-
-                    return (
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 1,
-                          width: '100%',
-                        }}
-                      >
-                        <img
-                          src={connectionIcons.images.ducklake || defaultIcon}
-                          alt=""
-                          style={{
-                            width: 14,
-                            height: 14,
-                            objectFit: 'contain',
-                          }}
-                        />
-                        <span
-                          style={{
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            flex: 1,
-                          }}
-                        >
-                          {instance.name}
-                        </span>
-                      </Box>
-                    );
-                  }
-
-                  // Handle regular database connections
-                  const conn = connections.find((c) => c.id === selected);
-                  if (!conn) return 'Select Connection';
-                  const icon =
-                    connectionIcon(conn.connection.type) || defaultIcon;
-                  const linkedProject = projects?.find(
-                    (p) => p.connectionId === conn.id,
-                  );
-                  return (
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1,
-                        width: '100%',
-                      }}
-                    >
-                      <img
-                        src={icon}
-                        alt=""
-                        style={{ width: 14, height: 14, objectFit: 'contain' }}
-                      />
-                      <span
-                        style={{
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          flex: 1,
-                        }}
-                      >
-                        {conn.connection.name}
-                      </span>
-                      {linkedProject && (
-                        <Tooltip title={`Project: ${linkedProject.name}`}>
-                          <LinkIcon
-                            sx={{
-                              ml: 'auto',
-                              fontSize: 16,
-                              color:
-                                linkedProject.id === selectedProject?.id
-                                  ? 'success.main'
-                                  : 'text.disabled',
-                              mr: 2,
-                              transform: 'rotate(-45deg)',
-                            }}
-                          />
-                        </Tooltip>
-                      )}
-                    </Box>
-                  );
-                }}
-                sx={{
-                  height: 28,
-                  bgcolor:
-                    theme.palette.mode === 'dark' ? '#2d2d2d' : '#e0e0e0',
-                  '& .MuiSelect-select': {
-                    py: 0,
-                    px: 1,
-                    fontSize: '0.8rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                  },
-                  '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
-                }}
-              >
-                <MenuItem value="" disabled sx={{ fontSize: '0.8rem' }}>
-                  Select Connection
-                </MenuItem>
-                {/* Database Connections */}
-                {connections.length > 0 && (
-                  <MenuItem disabled sx={{ fontSize: '0.75rem', opacity: 0.6 }}>
-                    <strong>Database Connections</strong>
-                  </MenuItem>
-                )}
-                {connections.map((conn) => {
-                  const linkedProject = projects?.find(
-                    (p) => p.connectionId === conn.id,
-                  );
-                  return (
-                    <MenuItem
-                      key={conn.id}
-                      value={conn.id}
-                      sx={{
-                        fontSize: '0.8rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1,
-                        justifyContent: 'space-between',
-                      }}
-                    >
-                      <Box
-                        sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
-                      >
-                        <img
-                          src={
-                            connectionIcon(conn.connection.type) || defaultIcon
-                          }
-                          alt=""
-                          style={{
-                            width: 14,
-                            height: 14,
-                            objectFit: 'contain',
-                          }}
-                        />
-                        {conn.connection.name}
-                      </Box>
-                      {linkedProject && (
-                        <Tooltip title={`Project: ${linkedProject.name}`}>
-                          <LinkIcon
-                            sx={{
-                              fontSize: 16,
-                              color:
-                                linkedProject.id === selectedProject?.id
-                                  ? 'success.main'
-                                  : 'text.disabled',
-                              transform: 'rotate(-45deg)',
-                            }}
-                          />
-                        </Tooltip>
-                      )}
-                    </MenuItem>
-                  );
-                })}
-                {/* DuckLake Instances */}
-                {duckLakeInstances.length > 0 && (
-                  <MenuItem
-                    disabled
-                    sx={{ fontSize: '0.75rem', opacity: 0.6, mt: 1 }}
-                  >
-                    <strong>DuckLake Instances</strong>
-                  </MenuItem>
-                )}
-                {duckLakeInstances.map((instance) => (
-                  <MenuItem
-                    key={`ducklake-${instance.id}`}
-                    value={`ducklake-${instance.id}`}
-                    onClick={() => {
-                      handleConnectionSelect({
-                        id: `ducklake-${instance.id}`,
-                        name: instance.name,
-                        type: 'ducklake',
-                      });
-                    }}
-                    sx={{
-                      fontSize: '0.8rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 1,
-                    }}
-                  >
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <img
-                        src={connectionIcons.images.ducklake || defaultIcon}
-                        alt=""
-                        style={{
-                          width: 14,
-                          height: 14,
-                          objectFit: 'contain',
-                        }}
-                      />
-                      {instance.name}
-                    </Box>
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-
-            <IconButton
-              size="small"
-              onClick={() => navigate('/app/add-connection')}
-              sx={{
-                width: 28,
-                height: 28,
-                bgcolor: 'transparent',
-                '&:hover': { bgcolor: 'rgba(0,0,0,0.05)' },
-              }}
-            >
-              <Add sx={{ fontSize: 18 }} />
-            </IconButton>
-          </Box>
-
           <Box
             sx={{
               borderBottom: 1,

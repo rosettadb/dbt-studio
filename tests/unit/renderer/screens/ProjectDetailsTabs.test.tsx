@@ -10,6 +10,7 @@ let mockRevealedFolderPath: string | null = null;
 
 jest.mock('../../../../src/renderer/components', () => ({
   Loader: () => null,
+  PanelHeaderDropdown: () => null,
   ProjectDbtSplitButton: () => null,
   TerminalLayout: ({ children }: { children: React.ReactNode }) => children,
 }));
@@ -42,6 +43,8 @@ jest.mock('../../../../src/renderer/controllers', () => ({
   }),
   useGitIsInitialized: () => ({ data: true }),
   useGetFileStatuses: () => mockUseGetFileStatuses(),
+  useGetProjects: () => ({ data: [] }),
+  useSelectProject: () => ({ mutateAsync: jest.fn() }),
 }));
 
 jest.mock('../../../../src/renderer/context/TabsProvider', () => ({

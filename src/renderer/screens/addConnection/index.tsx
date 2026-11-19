@@ -40,12 +40,6 @@ const ConnectionCardsContainer = styled(Box)`
   margin: 0 auto;
 `;
 
-const BackButtonContainer = styled(Box)`
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 1rem;
-`;
-
 type ItemType = {
   id: SupportedConnectionTypes;
   name: string;
@@ -113,42 +107,43 @@ const AddConnection: React.FC = () => {
       ) : (
         <ConnectionContainer>
           <Box>
-            {!projectId && (
-              <BackButtonContainer>
-                <Button
-                  variant="outlined"
-                  onClick={handleBack}
-                  startIcon={<ArrowBackIcon />}
-                >
-                  Back
-                </Button>
-              </BackButtonContainer>
-            )}
-
-            <Typography variant="h6" component="h6" gutterBottom>
-              Create New Connection
-            </Typography>
-            <Typography variant="body2" color="text.secondary" gutterBottom>
-              Select a database type to create a new connection
-            </Typography>
-
-            <Stack
-              direction="row"
-              alignItems="center"
-              justifyContent="flex-end"
-              sx={{ mb: 1 }}
+            <Box
+              display="flex"
+              alignItems="flex-start"
+              justifyContent="space-between"
+              mb={1}
             >
-              <FormControlLabel
-                control={
-                  <Switch
-                    size="small"
-                    checked={onlyDbtCompatible}
-                    onChange={(e) => setOnlyDbtCompatible(e.target.checked)}
-                  />
-                }
-                label="Only show dbt-compatible connections"
-              />
-            </Stack>
+              <Box>
+                <Typography variant="h6" component="h6" gutterBottom>
+                  Create New Connection
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Select a database type to create a new connection
+                </Typography>
+              </Box>
+              <Stack alignItems="flex-end">
+                {!projectId && (
+                  <Button
+                    variant="outlined"
+                    onClick={handleBack}
+                    startIcon={<ArrowBackIcon />}
+                  >
+                    Back
+                  </Button>
+                )}
+                <FormControlLabel
+                  sx={{ mr: 0 }}
+                  control={
+                    <Switch
+                      size="small"
+                      checked={onlyDbtCompatible}
+                      onChange={(e) => setOnlyDbtCompatible(e.target.checked)}
+                    />
+                  }
+                  label="Only show dbt-compatible connections"
+                />
+              </Stack>
+            </Box>
 
             <ConnectionCardsContainer>
               {visibleItems.map((item, index) => (

@@ -6,6 +6,7 @@ import type {
 } from '../connections/registry.shared';
 import { CloudConnection, RecentItem } from './frontend';
 import type { IcebergInstanceConfig } from './iceberg';
+import type { ProjectType } from './projectTypes';
 
 export type {
   ConnectionInput,
@@ -66,6 +67,8 @@ export type Project = {
   name: string;
   path: string;
   createdAt: string;
+  /** Missing on projects saved before project types existed: those are dbt. */
+  type?: ProjectType;
   connectionId?: string;
   rosettaConnection?: RosettaConnection;
   dbtConnection?: DBTConnection;
@@ -223,22 +226,6 @@ export type DataBase = {
 
 // Rosetta Version Management Types
 export type RosettaVersionInfo = {
-  currentVersion: string | null;
-  currentPath: string | null;
-  availableVersions: {
-    version: string;
-    releaseDate: string;
-    isPrerelease: boolean;
-    downloadUrl: string;
-    isNewer: boolean;
-    isOlder: boolean;
-    releaseNotes?: string;
-  }[];
-  latestStable: string;
-  latestPrerelease?: string;
-};
-
-export type RunnerVersionInfo = {
   currentVersion: string | null;
   currentPath: string | null;
   availableVersions: {

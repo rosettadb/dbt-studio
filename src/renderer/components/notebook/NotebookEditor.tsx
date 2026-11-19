@@ -55,6 +55,7 @@ import useSecureStorage from '../../hooks/useSecureStorage';
 import { resolveConnectionCredentials } from '../../utils/notebookConnectionTransfer';
 import { useConvertSqlNotebook } from '../../controllers/pythonNotebooks.controller';
 import { pythonNotebookToSummary } from './python/PythonNotebookEditor';
+import { usePaletteCommand } from '../commandPalette/commands';
 
 // Module-level singleton for SQL completion provider
 let sharedCompletionProvider: any = null;
@@ -291,6 +292,16 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     }
   }, [notebook, localCells, connectionId, notebookId, runCell]);
 
+  usePaletteCommand(
+    'notebook.sql.run-all',
+    'Notebook: Run all SQL cells',
+    handleRunAll,
+    !!notebook &&
+      localCells.length > 0 &&
+      !isRunningAll &&
+      executingCells.size === 0,
+  );
+
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -344,6 +355,19 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
       });
     },
     [notebook, connectionId, notebookId, updateNotebook, cancelPendingCellSave],
+  );
+
+  usePaletteCommand(
+    'notebook.sql.add-cell',
+    'Notebook: Add SQL cell',
+    () => handleAddCell('sql'),
+    !!notebook,
+  );
+  usePaletteCommand(
+    'notebook.sql.add-markdown',
+    'Notebook: Add Markdown cell',
+    () => handleAddCell('markdown'),
+    !!notebook,
   );
 
   const handleUpdateCell = useCallback(

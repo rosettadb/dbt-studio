@@ -3,7 +3,6 @@ import {
   FileDialogProperties,
   SettingsType,
   RosettaVersionInfo,
-  RunnerVersionInfo,
   RunnerPluginStatus,
   InstallResult,
   PythonInstallInfo,
@@ -184,25 +183,6 @@ export const installPythonVersion = async (
     version,
   );
   return data;
-};
-
-export const checkRunnerVersions = async (): Promise<RunnerVersionInfo> => {
-  const { data } = await client.get<RunnerVersionInfo>('version:runner:check');
-  return data;
-};
-
-export const installRunnerVersion = async (
-  version: string,
-): Promise<InstallResult> => {
-  const { data } = await client.post<string, InstallResult>(
-    'version:runner:install',
-    version,
-  );
-  return data;
-};
-
-export const uninstallRunnerVersion = async (): Promise<void> => {
-  await client.get<void>('version:runner:uninstall');
 };
 
 export const checkRunnerPluginDependencies = async (): Promise<
