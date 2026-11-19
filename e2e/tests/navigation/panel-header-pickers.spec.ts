@@ -120,7 +120,7 @@ seededTest.describe('dbt project picker', () => {
       await expect(
         window.locator('[data-testid="project-selection"]'),
       ).toBeVisible();
-      await expect(window.getByLabel('Project Name')).toBeVisible();
+      await expect(window.getByTestId('project-type-step')).toBeVisible();
     },
   );
 

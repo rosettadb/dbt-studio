@@ -107,7 +107,7 @@ test.describe('Home', () => {
 
     await window.locator('[data-tour="tour-open-project-btn"]').click();
 
-    await expect(window.getByTestId('project-name-input')).toBeVisible();
+    await expect(window.getByTestId('project-type-step')).toBeVisible();
   });
 
   test('fits the window without scrolling or flickering at every size', async ({
