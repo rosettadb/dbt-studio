@@ -292,7 +292,7 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
             <Taskbar>
               <TaskbarItem onClick={handleRestore}>
                 <Typography fontSize={13} sx={{ mr: 1 }} fontWeight="bold">
-                  Terminal
+                  Console
                 </Typography>
                 <TerminalIcon fontSize="small" />
                 {isRunning && (
