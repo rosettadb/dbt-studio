@@ -13,7 +13,7 @@
     "type": "git",
     "url": "git+https://github.com/rosettadb/dbt-studio.git"
   },
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "author": {
     "name": "RosettaLabs",
     "email": "info@rosettadb.io",
