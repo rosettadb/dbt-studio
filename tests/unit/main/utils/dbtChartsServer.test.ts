@@ -15,9 +15,23 @@ class FakeChild extends EventEmitter {
 
   signalCode: string | null = null;
 
+  // Ignores every kill, like a process that cannot be stopped.
+  stuck = false;
+
+  // How long it takes to exit once killed.
+  exitDelay = 0;
+
+  // Ends the process (kill on macOS/Linux, taskkill on Windows).
+  terminate(signal: string) {
+    if (this.stuck || this.exitCode !== null || this.signalCode !== null) {
+      return;
+    }
+    this.signalCode = signal;
+    setTimeout(() => this.emit('exit', null, signal), this.exitDelay);
+  }
+
   kill = jest.fn((signal?: string) => {
-    this.signalCode = signal ?? 'SIGTERM';
-    setTimeout(() => this.emit('exit', null, this.signalCode), 0);
+    this.terminate(signal ?? 'SIGTERM');
     return true;
   });
 
@@ -29,6 +43,8 @@ class FakeChild extends EventEmitter {
 
 const children: FakeChild[] = [];
 let nextPid = 4000;
+// The arguments of every `taskkill` (Windows stops).
+const taskkills: string[][] = [];
 
 jest.mock('child_process', () => ({
   spawn: jest.fn(() => {
@@ -37,8 +53,42 @@ jest.mock('child_process', () => ({
     children.push(child);
     return child;
   }),
-  execFile: jest.fn(),
+  execFile: jest.fn(
+    (command: string, args: string[], callback?: (error: null) => void) => {
+      if (command === 'taskkill') {
+        taskkills.push(args);
+        children
+          .find((child) => String(child.pid) === args[1])
+          ?.terminate('SIGKILL');
+      }
+      callback?.(null);
+    },
+  ),
 }));
+
+// Checks the stop for the platform: taskkill on Windows, a signal elsewhere.
+const expectTerminated = (child: FakeChild, signal?: string) => {
+  if (process.platform === 'win32') {
+    expect(taskkills).toContainEqual(['/pid', String(child.pid), '/T', '/F']);
+  } else if (signal) {
+    expect(child.kill).toHaveBeenCalledWith(signal);
+  } else {
+    expect(child.kill).toHaveBeenCalled();
+  }
+};
+
+const withPlatform = async (
+  platform: typeof process.platform,
+  run: () => Promise<void>,
+) => {
+  const original = Object.getOwnPropertyDescriptor(process, 'platform')!;
+  Object.defineProperty(process, 'platform', { value: platform });
+  try {
+    await run();
+  } finally {
+    Object.defineProperty(process, 'platform', original);
+  }
+};
 
 const broadcasts: unknown[] = [];
 jest.mock('../../../../src/main/utils/rendererBroadcast', () => ({
@@ -82,16 +132,35 @@ const loadWithTasks = (): { server: ServerModule; tasks: TaskManager } => {
 const serverRows = (tasks: TaskManager) =>
   tasks.list().filter((task) => task.type === 'dbt-charts-server');
 
+// 'down': /health answers 404 (dct not ready). 'cut-once': the next answer
+// sends its headers and part of the body, then closes the connection.
+let healthMode: 'ok' | 'down' | 'cut-once' = 'ok';
+// Runs once, while the next /health answer is being sent.
+let onHealth: (() => void) | null = null;
+
 // Answers /health as the newest fake child for its project.
 const startHealthServer = (
   projectFor: () => { pid: number; project: string },
 ) =>
   new Promise<void>((resolve) => {
     health = http.createServer((req, res) => {
-      if (req.url !== '/health') {
+      if (req.url !== '/health' || healthMode === 'down') {
         res.writeHead(404).end();
         return;
       }
+      if (healthMode === 'cut-once') {
+        healthMode = 'ok';
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Content-Length': '200',
+        });
+        res.write('{"status":');
+        setTimeout(() => req.socket.destroy(), 20);
+        return;
+      }
+      const hook = onHealth;
+      onHealth = null;
+      hook?.();
       const { pid, project } = projectFor();
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(
@@ -146,9 +215,21 @@ const tick = (ms: number) =>
     setTimeout(resolve, ms);
   });
 
+// Polls until `check` holds (or 5 s pass).
+const until = async (check: () => boolean) => {
+  const deadline = Date.now() + 5000;
+  while (!check() && Date.now() < deadline) {
+    // eslint-disable-next-line no-await-in-loop
+    await tick(5);
+  }
+};
+
 beforeEach(async () => {
   children.length = 0;
   broadcasts.length = 0;
+  taskkills.length = 0;
+  healthMode = 'ok';
+  onHealth = null;
   currentProject = '/projects/a';
   await startHealthServer(() => ({
     pid: children[children.length - 1]?.pid ?? 0,
@@ -216,7 +297,7 @@ describe('dbtChartsServer', () => {
     currentProject = '/projects/b';
     const b = server.ensureServer(options('/projects/b'));
     announce(await waitForChild(2));
-    expect(children[0].kill).toHaveBeenCalled();
+    expectTerminated(children[0]);
     const status = await b;
     expect(status.state).toBe('running');
     expect(server.getServerStatus('/projects/a').state).not.toBe('running');
@@ -228,7 +309,7 @@ describe('dbtChartsServer', () => {
     announce(await waitForChild(1));
     await pending;
     await server.stopServer();
-    expect(children[0].kill).toHaveBeenCalledWith('SIGTERM');
+    expectTerminated(children[0], 'SIGTERM');
     expect(server.getServerStatus('/projects/a').state).toBe('stopped');
   });
 
@@ -238,7 +319,7 @@ describe('dbtChartsServer', () => {
     announce(await waitForChild(1));
     await pending;
     await server.stopServer({ force: true, byUser: true });
-    expect(children[0].kill).toHaveBeenCalledWith('SIGKILL');
+    expectTerminated(children[0], 'SIGKILL');
     expect(server.getServerStatus('/projects/a')).toEqual(
       expect.objectContaining({ state: 'stopped', userStopped: true }),
     );
@@ -271,7 +352,7 @@ describe('dbtChartsServer', () => {
     const again = server.ensureServer(options('/projects/a'));
     announce(await waitForChild(2));
     expect((await again).state).toBe('running');
-    expect(children[0].kill).toHaveBeenCalled();
+    expectTerminated(children[0]);
   });
 
   it('spawns one server for parallel starts after a crash', async () => {
@@ -346,6 +427,188 @@ describe('dbtChartsServer', () => {
     });
   });
 
+  const startProject = async (
+    server: ServerModule,
+    projectPath: string,
+    count: number,
+  ) => {
+    currentProject = projectPath;
+    const pending = server.ensureServer(options(projectPath));
+    announce(await waitForChild(count));
+    return pending;
+  };
+
+  it("keeps a project's user stop when another project starts", async () => {
+    const server = loadModule();
+    await startProject(server, '/projects/a', 1);
+    await server.stopServer({ byUser: true });
+    await startProject(server, '/projects/b', 2);
+
+    expect(server.getServerStatus('/projects/a')).toEqual(
+      expect.objectContaining({ state: 'stopped', userStopped: true }),
+    );
+
+    // Starting that project again clears it.
+    await startProject(server, '/projects/a', 3);
+    await server.stopServer();
+    expect(server.getServerStatus('/projects/a').userStopped).toBeUndefined();
+  });
+
+  it('assembles lines split across output chunks', async () => {
+    const server = loadModule();
+    const pending = server.ensureServer(options('/projects/a'));
+    const child = await waitForChild(1);
+    const port = String(healthPort);
+    child.stdout.emit(
+      'data',
+      Buffer.from(`   URL: http://127.0.0.1:${port.slice(0, 2)}`),
+    );
+    child.stdout.emit('data', Buffer.from(`${port.slice(2)}\n`));
+    expect((await pending).url).toBe(`http://127.0.0.1:${port}`);
+
+    child.stderr.emit('data', Buffer.from('token hun'));
+    child.stderr.emit('data', Buffer.from('ter2 used\nlast words'));
+    child.stderr.emit('end');
+    const lines = server.getServerLog('/projects/a');
+    expect(lines).toContain('token *** used');
+    expect(lines).toContain('last words');
+    expect(lines.join('\n')).not.toMatch(/hun|ter2/);
+  });
+
+  it('settles the health probe when the answer is cut off', async () => {
+    healthMode = 'cut-once';
+    const server = loadModule();
+    const pending = server.ensureServer(options('/projects/a'));
+    announce(await waitForChild(1));
+    expect((await pending).state).toBe('running');
+  });
+
+  it('does not report running when dct exits while /health answers', async () => {
+    const server = loadModule();
+    const pending = server.ensureServer(options('/projects/a'));
+    const child = await waitForChild(1);
+    onHealth = () => {
+      child.exitCode = 1;
+      child.emit('exit', 1, null);
+    };
+    announce(child);
+
+    expect((await pending).state).toBe('crashed');
+    expect(server.getServerStatus('/projects/a').state).toBe('crashed');
+    expect(server.getRunningServerOrigin()).toBeNull();
+    expect(broadcasts).not.toContainEqual(
+      expect.objectContaining({ state: 'running' }),
+    );
+  });
+
+  it('a Stop during the start-timeout cleanup keeps its stopped result', async () => {
+    healthMode = 'down';
+    const server = loadModule();
+    const pending = server.ensureServer(options('/projects/a'));
+    const child = await waitForChild(1);
+    child.exitDelay = 200;
+    const realNow = Date.now.bind(Date);
+    const clock = jest
+      .spyOn(Date, 'now')
+      .mockImplementation(() => realNow() + 61_000);
+    try {
+      // The start timed out and is stopping dct.
+      await until(() => child.kill.mock.calls.length > 0);
+      await server.stopServer({ byUser: true });
+      expect(await pending).toEqual(
+        expect.objectContaining({ state: 'stopped', userStopped: true }),
+      );
+    } finally {
+      clock.mockRestore();
+    }
+    expect(server.getServerStatus('/projects/a')).toEqual(
+      expect.objectContaining({ state: 'stopped', userStopped: true }),
+    );
+    expect(broadcasts).not.toContainEqual(
+      expect.objectContaining({ state: 'crashed' }),
+    );
+  });
+
+  it('a start waits for a stop that is still in progress', async () => {
+    const server = loadModule();
+    await startProject(server, '/projects/a', 1);
+    children[0].exitDelay = 300;
+
+    const b = server.ensureServer(options('/projects/b'));
+    await tick(20); // b is stopping a
+    currentProject = '/projects/c';
+    const c = server.ensureServer(options('/projects/c'));
+    await tick(100);
+    expect(children).toHaveLength(1); // c waits for a to exit
+
+    announce(await waitForChild(2));
+    expect((await c).state).toBe('running');
+    expect((await b).state).toBe('stopped');
+    expect(children).toHaveLength(2);
+  });
+
+  it('a second Stop waits for the first one to finish', async () => {
+    const server = loadModule();
+    await startProject(server, '/projects/a', 1);
+    children[0].exitDelay = 200;
+
+    const first = server.stopServer();
+    let secondDone = false;
+    const second = server.stopServer().then(() => {
+      secondDone = true;
+      return undefined;
+    });
+    await tick(50);
+    expect(secondDone).toBe(false);
+    await Promise.all([first, second]);
+    expect(server.getServerStatus('/projects/a').state).toBe('stopped');
+  });
+
+  it('keeps a server that does not exit, so Stop can try again', async () => {
+    const { server, tasks } = loadWithTasks();
+    await startProject(server, '/projects/a', 1);
+    const child = children[0];
+    child.stuck = true;
+
+    jest.useFakeTimers({
+      doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'],
+    });
+    let error: Error | null = null;
+    try {
+      const stop = server.stopServer({ byUser: true }).catch((e: Error) => {
+        error = e;
+      });
+      await jest.advanceTimersByTimeAsync(11_000);
+      await stop;
+    } finally {
+      jest.useRealTimers();
+    }
+    expect((error as Error | null)?.message).toMatch(/did not exit/);
+    expect(server.getServerStatus('/projects/a').state).toBe('running');
+    expect(server.getRunningServerOrigin()).not.toBeNull();
+    expect(serverRows(tasks)[0].status).toBe('running');
+
+    child.stuck = false;
+    await server.stopServer({ byUser: true });
+    expect(server.getServerStatus('/projects/a')).toEqual(
+      expect.objectContaining({ state: 'stopped', userStopped: true }),
+    );
+    expect(serverRows(tasks)[0].status).toBe('completed');
+  });
+
+  it('stops with taskkill on Windows', async () => {
+    await withPlatform('win32', async () => {
+      const server = loadModule();
+      await startProject(server, '/projects/a', 1);
+      await server.stopServer();
+      expect(taskkills).toEqual([
+        ['/pid', String(children[0].pid), '/T', '/F'],
+      ]);
+      expect(children[0].kill).not.toHaveBeenCalled();
+      expect(server.getServerStatus('/projects/a').state).toBe('stopped');
+    });
+  });
+
   describe('Task Manager row', () => {
     const startRunning = async (server: ServerModule, count = 1) => {
       const pending = server.ensureServer(options('/projects/a'));
@@ -378,7 +641,7 @@ describe('dbtChartsServer', () => {
 
       expect(tasks.cancel(row.id)).toBe(true);
       await tick(50);
-      expect(children[0].kill).toHaveBeenCalledWith('SIGTERM');
+      expectTerminated(children[0], 'SIGTERM');
       expect(server.getServerStatus('/projects/a')).toEqual(
         expect.objectContaining({ state: 'stopped', userStopped: true }),
       );

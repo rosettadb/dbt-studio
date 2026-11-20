@@ -17,14 +17,25 @@ const restartChartsServer = jest.fn((projectPath: string) =>
   Promise.resolve({ projectPath, state: 'running' } as ChartsServerStatus),
 );
 const clearChartsServerLog = jest.fn(() => Promise.resolve());
+// Set by a test to control main's snapshot replies.
+let statusReply: ((projectPath: string) => Promise<ChartsServerStatus>) | null =
+  null;
+let logReply: ((projectPath: string) => Promise<string[]>) | null = null;
+const logReads: string[] = [];
 
 jest.mock('../../../../../src/renderer/services/dbtCharts.service', () => ({
   getChartsServerStatus: (projectPath: string) =>
-    Promise.resolve(
-      statusFor[projectPath] ?? { projectPath, state: 'stopped' },
-    ),
-  getChartsServerLog: (projectPath: string) =>
-    Promise.resolve(logFor[projectPath] ?? []),
+    statusReply
+      ? statusReply(projectPath)
+      : Promise.resolve(
+          statusFor[projectPath] ?? { projectPath, state: 'stopped' },
+        ),
+  getChartsServerLog: (projectPath: string) => {
+    logReads.push(projectPath);
+    return logReply
+      ? logReply(projectPath)
+      : Promise.resolve(logFor[projectPath] ?? []);
+  },
   subscribeToChartsServerStatus: (handler: typeof statusHandler) => {
     statusHandler = handler;
     return () => undefined;
@@ -83,6 +94,9 @@ beforeEach(() => {
   stopChartsServer.mockClear();
   restartChartsServer.mockClear();
   clearChartsServerLog.mockClear();
+  statusReply = null;
+  logReply = null;
+  logReads.length = 0;
 });
 
 describe('CHARTS SERVER terminal tab', () => {
@@ -350,5 +364,61 @@ describe('CHARTS SERVER terminal tab', () => {
       statusHandler?.({ projectPath: path, state: 'starting' });
     });
     expect(probe().startsWith('visible:')).toBe(true);
+  });
+
+  it('keeps a status event that arrives before the snapshot reply', async () => {
+    const path = '/projects/race';
+    let reply: (status: ChartsServerStatus) => void = () => undefined;
+    statusReply = () =>
+      new Promise((resolve) => {
+        reply = resolve;
+      });
+    render(<HeaderActions project={projectAt(path)} />);
+    await flush();
+
+    act(() => {
+      statusHandler?.({
+        projectPath: path,
+        state: 'running',
+        pid: 9,
+        startedAt: Date.now(),
+      });
+    });
+    // The older snapshot (still starting) arrives last.
+    await act(async () => {
+      reply({ projectPath: path, state: 'starting' });
+      await Promise.resolve();
+    });
+
+    expect(
+      screen.getByRole('button', { name: 'Restart Server' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Start Server' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('keeps the status when the log read fails, and reads the log again on the next mount', async () => {
+    const path = '/projects/log-fails';
+    statusFor[path] = {
+      projectPath: path,
+      state: 'running',
+      pid: 5,
+      startedAt: Date.now(),
+    };
+    logReply = () => Promise.reject(new Error('IPC failed'));
+    const first = render(<StateProbe project={projectAt(path)} />);
+    await flush();
+    expect(
+      screen.getByTestId('probe').textContent?.startsWith('visible:'),
+    ).toBe(true);
+    first.unmount();
+
+    logReply = null;
+    logFor[path] = ['$ dct serve --port 9000'];
+    render(<Component project={projectAt(path)} />);
+    await flush();
+    expect(logReads.filter((read) => read === path)).toHaveLength(2);
+    expect(screen.getByText(/dct serve --port 9000/)).toBeInTheDocument();
   });
 });

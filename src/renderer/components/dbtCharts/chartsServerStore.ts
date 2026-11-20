@@ -51,12 +51,17 @@ const subscribe = (listener: () => void) => {
   };
 };
 
+// Counts the status events of the loaded project, so a status snapshot
+// that was requested before the newest event doesn't replace it.
+let statusEvents = 0;
+
 let listening = false;
 const listen = () => {
   if (listening) return;
   listening = true;
   subscribeToChartsServerStatus((status) => {
     if (status.projectPath && status.projectPath === state.projectPath) {
+      statusEvents += 1;
       if (status.state === 'starting' || status.state === 'parsing') {
         // A (re)start shows a closed tab again.
         setState({ status, closed: false });
@@ -72,30 +77,59 @@ const listen = () => {
   });
 };
 
-let loadedPath: string | null = null;
-const load = (projectPath: string) => {
-  if (loadedPath === projectPath) return;
-  loadedPath = projectPath;
-  setState({
-    projectPath,
-    status: null,
-    lines: [],
-    revealed: false,
-    closed: false,
-  });
-  // IPC keeps order: events that arrived before these answers are already in
-  // main's snapshot, so the snapshot replaces them.
-  Promise.all([
-    getChartsServerStatus(projectPath),
-    getChartsServerLog(projectPath),
-  ])
-    .then(([status, lines]) => {
-      if (state.projectPath === projectPath) {
-        setState({ status, lines: lines.slice(-MAX_LINES) });
-      }
+// The snapshot reads for the loaded project. Each one is applied on its
+// own; one that failed is tried again on the next mount.
+type SnapshotRead = 'idle' | 'loading' | 'done';
+let loaded: {
+  projectPath: string | null;
+  status: SnapshotRead;
+  log: SnapshotRead;
+} = { projectPath: null, status: 'idle', log: 'idle' };
+
+const loadStatus = (projectPath: string) => {
+  loaded.status = 'loading';
+  const eventsBefore = statusEvents;
+  getChartsServerStatus(projectPath)
+    .then((status) => {
+      if (loaded.projectPath !== projectPath) return undefined;
+      loaded.status = 'done';
+      // The reply and the status events don't arrive in a fixed order: a
+      // newer event wins over this snapshot.
+      if (statusEvents === eventsBefore) setState({ status });
       return undefined;
     })
-    .catch(() => undefined);
+    .catch(() => {
+      if (loaded.projectPath === projectPath) loaded.status = 'idle';
+    });
+};
+
+const loadLog = (projectPath: string) => {
+  loaded.log = 'loading';
+  getChartsServerLog(projectPath)
+    .then((lines) => {
+      if (loaded.projectPath !== projectPath) return undefined;
+      loaded.log = 'done';
+      setState({ lines: lines.slice(-MAX_LINES) });
+      return undefined;
+    })
+    .catch(() => {
+      if (loaded.projectPath === projectPath) loaded.log = 'idle';
+    });
+};
+
+const load = (projectPath: string) => {
+  if (loaded.projectPath !== projectPath) {
+    loaded = { projectPath, status: 'idle', log: 'idle' };
+    setState({
+      projectPath,
+      status: null,
+      lines: [],
+      revealed: false,
+      closed: false,
+    });
+  }
+  if (loaded.status === 'idle') loadStatus(projectPath);
+  if (loaded.log === 'idle') loadLog(projectPath);
 };
 
 const EMPTY: Omit<ChartsServerPanelState, 'focusRequest'> = {

@@ -1,4 +1,6 @@
+import { shell } from 'electron';
 import {
+  guardBoardRedirect,
   isBoardUrl,
   nextZoomLevel,
   zoomActionFor,
@@ -72,5 +74,54 @@ describe('isBoardUrl', () => {
 
   it('rejects everything when no server runs', () => {
     expect(isBoardUrl('http://127.0.0.1:8765/', null)).toBe(false);
+  });
+});
+
+describe('guardBoardRedirect', () => {
+  const origin = 'http://127.0.0.1:8765';
+  const openExternal = shell.openExternal as jest.Mock;
+  const redirect = (url: string, isMainFrame = true) => ({
+    url,
+    isMainFrame,
+    preventDefault: jest.fn(),
+  });
+
+  beforeEach(() => {
+    openExternal.mockReset();
+    openExternal.mockResolvedValue(undefined);
+  });
+
+  it('keeps same-origin redirects in the board', () => {
+    const details = redirect('http://127.0.0.1:8765/sales/');
+    guardBoardRedirect(details, origin);
+    expect(details.preventDefault).not.toHaveBeenCalled();
+    expect(openExternal).not.toHaveBeenCalled();
+  });
+
+  it('cancels a redirect to another origin and opens it outside', () => {
+    const details = redirect('https://example.com/report');
+    guardBoardRedirect(details, origin);
+    expect(details.preventDefault).toHaveBeenCalled();
+    expect(openExternal).toHaveBeenCalledWith('https://example.com/report');
+  });
+
+  it('cancels a redirect to a non-web URL without opening it', () => {
+    const details = redirect('file:///etc/passwd');
+    guardBoardRedirect(details, origin);
+    expect(details.preventDefault).toHaveBeenCalled();
+    expect(openExternal).not.toHaveBeenCalled();
+  });
+
+  it('cancels every redirect when no server runs', () => {
+    const details = redirect('http://127.0.0.1:8765/sales/');
+    guardBoardRedirect(details, null);
+    expect(details.preventDefault).toHaveBeenCalled();
+  });
+
+  it('leaves redirects inside frames of the board alone', () => {
+    const details = redirect('https://example.com/embed', false);
+    guardBoardRedirect(details, origin);
+    expect(details.preventDefault).not.toHaveBeenCalled();
+    expect(openExternal).not.toHaveBeenCalled();
   });
 });

@@ -2,6 +2,8 @@ import { ChildProcess, spawn, execFile, execFileSync } from 'child_process';
 import http from 'http';
 import net from 'net';
 import path from 'path';
+import type { Readable } from 'stream';
+import { StringDecoder } from 'string_decoder';
 import { app } from 'electron';
 import fs from 'fs-extra';
 import type {
@@ -24,6 +26,12 @@ import { broadcastToRenderers } from './rendererBroadcast';
 const READY_TIMEOUT_MS = 60_000;
 const READY_POLL_MS = 300;
 const STOP_GRACE_MS = 5_000;
+// After SIGKILL / taskkill /F: how long to wait for the exit before Stop
+// reports that the process is still alive.
+const KILL_WAIT_MS = 5_000;
+const HEALTH_TIMEOUT_MS = 2_000;
+// A line longer than this without a newline is logged in pieces.
+const MAX_PARTIAL_LINE = 16_384;
 const MAX_LINES = 50;
 const MAX_LOG_LINES = 1_000;
 const HOST = '127.0.0.1';
@@ -63,12 +71,19 @@ let starting: {
   promise: Promise<ChartsServerStatus>;
 } | null = null;
 let lastStatus: ChartsServerStatus = { projectPath: null, state: 'stopped' };
+// Projects whose server the user stopped: their board tabs wait for Start.
+// Kept per project, so another project's status doesn't clear it; a start
+// of the same project does.
+const userStoppedProjects = new Set<string>();
 // Bumped by every start request and every stop. A start that sees a newer
 // generation was superseded (stopped, or replaced by another start) and
 // gives up without publishing anything.
 let generation = 0;
 // The last stop, so a superseded start can report the status it left.
 let lastStop: Promise<void> = Promise.resolve();
+// A stop whose process has not exited yet. `current` is already cleared
+// then, so later starts and stops wait for this instead.
+let stopInFlight: Promise<void> | null = null;
 // Every dct child that has not exited yet, for the last-resort kill on exit.
 const liveChildren = new Set<ChildProcess>();
 
@@ -80,6 +95,13 @@ const log: { projectPath: string | null; lines: string[] } = {
 
 const publish = (status: ChartsServerStatus) => {
   lastStatus = status;
+  if (status.projectPath) {
+    if (status.state === 'stopped' && status.userStopped) {
+      userStoppedProjects.add(status.projectPath);
+    } else {
+      userStoppedProjects.delete(status.projectPath);
+    }
+  }
   broadcastToRenderers('dbt-charts:serverStatus', status);
 };
 
@@ -139,12 +161,25 @@ const samePath = async (a: string, b: string): Promise<boolean> => {
     : ra === rb;
 };
 
-const readHealth = (
-  port: number,
-): Promise<{ pid?: number; project?: string; service?: string } | null> =>
+type Health = { pid?: number; project?: string; service?: string };
+
+// Always settles within HEALTH_TIMEOUT_MS: a response that closes before
+// its end, fails, or keeps trickling counts as "not ready", so the
+// readiness loop can check its deadline again.
+const readHealth = (port: number): Promise<Health | null> =>
   new Promise((resolve) => {
-    const req = http.get(
-      { host: HOST, port, path: '/health', timeout: 2000 },
+    let settled = false;
+    let req: http.ClientRequest | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const done = (health: Health | null) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      req?.destroy();
+      resolve(health);
+    };
+    req = http.get(
+      { host: HOST, port, path: '/health', timeout: HEALTH_TIMEOUT_MS },
       (res) => {
         let body = '';
         res.setEncoding('utf8');
@@ -153,22 +188,24 @@ const readHealth = (
         });
         res.on('end', () => {
           if (res.statusCode !== 200) {
-            resolve(null);
+            done(null);
             return;
           }
           try {
-            resolve(JSON.parse(body));
+            done(JSON.parse(body));
           } catch {
-            resolve(null);
+            done(null);
           }
         });
+        res.on('error', () => done(null));
+        res.on('aborted', () => done(null));
+        // After 'end' this is a no-op; before it, the body never finished.
+        res.on('close', () => done(null));
       },
     );
-    req.on('error', () => resolve(null));
-    req.on('timeout', () => {
-      req.destroy();
-      resolve(null);
-    });
+    req.on('error', () => done(null));
+    req.on('timeout', () => done(null));
+    timer = setTimeout(() => done(null), HEALTH_TIMEOUT_MS);
   });
 
 const isOurServer = async (entry: ServerEntry): Promise<boolean> => {
@@ -196,6 +233,11 @@ const killTree = (child: ChildProcess) => {
   child.kill('SIGKILL');
 };
 
+/**
+ * SIGTERM (Windows: taskkill), SIGKILL after the grace period, and resolves
+ * only once the process has exited. Throws when it is still alive after
+ * the kill, so the caller keeps it for another stop.
+ */
 const stopEntry = async (entry: ServerEntry, force = false): Promise<void> => {
   entry.stopping = true;
   const { child } = entry;
@@ -203,16 +245,21 @@ const stopEntry = async (entry: ServerEntry, force = false): Promise<void> => {
   const exited = new Promise<void>((resolve) => {
     child.once('exit', () => resolve());
   });
+  const exitsWithin = (ms: number) =>
+    Promise.race([exited.then(() => true), sleep(ms).then(() => false)]);
   if (force || process.platform === 'win32') {
     killTree(child);
   } else {
     child.kill('SIGTERM');
   }
-  const timedOut = await Promise.race([
-    exited.then(() => false),
-    sleep(STOP_GRACE_MS).then(() => true),
-  ]);
-  if (timedOut) killTree(child);
+  if (await exitsWithin(STOP_GRACE_MS)) return;
+  killTree(child);
+  if (await exitsWithin(KILL_WAIT_MS)) return;
+  // Not stopping any more: if it exits by itself later, that is a crash.
+  entry.stopping = false;
+  throw new Error(
+    `The dbt Charts server (pid ${child.pid ?? 'unknown'}) did not exit. Try Stop again.`,
+  );
 };
 
 const taskStatus = (taskId: string) =>
@@ -229,15 +276,47 @@ const closeTask = (taskId: string, error?: string) => {
   else TaskManagerService.complete(taskId);
 };
 
-const stopCurrent = async ({
-  force = false,
-  byUser = false,
-}: StopServerOptions = {}): Promise<void> => {
+const stopAndReport = async (
+  entry: ServerEntry,
+  { force = false, byUser = false }: StopServerOptions,
+): Promise<void> => {
+  appendServerLog(entry.projectPath, [
+    force ? '■ Killing dbt Charts server…' : '■ Stopping dbt Charts server…',
+  ]);
+  try {
+    await stopEntry(entry, force);
+  } catch (error) {
+    // Still alive: keep it as the current server, with its Task Manager
+    // row, so Stop (or Start) can try again.
+    if (!current) current = entry;
+    appendServerLog(entry.projectPath, [`■ ${(error as Error).message}`]);
+    publish(entry.status);
+    throw error;
+  }
+  appendServerLog(entry.projectPath, ['■ dbt Charts server stopped.']);
+  closeTask(entry.taskId);
+  publish({
+    projectPath: entry.projectPath,
+    state: 'stopped',
+    ...(byUser ? { userStopped: true } : {}),
+  });
+};
+
+const stopCurrent = async (options: StopServerOptions = {}): Promise<void> => {
+  // A stop whose process is still exiting: wait for it, so nothing starts
+  // while that process lives and this stop reports the final status.
+  while (stopInFlight) {
+    // eslint-disable-next-line no-await-in-loop
+    await stopInFlight.catch(() => undefined);
+  }
   const entry = current;
-  current = null;
   if (!entry) {
     // Nothing runs; a user stop still keeps a crashed board from restarting.
-    if (byUser && lastStatus.projectPath && lastStatus.state !== 'stopped') {
+    if (
+      options.byUser &&
+      lastStatus.projectPath &&
+      !(lastStatus.state === 'stopped' && lastStatus.userStopped)
+    ) {
       publish({
         projectPath: lastStatus.projectPath,
         state: 'stopped',
@@ -246,17 +325,14 @@ const stopCurrent = async ({
     }
     return;
   }
-  appendServerLog(entry.projectPath, [
-    force ? '■ Killing dbt Charts server…' : '■ Stopping dbt Charts server…',
-  ]);
-  await stopEntry(entry, force);
-  appendServerLog(entry.projectPath, ['■ dbt Charts server stopped.']);
-  closeTask(entry.taskId);
-  publish({
-    projectPath: entry.projectPath,
-    state: 'stopped',
-    ...(byUser ? { userStopped: true } : {}),
-  });
+  current = null;
+  const stop = stopAndReport(entry, options);
+  stopInFlight = stop;
+  try {
+    await stop;
+  } finally {
+    if (stopInFlight === stop) stopInFlight = null;
+  }
 };
 
 /**
@@ -303,7 +379,9 @@ const openTask = (projectPath: string): string => {
 export const getServerStatus = (projectPath: string): ChartsServerStatus => {
   if (current && current.projectPath === projectPath) return current.status;
   if (lastStatus.projectPath === projectPath) return lastStatus;
-  return { projectPath, state: 'stopped' };
+  return userStoppedProjects.has(projectPath)
+    ? { projectPath, state: 'stopped', userStopped: true }
+    : { projectPath, state: 'stopped' };
 };
 
 /**
@@ -368,10 +446,10 @@ const launch = async (
   current = entry;
   publish(entry.status);
 
-  const onOutput = (chunk: Buffer) => {
-    const lines = chunk
-      .toString()
-      .split(/\r?\n/)
+  // Whole lines only: a chunk can end inside a secret (the redactor would
+  // miss both halves) or inside the announced port.
+  const onLines = (raw: string[]) => {
+    const lines = raw
       .map((line) => redact(line).trimEnd())
       .filter((line) => line.trim().length > 0);
     lines.forEach((line) => {
@@ -382,8 +460,29 @@ const launch = async (
     });
     appendServerLog(projectPath, lines);
   };
-  child.stdout?.on('data', onOutput);
-  child.stderr?.on('data', onOutput);
+  const readLines = (stream: Readable | null) => {
+    if (!stream) return;
+    const decoder = new StringDecoder('utf8');
+    let partial = '';
+    stream.on('data', (chunk: Buffer | string) => {
+      const text =
+        partial + (typeof chunk === 'string' ? chunk : decoder.write(chunk));
+      const lines = text.split(/\r?\n/);
+      partial = lines.pop() ?? '';
+      if (partial.length > MAX_PARTIAL_LINE) {
+        lines.push(partial);
+        partial = '';
+      }
+      onLines(lines);
+    });
+    stream.on('end', () => {
+      const last = partial + decoder.end();
+      partial = '';
+      if (last) onLines([last]);
+    });
+  };
+  readLines(child.stdout);
+  readLines(child.stderr);
 
   let exited = false;
   let spawnError: Error | null = null;
@@ -412,7 +511,9 @@ const launch = async (
     if (exited || current !== entry || superseded()) break;
     // eslint-disable-next-line no-await-in-loop
     const ready = await isOurServer(entry);
-    if (current !== entry || superseded()) break;
+    // dct can answer /health and exit before the answer is read: the exit
+    // handler has published the crash, which must stay.
+    if (exited || current !== entry || superseded()) break;
     if (ready) {
       entry.status = {
         projectPath,
@@ -430,17 +531,43 @@ const launch = async (
   if (superseded()) {
     // Stopped, or replaced by a newer start: that one publishes the status,
     // so this start must not report a crash over it.
-    if (!entry.stopping && !hasExited(child)) await stopEntry(entry);
-    if (current === entry) current = null;
-    closeTask(entry.taskId);
+    if (!entry.stopping && !hasExited(child)) {
+      await stopEntry(entry).catch((stopError: Error) => {
+        appendServerLog(projectPath, [`■ ${stopError.message}`]);
+      });
+    }
+    // A process that would not exit stays current, for the next Stop.
+    if (current === entry && hasExited(child)) current = null;
+    if (hasExited(child)) closeTask(entry.taskId);
     return pendingServerStatus(projectPath);
   }
 
+  const timeoutText = `dbt Charts did not start in ${READY_TIMEOUT_MS / 1000} seconds.`;
   if (current === entry && !exited) {
-    await stopEntry(entry);
-    current = null;
+    try {
+      await stopEntry(entry);
+    } catch (stopError) {
+      if (superseded()) return pendingServerStatus(projectPath);
+      // Still alive: it stays the current server (and keeps its Task
+      // Manager row), so Start or Stop can try to stop it again.
+      const stuck: ChartsServerStatus = {
+        projectPath,
+        state: 'crashed',
+        lines: entry.lines.slice(-8),
+        error: `${timeoutText} ${(stopError as Error).message}`,
+      };
+      entry.status = stuck;
+      publish(stuck);
+      return stuck;
+    }
+    // A Stop while this cleanup waited has published its own result.
+    if (superseded()) {
+      closeTask(entry.taskId);
+      return pendingServerStatus(projectPath);
+    }
+    if (current === entry) current = null;
   }
-  let error = `dbt Charts did not start in ${READY_TIMEOUT_MS / 1000} seconds.`;
+  let error = timeoutText;
   if (spawnError) error = redact((spawnError as Error).message);
   else if (exited) error = 'dbt Charts stopped while starting.';
   closeTask(entry.taskId, error);
@@ -480,9 +607,23 @@ export const ensureServer = async (
   generation += 1;
   const gen = generation;
   const run = async (): Promise<ChartsServerStatus> => {
-    if (current) {
+    // Also waits for a stop that is still in progress (`current` is
+    // already cleared then), so two dct processes never run at once.
+    if (current || stopInFlight) {
       lastStop = stopCurrent();
-      await lastStop;
+      try {
+        await lastStop;
+      } catch (error) {
+        if (gen !== generation) return pendingServerStatus(projectPath);
+        // The old server would not exit; it is kept for another try.
+        const failed: ChartsServerStatus = {
+          projectPath,
+          state: 'crashed',
+          error: (error as Error).message,
+        };
+        publish(failed);
+        return failed;
+      }
     }
     if (gen !== generation) return pendingServerStatus(projectPath);
     return launch(options, gen);

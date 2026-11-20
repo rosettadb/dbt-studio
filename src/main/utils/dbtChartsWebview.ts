@@ -18,8 +18,8 @@ import { getRunningServerOrigin } from './dbtChartsServer';
 // - Zoom: the View menu's zoom roles act on the focused page, so with focus
 //   in the board Cmd +/-/0 zoomed only the board. Those keys are sent to
 //   the Studio page instead, and the board is kept at Studio's zoom level.
-// - Navigation: links that leave the board server open in the system
-//   browser; popups never open inside Studio.
+// - Navigation: links and server redirects that leave the board server
+//   open in the system browser; popups never open inside Studio.
 
 export type ZoomAction = 'in' | 'out' | 'reset';
 
@@ -67,6 +67,20 @@ const openOutside = (url: string) => {
   if (isWebUrl(url)) shell.openExternal(url).catch(() => undefined);
 };
 
+/**
+ * A server redirect of the board page (will-navigate doesn't see those):
+ * same-origin redirects stay in the board; one to another origin is
+ * cancelled and, for http(s), opened in the system browser.
+ */
+export const guardBoardRedirect = (
+  details: { url: string; isMainFrame: boolean; preventDefault: () => void },
+  origin: string | null,
+) => {
+  if (!details.isMainFrame || isBoardUrl(details.url, origin)) return;
+  details.preventDefault();
+  openOutside(details.url);
+};
+
 const isBoardGuest = (guest: WebContents): boolean => {
   try {
     return (
@@ -100,6 +114,10 @@ const guardGuest = (host: WebContents, guest: WebContents) => {
     if (isBoardUrl(url, getRunningServerOrigin())) return;
     event.preventDefault();
     openOutside(url);
+  });
+
+  guest.on('will-redirect', (details) => {
+    guardBoardRedirect(details, getRunningServerOrigin());
   });
 
   guest.setWindowOpenHandler(({ url }) => {
