@@ -7,11 +7,13 @@ import {
 import { codeFileView } from './CodeFileView';
 import { pipelineFileView } from './PipelineFileView';
 import { previewFileView } from './PreviewFileView';
+import { chartsFileView } from './ChartsFileView';
 
 // Registration order is match priority. Adding a file kind = one module
 // exporting a FileViewDefinition + one line here.
 registerFileView(previewFileView);
 registerFileView(pipelineFileView);
+registerFileView(chartsFileView);
 registerFallbackFileView(codeFileView);
 
 export { registerFileView, resolveFileView, listFileViews };
