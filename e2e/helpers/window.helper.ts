@@ -58,7 +58,7 @@ export const openHome = async (
 /**
  * Land on the project selection screen with setup skipped. The app opens on
  * the Home screen, so when the selection screen is not already mounted we take
- * the DBT Project card from Home. (The Recent Projects "New Project" button
+ * the Projects card from Home. (The Recent Projects "New Project" button
  * opens the new project form instead of the list.)
  */
 export const openProjectSelection = async (
@@ -80,7 +80,10 @@ export const openProjectSelection = async (
 
   if (await home.isVisible().catch(() => false)) {
     await appHelper.dismissQuickStartTourIfPresent();
-    await window.getByText('DBT Project', { exact: true }).click();
+    await window
+      .locator('[data-tour="tour-modules-area"]')
+      .getByText('Projects', { exact: true })
+      .click();
   }
 
   await window.waitForSelector('[data-testid="project-selection"]', {

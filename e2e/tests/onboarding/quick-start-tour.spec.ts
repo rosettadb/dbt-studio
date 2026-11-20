@@ -46,7 +46,7 @@ test.describe('Quick Start Tour', () => {
 
     // Now the page is interactive again: New Project opens the new project form
     await newProjectBtn.click();
-    await expect(window.getByTestId('project-name-input')).toBeVisible();
+    await expect(window.getByTestId('project-type-step')).toBeVisible();
   });
 
   test('should step forward and back through the tour', async ({
