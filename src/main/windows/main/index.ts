@@ -67,7 +67,12 @@ export const createMainWindow = (
     if (!isStudioUrl(url)) event.preventDefault();
   });
   mainWindow.webContents.on('will-frame-navigate', (event) => {
-    if (!isStudioUrl(event.url)) event.preventDefault();
+    // Only block top-level frame navigations away from the app URL.
+    // Child frames (iframes such as the Flowfile UI) must be allowed to load
+    // their own URLs freely.
+    if (event.frame?.parent == null && !isStudioUrl(event.url)) {
+      event.preventDefault();
+    }
   });
   mainWindow.loadURL(studioUrl.href);
 
