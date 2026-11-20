@@ -1,6 +1,7 @@
 import yaml from 'js-yaml';
 import type { Node, Edge } from 'reactflow';
 import type { PipelineNodeData } from './PipelineNode';
+import { isEmptyParam } from '../../../shared/pluginManifest';
 
 function topoSort(
   nodes: Node<PipelineNodeData>[],
@@ -47,14 +48,9 @@ function stepToObject(data: PipelineNodeData): Record<string, unknown> {
     name: data.name,
     plugin: data.plugin,
   };
-  if (data.plugin === 'git_clone@v1') {
-    if (data.url) step.url = data.url;
-    if (data.branch) step.branch = data.branch;
-    if (data.dest) step.dest = data.dest;
-  } else {
-    if (data.command) step.command = data.command;
-    if (data.working_dir) step.working_dir = data.working_dir;
-  }
+  Object.entries(data.params ?? {}).forEach(([key, value]) => {
+    if (!isEmptyParam(value)) step[key] = value;
+  });
   return step;
 }
 
@@ -65,26 +61,26 @@ export function serializePipelineConfig(
 ): string {
   const ordered = topoSort(nodes, edges);
 
-  type JobGroup = {
-    name: string;
-    type?: string;
-    steps: Record<string, unknown>[];
-  };
-  const jobs: JobGroup[] = [];
+  const jobs: Record<string, unknown>[] = [];
+  let lastSteps: Record<string, unknown>[] = [];
 
   ordered.forEach((node) => {
     const d = node.data;
     const jobName = d.jobName ?? 'run';
-    const { jobType } = d;
 
     const last = jobs[jobs.length - 1];
     if (last && last.name === jobName) {
-      last.steps.push(stepToObject(d));
-    } else {
-      const job: JobGroup = { name: jobName, steps: [stepToObject(d)] };
-      if (jobType) job.type = jobType;
-      jobs.push(job);
+      lastSteps.push(stepToObject(d));
+      return;
     }
+    lastSteps = [stepToObject(d)];
+    // The job's other keys (e.g. `needs`) are carried by its steps' nodes.
+    jobs.push({
+      name: jobName,
+      ...(d.jobType ? { type: d.jobType } : {}),
+      ...(d.jobExtra ?? {}),
+      steps: lastSteps,
+    });
   });
 
   return yaml.dump({ name: pipelineName, jobs }, { lineWidth: -1, indent: 2 });

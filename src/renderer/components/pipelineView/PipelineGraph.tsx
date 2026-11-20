@@ -46,7 +46,11 @@ import type { PipelineJob } from './types';
 import { PipelineNode, type PipelineNodeData } from './PipelineNode';
 import { NodePalette } from './NodePalette';
 import { StepEditDialog } from './StepEditDialog';
-import { PLUGIN_MAP } from './pluginDefinitions';
+import { usePluginCatalog } from './pluginDefinitions';
+import {
+  defaultStepParams,
+  type MacroContext,
+} from '../../../shared/pluginManifest';
 import { serializePipelineConfig } from './serializePipeline';
 import { validatePipelineGraph } from './validatePipeline';
 import { useTerminalMinimize } from '../terminal';
@@ -78,6 +82,10 @@ type PipelineGraphProps = {
   onEditingChange?: (isEditing: boolean) => void;
   /** Fired once when the pipeline view first mounts (e.g. tab opened). */
   onEnterView?: () => void;
+  /** Values for the macros in a plugin's widget defaults. */
+  macros?: MacroContext;
+  /** Paths picked in a step's form are saved relative to it. */
+  projectPath?: string;
 };
 
 type PipelineSnapshot = {
@@ -134,6 +142,7 @@ export function buildNodesAndEdges(
           isCleanup,
           jobName: job.name,
           jobType: job.type,
+          jobExtra: job.extra,
         },
         position: { x: 0, y: 0 },
       });
@@ -206,8 +215,11 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
   onRunWithEnv,
   onEditingChange,
   onEnterView,
+  macros,
+  projectPath,
 }) => {
   const theme = useTheme();
+  const catalog = usePluginCatalog();
   const { project, deleteElements } = useReactFlow();
   const terminal = useTerminalMinimize();
 
@@ -399,7 +411,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
   }, [resetHistory]);
 
   const handleSave = useCallback(async (): Promise<string | null> => {
-    const errors = validatePipelineGraph(nodes, edges);
+    const errors = validatePipelineGraph(nodes, edges, catalog.byId);
     if (errors.length > 0) {
       setValidationError(errors[0].message);
       return null;
@@ -418,7 +430,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
     } finally {
       setIsSaving(false);
     }
-  }, [nodes, edges, pipelineName, onSave, resetHistory]);
+  }, [nodes, edges, pipelineName, onSave, resetHistory, catalog.byId]);
 
   const handleRunClick = useCallback(
     (kind: 'run' | 'runWithEnv' = 'run') => {
@@ -509,6 +521,28 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
     [isEditing, setEdges, theme, commitHistory],
   );
 
+  // A step added from the palette: it joins the first non-cleanup job and
+  // starts with the defaults of its plugin's form.
+  const newStepData = useCallback(
+    (pluginId: string, nodeId: string): PipelineNodeData => {
+      const def = catalog.byId.get(pluginId);
+      const jobNode = nodes.find((n) => !n.data.isCleanup);
+      return {
+        name: `New ${def?.label ?? pluginId} step`,
+        plugin: pluginId,
+        params: def ? defaultStepParams(def, macros) : {},
+        stepIndex: nodes.length,
+        jobName: jobNode?.data.jobName ?? 'run',
+        jobType: jobNode?.data.jobType,
+        jobExtra: jobNode?.data.jobExtra,
+        editMode: true,
+        onEditClick: () => openEditForNode(nodeId),
+        onDeleteClick: () => handleNodeDelete(nodeId),
+      };
+    },
+    [catalog.byId, nodes, macros, openEditForNode, handleNodeDelete],
+  );
+
   const onDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault();
@@ -524,12 +558,6 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
         y: event.clientY - reactFlowBounds.top,
       });
 
-      const def = PLUGIN_MAP.get(pluginId);
-      const defaultJobName =
-        nodes.find((n) => !n.data.isCleanup)?.data.jobName ?? 'run';
-      const firstCommandField = def?.fields.find((f) => f.key === 'command');
-      const workingDirField = def?.fields.find((f) => f.key === 'working_dir');
-
       const newId = `node-${Date.now()}`;
       const newNode: Node<PipelineNodeData> = {
         id: newId,
@@ -537,30 +565,13 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
         position,
         sourcePosition: Position.Right,
         targetPosition: Position.Left,
-        data: {
-          name: `New ${def?.label ?? pluginId} step`,
-          plugin: pluginId,
-          command: firstCommandField?.defaultValue ?? '',
-          working_dir: workingDirField?.defaultValue ?? '',
-          stepIndex: nodes.length,
-          jobName: defaultJobName,
-          editMode: true,
-          onEditClick: () => openEditForNode(newId),
-          onDeleteClick: () => handleNodeDelete(newId),
-        } as PipelineNodeData,
+        data: newStepData(pluginId, newId),
       };
 
       commitHistory();
       setNodes((nds) => [...nds, newNode]);
     },
-    [
-      project,
-      nodes,
-      setNodes,
-      openEditForNode,
-      handleNodeDelete,
-      commitHistory,
-    ],
+    [project, setNodes, newStepData, commitHistory],
   );
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -583,11 +594,21 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
       setNodes((nds) =>
         nds.map((n) => {
           if (n.id !== editNode.id) return n;
+          // A step moved to another job takes that job's other keys (e.g.
+          // `needs`); in a job that is new it has none.
+          const jobExtra =
+            updated.jobName === n.data.jobName
+              ? n.data.jobExtra
+              : nds.find(
+                  (other) =>
+                    other.id !== n.id && other.data.jobName === updated.jobName,
+                )?.data.jobExtra;
           return {
             ...n,
             data: {
               ...n.data,
               ...updated,
+              jobExtra,
               isCleanup: updated.jobType?.toLowerCase() === 'cleanup',
               editMode: true,
               onEditClick: n.data.onEditClick,
@@ -610,11 +631,6 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
 
   const handlePaletteAdd = useCallback(
     (pluginId: string) => {
-      const def = PLUGIN_MAP.get(pluginId);
-      const defaultJobName =
-        nodes.find((n) => !n.data.isCleanup)?.data.jobName ?? 'run';
-      const firstCommandField = def?.fields.find((f) => f.key === 'command');
-      const workingDirField = def?.fields.find((f) => f.key === 'working_dir');
       const offset = nodes.length * 30;
       const newId = `node-${Date.now()}`;
       commitHistory();
@@ -626,21 +642,11 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
           position: { x: 50 + offset, y: 50 + offset },
           sourcePosition: Position.Right,
           targetPosition: Position.Left,
-          data: {
-            name: `New ${def?.label ?? pluginId} step`,
-            plugin: pluginId,
-            command: firstCommandField?.defaultValue ?? '',
-            working_dir: workingDirField?.defaultValue ?? '',
-            stepIndex: nodes.length,
-            jobName: defaultJobName,
-            editMode: true,
-            onEditClick: () => openEditForNode(newId),
-            onDeleteClick: () => handleNodeDelete(newId),
-          } as PipelineNodeData,
+          data: newStepData(pluginId, newId),
         },
       ]);
     },
-    [nodes, setNodes, openEditForNode, handleNodeDelete, commitHistory],
+    [nodes.length, setNodes, newStepData, commitHistory],
   );
 
   const onNodesChange = useCallback(
@@ -896,7 +902,7 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
               pannable
               zoomable
               nodeColor={(node) =>
-                PLUGIN_MAP.get(node.data?.plugin)?.color ??
+                catalog.byId.get(node.data?.plugin)?.color ??
                 theme.palette.primary.main
               }
               maskColor={
@@ -918,6 +924,8 @@ const PipelineGraphContent: React.FC<PipelineGraphProps> = ({
         existingJobNames={existingJobNames}
         onClose={() => setEditNode(null)}
         onSave={handleDialogSave}
+        macros={macros}
+        projectPath={projectPath}
       />
 
       <Dialog
@@ -981,6 +989,8 @@ export const PipelineGraph: React.FC<PipelineGraphProps> = ({
   onRunWithEnv,
   onEditingChange,
   onEnterView,
+  macros,
+  projectPath,
 }) => (
   <ReactFlowProvider>
     <PipelineGraphContent
@@ -995,6 +1005,8 @@ export const PipelineGraph: React.FC<PipelineGraphProps> = ({
       onRunWithEnv={onRunWithEnv}
       onEditingChange={onEditingChange}
       onEnterView={onEnterView}
+      macros={macros}
+      projectPath={projectPath}
     />
   </ReactFlowProvider>
 );

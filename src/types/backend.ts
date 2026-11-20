@@ -7,6 +7,7 @@ import type {
 import { CloudConnection, RecentItem } from './frontend';
 import type { IcebergInstanceConfig } from './iceberg';
 import type { ProjectType } from './projectTypes';
+import type { RequirementWithPlugins } from '../shared/pluginManifest';
 
 export type {
   ConnectionInput,
@@ -241,30 +242,15 @@ export type RosettaVersionInfo = {
   latestPrerelease?: string;
 };
 
-export type RunnerPluginId =
-  | 'dbt'
-  | 'rosetta'
-  | 'git'
-  | 'terraform'
-  | 's3'
-  | 'kinetica_cli'
-  | 'pyspark'
-  | 'command';
-
-export type RunnerPluginStatus = {
-  id: RunnerPluginId;
-  label: string;
-  plugin: string;
+// A tool the runner's plugins need (from the plugin manifest's `requires`)
+// and whether it is installed on this machine.
+export type RunnerRequirementStatus = RequirementWithPlugins & {
   available: boolean;
+  /** Found, possibly older than check.minVersion (then available is false). */
   version?: string;
   path?: string;
+  /** Installed by Studio itself (its own installer or its own Python). */
   managedInStudio?: boolean;
-  downloadUrl?: string;
-  java?: {
-    available: boolean;
-    version?: string;
-    requiredVersion: number;
-  };
 };
 
 export type DbtCoreVersionListItem = {

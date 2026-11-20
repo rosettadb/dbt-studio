@@ -25,13 +25,16 @@ import {
 } from '@mui/icons-material';
 import type { PipelineStep } from './types';
 import type { CloudStepStatus } from '../../../types/cloudAction';
-import { PLUGIN_MAP } from './pluginDefinitions';
+import { getPluginVisual, usePluginCatalog } from './pluginDefinitions';
+import { isEmptyParam } from '../../../shared/pluginManifest';
 
 export type PipelineNodeData = PipelineStep & {
   stepIndex: number;
   isCleanup?: boolean;
   jobName?: string;
   jobType?: string;
+  /** The job's other keys (e.g. `needs`), written back unchanged. */
+  jobExtra?: Record<string, unknown>;
   editMode?: boolean;
   onEditClick?: () => void;
   onDeleteClick?: () => void;
@@ -120,6 +123,11 @@ function getPluginLabel(plugin: string): string {
   return plugin.split('@')[0];
 }
 
+const paramText = (value: unknown): string => {
+  if (isEmptyParam(value)) return '';
+  return typeof value === 'object' ? JSON.stringify(value) : String(value);
+};
+
 export const PipelineNode = memo(
   ({ data, selected }: NodeProps<PipelineNodeData>) => {
     const theme = useTheme();
@@ -128,11 +136,13 @@ export const PipelineNode = memo(
       ? getStatusVisual(data.status, theme.palette)
       : null;
 
-    const pluginDef = PLUGIN_MAP.get(data.plugin);
+    const catalog = usePluginCatalog();
+    const pluginDef = catalog.byId.get(data.plugin);
+    const visual = getPluginVisual(pluginDef, data.plugin);
     const pluginColor = data.isCleanup
       ? CLEANUP_COLOR
-      : (pluginDef?.color ?? theme.palette.primary.main);
-    const PluginIcon = pluginDef?.icon ?? Terminal;
+      : (visual.color ?? theme.palette.primary.main);
+    const PluginIcon = visual.icon;
 
     let outerBorderColor = 'transparent';
     if (selected) outerBorderColor = theme.palette.primary.main;
@@ -141,8 +151,18 @@ export const PipelineNode = memo(
     else if (data.status === 'failed')
       outerBorderColor = theme.palette.error.main;
 
-    const isGitClone = data.plugin === 'git_clone@v1';
-    const displayValue = isGitClone ? (data.url ?? '') : (data.command ?? '');
+    // The card shows one parameter: the command when the step has one,
+    // otherwise the first filled field of the plugin's form (e.g. a URL).
+    const params = data.params ?? {};
+    const workingDir = paramText(params.working_dir);
+    const summaryKey = !isEmptyParam(params.command)
+      ? 'command'
+      : pluginDef?.widgets.find(
+          (widget) =>
+            widget.key !== 'working_dir' && !isEmptyParam(params[widget.key]),
+        )?.key;
+    const showsCommand = !summaryKey || summaryKey === 'command';
+    const displayValue = summaryKey ? paramText(params[summaryKey]) : '';
 
     return (
       <Box
@@ -431,7 +451,7 @@ export const PipelineNode = memo(
                 display: 'flex',
                 alignItems: 'flex-start',
                 gap: 0.75,
-                mb: data.working_dir ? 0.75 : 0,
+                mb: workingDir ? 0.75 : 0,
                 bgcolor: isDark ? alpha('#000', 0.2) : alpha('#000', 0.03),
                 borderRadius: 1,
                 px: 1,
@@ -439,7 +459,7 @@ export const PipelineNode = memo(
                 border: `1px solid ${theme.palette.divider}`,
               }}
             >
-              {isGitClone ? (
+              {!showsCommand ? (
                 <LinkIcon
                   sx={{
                     fontSize: 11,
@@ -478,7 +498,7 @@ export const PipelineNode = memo(
             </Box>
 
             {/* Working dir */}
-            {data.working_dir && (
+            {workingDir && (
               <Box
                 sx={{
                   display: 'flex',
@@ -501,7 +521,7 @@ export const PipelineNode = memo(
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  {data.working_dir}
+                  {workingDir}
                 </Typography>
               </Box>
             )}
