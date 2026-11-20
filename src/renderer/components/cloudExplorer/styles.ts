@@ -72,6 +72,7 @@ export const cloudExplorerSx: SxProps<Theme> = {
   p: '22px 28px 40px',
   bgcolor: 'background.paper',
   minHeight: '100%',
+  flexShrink: 0,
   '& > .MuiBox-root': { p: 0 },
 };
 
