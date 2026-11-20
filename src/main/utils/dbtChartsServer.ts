@@ -353,6 +353,21 @@ let taskCount = 0;
 let lastTaskId: string | null = null;
 
 /**
+ * The row's Stop button. The Task Manager marks the row Cancelled and drops
+ * this canceller before dct has exited; when dct does not exit, the row is
+ * set back to running with its Stop button, so Stop can be pressed again.
+ */
+const registerTaskStop = (taskId: string) => {
+  TaskManagerService.registerCanceller(taskId, () => {
+    stopServer({ byUser: true }).catch(() => {
+      if (taskStatus(taskId) !== 'cancelled') return;
+      TaskManagerService.start(taskId);
+      registerTaskStop(taskId);
+    });
+  });
+};
+
+/**
  * Adds the server's row to the Task Manager. Its Stop button is a stop by
  * the user, like ■ in the CHARTS SERVER tab: board tabs then wait for Start.
  * Only the newest row is kept, so restarts don't fill the history.
@@ -369,9 +384,7 @@ const openTask = (projectPath: string): string => {
     label: `dbt Charts server · ${path.basename(projectPath)}`,
     cancellable: true,
   });
-  TaskManagerService.registerCanceller(taskId, () => {
-    stopServer({ byUser: true }).catch(() => undefined);
-  });
+  registerTaskStop(taskId);
   lastTaskId = taskId;
   return taskId;
 };

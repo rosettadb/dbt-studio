@@ -663,6 +663,38 @@ describe('dbtChartsServer', () => {
       expect(serverRows(tasks)[0].status).toBe('cancelled');
     });
 
+    it('gives the row its Stop back when the server does not exit', async () => {
+      const { server, tasks } = loadWithTasks();
+      await startRunning(server);
+      const [row] = serverRows(tasks);
+      children[0].stuck = true;
+
+      jest.useFakeTimers({
+        doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'],
+      });
+      try {
+        expect(tasks.cancel(row.id)).toBe(true);
+        expect(serverRows(tasks)[0].status).toBe('cancelled');
+        await jest.advanceTimersByTimeAsync(11_000);
+      } finally {
+        jest.useRealTimers();
+      }
+      await tick(50);
+      expect(server.getServerStatus('/projects/a').state).toBe('running');
+      expect(serverRows(tasks)[0]).toEqual(
+        expect.objectContaining({ id: row.id, status: 'running' }),
+      );
+
+      // Stop there works again; a stop that succeeds stays Cancelled.
+      children[0].stuck = false;
+      expect(tasks.cancel(row.id)).toBe(true);
+      await tick(50);
+      expect(server.getServerStatus('/projects/a')).toEqual(
+        expect.objectContaining({ state: 'stopped', userStopped: true }),
+      );
+      expect(serverRows(tasks)[0].status).toBe('cancelled');
+    });
+
     it('fails the row with the exit reason when dct crashes', async () => {
       const { server, tasks } = loadWithTasks();
       await startRunning(server);
