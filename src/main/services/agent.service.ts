@@ -58,6 +58,10 @@ import {
   PROJECT_PIPELINE_TOOL_NAMES,
 } from './ai/tools/studio/pipeline.tools';
 import { STUDIO_KEYSTORE_TOOL_NAMES } from './ai/tools/studio/keystore.tools';
+import {
+  buildProjectChartsContext,
+  DBT_CHARTS_TOOL_NAMES,
+} from './ai/tools/studio/charts.tools';
 import ChatImageAttachmentService from './ai/chatImageAttachment.service';
 import { MAX_CHAT_IMAGES_PER_MESSAGE } from '../../types/chatAttachments';
 
@@ -85,6 +89,8 @@ export const AI_SETTINGS_DEFAULTS: AISettingsConfig = {
     studio_pipeline_generate: true,
     studio_pipeline_update: true,
     studio_keystore_register_placeholder: true,
+    studio_charts_validate: true,
+    studio_charts_refresh_preview: true,
   },
   configuration: {
     allowAIInBackground: true,
@@ -266,6 +272,7 @@ const TOOL_CATEGORIES = {
     'pathExists',
     'studio_pipeline_list',
     'studio_pipeline_read',
+    'studio_charts_validate',
   ],
   action: [
     'writeDbtModel',
@@ -274,6 +281,7 @@ const TOOL_CATEGORIES = {
     'studio_pipeline_generate',
     'studio_pipeline_update',
     'studio_keystore_register_placeholder',
+    'studio_charts_refresh_preview',
   ],
 };
 
@@ -286,6 +294,7 @@ export function getToolsForMode(
     ...filesystemTools,
     ...PROJECT_PIPELINE_TOOL_NAMES,
     ...STUDIO_KEYSTORE_TOOL_NAMES,
+    ...DBT_CHARTS_TOOL_NAMES,
   };
 
   if (mode === 'chat') {
@@ -1572,6 +1581,7 @@ COMBINED SUMMARY:`,
 
       let sessionContextBlock = '';
       let projectPipelineContext: string | undefined;
+      let projectChartsContext: string | undefined;
       const projectAiContext =
         screenKey === 'project' && request.includeProjectAiContext
           ? await readProjectAgentContext(projectPath)
@@ -1583,6 +1593,14 @@ COMBINED SUMMARY:`,
             hasDbt: projectHasDbt || projectTypeUnknown,
           },
         );
+        try {
+          projectChartsContext = await buildProjectChartsContext(projectPath);
+        } catch (err) {
+          console.warn(
+            '[AgentService] Failed to build dbt Charts context:',
+            err,
+          );
+        }
         try {
           // Derive the selected file path from contextItems (type 'file' entries)
           // The file path is stored in the metadata JSON field as { path: string }
@@ -1619,6 +1637,8 @@ COMBINED SUMMARY:`,
         delete agentEnabledTools.studio_pipeline_generate;
         delete agentEnabledTools.studio_pipeline_update;
         delete agentEnabledTools.studio_keystore_register_placeholder;
+        delete agentEnabledTools.studio_charts_validate;
+        delete agentEnabledTools.studio_charts_refresh_preview;
       }
 
       switch (request.screenKey ?? 'project') {
@@ -1665,6 +1685,7 @@ COMBINED SUMMARY:`,
             toolMode: request.toolMode || 'agent',
             projectAiContext,
             projectPipelineContext,
+            projectChartsContext,
             sessionContextBlock,
             connectionMeta: projectConnectionMeta,
             hasDbt: projectHasDbt,
@@ -2177,6 +2198,16 @@ COMBINED SUMMARY:`,
           name: 'studio_keystore_register_placeholder',
           description:
             'Register a placeholder keystore entry for a required env var',
+          category: 'dbt',
+        },
+        {
+          name: 'studio_charts_validate',
+          description: 'Validate a dbt Charts board',
+          category: 'dbt',
+        },
+        {
+          name: 'studio_charts_refresh_preview',
+          description: 'Reload the open dbt Charts preview',
           category: 'dbt',
         },
       ];

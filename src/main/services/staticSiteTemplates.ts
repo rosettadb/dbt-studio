@@ -22,6 +22,11 @@ export interface StaticPageData {
   themeMode: 'light' | 'dark';
   builtAt: string;
   truncated: Record<string, boolean>;
+  /** Filter values the queries were run with (Plan 97); shown read-only. */
+  inputs?: Record<
+    string,
+    { value: unknown; label?: unknown; start?: unknown; end?: unknown }
+  >;
 }
 
 // ─── HTML safety helpers ─────────────────────────────────────────────────────

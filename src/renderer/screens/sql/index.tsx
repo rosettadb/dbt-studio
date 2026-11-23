@@ -64,6 +64,7 @@ import { SqlTabManager } from '../../components/sqlTabs';
 import {
   AnalyticsPagesTreeView,
   AnalyticsEditor,
+  AnalyticsPagesGallery,
 } from '../../components/analytics';
 import useSqlTabManager from '../../hooks/useSqlTabManager';
 import {
@@ -1185,22 +1186,10 @@ const Sql = () => {
                         pageId={activeAnalyticsPageId}
                       />
                     ) : (
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          height: '100%',
-                          flexDirection: 'column',
-                          gap: 2,
-                          color: 'text.secondary',
-                        }}
-                      >
-                        <InsertChart sx={{ fontSize: 64, opacity: 0.2 }} />
-                        <Typography color="text.secondary">
-                          Select an analytics page from the sidebar
-                        </Typography>
-                      </Box>
+                      <AnalyticsPagesGallery
+                        connectionId={activeConnectionId ?? ''}
+                        onOpenPage={setActiveAnalyticsPageId}
+                      />
                     )}
                   </Box>
                 );

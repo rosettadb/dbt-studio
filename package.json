@@ -1,5 +1,5 @@
 {
-  "version": "1.7.8",
+  "version": "1.7.9",
   "name": "rosetta-dbt-studio",
   "description": "Turn Raw Data into Business Insights—Faster with RosettaDB",
   "keywords": [
@@ -13,7 +13,7 @@
     "type": "git",
     "url": "git+https://github.com/rosettadb/dbt-studio.git"
   },
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "author": {
     "name": "RosettaLabs",
     "email": "info@rosettadb.io",

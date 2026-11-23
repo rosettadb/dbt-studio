@@ -2,6 +2,10 @@ import { tool } from 'ai';
 import { z } from 'zod';
 import AgentService from '../../../agent.service';
 import { AnalyticsPagesService } from '../../../analyticsPages.service';
+import {
+  formatWarnings,
+  validatePage,
+} from '../../../../../shared/analyticsBi';
 
 function getAnalyticsContextResult(conversationId: number):
   | {
@@ -104,10 +108,18 @@ export function createStudioAnalyticsPagesTools(conversationId: number) {
       execute: async ({ markdownContent }) => {
         const contextResult = getAnalyticsContextResult(conversationId);
         if (!contextResult.ok) return contextResult;
-        return AgentService.requestAnalyticsEditorUpdate(
+        const result = await AgentService.requestAnalyticsEditorUpdate(
           conversationId,
           markdownContent,
         );
+        // Report page problems so the agent can fix them on its next turn.
+        const warnings = validatePage(markdownContent);
+        if (warnings.length === 0) return result;
+        return {
+          ...(result && typeof result === 'object' ? result : { result }),
+          pageWarnings: formatWarnings(warnings),
+          hint: 'Fix these page warnings and write the page again.',
+        };
       },
     }),
 

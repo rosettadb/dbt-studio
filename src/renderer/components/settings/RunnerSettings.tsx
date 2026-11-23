@@ -5,10 +5,6 @@ import {
   Box,
   Typography,
   Alert,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   CircularProgress,
   IconButton,
   Tooltip,
@@ -21,10 +17,9 @@ import {
   HelpOutline,
   TerminalOutlined,
   ExtensionOutlined,
-  Info,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import { SettingsType, RunnerPluginId } from '../../../types/backend';
+import { SettingsType, RunnerRequirementStatus } from '../../../types/backend';
 import { ConfirmationModal } from '../modals';
 import { useIsTaskTypeActive } from '../../hooks';
 import { isInstallCancelledError } from '../../../shared/installTasks';
@@ -36,7 +31,7 @@ import {
   SettingsStatus,
 } from './SettingsLayout';
 import {
-  useCheckRunnerPluginDependencies,
+  useCheckRunnerRequirements,
   useCheckKisqlVersion,
   useInstallKisql,
   useUninstallKisql,
@@ -44,52 +39,35 @@ import {
   useUninstallPySpark,
 } from '../../controllers';
 
-// Manual-install guidance shown in the help popover for deps that have no
-// in-app installer.
-const MANUAL_INSTALL_HELP: Partial<
-  Record<RunnerPluginId, { title: string; steps: string[] }>
-> = {
-  git: {
-    title: 'Installing Git',
-    steps: [
-      'macOS: run  xcode-select --install  or install via https://git-scm.com/downloads',
-      'Linux: sudo apt install git  (Debian/Ubuntu) or  sudo dnf install git  (Fedora)',
-      'Windows: download the installer from https://git-scm.com/downloads',
-      'After install, restart dbt Studio so the new PATH is picked up.',
-    ],
-  },
-  terraform: {
-    title: 'Installing Terraform',
-    steps: [
-      'macOS/Linux: use Homebrew —  brew tap hashicorp/tap && brew install hashicorp/tap/terraform',
-      'Or download the binary directly from https://developer.hashicorp.com/terraform/install',
-      'Windows: use the MSI installer linked on the download page above.',
-      'After install, restart dbt Studio so the new PATH is picked up.',
-    ],
-  },
-  s3: {
-    title: 'Installing AWS CLI',
-    steps: [
-      'macOS: brew install awscli',
-      'Linux: follow the official guide at https://aws.amazon.com/cli/',
-      'Windows: download the MSI installer from https://aws.amazon.com/cli/',
-      'After install, restart dbt Studio so the new PATH is picked up.',
-    ],
-  },
+// Which tools the plugins need, how each is checked and how it is installed
+// come from the runner's plugin manifest (`requires`). For a tool the
+// manifest marks as installed by Studio, the buttons below start the
+// installer Studio has for it: its own settings page (method "studio"),
+// KiSQL (a "download" with id "kisql") or PySpark (the "pip" package
+// "pyspark"). Any other tool gets its link and, when given, instructions.
+const hasSettingsPage = (dep: RunnerRequirementStatus) =>
+  dep.install.type === 'auto' && dep.install.method === 'studio';
+const isKisql = (dep: RunnerRequirementStatus) =>
+  dep.install.type === 'auto' &&
+  dep.install.method === 'download' &&
+  dep.id === 'kisql';
+const isPySpark = (dep: RunnerRequirementStatus) =>
+  dep.install.type === 'auto' &&
+  dep.install.method === 'pip' &&
+  dep.install.package === 'pyspark';
+
+const currentOs = (): 'darwin' | 'win32' | 'linux' => {
+  const platform = window.navigator.platform.toLowerCase();
+  if (platform.includes('mac')) return 'darwin';
+  if (platform.includes('win')) return 'win32';
+  return 'linux';
 };
 
-function describeJavaRequirement(
-  version?: string,
-  available?: boolean,
-): string {
-  if (!version) {
-    return 'Java was not found. PySpark requires Java 17 or newer. Install a JDK, then restart Studio.';
-  }
-  if (available) {
-    return `Java ${version} is available. PySpark requires Java 17 or newer.`;
-  }
-  return `Java ${version} was found. PySpark requires Java 17 or newer. Install a newer JDK, then restart Studio.`;
-}
+// The manifest's install steps for this OS, then the ones for every OS.
+const installSteps = (dep: RunnerRequirementStatus): string[] => {
+  const instructions = dep.install.instructions ?? {};
+  return [...(instructions[currentOs()] ?? []), ...(instructions.all ?? [])];
+};
 
 interface RunnerSettingsProps {
   settings: SettingsType;
@@ -106,20 +84,16 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
   const isInstallTaskActive = useIsTaskTypeActive('install:runner');
   const isPySparkInstallTaskActive = useIsTaskTypeActive('install:pyspark');
   const [kisqlUpdateAvailable, setKisqlUpdateAvailable] = useState(false);
-  const [javaInfoOpen, setJavaInfoOpen] = useState(false);
   const [helpAnchor, setHelpAnchor] = useState<{
     el: HTMLElement;
-    id: RunnerPluginId;
+    dep: RunnerRequirementStatus;
   } | null>(null);
 
-  const pluginDependencies = useCheckRunnerPluginDependencies({
+  const pluginDependencies = useCheckRunnerRequirements({
     onError: (error) => {
       toast.error(`Failed to check plugin dependencies: ${error.message}`);
     },
   });
-  const javaStatus = pluginDependencies.data?.find(
-    (dependency) => dependency.id === 'pyspark',
-  )?.java;
 
   // KiSQL hooks
   const checkKisql = useCheckKisqlVersion({
@@ -246,6 +220,13 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
             </Box>
           </SettingsSectionBody>
         )}
+        {pluginDependencies.data?.length === 0 && (
+          <SettingsSectionBody>
+            <Typography variant="body2" color="text.secondary">
+              No plugin dependencies. They are listed by the local runner.
+            </Typography>
+          </SettingsSectionBody>
+        )}
         {pluginDependencies.data?.map((dep) => (
           <SettingsRow
             key={dep.id}
@@ -259,20 +240,21 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
                 }}
               >
                 {dep.label}
-                {dep.available ? (
+                {dep.available && (
                   <SettingsStatus tone="success">
                     {dep.version ? `v${dep.version}` : 'Available'}
                   </SettingsStatus>
-                ) : (
+                )}
+                {!dep.available && dep.version && (
+                  <SettingsStatus tone="warning">
+                    v{dep.version} found, {dep.check.minVersion}+ required
+                  </SettingsStatus>
+                )}
+                {!dep.available && !dep.version && (
                   <SettingsStatus tone="warning">Not found</SettingsStatus>
                 )}
-                {dep.id === 'kinetica_cli' && kisqlUpdateAvailable && (
+                {isKisql(dep) && kisqlUpdateAvailable && (
                   <SettingsStatus tone="info">Update available</SettingsStatus>
-                )}
-                {dep.id === 'pyspark' && dep.java && !dep.java.available && (
-                  <SettingsStatus tone="warning">
-                    Java 17+ required
-                  </SettingsStatus>
                 )}
               </Box>
             }
@@ -286,12 +268,13 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
                   whiteSpace: 'nowrap',
                 }}
               >
-                Plugin: {dep.plugin}
+                {dep.plugins.length > 1 ? 'Plugins' : 'Plugin'}:{' '}
+                {dep.plugins.join(', ')}
                 {dep.path ? ` · ${dep.path}` : ''}
               </Box>
             }
           >
-            {(dep.id === 'dbt' || dep.id === 'rosetta') && (
+            {hasSettingsPage(dep) && (
               <Button
                 size="small"
                 variant="outlined"
@@ -300,7 +283,7 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
                 Manage
               </Button>
             )}
-            {dep.id === 'kinetica_cli' && (
+            {isKisql(dep) && (
               <>
                 <Button
                   size="small"
@@ -339,16 +322,8 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
                 )}
               </>
             )}
-            {dep.id === 'pyspark' && (
+            {isPySpark(dep) && (
               <>
-                <Tooltip title="Java requirement">
-                  <IconButton
-                    size="small"
-                    onClick={() => setJavaInfoOpen(true)}
-                  >
-                    <Info fontSize="small" />
-                  </IconButton>
-                </Tooltip>
                 <Button
                   size="small"
                   variant="outlined"
@@ -388,34 +363,29 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
               </>
             )}
             {!dep.available &&
-              dep.downloadUrl &&
-              dep.id !== 'kinetica_cli' &&
-              dep.id !== 'pyspark' && (
+              dep.install.url &&
+              !hasSettingsPage(dep) &&
+              !isKisql(dep) &&
+              !isPySpark(dep) && (
                 <Button
                   size="small"
                   variant="outlined"
                   startIcon={<Launch />}
-                  onClick={() => window.open(dep.downloadUrl, '_blank')}
+                  onClick={() => window.open(dep.install.url, '_blank')}
                 >
                   Install
                 </Button>
               )}
-            {dep.id !== 'kinetica_cli' &&
-              dep.id !== 'dbt' &&
-              dep.id !== 'rosetta' &&
-              dep.id !== 'command' &&
-              MANUAL_INSTALL_HELP[dep.id] && (
-                <Tooltip title="Installation help">
-                  <IconButton
-                    size="small"
-                    onClick={(e) =>
-                      setHelpAnchor({ el: e.currentTarget, id: dep.id })
-                    }
-                  >
-                    <HelpOutline fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-              )}
+            {installSteps(dep).length > 0 && (
+              <Tooltip title="Installation help">
+                <IconButton
+                  size="small"
+                  onClick={(e) => setHelpAnchor({ el: e.currentTarget, dep })}
+                >
+                  <HelpOutline fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
           </SettingsRow>
         ))}
       </SettingsSection>
@@ -425,7 +395,7 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
         onClose={() => setShowKisqlUninstallConfirmation(false)}
         onConfirm={confirmKisqlUninstall}
         title="Uninstall KiSQL"
-        question="Are you sure you want to uninstall KiSQL? Pipeline steps using kinetica_cli@v1 will fail until it is reinstalled."
+        question="Are you sure you want to uninstall KiSQL? Pipeline steps that use it will fail until it is reinstalled."
       />
 
       <ConfirmationModal
@@ -433,23 +403,8 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
         onClose={() => setShowPySparkUninstallConfirmation(false)}
         onConfirm={confirmPySparkUninstall}
         title="Uninstall PySpark"
-        question="Are you sure you want to uninstall PySpark from Studio Python? Local pipeline steps using pyspark@v1 will fail until it is reinstalled."
+        question="Are you sure you want to uninstall PySpark from Studio Python? Local pipeline steps that use it will fail until it is reinstalled."
       />
-
-      <Dialog open={javaInfoOpen} onClose={() => setJavaInfoOpen(false)}>
-        <DialogTitle>Java required for PySpark</DialogTitle>
-        <DialogContent>
-          <Typography>
-            {describeJavaRequirement(
-              javaStatus?.version,
-              javaStatus?.available,
-            )}
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setJavaInfoOpen(false)}>Close</Button>
-        </DialogActions>
-      </Dialog>
 
       {/* Manual-install help popover */}
       <Popover
@@ -460,18 +415,20 @@ export const RunnerSettings: React.FC<RunnerSettingsProps> = ({ settings }) => {
         transformOrigin={{ vertical: 'top', horizontal: 'left' }}
         PaperProps={{ sx: { p: 2, maxWidth: 380 } }}
       >
-        {helpAnchor && MANUAL_INSTALL_HELP[helpAnchor.id] && (
+        {helpAnchor && (
           <Box>
             <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
-              {MANUAL_INSTALL_HELP[helpAnchor.id]!.title}
+              Installing {helpAnchor.dep.label}
             </Typography>
-            <Alert severity="info" sx={{ mb: 1.5, py: 0 }}>
-              <Typography variant="caption">
-                Requires manual installation — no in-app installer available.
-              </Typography>
-            </Alert>
+            {helpAnchor.dep.install.type === 'manual' && (
+              <Alert severity="info" sx={{ mb: 1.5, py: 0 }}>
+                <Typography variant="caption">
+                  Requires manual installation — no in-app installer available.
+                </Typography>
+              </Alert>
+            )}
             <Box component="ol" sx={{ m: 0, pl: 2 }}>
-              {MANUAL_INSTALL_HELP[helpAnchor.id]!.steps.map((step) => (
+              {installSteps(helpAnchor.dep).map((step) => (
                 <Typography
                   key={step}
                   component="li"

@@ -11,6 +11,7 @@ import {
   Delete as DeleteIcon,
   PlayArrow as PlayIcon,
   Cached as RefreshIcon,
+  InsertChartOutlined as ChartBoardIcon,
 } from '@mui/icons-material';
 import { getClassWithColor } from 'file-icons-js';
 import { toast } from 'react-toastify';
@@ -20,6 +21,7 @@ import { YamlFileIcon } from '../fileIcon';
 import { FileNode, FileStatuses } from './types';
 import { GitStatusBadge } from './GitStatusBadge';
 import { PipelineThumbnailPreview } from './PipelineThumbnailPreview';
+import { isChartsBoardPath, isChartsPartial } from '../../../shared/dbtCharts';
 
 // Pixels each tree level is indented by. The indent guides below are drawn
 // at the same step, halfway between each ancestor folder's icon and its
@@ -224,6 +226,18 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
             <FolderIcon fontSize="inherit" />
           )}
         </FolderIconWrapper>
+      );
+    }
+    // dbt Charts board under the project-root charts/ folder (partials and
+    // meta.yml keep the YAML badge: they have no page of their own).
+    if (
+      isChartsBoardPath(projectPath, node.data.path) &&
+      !isChartsPartial(node.data.path)
+    ) {
+      return (
+        <FileIconWrapper>
+          <ChartBoardIcon fontSize="inherit" sx={{ color: 'primary.main' }} />
+        </FileIconWrapper>
       );
     }
     // file-icons-js shows a database icon for YAML, so use the YML badge instead

@@ -26,7 +26,6 @@ import {
   Add,
   TableChart,
   Warning,
-  InsertChart,
   Upload,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   ChatBubbleOutline,
@@ -59,7 +58,10 @@ import {
   buildConnectionDropdownItems,
   PanelHeaderDropdown,
 } from '../../components';
-import { AnalyticsEditor } from '../../components/analytics';
+import {
+  AnalyticsEditor,
+  AnalyticsPagesGallery,
+} from '../../components/analytics';
 import { NotebooksSidebar } from '../../components/notebook/NotebooksSidebar';
 import { NotebookTabManager } from '../../components/notebook/NotebookTabManager';
 import {
@@ -1377,25 +1379,10 @@ const Notebooks = () => {
                         onSchemaChange={handleRefreshSchema}
                       />
                     ) : (
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          height: '100%',
-                          gap: 2,
-                          color: 'text.secondary',
-                        }}
-                      >
-                        <InsertChart sx={{ fontSize: 64, opacity: 0.2 }} />
-                        <Typography variant="h6" color="text.secondary">
-                          Select an analytics page from the sidebar
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          or click + to create a new dashboard page
-                        </Typography>
-                      </Box>
+                      <AnalyticsPagesGallery
+                        connectionId={activeConnectionId}
+                        onOpenPage={handleOpenAnalyticsPage}
+                      />
                     )}
                   </Box>
                 );

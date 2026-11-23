@@ -4,6 +4,7 @@ import CloudIcon from '@mui/icons-material/Cloud';
 import { PipelineGraph } from './PipelineGraph';
 import { parsePipelineConfig } from './parsePipelineConfig';
 import type { PipelineJob, PipelineStep } from './types';
+import type { MacroContext } from '../../../shared/pluginManifest';
 import { useCloudActionStatus } from '../../controllers/rosettaCloud.controller';
 import type {
   CloudActionStatus,
@@ -40,6 +41,10 @@ type PipelineViewProps = {
   onEditingChange?: (isEditing: boolean) => void;
   /** Fired once when the pipeline view first mounts (e.g. tab opened). */
   onEnterView?: () => void;
+  /** Values for the macros in a plugin's widget defaults. */
+  macros?: MacroContext;
+  /** Paths picked in a step's form are saved relative to it. */
+  projectPath?: string;
 };
 
 const ACTION_STATUS_COLOR: Record<CloudActionStatus, string> = {
@@ -98,6 +103,8 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
   onRunWithEnv,
   onEditingChange,
   onEnterView,
+  macros,
+  projectPath,
 }) => {
   const config = React.useMemo(() => parsePipelineConfig(content), [content]);
 
@@ -218,6 +225,8 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
         onRunWithEnv={onRunWithEnv}
         onEditingChange={onEditingChange}
         onEnterView={onEnterView}
+        macros={macros}
+        projectPath={projectPath}
       />
     </Box>
   );

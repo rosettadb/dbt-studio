@@ -239,6 +239,35 @@ describe('DbtSettings runtime switch', () => {
     });
   });
 
+  it('spins left of Install All Adapters while installed packages are checked', async () => {
+    let finishCheck: (value: unknown) => void = () => undefined;
+    getInstalledPackages.mockReturnValue(
+      new Promise((resolve) => {
+        finishCheck = resolve;
+      }),
+    );
+    renderSettings();
+
+    // The page starts the check 1s after it opens.
+    const spinner = await screen.findByRole(
+      'progressbar',
+      { name: 'Checking installed packages' },
+      { timeout: 6000 },
+    );
+    expect(spinner.nextElementSibling).toBe(
+      screen.getByRole('button', { name: 'Install All Adapters' }),
+    );
+
+    finishCheck({ packages: {} });
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('progressbar', {
+          name: 'Checking installed packages',
+        }),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
   it('shows Activate v2 instead of the v2 list when dbt v2 is clicked', async () => {
     renderSettings();
     await screen.findByText('v1 · 1.11.12 installed');
