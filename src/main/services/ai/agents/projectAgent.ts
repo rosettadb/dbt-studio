@@ -12,6 +12,7 @@ import { composeAgentRuntime } from './composeAgentRuntime';
 import { PROJECT_AGENT_CONTEXT_FILE } from '../../../../shared/agentMemoryConstants';
 import { createStudioPipelineTools } from '../tools/studio/pipeline.tools';
 import { createStudioKeystoreTools } from '../tools/studio/keystore.tools';
+import { createStudioChartsTools } from '../tools/studio/charts.tools';
 
 export interface ProjectAgentOptions {
   projectPath?: string;
@@ -22,6 +23,7 @@ export interface ProjectAgentOptions {
   toolMode: 'chat' | 'agent';
   projectAiContext?: string;
   projectPipelineContext?: string;
+  projectChartsContext?: string;
   sessionContextBlock?: string;
   connectionMeta?: {
     name?: string;
@@ -75,6 +77,10 @@ export async function createProjectAgent(
     ? `\n<pipeline_authoring_context>\n${options.projectPipelineContext}\n</pipeline_authoring_context>\n`
     : '';
 
+  const chartsContextBlock = options.projectChartsContext
+    ? `\n<dbt_charts_authoring_context>\n${options.projectChartsContext}\n</dbt_charts_authoring_context>\n`
+    : '';
+
   const isAskMode = options.toolMode === 'chat';
   const hasDbt = options.hasDbt ?? true;
 
@@ -87,6 +93,7 @@ ${connectionBlock}
 ${sessionCtxBlock}
 ${projectContextBlock}
 ${pipelineContextBlock}
+${chartsContextBlock}
 
 ## Project AI Instructions (${PROJECT_AGENT_CONTEXT_FILE})
 
@@ -109,6 +116,7 @@ If the user asks you to write code, modify a file, or execute a command, explain
 - pathExists: Check if a file or directory exists
 - studio_pipeline_list: List pipeline YAML files in the active project
 - studio_pipeline_read: Read and validate a pipeline and return its content hash
+- studio_charts_validate: Validate a dbt Charts board YAML file under charts/
 ${mcpToolsList}`
     : `You are an expert dbt Studio AI assistant.
 You help users with dbt model development, debugging, documentation, and data operations.
@@ -119,6 +127,7 @@ ${connectionBlock}
 ${sessionCtxBlock}
 ${projectContextBlock}
 ${pipelineContextBlock}
+${chartsContextBlock}
 
 ## Project AI Instructions (${PROJECT_AGENT_CONTEXT_FILE})
 
@@ -251,6 +260,13 @@ already referenced elsewhere in the project (e.g. a new TF_VAR_* for a
 terraform@v1 step), register it with studio_keystore_register_placeholder so
 the user can find and fill it in later - never ask the user for or store a
 real secret value yourself.
+
+### dbt Charts Tools
+- studio_charts_validate: Validate a dbt Charts board YAML file under charts/ (offline)
+- studio_charts_refresh_preview: Reload the open dbt Charts preview for a board
+
+Write boards with writeFile under charts/. Validate after every write and fix
+every error. Refresh the preview once validation passes.
 ${mcpToolsList}
 
 ### Database Tools
@@ -275,6 +291,7 @@ Always confirm before making destructive changes.`;
         }),
         ...createFilesystemTools(projectPath),
         ...createStudioPipelineTools(projectPath),
+        ...createStudioChartsTools(projectPath),
         ...createStudioKeystoreTools(),
       }
     : { ...(hasDbt ? dbtTools : {}), ...filesystemTools };
@@ -298,6 +315,7 @@ Always confirm before making destructive changes.`;
     'studio_sql_schema_extract',
     'studio_pipeline_list',
     'studio_pipeline_read',
+    'studio_charts_validate',
   ];
 
   const makeAskModeStub = (toolName: string): any => {
@@ -315,9 +333,11 @@ Always confirm before making destructive changes.`;
     'studio_pipeline_generate',
     'studio_pipeline_update',
   ]);
+  const chartsCodeOnlyTools = new Set(['studio_charts_refresh_preview']);
   Object.entries(allBaseTools).forEach(([name, toolDef]) => {
     if (enabledToolNames.has(name) || name === 'studio_sql_schema_extract') {
       if (isAskMode && pipelineCodeOnlyTools.has(name)) return;
+      if (isAskMode && chartsCodeOnlyTools.has(name)) return;
       if (isAskMode && !READ_ONLY_TOOLS.includes(name)) {
         baseTools[name] = makeAskModeStub(name);
       } else {

@@ -32,6 +32,7 @@ import {
   registerPythonNotebooksHandlers,
   registerPtyHandlers,
 } from './ipcHandlers';
+import registerDbtChartsHandlers from './ipcHandlers/dbtCharts.ipcHandlers';
 import { installIpcErrorHandling } from './utils/ipcErrorHandler';
 
 const registerHandlers = (mainWindow: BrowserWindow) => {
@@ -62,6 +63,7 @@ const registerHandlers = (mainWindow: BrowserWindow) => {
   registerAnalyticsPagesHandlers();
   registerStaticSiteHandlers(mainWindow);
   registerFlowfileHandlers();
+  registerDbtChartsHandlers();
   registerPipelineTemplatesHandlers();
   registerTaskManagerHandlers(mainWindow);
   registerSecondBrainHandlers();
