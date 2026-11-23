@@ -1462,23 +1462,30 @@ export const DbtSettings: React.FC<DbtSettingsProps> = ({
         action={
           !isV2Active &&
           hasDbt && (
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={() => setShowInstallAllConfirmation(true)}
-              disabled={
-                isLoadingInstall || isLoadingDialog || isAdapterInstallBlocked
-              }
-              startIcon={
-                isLoadingInstall ? (
-                  <CircularProgress size={14} color="inherit" />
-                ) : (
-                  <CloudDownload />
-                )
-              }
-            >
-              {isLoadingInstall ? 'Installing...' : 'Install All Adapters'}
-            </Button>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              {isCheckingPackages && (
+                <Tooltip title="Checking installed packages">
+                  <CircularProgress size={16} />
+                </Tooltip>
+              )}
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => setShowInstallAllConfirmation(true)}
+                disabled={
+                  isLoadingInstall || isLoadingDialog || isAdapterInstallBlocked
+                }
+                startIcon={
+                  isLoadingInstall ? (
+                    <CircularProgress size={14} color="inherit" />
+                  ) : (
+                    <CloudDownload />
+                  )
+                }
+              >
+                {isLoadingInstall ? 'Installing...' : 'Install All Adapters'}
+              </Button>
+            </Box>
           )
         }
       >
