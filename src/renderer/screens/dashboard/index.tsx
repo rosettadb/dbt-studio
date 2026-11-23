@@ -7,10 +7,6 @@ import {
   CardActionArea,
   Chip,
   CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   Divider,
   Grid,
   List,
@@ -32,9 +28,12 @@ import ElectricalServicesIcon from '@mui/icons-material/ElectricalServices';
 
 import { icons, rosettaIcon } from '../../../../assets';
 import { connectionIcon } from '../../../connections/registry.renderer';
-import { ReactComponent as RouteIcon } from '../../assets/icons/lucide/route.svg';
 import { useAppContext } from '../../hooks';
-import type { DashboardCard } from '../../../extensionApi/renderer';
+import {
+  Slot,
+  STUDIO_SLOTS,
+  type DashboardCard,
+} from '../../../extensionApi/renderer';
 import { dashboardCards } from '../../../extensionHost/renderer/contributions.renderer';
 import { useRegistry } from '../../../extensionHost/renderer/registry.renderer';
 import { QuickStartTour, hasSeenTour, markTourSeen } from '../../components';
@@ -56,17 +55,6 @@ const DbtCardIcon: React.FC = () => (
     style={{ width: 28, height: 28, objectFit: 'contain' }}
   />
 );
-
-const PipelineCardIcon: React.FC = () => {
-  const theme = useTheme();
-  return (
-    <RouteIcon
-      width={28}
-      height={28}
-      style={{ color: theme.palette.primary.main }}
-    />
-  );
-};
 
 const AnalyticsCardIcon: React.FC = () => (
   <img
@@ -121,10 +109,12 @@ const ProjectTypeIcon: React.FC<{ connectionType?: string }> = ({
 };
 
 // Studio's own Home cards. Extensions add theirs to the same registry;
-// the gaps in `order` leave room between them.
+// the gaps in `order` leave room between them (700 is the Pipeline card,
+// which the pipeline tool adds).
 const features: DashboardCard[] = [
   {
     id: 'dbt-project',
+    order: 100,
     title: 'Projects',
     category: 'dbt and Analytics',
     description:
@@ -134,6 +124,7 @@ const features: DashboardCard[] = [
   },
   {
     id: 'notebook',
+    order: 200,
     title: 'Notebook',
     category: 'Analytics',
     description:
@@ -143,6 +134,7 @@ const features: DashboardCard[] = [
   },
   {
     id: 'sql-editor',
+    order: 300,
     title: 'SQL Editor',
     category: 'SQL',
     description: 'Write, execute, and profile high-performance SQL queries.',
@@ -151,6 +143,7 @@ const features: DashboardCard[] = [
   },
   {
     id: 'analytics',
+    order: 400,
     title: 'Analytics',
     category: 'BI & Viz',
     description: 'Visualize your data with powerful dashboards and charts.',
@@ -160,6 +153,7 @@ const features: DashboardCard[] = [
   },
   {
     id: 'datalake',
+    order: 500,
     title: 'Data Lake',
     category: 'Storage',
     description: 'Access and manage raw data across your data lake storage.',
@@ -168,6 +162,7 @@ const features: DashboardCard[] = [
   },
   {
     id: 'object-explorer',
+    order: 600,
     title: 'Object Explorer',
     category: 'Cloud',
     description: 'Browse and manage cloud storage objects effortlessly.',
@@ -175,16 +170,8 @@ const features: DashboardCard[] = [
     path: '/app/cloud-explorer',
   },
   {
-    id: 'pipeline',
-    title: 'Pipeline',
-    category: 'Orchestration',
-    description: 'Design and monitor robust data pipelines and workflows.',
-    icon: PipelineCardIcon,
-    // opened via modal — path unused
-    path: '',
-  },
-  {
     id: 'etl',
+    order: 800,
     title: 'ETL (Migrate)',
     category: 'Migration',
     description:
@@ -194,9 +181,7 @@ const features: DashboardCard[] = [
   },
 ];
 
-features.forEach((feature, index) =>
-  dashboardCards.add({ ...feature, order: (index + 1) * 100 }),
-);
+features.forEach((feature) => dashboardCards.add(feature));
 
 // How many rows each bottom panel lists; its Manage All button only shows when
 // there are more than this.
@@ -289,7 +274,6 @@ const Dashboard: React.FC = () => {
   const { data: connections = [] } = useGetConnections();
   const { mutateAsync: selectProject } = useSelectProject();
   const cards = useRegistry(dashboardCards);
-  const [isPipelineChoiceOpen, setIsPipelineChoiceOpen] = React.useState(false);
   const { data: apiKey, isLoading: apiKeyLoading } = useApiKey();
   const { data: profile } = useProfile();
   const { mutate: login, isLoading: loginLoading } = useAuthLogin({
@@ -308,25 +292,7 @@ const Dashboard: React.FC = () => {
     navigate(path);
   };
 
-  // The project list opens the chosen (or newly created) project with the
-  // Create Pipeline dialog already open.
-  const openProjectListForPipeline = (startNewProject: boolean) => {
-    setIsPipelineChoiceOpen(false);
-    setIsSidebarOpen(true);
-    navigate('/app/select-project', {
-      state: { forPipeline: true, startNewProject },
-    });
-  };
-
   const handleCardClick = (feature: DashboardCard) => {
-    if (feature.id === 'pipeline') {
-      if (projects.length === 0) {
-        openProjectListForPipeline(true);
-        return;
-      }
-      setIsPipelineChoiceOpen(true);
-      return;
-    }
     if (feature.id === 'analytics') {
       setIsSidebarOpen(true);
       navigate('/app/sql', { state: { tab: 2 } });
@@ -907,47 +873,8 @@ const Dashboard: React.FC = () => {
           </Grid>
         </Box>
       </Box>
-      <Dialog
-        open={isPipelineChoiceOpen}
-        onClose={() => setIsPipelineChoiceOpen(false)}
-        maxWidth="xs"
-        fullWidth
-      >
-        <DialogTitle>Where should the pipeline go?</DialogTitle>
-        <DialogContent>
-          <List disablePadding>
-            <ListItemButton
-              onClick={() => openProjectListForPipeline(true)}
-              sx={{ borderRadius: 1.5, mb: 0.5 }}
-            >
-              <ListItemIcon sx={{ minWidth: 36 }}>
-                <AddIcon color="primary" />
-              </ListItemIcon>
-              <ListItemText
-                primary="New project"
-                secondary="Create a new project, then add a pipeline to it"
-                primaryTypographyProps={{ fontWeight: 600 }}
-              />
-            </ListItemButton>
-            <ListItemButton
-              onClick={() => openProjectListForPipeline(false)}
-              sx={{ borderRadius: 1.5 }}
-            >
-              <ListItemIcon sx={{ minWidth: 36 }}>
-                <FolderOpenIcon color="primary" />
-              </ListItemIcon>
-              <ListItemText
-                primary="Existing project"
-                secondary="Pick one of your projects to add a pipeline to"
-                primaryTypographyProps={{ fontWeight: 600 }}
-              />
-            </ListItemButton>
-          </List>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setIsPipelineChoiceOpen(false)}>Cancel</Button>
-        </DialogActions>
-      </Dialog>
+      {/* Dialogs that extensions keep mounted on Home */}
+      <Slot id={STUDIO_SLOTS.homeOverlays} />
       {/* Only show the quick start tour for brand-new users with no projects */}
       {projects.length === 0 && <QuickStartTour />}
     </Box>

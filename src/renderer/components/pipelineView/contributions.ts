@@ -2,6 +2,7 @@ import TerminalIcon from '@mui/icons-material/Terminal';
 import { STUDIO_SLOTS } from '../../../extensionApi/renderer';
 import {
   appProviders,
+  dashboardCards,
   fileTreeHoverPreviews,
   fileTreeRowActions,
   projectMenuItems,
@@ -27,6 +28,11 @@ import {
   pipelineRunOnCloudItem,
 } from './pipelineMenuItems';
 import { pipelineRunStore } from './pipelineRunStore';
+import {
+  PIPELINE_CREATE_COMMAND,
+  PipelineProjectChoiceDialog,
+  pipelineDashboardCard,
+} from './PipelineHomeContributions';
 
 /**
  * Everything the pipeline tool adds to Studio's screens. Registered straight
@@ -62,9 +68,15 @@ slotRegistry(STUDIO_SLOTS.projectOverlays).add({
   id: 'pipeline.dialogs',
   Component: PipelineOverlays,
 });
-// Opens the Create Pipeline dialog; run by the Home card's flow.
+dashboardCards.add(pipelineDashboardCard);
+slotRegistry(STUDIO_SLOTS.homeOverlays).add({
+  id: 'pipeline.project-choice',
+  Component: PipelineProjectChoiceDialog,
+});
+// Opens the Create Pipeline dialog. The Home card asks the project list to
+// run it once the project is open.
 registerCommand({
-  id: 'pipeline.create',
+  id: PIPELINE_CREATE_COMMAND,
   label: 'Pipeline: Create pipeline',
   hidden: true,
   run: () => pipelineRunStore.openCreate(),

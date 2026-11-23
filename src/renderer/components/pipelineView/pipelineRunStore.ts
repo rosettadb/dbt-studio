@@ -7,6 +7,8 @@ import React from 'react';
  * the places a pipeline can be started from needs to hold a dialog itself.
  */
 export interface PipelineRunState {
+  /** The Home dialog asking which project the new pipeline goes into. */
+  isProjectChoiceOpen: boolean;
   isCreateOpen: boolean;
   /** Arguments of a cloud run waiting for its dialog; null when none. */
   cloudRunArgs: string | null;
@@ -17,6 +19,7 @@ export interface PipelineRunState {
 }
 
 const initialState: PipelineRunState = {
+  isProjectChoiceOpen: false,
   isCreateOpen: false,
   cloudRunArgs: null,
   localRunFile: null,
@@ -43,6 +46,8 @@ const getState = () => state;
 export const pipelineRunStore = {
   getState,
   subscribe,
+  openProjectChoice: () => setState({ isProjectChoiceOpen: true }),
+  closeProjectChoice: () => setState({ isProjectChoiceOpen: false }),
   openCreate: () => setState({ isCreateOpen: true }),
   closeCreate: () => setState({ isCreateOpen: false }),
   requestCloudRun: (args: string) => setState({ cloudRunArgs: args }),

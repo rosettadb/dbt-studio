@@ -43,7 +43,6 @@ import { AddConnectionModal, RemoveConnectionModal } from '../modals';
 import { useTabs } from '../../context/TabsProvider';
 import { useRefreshProjectFiles } from '../../hooks/useRefreshProjectFiles';
 import { projectsServices } from '../../services';
-import { runCommand } from '../commandPalette/commands';
 import { Slot, STUDIO_SLOTS } from '../../../extensionApi/renderer';
 
 export type SidebarTab = 'explorer' | 'scm' | 'connections';
@@ -279,10 +278,7 @@ const ConnectionsTab: React.FC<{ project: Project }> = ({ project }) => {
 
 // Explorer Tab Component — the file tree, and below it whatever extensions
 // put in the explorer footer slot.
-const ExplorerTab: React.FC<{
-  project: Project;
-  openCreatePipeline?: boolean;
-}> = ({ project, openCreatePipeline }) => {
+const ExplorerTab: React.FC<{ project: Project }> = ({ project }) => {
   const {
     activeFilePath,
     openFile,
@@ -301,14 +297,6 @@ const ExplorerTab: React.FC<{
   const { data: statuses = [] } = useGetFileStatuses(project.path, {
     enabled: !!project.path && !!isInitialized,
   });
-
-  // Open the Create Pipeline dialog when asked to from outside (the Home
-  // screen's pipeline card)
-  React.useEffect(() => {
-    if (openCreatePipeline) {
-      runCommand('pipeline.create');
-    }
-  }, [openCreatePipeline]);
 
   const handleFileSelect = React.useCallback(
     (fileNode: FileNode) => {
@@ -427,13 +415,11 @@ const SourceControlTab: React.FC<{ project: Project; active: boolean }> = ({
 interface ProjectSidebarProps {
   activeTab: SidebarTab;
   project: Project;
-  openCreatePipeline?: boolean;
 }
 
 export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   activeTab,
   project,
-  openCreatePipeline,
 }) => {
   return (
     <Box
@@ -445,12 +431,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
       }}
     >
       <Box sx={{ flex: 1, overflow: 'hidden' }}>
-        {activeTab === 'explorer' && (
-          <ExplorerTab
-            project={project}
-            openCreatePipeline={openCreatePipeline}
-          />
-        )}
+        {activeTab === 'explorer' && <ExplorerTab project={project} />}
         {/* Keep the existing Git handlers mounted across project sidebar tabs so
             their palette commands remain available throughout DBT Studio. */}
         <Box

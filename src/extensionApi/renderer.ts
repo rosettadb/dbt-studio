@@ -163,6 +163,8 @@ export const STUDIO_SLOTS = {
    * `{ project }`.
    */
   projectOverlays: 'project.overlays',
+  /** Always mounted while Home is open; for dialogs. No props. */
+  homeOverlays: 'home.overlays',
 } as const;
 
 /** A page in Settings, reachable at `/app/settings/<id>`. */

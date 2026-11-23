@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material';
 import ProjectDetails from '../../../../src/renderer/screens/projectDetails';
+import { registerCommand } from '../../../../src/renderer/components/commandPalette/commands';
 
 const mockUseGetFileStatuses = jest.fn();
 const mockSetIsSidebarOpen = jest.fn();
@@ -82,10 +83,12 @@ jest.mock('../../../../src/renderer/screens/chat', () => ({
   default: () => null,
 }));
 
-const renderProjectDetails = () =>
+const renderProjectDetails = (navigationState?: unknown) =>
   render(
     <ThemeProvider theme={createTheme()}>
-      <MemoryRouter>
+      <MemoryRouter
+        initialEntries={[{ pathname: '/', state: navigationState }]}
+      >
         <ProjectDetails />
       </MemoryRouter>
     </ThemeProvider>,
@@ -224,5 +227,41 @@ describe('ProjectDetails side panel tabs', () => {
     expect(
       screen.queryByRole('button', { name: 'Refresh directories' }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe('ProjectDetails opened with a command to run', () => {
+  beforeEach(() => {
+    mockUseGetFileStatuses.mockReturnValue({ data: [] });
+  });
+
+  it('runs the command the project list handed over, once the screen is open', () => {
+    const run = jest.fn();
+    const unregister = registerCommand({
+      id: 'test.after-open',
+      label: 'Test',
+      hidden: true,
+      run,
+    });
+
+    renderProjectDetails({ runCommand: 'test.after-open' });
+
+    expect(run).toHaveBeenCalledTimes(1);
+    unregister();
+  });
+
+  it('runs nothing when opened the usual way', () => {
+    const run = jest.fn();
+    const unregister = registerCommand({
+      id: 'test.after-open',
+      label: 'Test',
+      hidden: true,
+      run,
+    });
+
+    renderProjectDetails();
+
+    expect(run).not.toHaveBeenCalled();
+    unregister();
   });
 });
