@@ -3,6 +3,7 @@ export * from './AnalyticsPagesTreeView';
 export * from './AnalyticsEditor';
 export * from './AnalyticsPreview';
 export * from './AnalyticsComponentRenderer';
+export { AnalyticsPagesGallery } from './bi/gallery/AnalyticsPagesGallery';
 
 // Registry
 export {

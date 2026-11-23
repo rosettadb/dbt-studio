@@ -42,6 +42,7 @@ import {
 import { buildAnalyticsTree } from '../../utils/analyticsTree';
 import { AnalyticsPageItem } from './AnalyticsPageItem';
 import { StaticSiteBuildDialog } from './StaticSiteBuildDialog';
+import { AnalyticsExamplesSection } from './bi/examples/AnalyticsExamplesSection';
 import { StaticSiteService } from '../../services/staticSite.service';
 import type {
   StaticSiteBuildProgress,
@@ -411,6 +412,10 @@ export const AnalyticsPagesTreeView: React.FC<AnalyticsPagesTreeViewProps> = ({
               onContextMenu={handleContextMenu}
             />
           ))}
+        <AnalyticsExamplesSection
+          activePageId={activePageId}
+          onOpenPage={onOpenPage}
+        />
       </Box>
 
       {/* Context Menu */}
