@@ -1,8 +1,7 @@
 # AI Policy for Contributors
 
 You can use AI coding tools (Claude Code, Codex, Copilot, Cursor, and others)
-to contribute. [AGENTS.md](./AGENTS.md) gives those tools the context and
-rules for this repository, and most tools read it automatically.
+to contribute.
 
 The same rules apply to every contribution, however it was written.
 
