@@ -251,10 +251,10 @@ describe('DbtCoreVersionService', () => {
     expect(saveSettingsMock).not.toHaveBeenCalled();
   });
 
-  it('installs dbt-kinetica from its GitHub source archive', async () => {
+  it('installs dbt-kinetica from PyPI by package name', async () => {
     mockCommands([
       { exitCode: 0 },
-      { exitCode: 0, stdout: 'Name: dbt-kinetica\nVersion: 0.1.0\n' },
+      { exitCode: 0, stdout: 'Name: dbt-kinetica\nVersion: 1.0.1\n' },
     ]);
 
     const result = await DbtCoreVersionService.installLatestPackage({
@@ -262,18 +262,11 @@ describe('DbtCoreVersionService', () => {
       packageName: 'dbt-kinetica',
     });
 
-    expect(result).toEqual({ ok: true, installedVersion: '0.1.0' });
+    expect(result).toEqual({ ok: true, installedVersion: '1.0.1' });
     expect(spawnMock).toHaveBeenNthCalledWith(
       1,
       pythonPath,
-      [
-        '-m',
-        'pip',
-        'install',
-        '--upgrade',
-        '--no-cache-dir',
-        'dbt-kinetica @ https://github.com/rosettadb/kinetica-dbt-adapter/archive/92f4866dad614d24aa1f771585d249ab30a4ac6a.zip',
-      ],
+      ['-m', 'pip', 'install', '--upgrade', '--no-cache-dir', 'dbt-kinetica'],
       { shell: false },
     );
     expect(spawnMock).toHaveBeenNthCalledWith(
@@ -284,24 +277,47 @@ describe('DbtCoreVersionService', () => {
     );
   });
 
-  it('does not offer PyPI versions or pinned installs for dbt-kinetica', async () => {
+  it('lists PyPI versions and installs a pinned version for dbt-kinetica', async () => {
+    axiosGetMock.mockResolvedValue({
+      data: { releases: { '1.0.1': [{}] } },
+    } as any);
+
     const versions =
       await DbtCoreVersionService.listPackageVersions('dbt-kinetica');
     expect(versions).toEqual({
       packageName: 'dbt-kinetica',
-      versions: [],
-      latestStable: null,
+      versions: [{ version: '1.0.1', isPrerelease: false }],
+      latestStable: '1.0.1',
     });
-    expect(axiosGetMock).not.toHaveBeenCalled();
+    expect(axiosGetMock).toHaveBeenCalledWith(
+      'https://pypi.org/pypi/dbt-kinetica/json',
+      { timeout: 15000 },
+    );
 
+    mockCommands([
+      { exitCode: 0 },
+      { exitCode: 0, stdout: 'Name: dbt-kinetica\nVersion: 1.0.1\n' },
+    ]);
     const pinned = await DbtCoreVersionService.installPackageVersion({
       pythonPath,
       packageName: 'dbt-kinetica',
-      version: '0.1.0',
+      version: '1.0.1',
     });
-    expect(pinned.ok).toBe(false);
-    expect(pinned.error).toContain('Install latest');
-    expect(spawnMock).not.toHaveBeenCalled();
+    expect(pinned).toEqual({ ok: true, installedVersion: '1.0.1' });
+    expect(spawnMock).toHaveBeenNthCalledWith(
+      1,
+      pythonPath,
+      [
+        '-m',
+        'pip',
+        'install',
+        '--upgrade',
+        '--force-reinstall',
+        '--no-cache-dir',
+        'dbt-kinetica==1.0.1',
+      ],
+      { shell: false },
+    );
   });
 
   it('rejects versions that are not exact package versions', async () => {
