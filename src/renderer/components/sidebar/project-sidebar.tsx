@@ -8,7 +8,6 @@ import {
   CardContent,
   Chip,
   Divider,
-  Tooltip,
 } from '@mui/material';
 import {
   Add,
@@ -25,9 +24,7 @@ import {
   connectionLabel,
   connectionAccentColor,
 } from '../../../connections/registry.renderer';
-import { projectTypeOf } from '../../../shared/projectTypes';
 import { duckLakeInstanceIdOf } from '../../../shared/duckLakeInstanceIds';
-import { ReactComponent as RouteIcon } from '../../assets/icons/lucide/route.svg';
 import { FileTreeViewer } from '../index';
 import { FileTreeContainer } from '../../screens/projectDetails/styles';
 import { FileNode, Project } from '../../../types/backend';
@@ -38,26 +35,16 @@ import {
   useGetFileStatuses,
   useGetProjectFiles,
   useGetSelectedProject,
-  useGetSettings,
   useGitIsInitialized,
-  useListPipelines,
   useUpdateProject,
   useDuckLakeInstances,
 } from '../../controllers';
-import {
-  AddConnectionModal,
-  CreatePipelineModal,
-  PushToCloudModal,
-  RemoveConnectionModal,
-  RunWithEnvModal,
-} from '../modals';
+import { AddConnectionModal, RemoveConnectionModal } from '../modals';
 import { useTabs } from '../../context/TabsProvider';
 import { useRefreshProjectFiles } from '../../hooks/useRefreshProjectFiles';
 import { projectsServices } from '../../services';
-import {
-  getPipelineRelativeName,
-  getPipelineRelativePath,
-} from '../pipelineView';
+import { runCommand } from '../commandPalette/commands';
+import { Slot, STUDIO_SLOTS } from '../../../extensionApi/renderer';
 
 export type SidebarTab = 'explorer' | 'scm' | 'connections';
 
@@ -290,12 +277,12 @@ const ConnectionsTab: React.FC<{ project: Project }> = ({ project }) => {
   );
 };
 
-// Explorer Tab Component — file tree plus the per-pipeline run buttons.
+// Explorer Tab Component — the file tree, and below it whatever extensions
+// put in the explorer footer slot.
 const ExplorerTab: React.FC<{
   project: Project;
   openCreatePipeline?: boolean;
 }> = ({ project, openCreatePipeline }) => {
-  const theme = useTheme();
   const {
     activeFilePath,
     openFile,
@@ -304,8 +291,6 @@ const ExplorerTab: React.FC<{
     revealedFolderPath,
     clearRevealedFolder,
   } = useTabs();
-  const { data: settings } = useGetSettings();
-  const { data: connection } = useGetConnectionById(project.connectionId);
   const refreshProjectFiles = useRefreshProjectFiles();
   const { data: directories } = useGetProjectFiles(project, {
     enabled: !!project.id,
@@ -316,16 +301,12 @@ const ExplorerTab: React.FC<{
   const { data: statuses = [] } = useGetFileStatuses(project.path, {
     enabled: !!project.path && !!isInitialized,
   });
-  const { refetch: refetchPipelines } = useListPipelines(project.id);
 
-  const [createPipelineOpen, setCreatePipelineOpen] = React.useState(false);
-  const [cloudRunArgs, setCloudRunArgs] = React.useState<string | null>(null);
-  const [localRunFile, setLocalRunFile] = React.useState<string | null>(null);
-
-  // Open the modal when triggered externally (e.g. from the home screen pipeline card)
+  // Open the Create Pipeline dialog when asked to from outside (the Home
+  // screen's pipeline card)
   React.useEffect(() => {
     if (openCreatePipeline) {
-      setCreatePipelineOpen(true);
+      runCommand('pipeline.create');
     }
   }, [openCreatePipeline]);
 
@@ -334,15 +315,6 @@ const ExplorerTab: React.FC<{
       openFile(fileNode.path);
     },
     [openFile],
-  );
-
-  const handlePipelineCreated = React.useCallback(
-    async (filePath: string) => {
-      await refetchPipelines();
-      await refreshProjectFiles();
-      openFile(filePath);
-    },
-    [refetchPipelines, refreshProjectFiles, openFile],
   );
 
   return (
@@ -367,80 +339,11 @@ const ExplorerTab: React.FC<{
             revealFolderPath={revealedFolderPath}
             onFolderRevealed={clearRevealedFolder}
             onRenameCallback={renameTab}
-            onRunPipeline={(filePath) =>
-              setCloudRunArgs(
-                `--pipeline_name ${getPipelineRelativeName(filePath, project.path)}`,
-              )
-            }
-            onRunPipelineLocal={(filePath) => {
-              if (!settings?.runnerPath) return;
-              setLocalRunFile(getPipelineRelativePath(filePath, project.path));
-            }}
           />
         )}
       </Box>
 
-      {/* Create Pipeline button — shown for every project type with pipelines */}
-      {projectTypeOf(project).capabilities.pipelines && (
-        <Box
-          sx={{
-            px: 1,
-            pb: 1,
-            pt: 0.75,
-            flexShrink: 0,
-            borderTop: `1px solid ${theme.palette.divider}`,
-          }}
-        >
-          <Tooltip
-            title="Create a pipeline to run jobs on the cloud"
-            placement="top"
-            arrow
-          >
-            <Button
-              fullWidth
-              variant="contained"
-              size="small"
-              startIcon={<RouteIcon width={16} height={16} />}
-              onClick={() => setCreatePipelineOpen(true)}
-              sx={{
-                fontSize: '0.72rem',
-                py: 0.75,
-              }}
-            >
-              Create Pipeline
-            </Button>
-          </Tooltip>
-        </Box>
-      )}
-
-      <CreatePipelineModal
-        isOpen={createPipelineOpen}
-        onClose={() => setCreatePipelineOpen(false)}
-        project={project}
-        onCreated={(filePath) => handlePipelineCreated(filePath)}
-        onApplied={async () => {
-          await refetchPipelines();
-          await refreshProjectFiles();
-        }}
-      />
-      {cloudRunArgs !== null && (
-        <PushToCloudModal
-          isOpen
-          onClose={() => setCloudRunArgs(null)}
-          project={project}
-          command="pipeline"
-          initialDbtArguments={cloudRunArgs}
-        />
-      )}
-      {localRunFile && (
-        <RunWithEnvModal
-          isOpen
-          onClose={() => setLocalRunFile(null)}
-          project={project}
-          pipelineRelativePath={localRunFile}
-          connectionName={connection?.connection?.name}
-        />
-      )}
+      <Slot id={STUDIO_SLOTS.projectExplorerFooter} props={{ project }} />
     </FileTreeContainer>
   );
 };

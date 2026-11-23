@@ -14,6 +14,7 @@ import SecureStorageService from '../../secureStorage.service';
 import { TerminalConfirmGate } from './terminalConfirmGate';
 import { isProtectedPipelineWritePath } from './studio/pipeline.tools';
 import FileMutationRollbackService from '../fileMutationRollback.service';
+import { emitFileDidSave } from '../../../../extensionHost/main/fileEvents.main';
 import { isDbtRuntimeChanging } from '../../../utils/installTask';
 import { DBT_RUNTIME_CHANGING_MESSAGE } from '../../../../shared/installTasks';
 
@@ -402,6 +403,7 @@ export const writeDbtModel = tool({
       }
 
       fs.writeFileSync(filePath, content, 'utf-8');
+      emitFileDidSave(filePath, 'agent');
 
       return {
         success: true,
@@ -762,6 +764,7 @@ export function createDbtTools(
           const dir = path.dirname(filePath);
           if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
           fs.writeFileSync(filePath, content, 'utf-8');
+          emitFileDidSave(filePath, 'agent');
           onFileWritten?.(filePath);
           return {
             success: true,

@@ -35,6 +35,7 @@ import SettingsService from './settings.service';
 import ProjectTypesService from './projectTypes.service';
 import ConnectorsService from './connectors.service';
 import MainDatabaseService from './mainDatabase.service';
+import { emitFileDidSave } from '../../extensionHost/main/fileEvents.main';
 import {
   extractPipelineRequiredEnvVars,
   RequiredEnvVarSource,
@@ -809,6 +810,8 @@ export default class ProjectsService {
 
   static async saveFileContent(filePath: string, content: string) {
     await saveFileContent(filePath, content);
+    // Lets extensions react to the save (post-save hook).
+    emitFileDidSave(filePath, 'user');
     if (filePath.includes('/models/') && filePath.includes('/rosetta/')) {
       try {
         const chunks = filePath.split('/dbt/models/');

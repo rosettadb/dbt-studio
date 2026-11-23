@@ -1,0 +1,15 @@
+import type { ExtensionRendererModule } from '../../extensionApi/renderer';
+
+export interface BuiltinRendererExtension {
+  /** The same manifest object the main-process list uses. */
+  manifest: { publisher: string; name: string };
+  /** Its UI half. */
+  module: ExtensionRendererModule;
+}
+
+/**
+ * The internal extensions compiled into the app, renderer side. This file
+ * and `main/builtinExtensions.main.ts` are the only places outside
+ * `src/extensions/` that import from it.
+ */
+export const builtinRendererExtensions: BuiltinRendererExtension[] = [];

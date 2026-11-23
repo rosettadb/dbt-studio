@@ -27,6 +27,7 @@ import { Content, EditorContainer, Header, NoFileSelected } from './styles';
 import { useAppContext } from '../../hooks';
 import { AppLayout } from '../../layouts';
 import ChatScreen from '../chat';
+import { Slot, STUDIO_SLOTS } from '../../../extensionApi/renderer';
 
 const VerticalSash = (_: number, active: boolean) => (
   <div
@@ -363,6 +364,8 @@ const ProjectDetails: React.FC = () => {
           </Box>
         </Pane>
       </SplitPane>
+      {/* Dialogs and the like that extensions keep mounted on this screen */}
+      <Slot id={STUDIO_SLOTS.projectOverlays} props={{ project }} />
     </AppLayout>
   );
 };

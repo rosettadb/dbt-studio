@@ -2,7 +2,7 @@ import React from 'react';
 import { Container } from './styles';
 import { FileNode, FileStatus } from '../../../types/backend';
 import { NewFileModal } from '../modals';
-import { useGetSelectedProject, useGetSettings } from '../../controllers';
+import { useGetSelectedProject } from '../../controllers';
 import { ArboristTree } from './ArboristTree';
 import { FileStatuses } from './types';
 
@@ -16,8 +16,6 @@ type Props = {
   copyPath: (source: string, target: string) => Promise<void>;
   selectedPath?: string;
   onRenameCallback?: (oldPath: string, newPath: string) => void;
-  onRunPipeline?: (filePath: string) => void;
-  onRunPipelineLocal?: (filePath: string) => void;
   revealFolderPath?: string | null;
   onFolderRevealed?: () => void;
 };
@@ -32,13 +30,10 @@ const FileTreeViewer: React.FC<Props> = ({
   copyPath,
   selectedPath,
   onRenameCallback,
-  onRunPipeline,
-  onRunPipelineLocal,
   revealFolderPath,
   onFolderRevealed,
 }) => {
   const { data: project } = useGetSelectedProject();
-  const { data: settings } = useGetSettings();
 
   const [fileModal, setFileModal] = React.useState<string>();
   const [folderModal, setFolderModal] = React.useState<string>();
@@ -71,18 +66,6 @@ const FileTreeViewer: React.FC<Props> = ({
         copyPath={copyPath}
         revealFolderPath={revealFolderPath}
         onFolderRevealed={onFolderRevealed}
-        onRunPipeline={
-          settings?.env === 'cloud' && !settings?.dbtVersion?.startsWith('2.')
-            ? onRunPipeline
-            : undefined
-        }
-        onRunPipelineLocal={
-          settings?.env !== 'cloud' &&
-          !settings?.dbtVersion?.startsWith('2.') &&
-          settings?.runnerPath
-            ? onRunPipelineLocal
-            : undefined
-        }
       />
       {(fileModal || folderModal) && (
         <NewFileModal

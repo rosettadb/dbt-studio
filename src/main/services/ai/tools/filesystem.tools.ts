@@ -8,6 +8,7 @@ import * as path from 'path';
 import AgentService from '../../agent.service';
 import { isProtectedPipelineWritePath } from './studio/pipeline.tools';
 import FileMutationRollbackService from '../fileMutationRollback.service';
+import { emitFileDidSave } from '../../../../extensionHost/main/fileEvents.main';
 
 const MAX_FILE_SIZE = 1_000_000; // 1 MB for general files
 const MAX_DIRECTORY_DEPTH = 5;
@@ -223,6 +224,7 @@ export const writeFile = tool({
       }
 
       fs.writeFileSync(filePath, content, 'utf-8');
+      emitFileDidSave(filePath, 'agent');
 
       return {
         success: true,
@@ -449,6 +451,7 @@ export function createFilesystemTools(
           const dir = path.dirname(filePath);
           if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
           fs.writeFileSync(filePath, content, 'utf-8');
+          emitFileDidSave(filePath, 'agent');
           onFileWritten?.(filePath);
           return {
             success: true,

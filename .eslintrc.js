@@ -72,6 +72,64 @@ module.exports = {
       },
     },
     {
+      // An extension reaches Studio only through src/extensionApi. Whatever
+      // it needs from Studio is exported there, which is also exactly what an
+      // installed (not compiled-in) extension receives at runtime.
+      files: ['src/extensions/**/*.{ts,tsx}'],
+      rules: {
+        'import/no-restricted-paths': [
+          'error',
+          {
+            zones: [
+              {
+                target: './src/extensions',
+                from: './src',
+                except: ['./extensions', './extensionApi'],
+                message:
+                  'An extension imports only from src/extensionApi, its own folder and npm packages.',
+              },
+              // One extension does not import another's files; it reads what
+              // the other returned from activate() with api.extensions.getExports.
+              ...['pipeline', 'sql', 'dbt', 'analytics', 'notebooks'].map(
+                (id) => ({
+                  target: `./src/extensions/${id}`,
+                  from: './src/extensions',
+                  except: [`./${id}`],
+                  message:
+                    'Use api.extensions.getExports() instead of importing another extension.',
+                }),
+              ),
+            ],
+          },
+        ],
+      },
+    },
+    {
+      // Studio does not import from an extension. The two lists of internal
+      // extensions are the only exception.
+      files: ['src/**/*.{ts,tsx}'],
+      excludedFiles: [
+        'src/extensions/**',
+        'src/extensionHost/main/builtinExtensions.main.ts',
+        'src/extensionHost/renderer/builtinExtensions.renderer.ts',
+      ],
+      rules: {
+        'import/no-restricted-paths': [
+          'error',
+          {
+            zones: [
+              {
+                target: './src',
+                from: './src/extensions',
+                message:
+                  'Studio does not import from an extension. Extensions register through the extension API.',
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
       files: ['src/connections/**/*.{ts,tsx}'],
       rules: {
         // Connector methods implement a contract; many don't need `this`.

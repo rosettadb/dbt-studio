@@ -19,6 +19,9 @@ import {
 import { copyAssetsToUserData } from './utils/fileHelper';
 import { MCPClientManager } from './services/ai/mcp/mcpClientManager';
 import ChatGptAuthService from './services/ai/chatgpt/chatgptAuth.service';
+import { extensionHost } from '../extensionHost/main/index.main';
+import { handleExtensionProtocol } from '../extensionHost/main/ipc.main';
+import { EXTENSION_SCHEME } from '../extensionHost/shared/protocol.shared';
 
 const isProd = process.env.NODE_ENV === 'production';
 const isDebug =
@@ -46,6 +49,16 @@ protocol.registerSchemesAsPrivileged([
   },
   {
     scheme: 'html-preview',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+    },
+  },
+  {
+    // Files of installed extensions, loaded by the window as scripts.
+    scheme: EXTENSION_SCHEME,
     privileges: {
       standard: true,
       secure: true,
@@ -261,6 +274,8 @@ if (!gotTheLock) {
         });
       });
 
+      protocol.handle(EXTENSION_SCHEME, handleExtensionProtocol);
+
       app.on('activate', () => {
         if (windowManager) {
           const mainWindow = windowManager.getMainWindow();
@@ -334,6 +349,14 @@ ipcMain.handle('windows:closeSetup', () => {
 // Cleanup DuckLake connections before app quits
 app.on('before-quit', async (event) => {
   event.preventDefault();
+
+  try {
+    // Let extensions stop what they started (processes, kernels, sockets)
+    await extensionHost.deactivateAll();
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('[App] Error while stopping extensions:', error);
+  }
 
   try {
     // Disconnect all DuckLake connections to prevent memory leaks

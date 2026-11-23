@@ -34,6 +34,7 @@ import {
 } from './ipcHandlers';
 import registerDbtChartsHandlers from './ipcHandlers/dbtCharts.ipcHandlers';
 import { installIpcErrorHandling } from './utils/ipcErrorHandler';
+import { registerExtensionHostHandlers } from '../extensionHost/main/ipc.main';
 
 const registerHandlers = (mainWindow: BrowserWindow) => {
   installIpcErrorHandling();
@@ -69,6 +70,8 @@ const registerHandlers = (mainWindow: BrowserWindow) => {
   registerSecondBrainHandlers();
   registerIcebergDatalakeHandlers();
   registerBackupHandlers(mainWindow);
+  // Last, so extensions start after Studio's own handlers are in place.
+  registerExtensionHostHandlers();
 };
 
 export default registerHandlers;

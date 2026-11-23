@@ -5,6 +5,7 @@ import { tool } from 'ai';
 import yaml from 'js-yaml';
 import { z } from 'zod';
 import { diffLines } from 'diff';
+import { emitFileDidSave } from '../../../../../extensionHost/main/fileEvents.main';
 import {
   validateStepParams,
   type PluginDefinition,
@@ -840,6 +841,7 @@ export async function generateProjectPipeline(
     fs.closeSync(targetHandle);
     targetHandle = undefined;
     verifyPersistedPipeline(resolved.absolutePath, content);
+    emitFileDidSave(resolved.absolutePath, 'agent');
     return {
       success: true,
       mutation: 'pipeline-file-written',
@@ -966,6 +968,7 @@ export async function updateProjectPipeline(
     replacePipelineFile(resolved.absolutePath, content);
     replaced = true;
     verifyPersistedPipeline(resolved.absolutePath, content);
+    emitFileDidSave(resolved.absolutePath, 'agent');
     return {
       success: true,
       mutation: 'pipeline-file-written',

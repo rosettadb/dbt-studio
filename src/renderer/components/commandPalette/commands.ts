@@ -4,6 +4,8 @@ export type RegisteredCommand = {
   id: string;
   label: string;
   run: () => void | Promise<void>;
+  // Can be run by id but is not listed in the palette.
+  hidden?: boolean;
 };
 
 const commands = new Map<string, RegisteredCommand>();
@@ -11,7 +13,7 @@ const listeners = new Set<() => void>();
 let snapshot: RegisteredCommand[] = [];
 
 const publish = () => {
-  snapshot = Array.from(commands.values());
+  snapshot = Array.from(commands.values()).filter((command) => !command.hidden);
   listeners.forEach((listener) => listener());
 };
 
@@ -21,6 +23,26 @@ export const subscribeCommands = (listener: () => void) => {
 };
 
 export const getCommands = () => snapshot;
+
+// Runs a registered command by id. False when no such command exists.
+export const runCommand = (id: string): boolean => {
+  const command = commands.get(id);
+  if (!command) return false;
+  command.run();
+  return true;
+};
+
+// Registers a command that stays until the returned function is called
+// (used for commands that are not tied to a mounted component).
+export const registerCommand = (command: RegisteredCommand): (() => void) => {
+  commands.set(command.id, command);
+  publish();
+  return () => {
+    if (commands.get(command.id) !== command) return;
+    commands.delete(command.id);
+    publish();
+  };
+};
 
 // Register only while the action's owning UI is mounted and available.
 export const usePaletteCommand = (

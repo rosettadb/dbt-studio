@@ -33,7 +33,6 @@ import {
   CloudRunProvider,
   ProcessProvider,
   QueryResultsProvider,
-  RunnerProvider,
   TabsProvider,
   TaskManagerProvider,
 } from './context';
@@ -42,8 +41,39 @@ import { themeStorageManager, getStoredThemeMode } from './utils/themeStorage';
 import { ScrollbarStyles, UpdateDialog } from './components';
 import Loading from './screens/loading';
 import { CliProvider } from './hooks/useCli';
+import { ExtensionHostProvider } from '../extensionHost/renderer/ExtensionHostProvider.renderer';
+import { screens as screenRegistry } from '../extensionHost/renderer/contributions.renderer';
+import { useRegistry } from '../extensionHost/renderer/registry.renderer';
+import {
+  registerSharedModule,
+  STUDIO_API_MODULE,
+} from '../extensionHost/renderer/sharedModules.renderer';
+import { extensionHostRenderer } from '../extensionHost/renderer/index.renderer';
+import { builtinRendererExtensions } from '../extensionHost/renderer/builtinExtensions.renderer';
+import * as studioApiShared from '../extensionApi/shared';
+import * as studioApiRenderer from '../extensionApi/renderer';
+import * as studioApiStudio from '../extensionApi/studio';
+// The pipeline tool's contributions. Registered from here until the tool
+// moves into src/extensions (docs/extensions/PLAN.md, phase 2).
+import './components/pipelineView/contributions';
+
+// What an installed extension gets when it asks for '@rosetta/studio-api':
+// the same API the internal extensions import.
+registerSharedModule(STUDIO_API_MODULE, () => ({
+  ...studioApiShared,
+  ...studioApiRenderer,
+  ...studioApiStudio,
+}));
+
+// The extensions that ship inside the app.
+builtinRendererExtensions.forEach(({ manifest, module }) =>
+  extensionHostRenderer.registerBuiltin(manifest, module),
+);
 
 const App: React.FC = () => {
+  // Screens added by extensions. Studio's own screens are the routes below.
+  const extensionScreens = useRegistry(screenRegistry);
+
   return (
     <Router>
       <ScrollbarStyles />
@@ -76,10 +106,11 @@ const App: React.FC = () => {
           <Route path="settings/installation" element={<Settings />} />
           <Route path="settings/about" element={<Settings />} />
           <Route path="settings/flowfile" element={<Settings />} />
-          <Route path="settings/runner" element={<Settings />} />
           <Route path="settings/keystore" element={<Settings />} />
           <Route path="settings/task-manager" element={<Settings />} />
           <Route path="settings/backup" element={<Settings />} />
+          {/* Settings pages added through the settings-page registry */}
+          <Route path="settings/:section" element={<Settings />} />
           <Route path="sql" element={<Sql />} />
           <Route path="notebooks" element={<Notebooks />} />
           <Route
@@ -136,6 +167,22 @@ const App: React.FC = () => {
           />
           <Route path="flows" element={<Flows />} />
           <Route path="loading" element={<Loading />} />
+          {extensionScreens.flatMap((screen) => [
+            ...screen.paths.map((path) => (
+              <Route
+                key={`${screen.id}:${path}`}
+                path={path}
+                element={<screen.Component />}
+              />
+            )),
+            ...(screen.redirects ?? []).map((redirect) => (
+              <Route
+                key={`${screen.id}:redirect:${redirect.from}`}
+                path={redirect.from}
+                element={<Navigate to={redirect.to} replace />}
+              />
+            )),
+          ])}
           <Route path="*" element={<Navigate to="/app" />} />
         </Route>
       </Routes>
@@ -152,37 +199,37 @@ const AppWithProjectProvider: React.FC = () => {
       <AppProvider>
         <CliProvider>
           <ProcessProvider>
-            <RunnerProvider>
-              <TaskManagerProvider>
-                <CloudRunProvider>
-                  <TabsProvider>
-                    <QueryResultsProvider>
-                      <CssVarsProvider
-                        theme={theme}
-                        defaultMode={initialMode}
-                        storageManager={themeStorageManager}
-                      >
-                        <CssBaseline />
+            <TaskManagerProvider>
+              <CloudRunProvider>
+                <TabsProvider>
+                  <QueryResultsProvider>
+                    <CssVarsProvider
+                      theme={theme}
+                      defaultMode={initialMode}
+                      storageManager={themeStorageManager}
+                    >
+                      <CssBaseline />
+                      <ExtensionHostProvider>
                         <App />
-                        <UpdateDialog />
-                        <ToastContainer
-                          position="bottom-right"
-                          autoClose={3000}
-                          hideProgressBar={false}
-                          newestOnTop
-                          closeOnClick
-                          rtl={false}
-                          pauseOnFocusLoss
-                          pauseOnHover
-                          theme={initialMode === 'dark' ? 'dark' : 'light'}
-                          limit={3}
-                        />
-                      </CssVarsProvider>
-                    </QueryResultsProvider>
-                  </TabsProvider>
-                </CloudRunProvider>
-              </TaskManagerProvider>
-            </RunnerProvider>
+                      </ExtensionHostProvider>
+                      <UpdateDialog />
+                      <ToastContainer
+                        position="bottom-right"
+                        autoClose={3000}
+                        hideProgressBar={false}
+                        newestOnTop
+                        closeOnClick
+                        rtl={false}
+                        pauseOnFocusLoss
+                        pauseOnHover
+                        theme={initialMode === 'dark' ? 'dark' : 'light'}
+                        limit={3}
+                      />
+                    </CssVarsProvider>
+                  </QueryResultsProvider>
+                </TabsProvider>
+              </CloudRunProvider>
+            </TaskManagerProvider>
           </ProcessProvider>
         </CliProvider>
       </AppProvider>

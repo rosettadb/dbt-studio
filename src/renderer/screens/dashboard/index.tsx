@@ -34,6 +34,9 @@ import { icons, rosettaIcon } from '../../../../assets';
 import { connectionIcon } from '../../../connections/registry.renderer';
 import { ReactComponent as RouteIcon } from '../../assets/icons/lucide/route.svg';
 import { useAppContext } from '../../hooks';
+import type { DashboardCard } from '../../../extensionApi/renderer';
+import { dashboardCards } from '../../../extensionHost/renderer/contributions.renderer';
+import { useRegistry } from '../../../extensionHost/renderer/registry.renderer';
 import { QuickStartTour, hasSeenTour, markTourSeen } from '../../components';
 import { CommandPalette } from '../../components/commandPalette';
 import { CloudLocalEnvironmentSwitch } from '../../components/menu/CloudLocalEnvironmentSwitch';
@@ -117,7 +120,9 @@ const ProjectTypeIcon: React.FC<{ connectionType?: string }> = ({
   );
 };
 
-const features = [
+// Studio's own Home cards. Extensions add theirs to the same registry;
+// the gaps in `order` leave room between them.
+const features: DashboardCard[] = [
   {
     id: 'dbt-project',
     title: 'Projects',
@@ -188,6 +193,10 @@ const features = [
     path: '/app/flows',
   },
 ];
+
+features.forEach((feature, index) =>
+  dashboardCards.add({ ...feature, order: (index + 1) * 100 }),
+);
 
 // How many rows each bottom panel lists; its Manage All button only shows when
 // there are more than this.
@@ -279,6 +288,7 @@ const Dashboard: React.FC = () => {
   const { data: projects = [] } = useGetProjects();
   const { data: connections = [] } = useGetConnections();
   const { mutateAsync: selectProject } = useSelectProject();
+  const cards = useRegistry(dashboardCards);
   const [isPipelineChoiceOpen, setIsPipelineChoiceOpen] = React.useState(false);
   const { data: apiKey, isLoading: apiKeyLoading } = useApiKey();
   const { data: profile } = useProfile();
@@ -308,7 +318,7 @@ const Dashboard: React.FC = () => {
     });
   };
 
-  const handleCardClick = (feature: (typeof features)[number]) => {
+  const handleCardClick = (feature: DashboardCard) => {
     if (feature.id === 'pipeline') {
       if (projects.length === 0) {
         openProjectListForPipeline(true);
@@ -322,7 +332,15 @@ const Dashboard: React.FC = () => {
       navigate('/app/sql', { state: { tab: 2 } });
       return;
     }
-    handleFeatureClick(feature.path);
+    if (feature.onSelect) {
+      feature.onSelect({
+        navigate,
+        openSidebar: () => setIsSidebarOpen(true),
+        hasProjects: projects.length > 0,
+      });
+      return;
+    }
+    if (feature.path) handleFeatureClick(feature.path);
   };
 
   const handleOpenProject = async (projectId: string) => {
@@ -503,7 +521,7 @@ const Dashboard: React.FC = () => {
               Studio Modules
             </Typography>
             <Grid container rowSpacing={2} columnSpacing={2.5} sx={{ mb: 2 }}>
-              {features.map((feature) => {
+              {cards.map((feature) => {
                 const IconComponent = feature.icon;
                 return (
                   <Grid

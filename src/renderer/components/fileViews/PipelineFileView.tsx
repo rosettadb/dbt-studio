@@ -205,6 +205,9 @@ const PipelineFileView: React.FC<FileViewProps> = ({ tab, project }) => {
 
 export const pipelineFileView: FileViewDefinition = {
   id: 'pipeline',
+  // Between the preview view (300) and the charts view (100): a YAML file
+  // under rosetta/pipelines/ is a pipeline even inside a `charts` folder.
+  priority: 200,
   matches: (tab) => isPipelineFile(tab.path),
   Component: PipelineFileView,
 };

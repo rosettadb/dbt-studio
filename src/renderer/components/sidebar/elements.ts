@@ -1,100 +1,144 @@
+import React from 'react';
 import * as Icons from './icons';
+import type { NavigationItem } from '../../../extensionApi/renderer';
+import { navigationItems } from '../../../extensionHost/renderer/contributions.renderer';
+import { useRegistry } from '../../../extensionHost/renderer/registry.renderer';
+import { useLastDataLakeRoute } from '../../hooks/useLastDataLakeRoute';
 
-interface SideBarElementType {
-  path: string;
-  text: string;
-  description: string;
-  icon: any;
-  testId: string;
-  disabled?: boolean;
-  subItems?: Array<{ path: string; text: string; icon?: any }>;
-}
+/** A sidebar item with its enabled state worked out for the current app state. */
+export type SidebarItem = NavigationItem & { disabled: boolean };
 
-const baseElements: SideBarElementType[] = [
+// Studio's own sidebar items. Extensions add theirs to the same registry;
+// `order` leaves room between them.
+const coreItems: NavigationItem[] = [
   {
+    id: 'home',
     path: '/app',
-    text: 'Home',
+    label: 'Home',
     description: 'Overview of your projects and tools',
     icon: Icons.HomeIcon,
     testId: 'nav-item-home',
+    order: 100,
+    exact: true,
   },
   {
+    id: 'project',
     path: '/app/dbt-project',
-    text: 'Project',
+    label: 'Project',
     description: "Open the selected project's files and tools",
     icon: Icons.ProjectMenuIcon,
     testId: 'nav-item-files',
+    order: 200,
+    isEnabled: ({ hasProject }) => hasProject,
   },
   {
+    id: 'sql',
     path: '/app/sql',
-    text: 'SQL Editor',
+    label: 'SQL Editor',
     description: 'Write and run SQL against your connections',
     icon: Icons.DataSources,
     testId: 'nav-item-sql',
+    order: 300,
   },
   {
+    id: 'notebooks',
     path: '/app/notebooks',
-    text: 'Notebooks',
+    label: 'Notebooks',
     description: 'Explore data in SQL and Python notebooks',
     icon: Icons.NotebooksIcon,
     testId: 'nav-item-notebooks',
+    order: 400,
   },
   {
+    id: 'cloud-explorer',
     path: '/app/cloud-explorer',
-    text: 'Object Explorer',
+    label: 'Object Explorer',
     description: 'Browse your cloud storage buckets and files',
     icon: Icons.CloudIcon,
     testId: 'nav-item-cloud-explorer',
+    order: 500,
   },
   {
+    id: 'data-lake',
     path: '/app/data-lake',
-    text: 'DataLake',
+    label: 'DataLake',
     description: 'Manage your data lake instances and tables',
     icon: Icons.DataLakeMenuIcon,
     testId: 'nav-item-data-lake',
+    order: 600,
+    // Opens the data lake page that was open last.
+    useTargetPath: useLastDataLakeRoute,
   },
   {
+    id: 'flows',
     path: '/app/flows',
-    text: 'Flows',
+    label: 'Flows',
     description: 'Build visual data flows with Flowfile',
     icon: Icons.FlowsIcon,
     testId: 'nav-item-flows',
+    order: 700,
+  },
+  {
+    id: 'connections',
+    path: '/app/connections',
+    label: 'Database Connections',
+    description: 'Add and manage your database connections',
+    icon: Icons.ElectricalServices,
+    testId: 'nav-item-connections',
+    area: 'bottom',
+    order: 100,
+    activePaths: [
+      '/app/connections',
+      '/app/edit-connection',
+      '/app/add-connection',
+    ],
+  },
+  {
+    id: 'settings',
+    path: '/app/settings',
+    label: 'Settings',
+    description: 'Change app, dbt, Python and AI settings',
+    icon: Icons.SettingsIcon,
+    testId: 'nav-item-settings',
+    area: 'bottom',
+    order: 200,
   },
 ];
 
-export const getMainElements = (
-  isProjectSelected: boolean,
-): SideBarElementType[] => {
-  return baseElements.map((element) => {
-    if (!isProjectSelected && element.path === '/app/dbt-project') {
-      return { ...element, disabled: true };
-    }
-    return element;
-  });
-};
+coreItems.forEach((item) => navigationItems.add(item));
 
-export const getBottomElements = (): SideBarElementType[] => {
-  return [
-    {
-      path: '/app/connections',
-      text: 'Database Connections',
-      description: 'Add and manage your database connections',
-      icon: Icons.ElectricalServices,
-      testId: 'nav-item-connections',
-    },
-    {
-      path: '/app/settings',
-      text: 'Settings',
-      description: 'Change app, dbt, Python and AI settings',
-      icon: Icons.SettingsIcon,
-      testId: 'nav-item-settings',
-    },
-  ];
-};
-
-// Legacy compat: returns all elements in flat array
-export const getSidebarElements = (
+const resolve = (
+  items: ReadonlyArray<NavigationItem>,
+  area: 'main' | 'bottom',
   isProjectSelected: boolean,
-): SideBarElementType[] => {
-  return getMainElements(isProjectSelected);
+): SidebarItem[] =>
+  items
+    .filter((item) => (item.area ?? 'main') === area)
+    .map((item) => ({
+      ...item,
+      disabled: item.isEnabled
+        ? !item.isEnabled({ hasProject: isProjectSelected })
+        : false,
+    }));
+
+/** Items of the top group, in order. */
+export const getMainElements = (isProjectSelected: boolean): SidebarItem[] =>
+  resolve(navigationItems.list(), 'main', isProjectSelected);
+
+/** Items of the group pinned to the bottom, in order. */
+export const getBottomElements = (): SidebarItem[] =>
+  resolve(navigationItems.list(), 'bottom', false);
+
+/** Both groups, re-read whenever an item is added or removed. */
+export const useNavigationItems = (
+  isProjectSelected: boolean,
+): { main: SidebarItem[]; bottom: SidebarItem[] } => {
+  const items = useRegistry(navigationItems);
+  return React.useMemo(
+    () => ({
+      main: resolve(items, 'main', isProjectSelected),
+      bottom: resolve(items, 'bottom', isProjectSelected),
+    }),
+    [items, isProjectSelected],
+  );
 };
