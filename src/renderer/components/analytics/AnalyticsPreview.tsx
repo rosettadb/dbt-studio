@@ -1,239 +1,30 @@
 import React from 'react';
-import {
-  Box,
-  Typography,
-  CircularProgress,
-  useTheme,
-  Link,
-} from '@mui/material';
+import { Box, Typography, useTheme } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
-import type { Components } from 'react-markdown';
 import {
   parseAnalyticsMarkdown,
   extractFrontmatterTitle,
   type AnalyticsBlock,
 } from '../../utils/analyticsMarkdown';
 import { AnalyticsComponentRenderer } from './AnalyticsComponentRenderer';
+import { markdownComponents } from './bi/markdown/markdownComponents';
+import { SqlBadge } from './bi/ui/placeholders';
+import { BiPagePreview } from './bi/BiPagePreview';
+import {
+  usesLegacyEngine,
+  type InputState,
+  type InputValue,
+} from '../../../shared/analyticsBi';
 
-// ─── react-markdown component overrides ──────────────────────────────────
-const markdownComponents: Components = {
-  h1: ({ children }) => (
-    <Typography variant="h4" gutterBottom sx={{ mt: 2 }}>
-      {children}
-    </Typography>
-  ),
-  h2: ({ children }) => (
-    <Typography variant="h5" gutterBottom sx={{ mt: 2 }}>
-      {children}
-    </Typography>
-  ),
-  h3: ({ children }) => (
-    <Typography variant="h6" gutterBottom sx={{ mt: 1.5 }}>
-      {children}
-    </Typography>
-  ),
-  h4: ({ children }) => (
-    <Typography
-      variant="subtitle1"
-      fontWeight={600}
-      gutterBottom
-      sx={{ mt: 1 }}
-    >
-      {children}
-    </Typography>
-  ),
-  p: ({ children }) => (
-    <Typography variant="body2" sx={{ lineHeight: 1.75, mb: 1 }}>
-      {children}
-    </Typography>
-  ),
-  a: ({ children, href }) => (
-    <Link
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      underline="hover"
-    >
-      {children}
-    </Link>
-  ),
-  code: ({ children }) => (
-    <code
-      style={{
-        background: 'rgba(0,0,0,0.06)',
-        padding: '1px 4px',
-        borderRadius: 3,
-        fontFamily: 'monospace',
-        fontSize: '0.875em',
-      }}
-    >
-      {children}
-    </code>
-  ),
-  pre: ({ children }) => (
-    <Box
-      component="pre"
-      sx={{
-        bgcolor: 'action.hover',
-        p: 1.5,
-        borderRadius: 1,
-        overflow: 'auto',
-        fontSize: '0.8rem',
-        fontFamily: 'monospace',
-        mb: 1,
-      }}
-    >
-      {children}
-    </Box>
-  ),
-  blockquote: ({ children }) => (
-    <Box
-      component="blockquote"
-      sx={{
-        borderLeft: 3,
-        borderColor: 'primary.main',
-        pl: 2,
-        my: 1,
-        color: 'text.secondary',
-        fontStyle: 'italic',
-      }}
-    >
-      {children}
-    </Box>
-  ),
-  hr: () => (
-    <Box
-      component="hr"
-      sx={{ border: 'none', borderTop: 1, borderColor: 'divider', my: 2 }}
-    />
-  ),
-  ul: ({ children }) => (
-    <Box component="ul" sx={{ pl: 2, mb: 1 }}>
-      {children}
-    </Box>
-  ),
-  ol: ({ children }) => (
-    <Box component="ol" sx={{ pl: 2, mb: 1 }}>
-      {children}
-    </Box>
-  ),
-  li: ({ children }) => (
-    <Typography component="li" variant="body2" sx={{ lineHeight: 1.8 }}>
-      {children}
-    </Typography>
-  ),
-  table: ({ children }) => (
-    <Box
-      component="table"
-      sx={{
-        width: '100%',
-        borderCollapse: 'collapse',
-        fontSize: '0.8rem',
-        mb: 1,
-        '& th, & td': {
-          border: 1,
-          borderColor: 'divider',
-          px: 1.5,
-          py: 1,
-          textAlign: 'left',
-        },
-        '& th': {
-          fontWeight: 600,
-          bgcolor: 'action.hover',
-        },
-      }}
-    >
-      {children}
-    </Box>
-  ),
-};
-
-// ─── Clickable SQL Status Badge ──────────────────────────────────────────
-export const SqlBadge: React.FC<{
-  block: { name: string; sql: string };
-  status: 'idle' | 'running' | 'success' | 'error';
-  rowCount?: number;
-  error?: string | null;
-  duration?: number;
-  onRun: (name: string, sql: string) => void;
-}> = ({ block, status, rowCount, error, duration, onRun }) => {
-  const theme = useTheme();
-
-  const dot = (
-    {
-      idle: <span style={{ color: theme.palette.text.disabled }}>○</span>,
-      running: <CircularProgress size={10} sx={{ mt: '1px' }} />,
-      success: <span style={{ color: '#4caf50' }}>●</span>,
-      error: <span style={{ color: '#f44336' }}>●</span>,
-    } as Record<string, React.ReactNode>
-  )[status];
-
-  return (
-    <Box
-      onClick={() => onRun(block.name, block.sql)}
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1,
-        px: 1.5,
-        py: 0.5,
-        my: 0.5,
-        borderRadius: 1,
-        bgcolor: 'action.hover',
-        fontSize: '0.75rem',
-        cursor: 'pointer',
-        userSelect: 'none',
-        '&:hover': { bgcolor: 'action.selected' },
-      }}
-    >
-      {dot}
-      <Typography variant="caption" sx={{ fontFamily: 'monospace', flex: 1 }}>
-        {block.name}
-        {status === 'success' &&
-          rowCount !== undefined &&
-          ` — ${rowCount} row${rowCount !== 1 ? 's' : ''}`}
-        {status === 'success' && duration !== undefined && (
-          <Typography
-            component="span"
-            variant="caption"
-            color="text.disabled"
-            sx={{ ml: 0.5 }}
-          >
-            {duration > 1000
-              ? `${(duration / 1000).toFixed(2)}s`
-              : `${Math.round(duration)}ms`}
-          </Typography>
-        )}
-      </Typography>
-      {status === 'error' && error && (
-        <Typography
-          variant="caption"
-          color="error.main"
-          sx={{ fontSize: '0.65rem' }}
-          noWrap
-        >
-          {error}
-        </Typography>
-      )}
-      {status === 'idle' && (
-        <Typography
-          variant="caption"
-          color="text.disabled"
-          sx={{ fontSize: '0.65rem' }}
-        >
-          click to run
-        </Typography>
-      )}
-    </Box>
-  );
-};
+// Shared with the Plan 97 engine; SqlBadge is re-exported for old imports.
+export { SqlBadge } from './bi/ui/placeholders';
 
 // ─── Main Preview ──────────────────────────────────────────────────────────
-interface AnalyticsPreviewProps {
+interface LegacyPreviewProps {
   markdownContent: string;
   queryCache: Record<string, any[]>;
   queryStatuses: Record<string, 'idle' | 'running' | 'success' | 'error'>;
@@ -243,7 +34,16 @@ interface AnalyticsPreviewProps {
   pageId?: string;
 }
 
-export const AnalyticsPreview: React.FC<AnalyticsPreviewProps> = ({
+interface AnalyticsPreviewProps extends LegacyPreviewProps {
+  /** Plan 97 engine: current input values. */
+  inputs?: InputState;
+  /** Plan 97 engine: called when a filter changes. Omit for read-only inputs. */
+  onInputChange?: (name: string, value: InputValue) => void;
+  /** Plan 97 engine: show attribute warnings (editor only). */
+  showWarnings?: boolean;
+}
+
+const LegacyAnalyticsPreview: React.FC<LegacyPreviewProps> = ({
   markdownContent,
   queryCache,
   queryStatuses,
@@ -370,5 +170,50 @@ export const AnalyticsPreview: React.FC<AnalyticsPreviewProps> = ({
         return null;
       })}
     </Box>
+  );
+};
+
+/**
+ * Renders a page with the Plan 97 engine, or with the previous renderer
+ * when the page's frontmatter says `engine: legacy`.
+ */
+export const AnalyticsPreview: React.FC<AnalyticsPreviewProps> = ({
+  markdownContent,
+  queryCache,
+  queryStatuses,
+  queryErrors,
+  queryDurations,
+  onRunQuery,
+  pageId,
+  inputs,
+  onInputChange,
+  showWarnings,
+}) => {
+  if (usesLegacyEngine(markdownContent)) {
+    return (
+      <LegacyAnalyticsPreview
+        markdownContent={markdownContent}
+        queryCache={queryCache}
+        queryStatuses={queryStatuses}
+        queryErrors={queryErrors}
+        queryDurations={queryDurations}
+        onRunQuery={onRunQuery}
+        pageId={pageId}
+      />
+    );
+  }
+  return (
+    <BiPagePreview
+      markdownContent={markdownContent}
+      queryCache={queryCache}
+      queryStatuses={queryStatuses}
+      queryErrors={queryErrors}
+      queryDurations={queryDurations}
+      onRunQuery={onRunQuery}
+      pageId={pageId}
+      inputs={inputs}
+      onInputChange={onInputChange}
+      showWarnings={showWarnings}
+    />
   );
 };

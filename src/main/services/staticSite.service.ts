@@ -16,6 +16,14 @@ import SettingsService from './settings.service';
 import { extractQueryReferences } from '../../renderer/components/analytics/runtime/queryDependencyResolver';
 import DuckLakeService from './duckLake.service';
 import {
+  buildPageGraph,
+  defaultFromOptions,
+  defaultInputState,
+  interpolateSql,
+  parsePage,
+  type InputState,
+} from '../../shared/analyticsBi';
+import {
   toSlug,
   generateSiteShell,
   generateSiteCSS,
@@ -341,8 +349,23 @@ export class StaticSiteService {
         });
 
         const sqlBlocks = extractSqlBlocks(page.markdownContent ?? '');
-        const orderedBlocks = resolveDependencyOrder(sqlBlocks);
+        let orderedBlocks = resolveDependencyOrder(sqlBlocks);
         totalQueryCount += orderedBlocks.length;
+
+        // Plan 97 inputs: exports bake every query with the filters' default
+        // values (filters are read-only in the exported site).
+        const pageGraph = buildPageGraph(
+          parsePage(page.markdownContent ?? '').nodes,
+        );
+        const exportInputs: InputState = defaultInputState(pageGraph.inputs);
+        const knownInputs = new Set(pageGraph.inputs.map((i) => i.name));
+        if (pageGraph.errors.length === 0) {
+          // Options queries must run before the queries that read their input.
+          const rank = new Map(pageGraph.order.map((name, i) => [name, i]));
+          orderedBlocks = [...orderedBlocks].sort(
+            (a, b) => (rank.get(a.name) ?? 0) - (rank.get(b.name) ?? 0),
+          );
+        }
 
         const queryResults: Record<string, any[]> = {};
         const queryStatuses: Record<string, 'success' | 'error'> = {};
@@ -353,7 +376,25 @@ export class StaticSiteService {
         // via {{query_name}} substitution, so parallelism is not possible here.
         for (let qi = 0; qi < orderedBlocks.length; qi += 1) {
           const block = orderedBlocks[qi];
-          const resolvedSql = substituteQueryRefs(block.sql, queryResults);
+          let interpolatedSql: string;
+          try {
+            interpolatedSql = interpolateSql(
+              block.sql,
+              exportInputs,
+              knownInputs,
+            );
+          } catch (err) {
+            queryResults[block.name] = [];
+            queryStatuses[block.name] = 'error';
+            queryErrors[block.name] = (err as Error).message;
+            truncated[block.name] = false;
+            // eslint-disable-next-line no-continue
+            continue;
+          }
+          const resolvedSql = substituteQueryRefs(
+            interpolatedSql,
+            queryResults,
+          );
 
           sendProgress(mainWindow, {
             phase: 'querying',
@@ -373,6 +414,15 @@ export class StaticSiteService {
           queryStatuses[block.name] = result.error ? 'error' : 'success';
           queryErrors[block.name] = result.error;
           truncated[block.name] = result.truncated;
+
+          if (!result.error) {
+            pageGraph.inputs.forEach((def) => {
+              if (def.optionsQuery !== block.name || exportInputs[def.name])
+                return;
+              const value = defaultFromOptions(def, result.data ?? []);
+              if (value) exportInputs[def.name] = value;
+            });
+          }
         }
 
         pageDataMap.set(meta.id, {
@@ -384,6 +434,7 @@ export class StaticSiteService {
           themeMode,
           builtAt: new Date().toISOString(),
           truncated,
+          inputs: exportInputs,
         });
       }
 

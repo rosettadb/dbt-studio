@@ -15,7 +15,15 @@ import React, {
   useRef,
   useMemo,
 } from 'react';
-import { Box, Typography, IconButton, Tooltip, useTheme } from '@mui/material';
+import {
+  Box,
+  Button,
+  Chip,
+  Typography,
+  IconButton,
+  Tooltip,
+  useTheme,
+} from '@mui/material';
 import {
   InsertChart,
   PlayArrow,
@@ -23,6 +31,7 @@ import {
   ViewStream,
   Code,
   CodeOff,
+  ContentCopy,
 } from '@mui/icons-material';
 import { z } from 'zod';
 import MonacoEditor from '@monaco-editor/react';
@@ -30,16 +39,24 @@ import SplitPane, { Pane } from 'split-pane-react';
 import 'split-pane-react/esm/themes/default.css';
 import * as monaco from 'monaco-editor';
 import {
+  useCreateAnalyticsPage,
   useGetAnalyticsPages,
   useUpdateAnalyticsPage,
 } from '../../controllers/analyticsPages.controller';
 import { useSchemaForConnection, useMonacoAutocomplete } from '../../hooks';
-import {
-  executeAnalyticsQuery,
-  resolveQueryDependencies,
-} from '../../utils/analyticsQueryEngine';
-import { parseAnalyticsMarkdown } from '../../utils/analyticsMarkdown';
+import { executeAnalyticsQuery } from '../../utils/analyticsQueryEngine';
 import { AnalyticsPreview } from './AnalyticsPreview';
+import {
+  QueryExecutor,
+  useAnalyticsPageRuntime,
+} from './bi/runtime/useAnalyticsPageRuntime';
+import { QueryStatusMenu } from './bi/ui/QueryStatusMenu';
+import {
+  duplicateMarkdown,
+  executeExampleQuery,
+  getExamplePage,
+  requestOpenAnalyticsPage,
+} from './bi/examples';
 import { AnalyticsPreviewErrorBoundary } from './AnalyticsPreviewErrorBoundary';
 import {
   AnalyticsEditorResultsSummary,
@@ -119,14 +136,27 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
   const isDarkMode = theme.palette.mode === 'dark';
 
   const { data: pages = [] } = useGetAnalyticsPages(connectionId);
+  // Read-only example dashboards are bundled, not stored.
+  const example = useMemo(() => getExamplePage(pageId), [pageId]);
   const page = useMemo(
-    () => pages.find((p) => p.id === pageId),
-    [pages, pageId],
+    () =>
+      example
+        ? {
+            id: example.id,
+            title: example.title,
+            markdownContent: example.markdown,
+          }
+        : pages.find((p) => p.id === pageId),
+    [example, pages, pageId],
   );
   const updateAnalyticsPage = useUpdateAnalyticsPage();
+  const createAnalyticsPage = useCreateAnalyticsPage();
 
   // ── Editor state ──────────────────────────────────────────────────────
   const [markdownContent, setMarkdownContent] = useState('');
+  // Page whose content is in `markdownContent`. Set in the same update as the
+  // content, so the runtime never sees a new page id with the old markdown.
+  const [loadedPageId, setLoadedPageId] = useState<string | null>(null);
   const [isEditorDirty, setIsEditorDirty] = useState(false);
   const [splitOrientation, setSplitOrientation] = useState<
     'vertical' | 'horizontal'
@@ -136,18 +166,27 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
   >(['50%', '50%']);
   const [editorCollapsed, setEditorCollapsed] = useState(false);
 
-  // ── Query execution state ─────────────────────────────────────────────
-  const [queryCache, setQueryCache] = useState<Record<string, any[]>>({});
-  const [queryStatuses, setQueryStatuses] = useState<
-    Record<string, 'idle' | 'running' | 'success' | 'error'>
-  >({});
-  const [queryErrors, setQueryErrors] = useState<Record<string, string | null>>(
-    {},
+  // ── Query execution + inputs (Plan 97 page runtime) ────────────────────
+  const executeQuery = useCallback<QueryExecutor>(
+    ({ queryName, sql, inputs }) =>
+      example
+        ? executeExampleQuery(example, { queryName, inputs })
+        : executeAnalyticsQuery({ queryName, sql, connectionId }),
+    [example, connectionId],
   );
-  const [queryDurations, setQueryDurations] = useState<
-    Record<string, number | undefined>
-  >({});
-  const [isRunningQueries, setIsRunningQueries] = useState(false);
+  const runtime = useAnalyticsPageRuntime({
+    markdown: markdownContent,
+    execute: executeQuery,
+    cacheScope: `${connectionId}|${loadedPageId ?? ''}`,
+    // Wait until the example's own markdown is loaded before running it.
+    autoRun: Boolean(example) && loadedPageId === pageId,
+    onSchemaChange,
+  });
+  const queryCache = runtime.results;
+  const queryStatuses = runtime.statuses;
+  const queryErrors = runtime.errors;
+  const queryDurations = runtime.durations;
+  const isRunningQueries = runtime.isRunning;
 
   // ── Component snippet templates for slash commands ──────────────────
   const componentSnippets: Record<string, string> = {
@@ -183,12 +222,6 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
   const completionProviderRef = useRef<monaco.IDisposable | null>(null);
   const hoverProviderRef = useRef<monaco.IDisposable | null>(null);
   const markdownContentRef = useRef('');
-  const queryCacheRef = useRef<Record<string, any[]>>({});
-  const queryStatusesRef = useRef<
-    Record<string, 'idle' | 'running' | 'success' | 'error'>
-  >({});
-  const queryErrorsRef = useRef<Record<string, string | null>>({});
-  const queryDurationsRef = useRef<Record<string, number | undefined>>({});
   const runAllQueriesRef = useRef<() => Promise<void>>(async () => undefined);
 
   // ── Schema for SQL autocomplete ───────────────────────────────────────
@@ -208,22 +241,6 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
   }, [markdownContent]);
 
   useEffect(() => {
-    queryCacheRef.current = queryCache;
-  }, [queryCache]);
-
-  useEffect(() => {
-    queryStatusesRef.current = queryStatuses;
-  }, [queryStatuses]);
-
-  useEffect(() => {
-    queryErrorsRef.current = queryErrors;
-  }, [queryErrors]);
-
-  useEffect(() => {
-    queryDurationsRef.current = queryDurations;
-  }, [queryDurations]);
-
-  useEffect(() => {
     return () => {
       if (completionProviderRef.current) {
         completionProviderRef.current.dispose();
@@ -241,6 +258,7 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
       isSyncingRef.current = true;
       const content = page.markdownContent || ANALYTICS_STARTER_TEMPLATE;
       setMarkdownContent(content);
+      setLoadedPageId(page.id);
       setIsEditorDirty(false);
       setTimeout(() => {
         isSyncingRef.current = false;
@@ -251,6 +269,8 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
   // ── Auto-save with 1s debounce ────────────────────────────────────────
   const handleMarkdownChange = useCallback(
     (value: string) => {
+      // Examples are read-only: never write them to the database.
+      if (example) return;
       setMarkdownContent(value);
       if (isSyncingRef.current) return;
 
@@ -265,7 +285,7 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
         setIsEditorDirty(false);
       }, 1000);
     },
-    [connectionId, pageId, updateAnalyticsPage],
+    [connectionId, pageId, updateAnalyticsPage, example],
   );
 
   // Flush timer when switching pages to prevent cross-page writes
@@ -276,161 +296,23 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
     [pageId],
   );
 
-  // ── Query execution engine ────────────────────────────────────────────
+  // ── Query execution ───────────────────────────────────────────────────
   const handleRunAllQueries = useCallback(async () => {
-    if (isRunningQueries) return;
+    await runtime.runAll();
+  }, [runtime.runAll]);
 
-    const blocks = parseAnalyticsMarkdown(markdownContent);
-    const originalSqlBlocks: Array<{
-      type: 'sql';
-      name: string;
-      sql: string;
-    }> = [];
-    const walkBlocks = (blks: any[]) => {
-      blks.forEach((b) => {
-        if (b.type === 'sql') originalSqlBlocks.push(b as any);
-        if (b.type === 'component' && b.content) {
-          walkBlocks(parseAnalyticsMarkdown(b.content));
-        }
-      });
-    };
-    walkBlocks(blocks);
-
-    if (originalSqlBlocks.length === 0) return;
-
-    const dependencyResult = resolveQueryDependencies(markdownContent);
-    if (dependencyResult.errors.length > 0) {
-      const nextStatuses: Record<
-        string,
-        'idle' | 'running' | 'success' | 'error'
-      > = {};
-      const nextErrors: Record<string, string | null> = {};
-      dependencyResult.errors.forEach((err) => {
-        const targetName = err.blockName ?? originalSqlBlocks[0]?.name;
-        if (targetName) {
-          nextStatuses[targetName] = 'error';
-          nextErrors[targetName] = err.message;
-        }
-      });
-      setQueryStatuses((prev) => ({ ...prev, ...nextStatuses }));
-      setQueryErrors((prev) => ({ ...prev, ...nextErrors }));
-      return;
-    }
-
-    const sqlBlocks = dependencyResult.resolved;
-
-    setIsRunningQueries(true);
-
-    // Reset all statuses to 'running'
-    setQueryStatuses((prev) => {
-      const next = { ...prev };
-      sqlBlocks.forEach((b) => {
-        next[b.name] = 'running';
-      });
-      return next;
-    });
-
-    // Execute each SQL block sequentially using reduce so we avoid for...of
-    // (which requires regenerator-runtime) and satisfy no-await-in-loop.
-    await sqlBlocks.reduce(
-      (chain, block) =>
-        chain.then(async () => {
-          try {
-            const result = await executeAnalyticsQuery({
-              queryName: block.name,
-              sql: block.sql,
-              connectionId,
-            });
-            setQueryCache((prev) => ({
-              ...prev,
-              [block.name]: result.data,
-            }));
-            setQueryStatuses((prev) => ({
-              ...prev,
-              [block.name]: result.status,
-            }));
-            setQueryErrors((prev) => ({
-              ...prev,
-              [block.name]: result.error ?? null,
-            }));
-            setQueryDurations((prev) => ({
-              ...prev,
-              [block.name]: result.duration,
-            }));
-
-            if (
-              onSchemaChange &&
-              result.status === 'success' &&
-              /^\s*(CREATE|DROP|ALTER|RENAME|TRUNCATE)/i.test(block.sql.trim())
-            ) {
-              onSchemaChange();
-            }
-            return undefined; // promise/always-return
-          } catch (err: any) {
-            setQueryStatuses((prev) => ({ ...prev, [block.name]: 'error' }));
-            setQueryErrors((prev) => ({
-              ...prev,
-              [block.name]: err?.message ?? 'Unexpected error',
-            }));
-            return undefined; // promise/always-return
-          }
-        }),
-      Promise.resolve(),
-    );
-
-    setIsRunningQueries(false);
-  }, [isRunningQueries, markdownContent, connectionId, onSchemaChange]);
-
-  // ── Run a single query (called from preview badge click) ─────────────
+  // Run a single query (called from a preview badge click)
   const handleRunSingleQuery = useCallback(
-    async (queryName: string, sql: string) => {
-      setQueryStatuses((prev) => ({ ...prev, [queryName]: 'running' }));
-      try {
-        const dependencyResult = resolveQueryDependencies(markdownContent);
-        if (dependencyResult.errors.length > 0) {
-          const relatedError =
-            dependencyResult.errors.find(
-              (err) => err.blockName === queryName,
-            ) ?? dependencyResult.errors[0];
-          setQueryStatuses((prev) => ({ ...prev, [queryName]: 'error' }));
-          setQueryErrors((prev) => ({
-            ...prev,
-            [queryName]: relatedError.message,
-          }));
-          return;
-        }
-        const resolvedSql =
-          dependencyResult.resolved.find((block) => block.name === queryName)
-            ?.sql ?? sql;
-        const result = await executeAnalyticsQuery({
-          queryName,
-          sql: resolvedSql,
-          connectionId,
-        });
-        setQueryCache((prev) => ({ ...prev, [queryName]: result.data }));
-        setQueryStatuses((prev) => ({ ...prev, [queryName]: result.status }));
-        setQueryErrors((prev) => ({
-          ...prev,
-          [queryName]: result.error ?? null,
-        }));
-        setQueryDurations((prev) => ({
-          ...prev,
-          [queryName]: result.duration,
-        }));
-      } catch (err: any) {
-        setQueryStatuses((prev) => ({ ...prev, [queryName]: 'error' }));
-        setQueryErrors((prev) => ({
-          ...prev,
-          [queryName]: err?.message ?? 'Error',
-        }));
-      }
+    async (queryName: string) => {
+      await runtime.runQuery(queryName);
     },
-    [connectionId, markdownContent],
+    [runtime.runQuery],
   );
 
   const getBridgeResults = useCallback((): AnalyticsEditorResultsSummary => {
+    const current = runtime.snapshot();
     const results = Object.fromEntries(
-      Object.entries(queryCacheRef.current).map(([queryName, rows]) => {
+      Object.entries(current.results).map(([queryName, rows]) => {
         const safeRows = Array.isArray(rows) ? rows : [];
         const firstRow = safeRows[0];
         const columns =
@@ -448,12 +330,12 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
     );
 
     return {
-      statuses: queryStatusesRef.current,
-      errors: queryErrorsRef.current,
-      durations: queryDurationsRef.current,
+      statuses: current.statuses,
+      errors: current.errors,
+      durations: current.durations,
       results,
     };
-  }, []);
+  }, [runtime.snapshot]);
 
   useEffect(() => {
     runAllQueriesRef.current = handleRunAllQueries;
@@ -463,12 +345,45 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
     return registerAnalyticsEditorBridge({
       getContent: () => markdownContentRef.current,
       setContent: (content) => {
+        if (example) {
+          throw new Error(
+            `"${example.title}" is a read-only example. Ask the user to click "Duplicate to my pages" and open the copy first.`,
+          );
+        }
         handleMarkdownChange(content);
       },
       runQueries: () => runAllQueriesRef.current(),
       getResults: getBridgeResults,
     });
-  }, [connectionId, pageId, handleMarkdownChange, getBridgeResults]);
+  }, [connectionId, pageId, handleMarkdownChange, getBridgeResults, example]);
+
+  // ── Examples: copy into the user's pages ─────────────────────────────
+  const handleDuplicateExample = useCallback(() => {
+    if (!example || !connectionId) return;
+    const slug = example.routePath.split('/').pop() ?? 'example';
+    const existing = new Set(pages.map((p) => p.routePath));
+    let routePath = `/${slug}`;
+    let n = 2;
+    while (existing.has(routePath)) {
+      routePath = `/${slug}-${n}`;
+      n += 1;
+    }
+    const title = n > 2 ? `${example.title} ${n - 1}` : example.title;
+    createAnalyticsPage.mutate(
+      {
+        connectionId,
+        data: {
+          title,
+          routePath,
+          markdownContent: duplicateMarkdown(example, title),
+        },
+      },
+      {
+        onSuccess: (newPage: { id: string }) =>
+          requestOpenAnalyticsPage(newPage.id),
+      },
+    );
+  }, [example, connectionId, pages, createAnalyticsPage]);
 
   // ── Monaco editor mount ───────────────────────────────────────────────
   const handleEditorMount = useCallback(
@@ -714,6 +629,46 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
           </Typography>
         )}
 
+        {example && (
+          <>
+            <Chip
+              size="small"
+              label="Example · read-only"
+              variant="outlined"
+              sx={{ height: 22, fontSize: '0.7rem' }}
+            />
+            <Tooltip
+              title={
+                connectionId
+                  ? 'Copy this example into your pages so you can edit it'
+                  : 'Select a connection first; copies are saved with a connection'
+              }
+            >
+              <span>
+                <Button
+                  size="small"
+                  variant="contained"
+                  startIcon={<ContentCopy sx={{ fontSize: 14 }} />}
+                  onClick={handleDuplicateExample}
+                  disabled={!connectionId || createAnalyticsPage.isLoading}
+                  sx={{ textTransform: 'none', py: 0.25 }}
+                >
+                  Duplicate to my pages
+                </Button>
+              </span>
+            </Tooltip>
+          </>
+        )}
+
+        <QueryStatusMenu
+          markdown={markdownContent}
+          statuses={queryStatuses}
+          errors={queryErrors}
+          durations={queryDurations}
+          results={queryCache}
+          onRunQuery={handleRunSingleQuery}
+        />
+
         <Tooltip title="Run all SQL queries (Ctrl+Shift+Enter)">
           <span>
             <IconButton
@@ -780,6 +735,9 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
               queryDurations={queryDurations}
               onRunQuery={handleRunSingleQuery}
               pageId={pageId}
+              inputs={runtime.inputs}
+              onInputChange={runtime.setInput}
+              showWarnings={!example}
             />
           </AnalyticsPreviewErrorBoundary>
         ) : (
@@ -802,6 +760,8 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
                   value={markdownContent}
                   onChange={(val) => handleMarkdownChange(val ?? '')}
                   options={{
+                    readOnly: Boolean(example),
+                    domReadOnly: Boolean(example),
                     fontSize: 13,
                     minimap: { enabled: false },
                     lineNumbers: 'on',
@@ -828,6 +788,9 @@ export const AnalyticsEditor: React.FC<AnalyticsEditorProps> = ({
                   queryDurations={queryDurations}
                   onRunQuery={handleRunSingleQuery}
                   pageId={pageId}
+                  inputs={runtime.inputs}
+                  onInputChange={runtime.setInput}
+                  showWarnings={!example}
                 />
               </AnalyticsPreviewErrorBoundary>
             </Pane>

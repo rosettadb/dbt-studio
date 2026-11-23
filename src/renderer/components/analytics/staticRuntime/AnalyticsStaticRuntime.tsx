@@ -29,6 +29,11 @@ export interface StaticPageData {
   themeMode: 'light' | 'dark';
   builtAt: string;
   truncated: Record<string, boolean>;
+  /** Filter values the queries were run with (Plan 97); shown read-only. */
+  inputs?: Record<
+    string,
+    { value: unknown; label?: unknown; start?: unknown; end?: unknown }
+  >;
 }
 
 /**
@@ -60,6 +65,8 @@ export function mount(container: HTMLElement, data: StaticPageData): void {
                 >
               }
               queryErrors={data.queryErrors}
+              // Filters are fixed to the values the export was built with.
+              inputs={data.inputs}
               // Truncated flags are ignored in runtime since we don't fetch more rows
             />
           </AnalyticsPreviewErrorBoundary>
