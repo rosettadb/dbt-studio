@@ -1,6 +1,6 @@
 {
   "name": "rosetta-dbt-studio",
-  "version": "1.7.8",
+  "version": "1.7.9",
   "description": "A modern DBT desktop IDE",
   "license": "AGPL-3.0-only",
   "author": {
