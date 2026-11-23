@@ -7,28 +7,18 @@ JDBC driver is required for dbt.
 
 ## Installation
 
-`dbt-kinetica` is not published on PyPI. The Studio installs it into its managed
-Python environment from the GitHub source archive:
+`dbt-kinetica` is published on
+[PyPI](https://pypi.org/project/dbt-kinetica/). The Studio installs it into its
+managed Python environment like the other adapters:
 
 ```
-pip install "dbt-kinetica @ https://github.com/rosettadb/kinetica-dbt-adapter/archive/92f4866dad614d24aa1f771585d249ab30a4ac6a.zip"
+pip install dbt-kinetica
 ```
 
 This pulls `dbt-core>=1.8,<2`, `dbt-adapters`, `dbt-common` and `gpudb>=7.2,<8`.
-The archive form is used instead of `git+https://...` so that end users do not
-need a local `git` executable. The archive is pinned to a reviewed commit SHA
-rather than the `main` branch so a later upstream change cannot alter what
-users install. The source is declared once in
-`src/shared/dbtAdapterPackages.ts`; every install path (onboarding, Settings,
-"Install all adapters") reads from it. To pick up a newer upstream revision,
-review the commit and bump the SHA there.
-
-Because there is no PyPI release, the Settings screen offers "Install" /
-"Update from source" for this adapter instead of a version list.
-"Update from source" reinstalls the pinned revision; it only delivers new
-upstream code after the SHA in the Studio has been bumped. The adapter
-requires dbt Core 1.x; under the dbt Core v2 preview it is reported as
-unsupported and execution is blocked, like Postgres.
+The Settings screen lists its PyPI versions and offers "Install latest" or a
+specific version. The adapter requires dbt Core 1.x; under the dbt Core v2
+preview it is reported as unsupported and execution is blocked, like Postgres.
 
 ## Profile mapping
 
