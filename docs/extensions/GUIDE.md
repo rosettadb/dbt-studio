@@ -121,6 +121,8 @@ api.screens.add({
 });
 ```
 
+Other `ScreenDefinition` fields: `redirects: [{ from, to }]` (relative paths that redirect to an absolute route) and `assistant: true` (the top bar shows the AI assistant button on this screen).
+
 Other `NavigationItem` fields: `area: 'bottom'` (the group at the bottom), `activePaths` (other routes that should highlight the item), `isEnabled({ hasProject })`, `testId`.
 
 A screen renders inside `AppLayout`, which sets the side panel and the top bar for that screen:
@@ -166,6 +168,22 @@ navigate('/app/select-project', {
 ```
 
 The list shows `message`, and the project that is picked or created opens and runs the command (registered with `api.commands.add`, `hidden: true` if it should not be in the palette).
+
+**A tab in a connection screen.** The SQL Editor screen takes tabs from other extensions (Analytics is one): an entry in its side panel tabs, what the side panel shows, and what the main area shows while the tab is selected.
+
+```js
+api.workspaceTabs.add(STUDIO_WORKSPACES.sql, {
+  id: 'my-tab',
+  order: 200,
+  label: 'My tab',
+  icon: MyIcon,
+  Sidebar: MySidebar,     // receives { connectionId, connectionName, state, setState }
+  Main: MyMain,           // same props
+  assistant: (state) => ({ screenKey: 'sql' }),   // which AI assistant to use; optional
+});
+```
+
+`state` is whatever the tab needs to remember while the screen is open (the item that is open, for example). `Sidebar` and `Main` share it, and it is reset when the connection changes.
 
 ### 4.4 File handlers
 
@@ -397,6 +415,8 @@ Lint enforces the boundary:
 - Nothing outside `src/extensions/` imports from it, except those two list files.
 
 If an internal extension needs something from Studio, it is exported through `src/extensionApi/`, which makes it available to installed extensions as well.
+
+The **SQL Editor** (`src/extensions/sql/`) is the second: a sidebar entry, a screen with the assistant button, a Home card, and saved queries in its main half.
 
 The first internal extension is **Pipelines** (`src/extensions/pipeline/`): `manifest.shared.ts` is its manifest and `renderer/index.ts` its `activate`, which shows every UI injection point in use. `tests/unit/extensions/pipeline.activate.test.ts` shows how to test an extension through the real host.
 

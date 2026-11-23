@@ -3,4 +3,4 @@
  * the side panel and the top bar; without it the previous screen's side
  * panel stays visible.
  */
-export { AppLayout } from '../../renderer/layouts/appLayout';
+export { AppLayout } from '../../renderer/layouts';

@@ -1,1 +1,6 @@
-export type { InstallResult, Project, SettingsType } from '../../types/backend';
+export type {
+  InstallResult,
+  Project,
+  SavedQuery,
+  SettingsType,
+} from '../../types/backend';

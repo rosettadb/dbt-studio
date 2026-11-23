@@ -19,7 +19,6 @@ import {
   registerAgentHandlers,
   registerMCPHandlers,
   registerSkillsHandlers,
-  registerSavedQueriesHandlers,
   registerAnalyticsPagesHandlers,
   registerStaticSiteHandlers,
   registerFlowfileHandlers,
@@ -57,7 +56,6 @@ const registerHandlers = (mainWindow: BrowserWindow) => {
   registerAgentHandlers();
   registerMCPHandlers();
   registerSkillsHandlers();
-  registerSavedQueriesHandlers();
   registerAnalyticsPagesHandlers();
   registerStaticSiteHandlers(mainWindow);
   registerFlowfileHandlers();

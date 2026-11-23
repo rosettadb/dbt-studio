@@ -18,7 +18,6 @@ import {
   useTheme,
 } from '@mui/material';
 import { toast } from 'react-toastify';
-import Terminal from '@mui/icons-material/Terminal';
 import AutoStoriesIcon from '@mui/icons-material/AutoStories';
 import AddIcon from '@mui/icons-material/Add';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
@@ -88,10 +87,6 @@ const CloudExplorerCardIcon: React.FC = () => (
   />
 );
 
-const SqlEditorCardIcon: React.FC = () => (
-  <Terminal color="primary" sx={{ fontSize: 28 }} />
-);
-
 const ProjectTypeIcon: React.FC<{ connectionType?: string }> = ({
   connectionType,
 }) => {
@@ -109,8 +104,8 @@ const ProjectTypeIcon: React.FC<{ connectionType?: string }> = ({
 };
 
 // Studio's own Home cards. Extensions add theirs to the same registry;
-// the gaps in `order` leave room between them (700 is the Pipeline card,
-// which the pipeline tool adds).
+// the gaps in `order` leave room between them (300 is the SQL Editor card
+// and 700 the Pipeline card, which their extensions add).
 const features: DashboardCard[] = [
   {
     id: 'dbt-project',
@@ -133,22 +128,13 @@ const features: DashboardCard[] = [
     path: '/app/notebooks',
   },
   {
-    id: 'sql-editor',
-    order: 300,
-    title: 'SQL Editor',
-    category: 'SQL',
-    description: 'Write, execute, and profile high-performance SQL queries.',
-    icon: SqlEditorCardIcon,
-    path: '/app/sql',
-  },
-  {
     id: 'analytics',
     order: 400,
     title: 'Analytics',
     category: 'BI & Viz',
     description: 'Visualize your data with powerful dashboards and charts.',
     icon: AnalyticsCardIcon,
-    // navigated programmatically with state: { tab: 2 }
+    // navigated programmatically with state: { tab: 'analytics' }
     path: '/app/sql',
   },
   {
@@ -295,7 +281,7 @@ const Dashboard: React.FC = () => {
   const handleCardClick = (feature: DashboardCard) => {
     if (feature.id === 'analytics') {
       setIsSidebarOpen(true);
-      navigate('/app/sql', { state: { tab: 2 } });
+      navigate('/app/sql', { state: { tab: 'analytics' } });
       return;
     }
     if (feature.onSelect) {

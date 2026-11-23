@@ -10,6 +10,7 @@ import type {
   ScreenDefinition,
   SettingsPage,
   SlotContribution,
+  WorkspaceTab,
 } from '../../extensionApi/renderer';
 import {
   byOrder,
@@ -41,6 +42,24 @@ export const fileTreeHoverPreviews = createRegistry<FileTreeHoverPreview>();
 export const projectMenuItems = createRegistry<ProjectMenuItem>({
   compare: byOrder,
 });
+
+const workspaceTabRegistries = new Map<string, Registry<WorkspaceTab>>();
+
+/** The tabs contributed to one screen, created the first time it is asked for. */
+export const workspaceTabRegistry = (
+  screenId: string,
+): Registry<WorkspaceTab> => {
+  const existing = workspaceTabRegistries.get(screenId);
+  if (existing) return existing;
+  const created = createRegistry<WorkspaceTab>({ compare: byOrder });
+  workspaceTabRegistries.set(screenId, created);
+  return created;
+};
+
+/** The tabs contributed to a screen, for the screen that hosts them. */
+export const useWorkspaceTabs = (
+  screenId: string,
+): ReadonlyArray<WorkspaceTab> => useRegistry(workspaceTabRegistry(screenId));
 
 const slotRegistries = new Map<string, Registry<SlotContribution>>();
 

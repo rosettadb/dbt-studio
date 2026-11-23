@@ -27,6 +27,7 @@ import {
   screens,
   settingsPages,
   slotRegistry,
+  workspaceTabRegistry,
 } from './contributions.renderer';
 import { loadExtensionModule } from './moduleLoader.renderer';
 import {
@@ -306,6 +307,9 @@ export class ExtensionHostRenderer {
       },
       screens: {
         add: (screen) => track(screens.add(screen)),
+      },
+      workspaceTabs: {
+        add: (screenId, tab) => track(workspaceTabRegistry(screenId).add(tab)),
       },
       slots: {
         add: (slotId, contribution) =>

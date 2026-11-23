@@ -4,7 +4,7 @@ import { toast } from 'react-toastify';
 import {
   SqlEditor,
   SqlEditorHandle,
-} from '../../../../src/renderer/components/sqlEditor';
+} from '../../../../src/extensions/sql/renderer/sqlEditor';
 import { connectorsServices } from '../../../../src/renderer/services';
 import { SNOWFLAKE_REAUTH_MESSAGE } from '../../../../src/types/backend';
 
@@ -19,11 +19,14 @@ jest.mock('../../../../src/renderer/services/duckLake.service', () => ({
 jest.mock('../../../../src/renderer/hooks', () => ({
   useAppContext: () => ({ fetchSchema: jest.fn() }),
 }));
-jest.mock('../../../../src/renderer/controllers', () => ({
+// Studio's controllers barrel is loaded by the editor's imports; none of
+// its hooks is used in these tests.
+jest.mock('../../../../src/renderer/controllers', () => ({}));
+jest.mock('../../../../src/extensions/sql/renderer/editor.controller', () => ({
   useSqlEditorBridge: jest.fn(),
 }));
 jest.mock(
-  '../../../../src/renderer/components/sqlEditor/editorComponent',
+  '../../../../src/extensions/sql/renderer/sqlEditor/editorComponent',
   () => ({ SqlEditorComponent: () => null }),
 );
 jest.mock('../../../../src/renderer/lib/monaco/insertText', () => ({

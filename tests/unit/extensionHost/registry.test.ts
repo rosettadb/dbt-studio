@@ -2,11 +2,15 @@ import {
   byOrder,
   createRegistry,
 } from '../../../src/extensionHost/renderer/registry.renderer';
-import { isNavigationItemActive } from '../../../src/extensionHost/renderer/contributions.renderer';
+import {
+  isNavigationItemActive,
+  navigationItems,
+} from '../../../src/extensionHost/renderer/contributions.renderer';
 import {
   getBottomElements,
   getMainElements,
 } from '../../../src/renderer/components/sidebar/elements';
+import { sqlNavigationItem } from '../../../src/extensions/sql/renderer/contributions';
 
 type Item = { id: string; order?: number; label?: string };
 
@@ -82,6 +86,9 @@ describe('registry', () => {
 });
 
 describe('sidebar active item', () => {
+  // The sidebar holds Studio's own entries plus those of the extensions
+  // that ship with Studio.
+  navigationItems.add(sqlNavigationItem);
   const items = [...getMainElements(true), ...getBottomElements()];
   const activeFor = (pathname: string) =>
     items

@@ -1,6 +1,8 @@
 import type { ExtensionRendererModule } from '../../extensionApi/renderer';
 import { pipelineManifest } from '../../extensions/pipeline/manifest.shared';
 import { pipelineRenderer } from '../../extensions/pipeline/renderer';
+import { sqlManifest } from '../../extensions/sql/manifest.shared';
+import { sqlRenderer } from '../../extensions/sql/renderer';
 
 export interface BuiltinRendererExtension {
   /** The same manifest object the main-process list uses. */
@@ -16,4 +18,5 @@ export interface BuiltinRendererExtension {
  */
 export const builtinRendererExtensions: BuiltinRendererExtension[] = [
   { manifest: pipelineManifest, module: pipelineRenderer },
+  { manifest: sqlManifest, module: sqlRenderer },
 ];

@@ -15,7 +15,6 @@ import theme from './theme';
 import {
   ProjectDetails,
   Settings,
-  Sql,
   AddConnection,
   EditConnection,
   SelectProject,
@@ -53,6 +52,8 @@ import { builtinRendererExtensions } from '../extensionHost/renderer/builtinExte
 import * as studioApiShared from '../extensionApi/shared';
 import * as studioApiRenderer from '../extensionApi/renderer';
 import * as studioApiStudio from '../extensionApi/studio';
+// Analytics adds itself to the SQL Editor screen as a tab.
+import './components/analytics/registerWorkspaceTab';
 
 // What an installed extension gets when it asks for '@rosetta/studio-api':
 // the same API the internal extensions import.
@@ -108,7 +109,6 @@ const App: React.FC = () => {
           <Route path="settings/backup" element={<Settings />} />
           {/* Settings pages added through the settings-page registry */}
           <Route path="settings/:section" element={<Settings />} />
-          <Route path="sql" element={<Sql />} />
           <Route path="notebooks" element={<Notebooks />} />
           <Route
             path="cloud-explorer"
@@ -146,10 +146,6 @@ const App: React.FC = () => {
           <Route path="data-lake/dashboard" element={<DataLake />} />
           <Route path="data-lake/instances" element={<DataLake />} />
           <Route path="data-lake/new-instance" element={<DataLake />} />
-          <Route
-            path="data-lake/history"
-            element={<Navigate to="/app/sql" replace />}
-          />
           <Route
             path="data-lake/:type/instances/:instanceId"
             element={<DataLake />}

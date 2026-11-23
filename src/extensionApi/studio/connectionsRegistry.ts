@@ -1,2 +1,5 @@
 /** The UI side of the connection registry. */
-export { getConnectionUi } from '../../connections/registry.renderer';
+export {
+  connectionIcon,
+  getConnectionUi,
+} from '../../connections/registry.renderer';

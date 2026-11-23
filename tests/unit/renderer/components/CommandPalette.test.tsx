@@ -15,6 +15,11 @@ import {
   getBottomElements,
   getMainElements,
 } from '../../../../src/renderer/components/sidebar/elements';
+import { navigationItems } from '../../../../src/extensionHost/renderer/contributions.renderer';
+import { sqlNavigationItem } from '../../../../src/extensions/sql/renderer/contributions';
+
+// The SQL Editor's sidebar entry comes from its extension.
+navigationItems.add(sqlNavigationItem);
 
 const mockNavigate = jest.fn();
 const mockOpenFile = jest.fn();

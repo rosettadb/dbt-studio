@@ -49,6 +49,7 @@ export type {
 export {
   Slot,
   useSlot,
+  useWorkspaceTabs,
 } from '../extensionHost/renderer/contributions.renderer';
 
 /** An entry in the activity bar on the left. */
@@ -89,6 +90,8 @@ export interface ScreenDefinition {
   Component: React.ComponentType;
   /** Relative paths that redirect to an absolute route. */
   redirects?: Array<{ from: string; to: string }>;
+  /** Show the AI assistant button in the top bar on this screen. */
+  assistant?: boolean;
 }
 
 /** A component placed into a named slot of an existing screen. */
@@ -189,6 +192,42 @@ export interface ProjectMenuItem {
   onSelect: (context: ProjectMenuContext) => void;
 }
 
+/** What a workspace tab's two parts get from the screen that hosts it. */
+export interface WorkspaceTabProps<S = unknown> {
+  /** The connection the screen is working on; null while none is picked. */
+  connectionId: string | null;
+  /** Name to show for the connection, when the screen knows one. */
+  connectionName?: string;
+  /**
+   * What the tab keeps while the screen is open (for example the page that
+   * is open). Shared by `Sidebar` and `Main`; reset to null when the
+   * connection changes.
+   */
+  state: S | null;
+  setState: (state: S | null) => void;
+}
+
+/**
+ * A tab added to a screen that works on one connection (the SQL Editor):
+ * an entry in the screen's side panel tabs, what the side panel shows for
+ * it, and what the main area shows while it is selected.
+ */
+export interface WorkspaceTab<S = any> {
+  id: string;
+  order?: number;
+  label: string;
+  icon: React.ComponentType<any>;
+  Sidebar: React.ComponentType<WorkspaceTabProps<S>>;
+  Main: React.ComponentType<WorkspaceTabProps<S>>;
+  /** The AI assistant to use while this tab is selected. */
+  assistant?: (state: S | null) => { screenKey: string; pageId?: string };
+}
+
+/** Screens that accept workspace tabs. */
+export const STUDIO_WORKSPACES = {
+  sql: 'sql',
+} as const;
+
 /** Slots Studio's own screens offer. Props are what each contribution gets. */
 export const STUDIO_SLOTS = {
   /** Under the file tree of the project screen. Props: `{ project }`. */
@@ -243,6 +282,10 @@ export interface ExtensionRendererApi {
   };
   readonly screens: {
     add: (screen: ScreenDefinition) => Disposable;
+  };
+  readonly workspaceTabs: {
+    /** `screenId` is one of `STUDIO_WORKSPACES`. */
+    add: (screenId: string, tab: WorkspaceTab) => Disposable;
   };
   readonly slots: {
     /** Slot ids are published by the screen that owns the slot. */

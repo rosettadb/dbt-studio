@@ -26,7 +26,7 @@ import {
   Close,
   InsertChart,
 } from '@mui/icons-material';
-import { SchemaTreeViewerWithSchema } from '../../screens/sql/SchemaTreeViewerWithSchema';
+import { SchemaTreeViewerWithSchema } from '../schemaTreeViewer/SchemaTreeViewerWithSchema';
 import { NotebooksTreeView } from './NotebooksTreeView';
 import { AnalyticsPagesTreeView } from '../analytics';
 import { Table, SupportedConnectionTypes } from '../../../types/backend';

@@ -1,1 +1,6 @@
-export { projectsServices, settingsServices } from '../../renderer/services';
+export {
+  DuckLakeService,
+  connectorsServices,
+  projectsServices,
+  settingsServices,
+} from '../../renderer/services';

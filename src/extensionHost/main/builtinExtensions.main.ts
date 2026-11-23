@@ -1,6 +1,8 @@
 import type { ExtensionMainModule } from '../../extensionApi/main';
 import { pipelineManifest } from '../../extensions/pipeline/manifest.shared';
 import { pipelineMain } from '../../extensions/pipeline/main';
+import { sqlManifest } from '../../extensions/sql/manifest.shared';
+import { sqlMain } from '../../extensions/sql/main';
 
 export interface BuiltinMainExtension {
   /** The extension's manifest object (validated by the host). */
@@ -16,4 +18,5 @@ export interface BuiltinMainExtension {
  */
 export const builtinMainExtensions: BuiltinMainExtension[] = [
   { manifest: pipelineManifest, module: pipelineMain },
+  { manifest: sqlManifest, module: sqlMain },
 ];

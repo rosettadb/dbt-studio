@@ -17,7 +17,6 @@ import registerLanguageIntelligenceHandlers from './languageIntelligence.ipcHand
 import { registerAgentHandlers } from './agent.ipcHandlers';
 import { registerMCPHandlers } from './mcp.ipcHandlers';
 import { registerSkillsHandlers } from './skills.ipcHandlers';
-import registerSavedQueriesHandlers from './savedQueries.ipcHandlers';
 import { registerAnalyticsPagesHandlers } from './analyticsPages.ipcHandlers';
 import { registerStaticSiteHandlers } from './staticSite.ipcHandlers';
 import registerFlowfileHandlers from './flowfile.ipcHandlers';
@@ -50,7 +49,6 @@ export {
   registerAgentHandlers,
   registerMCPHandlers,
   registerSkillsHandlers,
-  registerSavedQueriesHandlers,
   registerAnalyticsPagesHandlers,
   registerStaticSiteHandlers,
   registerFlowfileHandlers,

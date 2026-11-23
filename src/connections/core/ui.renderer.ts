@@ -7,7 +7,7 @@ import type {
 import type {
   ParsedStatement,
   SqlStatementModel,
-} from '../../renderer/components/sqlEditor/editorComponent/statements';
+} from './sqlStatements.shared';
 
 /** Props every connection form takes today (one type for all forms). */
 export type ConnectionFormProps = {
