@@ -87,6 +87,9 @@ A broken extension never stops Studio. It is listed as *Failed* or *Cannot start
 | `api.panels.add(panel)` | A tab in the bottom panel of the project screen |
 | `api.fileTree.addRowAction(action)` / `api.fileTree.addHoverPreview(preview)` | A button on matching rows of the project file tree, and what shows when the pointer rests on a row |
 | `api.projectMenu.addItem(item)` | An entry in the run menu of the project screen's top bar |
+| `api.editor.addAction(action)` | A button in the bar above the code editor, next to the file's breadcrumb |
+| `api.monaco` | The Monaco namespace all editors share: languages, autocomplete, formatting, hover |
+| `api.files.onWillSave / onDidSave / onDidOpen / onDidClose` | Hooks before and after a file is saved, and when it is opened or closed |
 | `api.commands.add(command)` | A command in the command palette |
 | `api.app.addProvider(provider)` | A React provider around the whole app |
 | `api.ipc.invoke(channel, ...args)` / `api.ipc.on(channel, listener)` | Calls to and events from your main half |
@@ -149,6 +152,20 @@ Slot ids are published by the screen that owns them. Studio's own slots are in `
 |---|---|---|
 | `STUDIO_SLOTS.projectExplorerFooter` | Under the file tree of the project screen | `{ project }` |
 | `STUDIO_SLOTS.projectOverlays` | Always mounted while the project screen is open; for dialogs | `{ project }` |
+| `STUDIO_SLOTS.homeOverlays` | Always mounted while Home is open; for dialogs | none |
+
+**Opening a project first.** When something needs a project (the Pipelines card on Home does), send the user to the project list with a command to run afterwards:
+
+```js
+navigate('/app/select-project', {
+  state: {
+    afterOpen: { command: 'my.command-id', message: 'Pick the project to add this to.' },
+    startNewProject: false,   // true opens the new project form straight away
+  },
+});
+```
+
+The list shows `message`, and the project that is picked or created opens and runs the command (registered with `api.commands.add`, `hidden: true` if it should not be in the palette).
 
 ### 4.4 File handlers
 
@@ -198,7 +215,60 @@ A row action renders its own button and may return `null` when it does not apply
 
 To open a dialog from a row button or a menu entry, keep the "what should be open" state in a small store of your own and render the dialog from a contribution to `STUDIO_SLOTS.projectOverlays`.
 
-### 4.6 Bottom panels, commands, dashboard cards, settings pages
+### 4.6 The code editor: breadcrumb buttons, language features, save hooks
+
+**A button above the editor** ("Run", "Preview", "Format"):
+
+```js
+api.editor.addAction({
+  id: 'my-run',
+  order: 100,
+  when: ({ language, tab }) => language === 'sql' && !tab.isReadOnly,
+  Component: RunButton,     // receives { tab, projectId, projectPath, language }
+});
+```
+
+The component renders its own button. `tab` is the open file (`path`, `content`, `isModified`, ...).
+
+**Autocomplete, formatting, hover, a new language** go on the shared Monaco namespace. Each `register...` returns a disposable; push it onto `api.subscriptions` so it is removed with the extension:
+
+```js
+api.subscriptions.push(
+  api.monaco.languages.registerCompletionItemProvider('sql', {
+    provideCompletionItems: (model, position) => ({ suggestions: [/* ... */] }),
+  }),
+  api.monaco.languages.registerDocumentFormattingEditProvider('sql', {
+    provideDocumentFormattingEdits: (model) => [
+      { range: model.getFullModelRange(), text: format(model.getValue()) },
+    ],
+  }),
+);
+```
+
+Providers are global per language id: they apply to every editor that shows that language.
+
+**Hooks around saving and opening:**
+
+```js
+// Before a file is written. Return a string to change what is written.
+api.files.onWillSave(({ path, content, reason }) => {
+  if (reason !== 'manual' || !path.endsWith('.sql')) return undefined;
+  return format(content);
+});
+
+// After a file was written, by the editor ('user') or an AI agent ('agent').
+api.files.onDidSave(({ path, source }) => { /* ... */ });
+
+api.files.onDidOpen(({ path }) => { /* ... */ });
+api.files.onDidClose(({ path }) => { /* ... */ });
+```
+
+- `reason` is `manual` (Save, Ctrl/Cmd+S, Save All, Save and close), `auto` (saved on the user's behalf, for example before a run) or `programmatic` (written by code: an applied AI edit, a restore, a new file). A formatter normally acts on `manual` only.
+- Every save from the window goes through these hooks. Participants run one after the other; each sees what the previous one returned. When the content changes, the open tab is updated to what was written.
+- A participant that throws, or takes longer than 3 seconds, is skipped and the file is saved anyway.
+- Files written by an AI agent are written in the main process: they fire `onDidSave` but not `onWillSave`.
+
+### 4.7 Bottom panels, commands, dashboard cards, settings pages
 
 ```js
 api.panels.add({
@@ -231,7 +301,19 @@ These must be Studio's own copies; do **not** bundle them. Mark them as external
 
 `react`, `react-dom`, `react/jsx-runtime`, `@mui/material`, `@mui/material/styles`, `@emotion/react`, `@emotion/styled`, `react-router-dom`, `react-query`, `monaco-editor`, `@rosetta/studio-api`
 
-`@rosetta/studio-api` is Studio's API module (`AppLayout`, `Slot`, `useSlot`, `toDisposable`, ...). Anything else your extension needs is bundled into it.
+`@rosetta/studio-api` is Studio's API module. Besides the contract helpers (`Slot`, `useSlot`, `STUDIO_SLOTS`, `toDisposable`) it carries the pieces of Studio that extensions may use, listed in `src/extensionApi/studio/`:
+
+| Area | Exports |
+|---|---|
+| Layout and dialogs | `AppLayout`, `Modal`, `ConfirmationModal`, `PushToCloudModal`, `UnsavedChangesDialog`, the settings-page building blocks (`SettingsStack`, `SettingsSection`, `SettingsRow`, `SettingsStatus`, ...) |
+| Editor and tabs | `Editor`, `useTabs`, `useTerminalMinimize`, `useRefreshProjectFiles` |
+| Project, settings, connections | `useGetSelectedProject`, `useGetSettings`, `useGetConnectionById`, `useSetConnectionEnvVariable`, `getConnectionUi`, `projectTypeOf`, `useAppContext`, `useSecureStorage` |
+| Cloud runs and tasks | `useCloudRuns`, `useCloudRunActionId`, `useActiveCloudRun`, `useCloudActionStatus`, `useCloudActionLogs`, `usePipelineActionId`, `useTaskManager`, `useTaskChannel`, `useIsTaskTypeActive` |
+| Services | `projectsServices`, `settingsServices`, `getFileContent`, `getFileStatus`, `isFileUnpushed`, `secureStorageService`, `materializeSnowflakeToken`, `client` (typed calls to Studio's main process), `QUERY_KEYS` |
+| Paths | `path`, `splitSegments`, `toPosix`, `isInside` |
+| Types | `Project`, `FileNode`, `SettingsType`, cloud action types, ... |
+
+This list grows as more of Studio's own tools become extensions. Anything else your extension needs is bundled into it.
 
 ### The renderer file format
 
@@ -291,6 +373,8 @@ exports.deactivate = () => { /* stop what you started outside api */ };
 | `api.ipc.send(channel, payload, target?)` | Sends an event to the UI half (`api.ipc.on`) in every window, or one |
 | `api.bridge.request(operation, payload, { timeoutMs })` | Asks the UI half for something only the open UI knows; it answers with `api.bridge.handle`. Rejects after 15 s by default if no window answers. |
 | `api.workspace.onDidSaveFile(listener)` | Runs after a project file was written |
+| `api.windows.getMainWindow()` | Studio's main window, or null while it is not open |
+| `api.startup.addTask({ id, run })` | Work to do while Studio starts, behind the splash screen. `run({ setMessage })` can change the splash line. A task that throws is logged and Studio still starts. |
 | `api.storagePath` | A folder for the extension's own files |
 | `api.extensions.getExports(id)` | What another extension's main `activate` returned |
 | `api.log` | Console output tagged with the extension id |
@@ -300,6 +384,8 @@ The types are in `src/extensionApi/main.ts`.
 **Channel names are global.** Prefix them with your extension's name (`hello:greet`). Registering a channel that already exists fails the activation.
 
 `deactivate` runs when the extension is disabled or uninstalled, and when Studio quits (Studio waits for it).
+
+Pieces of Studio's main process that an internal extension may use are in `src/extensionApi/studioMain/` (the install queue, the process adapter, the settings / projects / task-manager services, types). `src/extensions/pipeline/main/index.ts` is a complete main half: backend handlers, a start-up task, and stopping a child process in `deactivate`.
 
 ## 7. Internal extensions
 
@@ -311,6 +397,8 @@ Lint enforces the boundary:
 - Nothing outside `src/extensions/` imports from it, except those two list files.
 
 If an internal extension needs something from Studio, it is exported through `src/extensionApi/`, which makes it available to installed extensions as well.
+
+The first internal extension is **Pipelines** (`src/extensions/pipeline/`): `manifest.shared.ts` is its manifest and `renderer/index.ts` its `activate`, which shows every UI injection point in use. `tests/unit/extensions/pipeline.activate.test.ts` shows how to test an extension through the real host.
 
 ## 8. Rules
 

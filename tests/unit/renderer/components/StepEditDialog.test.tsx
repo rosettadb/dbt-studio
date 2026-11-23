@@ -1,36 +1,39 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { StepEditDialog } from '../../../../src/renderer/components/pipelineView/StepEditDialog';
-import type { PipelineNodeData } from '../../../../src/renderer/components/pipelineView/PipelineNode';
+import { StepEditDialog } from '../../../../src/extensions/pipeline/renderer/StepEditDialog';
+import type { PipelineNodeData } from '../../../../src/extensions/pipeline/renderer/PipelineNode';
 
 // The designer's plugins come from the runner's plugin manifest.
-jest.mock('../../../../src/renderer/controllers', () => {
-  const { parsePluginManifest } = jest.requireActual(
-    '../../../../src/shared/pluginManifest',
-  );
-  const data = [
-    ...parsePluginManifest(
-      jest.requireActual('../../__fixtures__/plugins.json'),
-    ),
-    ...parsePluginManifest([
-      {
-        name: 'every_widget@v1',
-        widgets: [
-          { key: 'flag', type: 'checkbox', label: 'Flag' },
-          { key: 'count', type: 'number', label: 'Count' },
-          {
-            key: 'secret',
-            type: 'input',
-            label: 'Secret',
-            visible_when: { key: 'flag', equals: true },
-          },
-          { key: 'pairs', type: 'key_value', label: 'Pairs' },
-        ],
-      },
-    ]),
-  ];
-  return { useGetRunnerPlugins: () => ({ data, isLoading: false }) };
-});
+jest.mock(
+  '../../../../src/extensions/pipeline/renderer/pipelineControllers',
+  () => {
+    const { parsePluginManifest } = jest.requireActual(
+      '../../../../src/shared/pluginManifest',
+    );
+    const data = [
+      ...parsePluginManifest(
+        jest.requireActual('../../__fixtures__/plugins.json'),
+      ),
+      ...parsePluginManifest([
+        {
+          name: 'every_widget@v1',
+          widgets: [
+            { key: 'flag', type: 'checkbox', label: 'Flag' },
+            { key: 'count', type: 'number', label: 'Count' },
+            {
+              key: 'secret',
+              type: 'input',
+              label: 'Secret',
+              visible_when: { key: 'flag', equals: true },
+            },
+            { key: 'pairs', type: 'key_value', label: 'Pairs' },
+          ],
+        },
+      ]),
+    ];
+    return { useGetRunnerPlugins: () => ({ data, isLoading: false }) };
+  },
+);
 
 const step = (
   plugin: string,

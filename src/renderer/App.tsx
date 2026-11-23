@@ -53,9 +53,6 @@ import { builtinRendererExtensions } from '../extensionHost/renderer/builtinExte
 import * as studioApiShared from '../extensionApi/shared';
 import * as studioApiRenderer from '../extensionApi/renderer';
 import * as studioApiStudio from '../extensionApi/studio';
-// The pipeline tool's contributions. Registered from here until the tool
-// moves into src/extensions (docs/extensions/PLAN.md, phase 2).
-import './components/pipelineView/contributions';
 
 // What an installed extension gets when it asks for '@rosetta/studio-api':
 // the same API the internal extensions import.

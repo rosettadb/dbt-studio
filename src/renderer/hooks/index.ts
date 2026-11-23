@@ -8,7 +8,6 @@ import useRosettaExtract from './useRosettaExtract';
 import useRosettaDBT from './useRosettaDBT';
 import useDbt from './useDbt';
 import useProcess from './useProcessContext';
-import useRunner from './useRunnerContext';
 import useSecureStorage from './useSecureStorage';
 import useTabManager from './useTabManager';
 import useDuckLakeConnection from './useDuckLakeConnection';
@@ -37,7 +36,6 @@ export {
   useRosettaDBT,
   useDbt,
   useProcess,
-  useRunner,
   useSecureStorage,
   useTabManager,
   useDuckLakeConnection,

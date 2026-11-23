@@ -1,3 +1,4 @@
+import * as monaco from 'monaco-editor';
 import type {
   ExtensionRendererApi,
   ExtensionRendererModule,
@@ -13,10 +14,12 @@ import {
   type Disposable,
   type ExtensionBridgeRequest,
   type ExtensionBridgeResponse,
+  type FileDidSaveEvent,
 } from '../shared/protocol.shared';
 import {
   appProviders,
   dashboardCards,
+  editorActions,
   fileTreeHoverPreviews,
   fileTreeRowActions,
   navigationItems,
@@ -26,6 +29,13 @@ import {
   slotRegistry,
 } from './contributions.renderer';
 import { loadExtensionModule } from './moduleLoader.renderer';
+import {
+  emitFileDidSave,
+  onDidCloseFile,
+  onDidOpenFile,
+  onDidSaveFile,
+  onWillSaveFile,
+} from './documents.renderer';
 import { registerFileView } from '../../renderer/components/fileViews/registry';
 import { registerTerminalPanel } from '../../renderer/components/terminal/panels/registry';
 import { registerCommand } from '../../renderer/components/commandPalette/commands';
@@ -97,6 +107,10 @@ export class ExtensionHostRenderer {
         });
         ipcRenderer.on('extensions:bridge:request', (request) => {
           this.answerBridge(request as ExtensionBridgeRequest);
+        });
+        // The main process reports every saved file (editor and AI agent).
+        ipcRenderer.on('extensions:file:didSave', (event) => {
+          emitFileDidSave(event as FileDidSaveEvent);
         });
         try {
           const list = await ipcRenderer.invoke('extensions:list');
@@ -308,6 +322,16 @@ export class ExtensionHostRenderer {
       },
       fileViews: {
         add: (view) => track(registerFileView(view)),
+      },
+      editor: {
+        addAction: (action) => track(editorActions.add(action)),
+      },
+      monaco,
+      files: {
+        onWillSave: (participant) => track(onWillSaveFile(participant)),
+        onDidSave: (listener) => track(onDidSaveFile(listener)),
+        onDidOpen: (listener) => track(onDidOpenFile(listener)),
+        onDidClose: (listener) => track(onDidCloseFile(listener)),
       },
       fileTree: {
         addRowAction: (action) => track(fileTreeRowActions.add(action)),

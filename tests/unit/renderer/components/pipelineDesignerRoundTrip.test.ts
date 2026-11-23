@@ -1,9 +1,9 @@
 import yaml from 'js-yaml';
 import type { Node, Edge } from 'reactflow';
-import { parsePipelineConfig } from '../../../../src/renderer/components/pipelineView/parsePipelineConfig';
-import { serializePipelineConfig } from '../../../../src/renderer/components/pipelineView/serializePipeline';
-import { validatePipelineGraph } from '../../../../src/renderer/components/pipelineView/validatePipeline';
-import type { PipelineNodeData } from '../../../../src/renderer/components/pipelineView/PipelineNode';
+import { parsePipelineConfig } from '../../../../src/extensions/pipeline/renderer/parsePipelineConfig';
+import { serializePipelineConfig } from '../../../../src/extensions/pipeline/renderer/serializePipeline';
+import { validatePipelineGraph } from '../../../../src/extensions/pipeline/renderer/validatePipeline';
+import type { PipelineNodeData } from '../../../../src/extensions/pipeline/renderer/PipelineNode';
 import { parsePluginManifest } from '../../../../src/shared/pluginManifest';
 import shipped from '../../__fixtures__/plugins.json';
 

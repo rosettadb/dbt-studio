@@ -68,9 +68,12 @@ jest.mock('../../../../assets', () => ({
   rosettaIcon: 'rosetta.png',
 }));
 
-jest.mock('../../../../src/renderer/assets/icons/lucide/route.svg', () => ({
-  ReactComponent: () => null,
-}));
+jest.mock(
+  '../../../../src/extensions/pipeline/renderer/assets/route.svg',
+  () => ({
+    ReactComponent: () => null,
+  }),
+);
 
 const renderDashboard = (projects: unknown[]) => {
   (useGetProjects as jest.Mock).mockReturnValue({ data: projects });

@@ -14,13 +14,15 @@ import {
   RosettaCloudService,
   DuckLakeConnectionManager,
   FlowfileService,
-  RunnerService,
 } from './services';
 import { copyAssetsToUserData } from './utils/fileHelper';
 import { MCPClientManager } from './services/ai/mcp/mcpClientManager';
 import ChatGptAuthService from './services/ai/chatgpt/chatgptAuth.service';
 import { extensionHost } from '../extensionHost/main/index.main';
-import { handleExtensionProtocol } from '../extensionHost/main/ipc.main';
+import {
+  handleExtensionProtocol,
+  startExtensionHost,
+} from '../extensionHost/main/ipc.main';
 import { EXTENSION_SCHEME } from '../extensionHost/shared/protocol.shared';
 
 const isProd = process.env.NODE_ENV === 'production';
@@ -212,14 +214,10 @@ if (!gotTheLock) {
             }
           }
 
-          try {
-            await RunnerService.downloadRunnerForDevelopment(() =>
-              updateMessage('Downloading the local runner...'),
-            );
-            await RunnerService.copyBundledRunnerToUserData();
-          } catch (e) {
-            console.error('Failed to set up the local runner:', e);
-          }
+          // Extensions prepare what they need before the window opens (the
+          // Pipelines extension puts the local runner in place).
+          await startExtensionHost();
+          await extensionHost.runStartupTasks(updateMessage);
 
           const fakeStages = [
             { message: 'Loading settings...', delay: 1000 },

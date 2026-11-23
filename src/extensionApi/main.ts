@@ -7,7 +7,7 @@
  * creates (timers, child processes, sockets) it pushes a disposable onto
  * `api.subscriptions`, or cleans up in `deactivate()`.
  */
-import type { IpcMainInvokeEvent, WebContents } from 'electron';
+import type { BrowserWindow, IpcMainInvokeEvent, WebContents } from 'electron';
 import type {
   Disposable,
   ExtensionDescription,
@@ -50,6 +50,19 @@ export interface ExtensionMainWorkspace {
   onDidSaveFile: (listener: (event: FileDidSaveEvent) => void) => Disposable;
 }
 
+/** Work an extension does while Studio starts, behind the splash screen. */
+export interface StartupTask {
+  id: string;
+  /**
+   * Runs once per app start, before the main window opens. `setMessage`
+   * changes the line shown on the splash screen. A task that throws is
+   * logged and does not stop Studio from starting.
+   */
+  run: (context: {
+    setMessage: (message: string) => Promise<void>;
+  }) => Promise<void>;
+}
+
 export interface ExtensionMainApi {
   readonly extension: ExtensionDescription;
   /** Disposed, last added first, when the extension is deactivated. */
@@ -57,6 +70,13 @@ export interface ExtensionMainApi {
   readonly ipc: ExtensionMainIpc;
   readonly bridge: ExtensionMainBridge;
   readonly workspace: ExtensionMainWorkspace;
+  readonly windows: {
+    /** Studio's main window, or null while it is not open. */
+    getMainWindow: () => BrowserWindow | null;
+  };
+  readonly startup: {
+    addTask: (task: StartupTask) => Disposable;
+  };
   /** A folder this extension may use for its own files. Created on demand. */
   readonly storagePath: string;
   readonly log: ExtensionLogger;

@@ -2,6 +2,7 @@ import React from 'react';
 import type {
   AppProvider,
   DashboardCard,
+  EditorAction,
   FileTreeHoverPreview,
   FileTreeRowAction,
   NavigationItem,
@@ -30,6 +31,9 @@ export const dashboardCards = createRegistry<DashboardCard>({
 });
 export const settingsPages = createRegistry<SettingsPage>({ compare: byOrder });
 export const appProviders = createRegistry<AppProvider>({ compare: byOrder });
+export const editorActions = createRegistry<EditorAction>({
+  compare: byOrder,
+});
 export const fileTreeRowActions = createRegistry<FileTreeRowAction>({
   compare: byOrder,
 });

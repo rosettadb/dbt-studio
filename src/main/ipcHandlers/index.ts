@@ -5,7 +5,6 @@ import registerConnectorsHandlers from './connectors.ipcHandlers';
 import registerGitHandlers from './git.ipcHandlers';
 import registerUtilsHandlers from './utils.ipcHandlers';
 import registerProcessHandlers from './process.ipcHandlers';
-import registerRunnerHandlers from './runner.ipcHandlers';
 import registerSecureStorageHandlers from './secureStorage.ipcHandlers';
 import registerUpdateHandlers from './updates.ipcHandlers';
 import registerCloudExplorerHandlers from './cloudExplorer.ipcHandlers';
@@ -22,7 +21,6 @@ import registerSavedQueriesHandlers from './savedQueries.ipcHandlers';
 import { registerAnalyticsPagesHandlers } from './analyticsPages.ipcHandlers';
 import { registerStaticSiteHandlers } from './staticSite.ipcHandlers';
 import registerFlowfileHandlers from './flowfile.ipcHandlers';
-import { registerPipelineTemplatesHandlers } from './pipelineTemplates.ipcHandlers';
 import registerTaskManagerHandlers from './taskManager.ipcHandlers';
 import { registerSecondBrainHandlers } from './secondBrain.ipcHandlers';
 import { registerIcebergDatalakeHandlers } from './icebergDatalake.ipcHandlers';
@@ -40,7 +38,6 @@ export {
   registerGitHandlers,
   registerUtilsHandlers,
   registerProcessHandlers,
-  registerRunnerHandlers,
   registerSecureStorageHandlers,
   registerUpdateHandlers,
   registerCloudExplorerHandlers,
@@ -57,7 +54,6 @@ export {
   registerAnalyticsPagesHandlers,
   registerStaticSiteHandlers,
   registerFlowfileHandlers,
-  registerPipelineTemplatesHandlers,
   registerTaskManagerHandlers,
   registerSecondBrainHandlers,
   registerIcebergDatalakeHandlers,

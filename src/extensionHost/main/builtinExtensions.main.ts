@@ -1,4 +1,6 @@
 import type { ExtensionMainModule } from '../../extensionApi/main';
+import { pipelineManifest } from '../../extensions/pipeline/manifest.shared';
+import { pipelineMain } from '../../extensions/pipeline/main';
 
 export interface BuiltinMainExtension {
   /** The extension's manifest object (validated by the host). */
@@ -12,4 +14,6 @@ export interface BuiltinMainExtension {
  * file and `renderer/builtinExtensions.renderer.ts` are the only places
  * outside `src/extensions/` that import from it.
  */
-export const builtinMainExtensions: BuiltinMainExtension[] = [];
+export const builtinMainExtensions: BuiltinMainExtension[] = [
+  { manifest: pipelineManifest, module: pipelineMain },
+];

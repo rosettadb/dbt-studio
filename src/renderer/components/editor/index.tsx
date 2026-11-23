@@ -11,6 +11,7 @@ import {
 import { MonacoCodeEditor } from '../monaco/MonacoCodeEditor';
 import { DiffView } from './diffView';
 import { EditorHeader } from './editorHeader';
+import { EditorActions } from './EditorActions';
 import {
   getDecorations,
   getLanguageFromExtension,
@@ -466,7 +467,7 @@ export const Editor: React.FC<EditorProps> = ({
     if (!activeTab || !activeTabId || !activeTab.isModified || isSaving) return;
     setIsSaving(true);
     updateFileContent(
-      { path: activeTab.path, content: activeTab.content },
+      { path: activeTab.path, content: activeTab.content, reason: 'manual' },
       {
         onSuccess: () => {
           onTabSaved?.(activeTabId);
@@ -580,7 +581,11 @@ export const Editor: React.FC<EditorProps> = ({
                   // Auto-save unsaved changes so the on-disk file matches
                   // what the user sees before running.
                   updateFileContent(
-                    { path: activeTab.path, content: activeContent },
+                    {
+                      path: activeTab.path,
+                      content: activeContent,
+                      reason: 'auto',
+                    },
                     {
                       onSuccess: () =>
                         runCommandAsync(pythonExe, [activeTab.path]),
@@ -592,7 +597,18 @@ export const Editor: React.FC<EditorProps> = ({
               }
             : undefined
         }
-        extraActions={extraActions}
+        extraActions={
+          <>
+            {extraActions}
+            {/* Buttons extensions added for this kind of file */}
+            <EditorActions
+              tab={activeTab}
+              projectId={projectId}
+              projectPath={projectPath}
+              language={language}
+            />
+          </>
+        }
       />
 
       <EditorViewport>

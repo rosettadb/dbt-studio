@@ -3,6 +3,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import { createRequire } from 'module';
 import type {
+  StartupTask,
   ExtensionMainApi,
   ExtensionMainModule,
 } from '../../extensionApi/main';
@@ -111,6 +112,10 @@ export class ExtensionHostMain {
 
   private bridgeSequence = 0;
 
+  private readonly startupTasks: StartupTask[] = [];
+
+  private mainWindow: BrowserWindow | null = null;
+
   private startPromise: Promise<void> | null = null;
 
   /** Serialises changes so two of them never interleave. */
@@ -147,6 +152,30 @@ export class ExtensionHostMain {
       liveEnabled: true,
       codeLoaded: true,
     });
+  }
+
+  /** The window extensions get from `api.windows.getMainWindow()`. */
+  setMainWindow(window: BrowserWindow | null): void {
+    this.mainWindow = window;
+  }
+
+  /**
+   * Runs what extensions asked to do while Studio starts, one after the
+   * other. A failing task is logged and the rest still run.
+   */
+  async runStartupTasks(
+    setMessage: (message: string) => Promise<void>,
+  ): Promise<void> {
+    await this.whenReady();
+    await [...this.startupTasks].reduce(async (previous, task) => {
+      await previous;
+      try {
+        await task.run({ setMessage });
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error(`[extensions] Start-up task "${task.id}" failed:`, error);
+      }
+    }, Promise.resolve());
   }
 
   /** Finds installed extensions and activates everything that may run. Idempotent. */
@@ -547,6 +576,23 @@ export class ExtensionHostMain {
       },
       workspace: {
         onDidSaveFile: (listener) => track(onDidSaveFile(listener)),
+      },
+      windows: {
+        getMainWindow: () =>
+          this.mainWindow && !this.mainWindow.isDestroyed()
+            ? this.mainWindow
+            : null,
+      },
+      startup: {
+        addTask: (task) => {
+          this.startupTasks.push(task);
+          return track(
+            toDisposable(() => {
+              const index = this.startupTasks.indexOf(task);
+              if (index >= 0) this.startupTasks.splice(index, 1);
+            }),
+          );
+        },
       },
       get storagePath() {
         const storagePath = getExtensionStoragePath(id);

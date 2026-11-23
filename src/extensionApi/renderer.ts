@@ -9,11 +9,20 @@
  */
 import type React from 'react';
 import type { NavigateFunction } from 'react-router-dom';
+import type * as monaco from 'monaco-editor';
+import type { EditorTabState } from '../types/editor';
+import type {
+  FileOpenCloseEvent,
+  FileSaveReason,
+  FileWillSaveEvent,
+  FileWillSaveParticipant,
+} from '../extensionHost/renderer/documents.renderer';
 import type { Project, SettingsType } from '../types/backend';
 import type {
   Disposable,
   ExtensionDescription,
   ExtensionLogger,
+  FileDidSaveEvent,
 } from './shared';
 import type {
   FileViewDefinition,
@@ -26,6 +35,11 @@ import type {
 } from '../renderer/components/terminal/panels/types';
 
 export type {
+  EditorTabState,
+  FileOpenCloseEvent,
+  FileSaveReason,
+  FileWillSaveEvent,
+  FileWillSaveParticipant,
   FileViewDefinition,
   FileViewProps,
   TerminalPanelContext,
@@ -104,6 +118,27 @@ export interface DashboardCard {
   /** Route opened on click. Ignored when `onSelect` is given. */
   path?: string;
   onSelect?: (context: DashboardCardContext) => void;
+}
+
+/** What a breadcrumb-bar action knows about the file shown in the editor. */
+export interface EditorActionContext {
+  /** The open file: `path`, `content`, `isModified`, ... */
+  tab: EditorTabState;
+  projectId?: string;
+  projectPath: string;
+  /** Monaco language id of the file, e.g. `sql`, `python`, `markdown`. */
+  language: string;
+}
+
+/**
+ * A button (or anything small) in the bar above the code editor, next to
+ * the file's breadcrumb: "Run", "Preview", "Format".
+ */
+export interface EditorAction {
+  id: string;
+  order?: number;
+  when: (context: EditorActionContext) => boolean;
+  Component: React.ComponentType<EditorActionContext>;
 }
 
 /** One row of the project file tree, as row contributions see it. */
@@ -228,6 +263,31 @@ export interface ExtensionRendererApi {
      * view with the highest `priority` whose `matches` accepts the tab wins.
      */
     add: (view: FileViewDefinition<any>) => Disposable;
+  };
+  readonly editor: {
+    /** Adds a button to the bar above the code editor for matching files. */
+    addAction: (action: EditorAction) => Disposable;
+  };
+  /**
+   * The Monaco namespace all of Studio's editors share. Languages,
+   * completion, formatting and hover providers registered on it apply to
+   * every editor; each `register...` call returns a disposable, which the
+   * extension pushes onto `api.subscriptions`.
+   */
+  readonly monaco: typeof monaco;
+  readonly files: {
+    /**
+     * Runs before a project file is written. Return a string to change what
+     * is written (a formatter); return nothing to leave it. A participant
+     * that throws or takes longer than 3 s is skipped and the save goes on.
+     */
+    onWillSave: (participant: FileWillSaveParticipant) => Disposable;
+    /** Runs after a project file was written, by the editor or by an agent. */
+    onDidSave: (listener: (event: FileDidSaveEvent) => void) => Disposable;
+    /** Runs when a file is opened in the project editor. */
+    onDidOpen: (listener: (event: FileOpenCloseEvent) => void) => Disposable;
+    /** Runs when a file's editor tab is closed. */
+    onDidClose: (listener: (event: FileOpenCloseEvent) => void) => Disposable;
   };
   readonly fileTree: {
     addRowAction: (action: FileTreeRowAction) => Disposable;

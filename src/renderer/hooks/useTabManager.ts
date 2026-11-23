@@ -806,13 +806,14 @@ const useTabManager = (projectId?: string): UseTabManagerReturn => {
 
       try {
         // Save the file
-        await projectsServices.saveFileContent({
-          path: tab.path,
-          content: tab.content,
-        });
+        const written = await projectsServices.saveDocument(
+          { path: tab.path, content: tab.content },
+          { reason: 'manual' },
+        );
 
-        // Mark as saved
-        markTabSaved(tabId);
+        // Mark as saved, against what went to disk (a pre-save hook may
+        // have changed it)
+        markTabSaved(tabId, written.content);
 
         // Close the tab
         performClose(tabId);

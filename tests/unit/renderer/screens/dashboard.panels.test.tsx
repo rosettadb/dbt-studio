@@ -91,9 +91,12 @@ jest.mock('../../../../assets', () => ({
   rosettaIcon: 'rosetta.png',
 }));
 
-jest.mock('../../../../src/renderer/assets/icons/lucide/route.svg', () => ({
-  ReactComponent: () => null,
-}));
+jest.mock(
+  '../../../../src/extensions/pipeline/renderer/assets/route.svg',
+  () => ({
+    ReactComponent: () => null,
+  }),
+);
 
 const buildProjects = (count: number) =>
   Array.from({ length: count }, (_, index) => ({

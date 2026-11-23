@@ -84,7 +84,9 @@ module.exports = {
               {
                 target: './src/extensions',
                 from: './src',
-                except: ['./extensions', './extensionApi'],
+                // src/node_modules is a link to the native packages
+                // (release/app/node_modules), i.e. npm packages.
+                except: ['./extensions', './extensionApi', './node_modules'],
                 message:
                   'An extension imports only from src/extensionApi, its own folder and npm packages.',
               },

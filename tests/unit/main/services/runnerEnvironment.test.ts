@@ -3,7 +3,7 @@ import path from 'path';
 import {
   getRunnerJavaCommand,
   getRunnerToolEnvironment,
-} from '../../../../src/main/services/runnerEnvironment';
+} from '../../../../src/extensions/pipeline/main/runnerEnvironment';
 
 describe('runner Java environment', () => {
   const originalPlatform = process.platform;

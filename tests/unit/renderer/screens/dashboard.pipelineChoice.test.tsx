@@ -18,8 +18,8 @@ import { STUDIO_SLOTS } from '../../../../src/extensionApi/renderer';
 import {
   PipelineProjectChoiceDialog,
   pipelineDashboardCard,
-} from '../../../../src/renderer/components/pipelineView/PipelineHomeContributions';
-import { pipelineRunStore } from '../../../../src/renderer/components/pipelineView/pipelineRunStore';
+} from '../../../../src/extensions/pipeline/renderer/PipelineHomeContributions';
+import { pipelineRunStore } from '../../../../src/extensions/pipeline/renderer/pipelineRunStore';
 import {
   useGetConnections,
   useGetProjects,
@@ -75,9 +75,12 @@ jest.mock('../../../../assets', () => ({
   rosettaIcon: 'rosetta.png',
 }));
 
-jest.mock('../../../../src/renderer/assets/icons/lucide/route.svg', () => ({
-  ReactComponent: () => null,
-}));
+jest.mock(
+  '../../../../src/extensions/pipeline/renderer/assets/route.svg',
+  () => ({
+    ReactComponent: () => null,
+  }),
+);
 
 const PIPELINE_NOTE =
   'Pick the project to add a pipeline to, or create a new one.';

@@ -1,4 +1,6 @@
 import type { ExtensionRendererModule } from '../../extensionApi/renderer';
+import { pipelineManifest } from '../../extensions/pipeline/manifest.shared';
+import { pipelineRenderer } from '../../extensions/pipeline/renderer';
 
 export interface BuiltinRendererExtension {
   /** The same manifest object the main-process list uses. */
@@ -12,4 +14,6 @@ export interface BuiltinRendererExtension {
  * and `main/builtinExtensions.main.ts` are the only places outside
  * `src/extensions/` that import from it.
  */
-export const builtinRendererExtensions: BuiltinRendererExtension[] = [];
+export const builtinRendererExtensions: BuiltinRendererExtension[] = [
+  { manifest: pipelineManifest, module: pipelineRenderer },
+];

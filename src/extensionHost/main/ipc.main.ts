@@ -11,6 +11,7 @@ import {
 import fs from 'fs-extra';
 import { pathToFileURL } from 'url';
 import { extensionHost } from './index.main';
+import { installIpcErrorHandling } from '../../main/utils/ipcErrorHandler';
 import { builtinMainExtensions } from './builtinExtensions.main';
 import {
   getExtensionsRoot,
@@ -86,13 +87,36 @@ const installFromDialog = async (
   }
 };
 
-let started = false;
+let startPromise: Promise<void> | null = null;
 
 /**
- * Registers the host's own channels and starts the host. Safe to call more
- * than once: `registerHandlers` runs for the main and the setup window.
+ * Adds the internal extensions and starts the host. Idempotent: it is
+ * called while Studio starts (so extensions can prepare behind the splash
+ * screen) and again when a window registers its handlers.
  */
-export const registerExtensionHostHandlers = (): void => {
+export const startExtensionHost = (): Promise<void> => {
+  if (!startPromise) {
+    // Handlers that extensions register must report errors like Studio's.
+    installIpcErrorHandling();
+    builtinMainExtensions.forEach(({ manifest, module }) =>
+      extensionHost.registerBuiltin(manifest, module),
+    );
+    startPromise = extensionHost.start().catch((error) => {
+      // eslint-disable-next-line no-console
+      console.error('[extensions] Host failed to start:', error);
+    });
+  }
+  return startPromise;
+};
+
+/**
+ * Registers the host's own channels for a window and makes sure the host
+ * runs. Safe to call more than once: `registerHandlers` runs for the main
+ * and the setup window.
+ */
+export const registerExtensionHostHandlers = (window: BrowserWindow): void => {
+  extensionHost.setMainWindow(window);
+
   handle('extensions:list', async () => {
     await extensionHost.whenReady();
     return extensionHost.list();
@@ -127,16 +151,7 @@ export const registerExtensionHostHandlers = (): void => {
     },
   );
 
-  if (!started) {
-    started = true;
-    builtinMainExtensions.forEach(({ manifest, module }) =>
-      extensionHost.registerBuiltin(manifest, module),
-    );
-    extensionHost.start().catch((error) => {
-      // eslint-disable-next-line no-console
-      console.error('[extensions] Host failed to start:', error);
-    });
-  }
+  startExtensionHost();
 };
 
 /**

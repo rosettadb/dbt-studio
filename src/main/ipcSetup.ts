@@ -7,7 +7,6 @@ import {
   registerGitHandlers,
   registerUtilsHandlers,
   registerProcessHandlers,
-  registerRunnerHandlers,
   registerSecureStorageHandlers,
   registerUpdateHandlers,
   registerCloudExplorerHandlers,
@@ -24,7 +23,6 @@ import {
   registerAnalyticsPagesHandlers,
   registerStaticSiteHandlers,
   registerFlowfileHandlers,
-  registerPipelineTemplatesHandlers,
   registerTaskManagerHandlers,
   registerSecondBrainHandlers,
   registerIcebergDatalakeHandlers,
@@ -46,7 +44,6 @@ const registerHandlers = (mainWindow: BrowserWindow) => {
   registerUtilsHandlers();
   registerProcessHandlers(mainWindow);
   registerPtyHandlers(mainWindow);
-  registerRunnerHandlers(mainWindow);
   registerSecureStorageHandlers();
   registerUpdateHandlers();
   registerCloudExplorerHandlers();
@@ -65,13 +62,12 @@ const registerHandlers = (mainWindow: BrowserWindow) => {
   registerStaticSiteHandlers(mainWindow);
   registerFlowfileHandlers();
   registerDbtChartsHandlers();
-  registerPipelineTemplatesHandlers();
   registerTaskManagerHandlers(mainWindow);
   registerSecondBrainHandlers();
   registerIcebergDatalakeHandlers();
   registerBackupHandlers(mainWindow);
   // Last, so extensions start after Studio's own handlers are in place.
-  registerExtensionHostHandlers();
+  registerExtensionHostHandlers(mainWindow);
 };
 
 export default registerHandlers;

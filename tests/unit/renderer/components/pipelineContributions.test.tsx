@@ -12,12 +12,12 @@ import {
 import {
   pipelineCloudRunRowAction,
   pipelineLocalRunRowAction,
-} from '../../../../src/renderer/components/pipelineView/PipelineTreeContributions';
-import { pipelineRunStore } from '../../../../src/renderer/components/pipelineView/pipelineRunStore';
+} from '../../../../src/extensions/pipeline/renderer/PipelineTreeContributions';
+import { pipelineRunStore } from '../../../../src/extensions/pipeline/renderer/pipelineRunStore';
 import {
   pipelineRunLocallyItem,
   pipelineRunOnCloudItem,
-} from '../../../../src/renderer/components/pipelineView/pipelineMenuItems';
+} from '../../../../src/extensions/pipeline/renderer/pipelineMenuItems';
 import { useGetSettings } from '../../../../src/renderer/controllers';
 import { isFileUnpushed } from '../../../../src/renderer/services/git.service';
 
@@ -32,7 +32,7 @@ jest.mock('../../../../src/renderer/controllers', () => ({
   useGetSettings: jest.fn(),
 }));
 jest.mock(
-  '../../../../src/renderer/components/fileTreeViewer/PipelineThumbnailPreview',
+  '../../../../src/extensions/pipeline/renderer/PipelineThumbnailPreview',
   () => ({ PipelineThumbnailPreview: () => null }),
 );
 

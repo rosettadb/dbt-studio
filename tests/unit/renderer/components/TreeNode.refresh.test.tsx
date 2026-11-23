@@ -10,11 +10,6 @@ jest.mock('../../../../src/renderer/services/git.service', () => ({
   isFileUnpushed: jest.fn(),
 }));
 
-jest.mock(
-  '../../../../src/renderer/components/fileTreeViewer/PipelineThumbnailPreview',
-  () => ({ PipelineThumbnailPreview: () => null }),
-);
-
 const PROJECT_PATH = '/projects/shop';
 
 const folderNode = (folderPath: string, level: number) =>
