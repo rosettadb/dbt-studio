@@ -1,14 +1,15 @@
 import type { CloudStepStatus } from '../../../types/cloudAction';
+import type { StepParams } from '../../../shared/pluginManifest';
 
 export interface PipelineStep {
   name: string;
   plugin: string;
-  command?: string;
-  working_dir?: string;
-  // git_clone@v1 specific
-  url?: string;
-  branch?: string;
-  dest?: string;
+  /**
+   * Every other key of the step, as written in the file. Which of them the
+   * designer shows as form fields comes from the plugin's manifest entry;
+   * the rest are kept as they are.
+   */
+  params: StepParams;
   /**
    * Execution status, populated when a cloud action is mapped onto the local
    * pipeline config. Undefined means "no run associated" → render idle.
@@ -22,6 +23,8 @@ export interface PipelineJob {
   name: string;
   type?: string;
   steps: PipelineStep[];
+  /** Every other key of the job (e.g. `needs`), kept as written. */
+  extra?: Record<string, unknown>;
 }
 
 export interface PipelineConfig {

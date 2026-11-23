@@ -1,182 +1,79 @@
+import React from 'react';
 import type { SvgIconComponent } from '@mui/icons-material';
 import TransformIcon from '@mui/icons-material/Transform';
 import LanguageIcon from '@mui/icons-material/Language';
 import BuildIcon from '@mui/icons-material/Build';
 import TerminalIcon from '@mui/icons-material/Terminal';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import CloudIcon from '@mui/icons-material/Cloud';
 import SpeedIcon from '@mui/icons-material/Speed';
 import CodeIcon from '@mui/icons-material/Code';
+import LinkIcon from '@mui/icons-material/Link';
+import StorageIcon from '@mui/icons-material/Storage';
+import ScheduleIcon from '@mui/icons-material/Schedule';
+import ExtensionIcon from '@mui/icons-material/Extension';
+import { useGetRunnerPlugins } from '../../controllers';
+import type { PluginDefinition } from '../../../shared/pluginManifest';
 
-export type PluginId =
-  | 'dbt@v1'
-  | 'rosetta@v1'
-  | 'terraform@v1'
-  | 'command@v1'
-  | 's3@v1'
-  | 'kinetica_cli@v1'
-  | 'git_clone@v1'
-  | 'pyspark@v1';
+// Which plugins exist and what their forms look like comes from the runner's
+// plugin manifest (useGetRunnerPlugins). This file only draws them.
 
-export interface PluginField {
-  key: string;
+// Icons a manifest entry can name (`icon`, a Material icon name). Any other
+// name gets the generic plugin icon.
+const ICONS: Record<string, SvgIconComponent> = {
+  transform: TransformIcon,
+  language: LanguageIcon,
+  build: BuildIcon,
+  terminal: TerminalIcon,
+  cloud_upload: CloudUploadIcon,
+  cloud: CloudIcon,
+  speed: SpeedIcon,
+  code: CodeIcon,
+  link: LinkIcon,
+  storage: StorageIcon,
+  schedule: ScheduleIcon,
+  extension: ExtensionIcon,
+};
+
+export interface PluginVisual {
   label: string;
-  required: boolean;
-  multiline?: boolean;
-  placeholder?: string;
-  defaultValue?: string;
-}
-
-export interface PluginDef {
-  id: PluginId;
-  label: string;
-  color: string;
-  category: string;
+  /** Undefined: the caller uses its own default (the theme's colour). */
+  color?: string;
   icon: SvgIconComponent;
-  fields: PluginField[];
 }
 
-export const PLUGIN_DEFS: PluginDef[] = [
-  {
-    id: 'dbt@v1',
-    label: 'dbt',
-    color: '#FF694B',
-    category: 'Generic',
-    icon: TransformIcon,
-    fields: [
-      {
-        key: 'command',
-        label: 'Command',
-        required: true,
-        multiline: true,
-        defaultValue: 'dbt run',
-        placeholder: 'dbt seed && dbt run',
-      },
-      {
-        key: 'working_dir',
-        label: 'Working Dir',
-        required: false,
-        placeholder: 'dbt',
-      },
-    ],
-  },
-  {
-    id: 'rosetta@v1',
-    label: 'rosetta',
-    color: '#7C4DFF',
-    category: 'Generic',
-    icon: LanguageIcon,
-    fields: [
-      {
-        key: 'command',
-        label: 'Command',
-        required: true,
-        multiline: true,
-        placeholder: 'rosetta apply -s bigquery',
-      },
-      {
-        key: 'working_dir',
-        label: 'Working Dir',
-        required: false,
-        defaultValue: 'rosetta',
-        placeholder: 'rosetta',
-      },
-    ],
-  },
-  {
-    id: 'pyspark@v1',
-    label: 'PySpark',
-    color: '#E25A1C',
-    category: 'Generic',
-    icon: CodeIcon,
-    fields: [
-      {
-        key: 'command',
-        label: 'Command',
-        required: true,
-        multiline: true,
-        placeholder: 'spark-submit jobs/transform.py',
-      },
-      {
-        key: 'working_dir',
-        label: 'Working Dir',
-        required: false,
-        placeholder: 'spark',
-      },
-    ],
-  },
-  {
-    id: 'terraform@v1',
-    label: 'terraform',
-    color: '#7B42BC',
-    category: 'Generic',
-    icon: BuildIcon,
-    fields: [
-      {
-        key: 'command',
-        label: 'Command',
-        required: true,
-        multiline: true,
-        placeholder: 'terraform init && terraform apply -auto-approve',
-        defaultValue: 'terraform init && terraform apply -auto-approve',
-      },
-      {
-        key: 'working_dir',
-        label: 'Working Dir',
-        required: false,
-        placeholder: 'terraform',
-      },
-    ],
-  },
-  {
-    id: 'command@v1',
-    label: 'shell',
-    color: '#455A64',
-    category: 'Generic',
-    icon: TerminalIcon,
-    fields: [
-      {
-        key: 'command',
-        label: 'Command',
-        required: true,
-        multiline: true,
-        placeholder: 'echo "hello world"',
-      },
-    ],
-  },
-  {
-    id: 's3@v1',
-    label: 's3',
-    color: '#FF9900',
-    category: 'Generic',
-    icon: CloudUploadIcon,
-    fields: [
-      {
-        key: 'command',
-        label: 'Command',
-        required: true,
-        multiline: true,
-        placeholder: 'aws s3 cp results/ s3://my-bucket/ --recursive',
-      },
-    ],
-  },
-  {
-    id: 'kinetica_cli@v1',
-    label: 'kinetica',
-    color: '#00BCD4',
-    category: 'Generic',
-    icon: SpeedIcon,
-    fields: [
-      {
-        key: 'command',
-        label: 'Command',
-        required: true,
-        multiline: true,
-        placeholder: 'kisql --url http://localhost:9191 --sql "SELECT 1"',
-      },
-    ],
-  },
-];
+/** How a step's plugin is drawn; `plugin` is undefined for an unknown one. */
+export function getPluginVisual(
+  plugin: PluginDefinition | undefined,
+  pluginId: string,
+): PluginVisual {
+  if (!plugin) {
+    return { label: pluginId.split('@')[0], icon: TerminalIcon };
+  }
+  return {
+    label: plugin.label,
+    color: plugin.color,
+    icon: (plugin.icon && ICONS[plugin.icon]) || ExtensionIcon,
+  };
+}
 
-export const PLUGIN_MAP = new Map<string, PluginDef>(
-  PLUGIN_DEFS.map((p) => [p.id, p]),
-);
+const NO_PLUGINS: PluginDefinition[] = [];
+
+export interface PluginCatalog {
+  plugins: PluginDefinition[];
+  byId: ReadonlyMap<string, PluginDefinition>;
+  isLoading: boolean;
+}
+
+export function usePluginCatalog(): PluginCatalog {
+  const { data, isLoading } = useGetRunnerPlugins();
+  const plugins = data ?? NO_PLUGINS;
+  return React.useMemo(
+    () => ({
+      plugins,
+      byId: new Map(plugins.map((plugin) => [plugin.id, plugin])),
+      isLoading,
+    }),
+    [plugins, isLoading],
+  );
+}

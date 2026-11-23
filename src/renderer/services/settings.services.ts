@@ -3,12 +3,13 @@ import {
   FileDialogProperties,
   SettingsType,
   RosettaVersionInfo,
-  RunnerPluginStatus,
+  RunnerRequirementStatus,
   InstallResult,
   PythonInstallInfo,
   PythonVersionInfo,
 } from '../../types/backend';
 import { client } from '../config/client';
+import type { PluginDefinition } from '../../shared/pluginManifest';
 import { SecureStorageAccount } from '../../types/frontend';
 
 export const getSettings = async (): Promise<SettingsType> => {
@@ -185,12 +186,29 @@ export const installPythonVersion = async (
   return data;
 };
 
-export const checkRunnerPluginDependencies = async (): Promise<
-  RunnerPluginStatus[]
+export const checkRunnerRequirements = async (): Promise<
+  RunnerRequirementStatus[]
 > => {
-  const { data } = await client.get<RunnerPluginStatus[]>(
-    'runner:plugins:check',
+  const { data } = await client.get<RunnerRequirementStatus[]>(
+    'runner:requirements:check',
   );
+  return data;
+};
+
+export const getRunnerPlugins = async (): Promise<PluginDefinition[]> => {
+  const { data } = await client.get<PluginDefinition[]>(
+    'runner:plugins:manifest',
+  );
+  return data;
+};
+
+export const getPluginMacroDirs = async (
+  projectPath: string,
+): Promise<{ dbtDir: string; rosettaDir: string }> => {
+  const { data } = await client.post<
+    string,
+    { dbtDir: string; rosettaDir: string }
+  >('runner:plugins:macros', projectPath);
   return data;
 };
 

@@ -1,33 +1,14 @@
 import { ipcMain, BrowserWindow, app } from 'electron';
 import path from 'path';
 import fs from 'fs-extra';
-import yaml from 'js-yaml';
 import { ProcessAdapter } from '../adapters';
-import {
-  TaskManagerService,
-  SettingsService,
-  RunnerService,
-} from '../services';
+import { TaskManagerService, SettingsService } from '../services';
 import { getRunnerToolEnvironment } from '../services/runnerEnvironment';
 import { discoverSparkHome } from '../services/sparkEnvironment';
 
 // Separate ProcessAdapter instance (own 'runner:*' channels) so a pipeline
 // run never collides with the shared 'process:*' slot used by "Serve Docs".
 const runnerProcessAdapter = new ProcessAdapter('runner');
-
-function usesPySpark(content: string): boolean {
-  const pipeline = yaml.load(content) as {
-    jobs?: { steps?: { plugin?: string }[] }[];
-  } | null;
-  return (
-    Array.isArray(pipeline?.jobs) &&
-    pipeline.jobs.some(
-      (job) =>
-        Array.isArray(job?.steps) &&
-        job.steps.some((step) => step?.plugin === 'pyspark@v1'),
-    )
-  );
-}
 
 const handlerChannels = ['runner:run', 'runner:stop', 'runner:status'];
 
@@ -114,45 +95,6 @@ const registerRunnerHandlers = (mainWindow: BrowserWindow) => {
       }
 
       const toolEnv = await getRunnerToolEnvironment(settings);
-      try {
-        // pipelineFile is relative to rosetta/pipelines/ (or the legacy
-        // .rosetta/ folder), the same places ProjectsService.listPipelines
-        // looks, in the same order.
-        const pipelinePaths = [
-          path.resolve(workspaceDir, 'rosetta', 'pipelines', pipelineFile),
-          path.resolve(workspaceDir, '.rosetta', pipelineFile),
-        ];
-        const pipelinePathExists = await Promise.all(
-          pipelinePaths.map((pipelinePath) => fs.pathExists(pipelinePath)),
-        );
-        const pipelinePath = pipelinePaths.find(
-          (_, index) => pipelinePathExists[index],
-        );
-        const content = pipelinePath
-          ? await fs.readFile(pipelinePath, 'utf8')
-          : '';
-        if (usesPySpark(content)) {
-          if (!RunnerService.supportsPySpark(settings.runnerVersion)) {
-            return {
-              success: false,
-              error:
-                'PySpark requires runner 1.7.6 or newer. Update dbt Studio to get a newer local runner.',
-            };
-          }
-          const java = await RunnerService.checkJavaRuntime(toolEnv);
-          if (!java.available) {
-            return {
-              success: false,
-              error: java.version
-                ? `Java ${java.version} was found. PySpark requires Java 17 or newer.`
-                : 'Java was not found. PySpark requires Java 17 or newer.',
-            };
-          }
-        }
-      } catch {
-        // The runner reports missing or invalid pipeline files itself.
-      }
-
       const logDir = path.join(app.getPath('userData'), 'runner-logs');
       await fs.mkdirp(logDir);
       // taskId is a deterministic id built from a filesystem path and may

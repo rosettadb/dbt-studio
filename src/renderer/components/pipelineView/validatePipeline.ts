@@ -1,6 +1,9 @@
 import type { Node, Edge } from 'reactflow';
 import type { PipelineNodeData } from './PipelineNode';
-import { PLUGIN_MAP } from './pluginDefinitions';
+import {
+  validateStepParams,
+  type PluginDefinition,
+} from '../../../shared/pluginManifest';
 
 export interface ValidationError {
   nodeId?: string;
@@ -10,6 +13,7 @@ export interface ValidationError {
 export function validatePipelineGraph(
   nodes: Node<PipelineNodeData>[],
   edges: Edge[],
+  pluginsById: ReadonlyMap<string, PluginDefinition> = new Map(),
 ): ValidationError[] {
   if (nodes.length === 0) {
     return [{ message: 'Pipeline has no steps' }];
@@ -49,25 +53,23 @@ export function validatePipelineGraph(
     });
   }
 
-  // Required fields per plugin
+  // What each step's plugin asks for in the runner's plugin manifest. A
+  // plugin the manifest does not list is not checked here.
   nodes.forEach((n) => {
     const { name, plugin } = n.data;
     if (!name?.trim()) {
       errors.push({ nodeId: n.id, message: 'A step is missing its name' });
     }
-    const def = PLUGIN_MAP.get(plugin);
+    const def = pluginsById.get(plugin);
     if (def) {
-      def.fields
-        .filter((f) => f.required)
-        .forEach((f) => {
-          const val = (n.data as unknown as Record<string, unknown>)[f.key];
-          if (!val || (typeof val === 'string' && !val.trim())) {
-            errors.push({
-              nodeId: n.id,
-              message: `"${name || 'Step'}" is missing required field: ${f.label}`,
-            });
-          }
+      validateStepParams(def, n.data.params ?? {}).forEach((issue) => {
+        errors.push({
+          nodeId: n.id,
+          message: issue.key
+            ? `"${name || 'Step'}" is ${issue.message}`
+            : `"${name || 'Step'}": ${issue.message}`,
         });
+      });
     }
   });
 

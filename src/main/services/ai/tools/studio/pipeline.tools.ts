@@ -6,9 +6,13 @@ import yaml from 'js-yaml';
 import { z } from 'zod';
 import { diffLines } from 'diff';
 import {
-  ADDABLE_PIPELINE_PLUGINS,
-  PIPELINE_PLUGIN_BY_ID,
-} from '../../../../../shared/pipelinePluginCatalog';
+  validateStepParams,
+  type PluginDefinition,
+} from '../../../../../shared/pluginManifest';
+import {
+  getPluginDefinitions,
+  loadPluginDefinitions,
+} from '../../../pluginManifest.service';
 
 export const PIPELINE_CANONICAL_ROOT = 'rosetta/pipelines';
 export const PIPELINE_LEGACY_ROOT = '.rosetta';
@@ -88,12 +92,12 @@ const stableValue = (value: unknown): unknown => {
 
 const compatibilityStepCounts = (
   pipeline: ParsedPipeline,
+  pluginsById: Map<string, PluginDefinition>,
 ): Map<string, number> => {
   const counts = new Map<string, number>();
   pipeline.jobs.forEach((job) => {
     job.steps.forEach((step) => {
-      const contract = PIPELINE_PLUGIN_BY_ID.get(step.plugin);
-      if (contract?.availability === 'addable') return;
+      if (pluginsById.get(step.plugin)?.addable) return;
       const signature = JSON.stringify(stableValue(step));
       counts.set(signature, (counts.get(signature) ?? 0) + 1);
     });
@@ -104,19 +108,21 @@ const compatibilityStepCounts = (
 const validatePluginAuthoring = (
   pipeline: ParsedPipeline,
   mode: PipelineValidationMode,
+  plugins: PluginDefinition[],
   previousPipeline?: ParsedPipeline,
 ): { issues: PipelineIssue[]; warnings: string[] } => {
   const issues: PipelineIssue[] = [];
   const warnings: string[] = [];
+  const pluginsById = new Map(plugins.map((plugin) => [plugin.id, plugin]));
   const previousCompatibilitySteps = previousPipeline
-    ? compatibilityStepCounts(previousPipeline)
+    ? compatibilityStepCounts(previousPipeline, pluginsById)
     : new Map<string, number>();
 
   pipeline.jobs.forEach((job, jobIndex) => {
     job.steps.forEach((step, stepIndex) => {
       const pluginPath = `jobs.${jobIndex}.steps.${stepIndex}`;
-      const contract = PIPELINE_PLUGIN_BY_ID.get(step.plugin);
-      if (!contract || contract.availability !== 'addable') {
+      const contract = pluginsById.get(step.plugin);
+      if (!contract || !contract.addable) {
         const label = contract
           ? `Compatibility-only plugin ${JSON.stringify(step.plugin)}`
           : `Unknown plugin ${JSON.stringify(step.plugin)}`;
@@ -140,17 +146,24 @@ const validatePluginAuthoring = (
         return;
       }
 
-      contract.fields
-        .filter((field) => field.required)
-        .forEach((field) => {
-          const value = step[field.key];
-          if (typeof value !== 'string' || !value.trim()) {
-            issues.push({
-              path: `${pluginPath}.${field.key}`,
-              message: `${contract.id} requires ${field.key}`,
-            });
-          }
-        });
+      const params = Object.fromEntries(
+        Object.entries(step).filter(
+          ([key]) => key !== 'name' && key !== 'plugin',
+        ),
+      );
+      validateStepParams(contract, params).forEach((issue) => {
+        issues.push(
+          issue.key
+            ? {
+                path: `${pluginPath}.${issue.key}`,
+                message: `${contract.id} requires ${issue.key}`,
+              }
+            : {
+                path: pluginPath,
+                message: `${contract.id}: ${issue.message}`,
+              },
+        );
+      });
     });
   });
 
@@ -400,6 +413,8 @@ export function validatePipelineContent(
   options: {
     mode?: PipelineValidationMode;
     previousContent?: string;
+    /** Defaults to the runner's plugin manifest as last loaded. */
+    plugins?: PluginDefinition[];
   } = {},
 ): {
   valid: boolean;
@@ -467,6 +482,7 @@ export function validatePipelineContent(
     const pluginValidation = validatePluginAuthoring(
       result.data,
       options.mode ?? 'read',
+      options.plugins ?? getPluginDefinitions(),
       previousPipeline,
     );
     return {
@@ -616,6 +632,7 @@ export async function readProjectPipeline(
 > {
   const resolved = resolvePipelineReadPath(projectPath, candidatePath);
   if (!resolved.success) return resolved;
+  await loadPluginDefinitions();
   try {
     if (!fs.existsSync(resolved.absolutePath)) {
       return {
@@ -785,6 +802,7 @@ export async function generateProjectPipeline(
 ): Promise<PipelineMutationResult> {
   const resolved = resolvePipelineGeneratePath(projectPath, candidatePath);
   if (!resolved.success) return resolved;
+  await loadPluginDefinitions();
   const validation = validatePipelineContent(content, { mode: 'generate' });
   if (!validation.valid) {
     return {
@@ -890,6 +908,7 @@ export async function updateProjectPipeline(
       stale: true,
     };
   }
+  await loadPluginDefinitions();
   const structuralValidation = validatePipelineContent(content);
   if (!structuralValidation.valid) {
     return {
@@ -983,23 +1002,39 @@ export async function buildProjectPipelineContext(
   options: { hasDbt?: boolean } = {},
 ): Promise<string> {
   const hasDbt = options.hasDbt ?? true;
-  const pluginGuidance = ADDABLE_PIPELINE_PLUGINS.map((plugin) => {
-    const required = plugin.fields
-      .filter((field) => field.required)
-      .map((field) => `\`${field.key}\``)
-      .join(', ');
-    const optional = plugin.fields
-      .filter((field) => !field.required)
-      .map((field) => `\`${field.key}\``)
-      .join(', ');
-    return `  - \`${plugin.id}\`: required ${required || 'none'}; optional ${optional || 'none'}`;
-  });
+  const plugins = await loadPluginDefinitions();
+  const describeField = (field: PluginDefinition['widgets'][number]) =>
+    field.options.length > 0
+      ? `\`${field.key}\` (one of: ${field.options
+          .map((option) => option.value)
+          .join(', ')})`
+      : `\`${field.key}\``;
+  const pluginGuidance = plugins
+    .filter((plugin) => plugin.addable)
+    .map((plugin) => {
+      const required = plugin.widgets
+        .filter((field) => field.required)
+        .map(describeField)
+        .join(', ');
+      const optional = plugin.widgets
+        .filter((field) => !field.required)
+        .map(describeField)
+        .join(', ');
+      const rules = plugin.rules
+        .map((rule) => rule.message ?? `${rule.type}: ${rule.keys.join(', ')}`)
+        .map((rule) => `; ${rule}`)
+        .join('');
+      return `  - \`${plugin.id}\`: required ${required || 'none'}; optional ${optional || 'none'}${rules}`;
+    });
+  const preserveOnly = plugins
+    .filter((plugin) => !plugin.addable)
+    .map((plugin) => `\`${plugin.id}\``);
   const authoringGuidance = [
     '- One visual pipeline node represents one YAML step. Jobs group ordered step nodes; jobs are not node/plugin types.',
     '- Addable step plugins:',
     ...pluginGuidance,
     '- For dbt operations use `plugin: dbt@v1` and a `command` such as `dbt run`, `dbt test`, `dbt compile`, or `dbt debug`. `dbt-run`, `dbt-test`, `dbt-compile`, and `dbt-debug` are not plugin IDs.',
-    '- `git_clone@v1` and unknown plugins may be preserved unchanged when already present, but must not be introduced by generate or update.',
+    `- ${[...preserveOnly, 'unknown plugins'].join(', ')} may be preserved unchanged when already present, but must not be introduced by generate or update.`,
     "- When adding or updating a `terraform@v1` step: before finalizing, use `listDirectory`/`pathExists`/`readFile` to check the step's `working_dir` for existing `.tf` files. If none satisfy what the step needs, create minimal ones with `writeFile` (e.g. `main.tf`, `variables.tf`) sized to the actual resources being provisioned - do this directly, without asking for confirmation, since no existing file is being changed. If `.tf` files exist but do not match what the pipeline needs, explain the mismatch and ask the user for confirmation before editing them, per the 'confirm before overwriting existing files' rule. If they already satisfy the need, leave them untouched.",
     '- A teardown/cleanup step (e.g. `terraform destroy`) belongs in its own entry in the top-level `jobs` array with `type: "cleanup"` (a sibling of the other jobs, not nested inside one), not in an `on_finish` key at any level, which is not supported.',
     '- A Terraform variable receives a dynamic value in exactly one way: Studio sets a `TF_VAR_<variable_name>` environment variable before running `terraform apply`, which Terraform reads natively. There is no other mechanism. Never write a `default` that calls a function to look up an env var, secret, or keystore value (e.g. `env_var(...)`, `env.gitops_var(...)`, or any similarly invented function) - these do not exist in Terraform/HCL and will fail to parse. A variable needing a dynamic value must have NO `default` at all (it becomes required, and Studio\'s "Run with env" dialog will prompt for it). Only give a `default` when the value is genuinely static and not sensitive (e.g. `default = "US"` for a region).',
