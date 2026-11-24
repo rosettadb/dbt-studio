@@ -9,8 +9,8 @@ import { useLastDataLakeRoute } from '../../hooks/useLastDataLakeRoute';
 export type SidebarItem = NavigationItem & { disabled: boolean };
 
 // Studio's own sidebar items. Extensions add theirs to the same registry;
-// `order` leaves room between them (300 is the SQL Editor, which its
-// extension adds).
+// `order` leaves room between them (300 is the SQL Editor and 400
+// Notebooks, which their extensions add).
 const coreItems: NavigationItem[] = [
   {
     id: 'home',
@@ -31,15 +31,6 @@ const coreItems: NavigationItem[] = [
     testId: 'nav-item-files',
     order: 200,
     isEnabled: ({ hasProject }) => hasProject,
-  },
-  {
-    id: 'notebooks',
-    path: '/app/notebooks',
-    label: 'Notebooks',
-    description: 'Explore data in SQL and Python notebooks',
-    icon: Icons.NotebooksIcon,
-    testId: 'nav-item-notebooks',
-    order: 400,
   },
   {
     id: 'cloud-explorer',

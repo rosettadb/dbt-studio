@@ -22,7 +22,6 @@ import {
   CloudExplorer,
   Connections,
   DuckLake as DataLake,
-  Notebooks,
   Flows,
   Dashboard,
 } from './screens';
@@ -107,7 +106,6 @@ const App: React.FC = () => {
           <Route path="settings/backup" element={<Settings />} />
           {/* Settings pages added through the settings-page registry */}
           <Route path="settings/:section" element={<Settings />} />
-          <Route path="notebooks" element={<Notebooks />} />
           <Route
             path="cloud-explorer"
             element={<Navigate to="/app/cloud-explorer/dashboard" />}

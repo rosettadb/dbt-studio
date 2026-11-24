@@ -11,6 +11,7 @@ import {
   getMainElements,
 } from '../../../src/renderer/components/sidebar/elements';
 import { sqlNavigationItem } from '../../../src/extensions/sql/renderer/contributions';
+import { notebooksNavigationItem } from '../../../src/extensions/notebooks/renderer/contributions';
 
 type Item = { id: string; order?: number; label?: string };
 
@@ -89,6 +90,7 @@ describe('sidebar active item', () => {
   // The sidebar holds Studio's own entries plus those of the extensions
   // that ship with Studio.
   navigationItems.add(sqlNavigationItem);
+  navigationItems.add(notebooksNavigationItem);
   const items = [...getMainElements(true), ...getBottomElements()];
   const activeFor = (pathname: string) =>
     items

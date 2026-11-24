@@ -1,2 +1,5 @@
 /** Icons of Studio's own sidebar entries. */
-export { DataSources } from '../../renderer/components/sidebar/icons';
+export {
+  DataSources,
+  NotebooksIcon,
+} from '../../renderer/components/sidebar/icons';

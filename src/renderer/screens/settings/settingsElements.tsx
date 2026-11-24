@@ -12,7 +12,7 @@ import ExtensionOutlinedIcon from '@mui/icons-material/ExtensionOutlined';
 import { SvgIconComponent } from '@mui/icons-material';
 import React from 'react';
 import { Icon } from '../../components/icon';
-import { PythonMonoIcon } from '../../components/notebook/NotebookKindIcon';
+import { PythonMonoIcon } from '../../components/icon/PythonMonoIcon';
 import { DbtMonoIcon } from '../../components/icon/DbtMonoIcon';
 import { icons } from '../../../../assets';
 import { ExtensionsSettings } from '../../components/settings/ExtensionsSettings';

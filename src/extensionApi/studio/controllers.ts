@@ -4,6 +4,7 @@ export {
   useGetConnections,
   useGetSelectedProject,
   useGetSettings,
+  useImportConnectionFromNotebook,
   useRenameDuckLakeColumn,
   useRenameDuckLakeTable,
   useSetConnectionEnvVariable,

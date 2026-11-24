@@ -12,7 +12,6 @@ import registerAIHandlers from './ai.ipcHandlers';
 import registerRosettaCloudIpcHandlers from './rosettaCloud.ipcHandlers';
 import registerDuckLakeHandlers from './duckLake.ipcHandlers';
 import registerLineageHandlers from './lineage.ipcHandlers';
-import { registerNotebooksHandlers } from './notebooks.ipcHandlers';
 import registerLanguageIntelligenceHandlers from './languageIntelligence.ipcHandlers';
 import { registerAgentHandlers } from './agent.ipcHandlers';
 import { registerMCPHandlers } from './mcp.ipcHandlers';
@@ -22,12 +21,10 @@ import registerTaskManagerHandlers from './taskManager.ipcHandlers';
 import { registerSecondBrainHandlers } from './secondBrain.ipcHandlers';
 import { registerIcebergDatalakeHandlers } from './icebergDatalake.ipcHandlers';
 import registerBackupHandlers from './backup.ipcHandlers';
-import { registerPythonNotebooksHandlers } from './pythonNotebooks.ipcHandlers';
 import registerPtyHandlers from './pty.ipcHandlers';
 
 export {
   registerPtyHandlers,
-  registerPythonNotebooksHandlers,
   registerCliHandlers,
   registerProjectHandlers,
   registerSettingsHandlers,
@@ -42,7 +39,6 @@ export {
   registerRosettaCloudIpcHandlers,
   registerDuckLakeHandlers,
   registerLineageHandlers,
-  registerNotebooksHandlers,
   registerLanguageIntelligenceHandlers,
   registerAgentHandlers,
   registerMCPHandlers,

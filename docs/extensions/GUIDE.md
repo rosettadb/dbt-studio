@@ -420,6 +420,8 @@ The **SQL Editor** (`src/extensions/sql/`) is the second: a sidebar entry, a scr
 
 **Analytics** (`src/extensions/analytics/`) is the third: a tab in the SQL Editor and Notebooks screens, a Home card with `onSelect`, and in its main half the Analytics page channels and the static site export (which uses `api.windows.getMainWindow()` to report progress).
 
+**Notebooks** (`src/extensions/notebooks/`) is the fourth: a sidebar entry, a screen that itself takes tabs from other extensions (`STUDIO_WORKSPACES.notebooks`), a Home card, and a main half whose `deactivate()` stops every running kernel when Studio quits or the extension is switched off.
+
 The first internal extension is **Pipelines** (`src/extensions/pipeline/`): `manifest.shared.ts` is its manifest and `renderer/index.ts` its `activate`, which shows every UI injection point in use. `tests/unit/extensions/pipeline.activate.test.ts` shows how to test an extension through the real host.
 
 ## 8. Rules

@@ -74,13 +74,29 @@ describe('pythonNotebooks.ipcHandlers', () => {
       default: runtimes,
     }));
 
+    // The SQL notebooks store is not under test here.
+    jest.doMock('../../../../src/main/services/notebooks.service', () => ({
+      NotebooksService: {},
+    }));
+
     const electron = await import('electron');
     const { registerPythonNotebooksHandlers } = await import(
-      '../../../../src/main/ipcHandlers/pythonNotebooks.ipcHandlers'
+      '../../../../src/extensions/notebooks/main/pythonNotebooksHandlers'
     );
-    registerPythonNotebooksHandlers();
+    const { notebooksMain } = await import(
+      '../../../../src/extensions/notebooks/main'
+    );
+    // The handlers register through the extension API, which registers with
+    // ipcMain.
+    const api: any = {
+      ipc: {
+        handle: (channel: string, handler: (...args: any[]) => unknown) =>
+          electron.ipcMain.handle(channel, handler),
+      },
+    };
+    registerPythonNotebooksHandlers(api);
 
-    return { electron, notebooks, env, kernel, runtimes };
+    return { electron, notebooks, env, kernel, runtimes, notebooksMain };
   };
 
   it('registers every channel from the PythonNotebookChannels union', async () => {
@@ -205,13 +221,11 @@ describe('pythonNotebooks.ipcHandlers', () => {
     expect(runtimes.installRuntime).toHaveBeenCalledWith('3.11.12');
   });
 
-  it('shuts down all kernels on app quit', async () => {
-    const { electron, kernel } = await setup();
-    const quitRegistration = (electron.app.on as jest.Mock).mock.calls.find(
-      ([event]) => event === 'before-quit',
-    );
-    expect(quitRegistration).toBeDefined();
-    quitRegistration[1]();
+  it('shuts down all kernels when the extension stops (app quit or switched off)', async () => {
+    const { kernel, notebooksMain } = await setup();
+
+    await notebooksMain.deactivate?.();
+
     expect(kernel.shutdownAll).toHaveBeenCalled();
   });
 });

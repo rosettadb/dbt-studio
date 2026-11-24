@@ -2,12 +2,18 @@ import React from 'react';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 
 import Dashboard from '../../../../src/renderer/screens/dashboard';
+import { dashboardCards } from '../../../../src/extensionHost/renderer/contributions.renderer';
+import { notebooksDashboardCard } from '../../../../src/extensions/notebooks/renderer/contributions';
 import {
   useApiKey,
   useGetConnections,
   useGetProjects,
   useProfile,
 } from '../../../../src/renderer/controllers';
+
+// Home shows Studio's own cards plus those of the extensions that ship with
+// Studio; the Notebook card is the one these tests look at.
+dashboardCards.add(notebooksDashboardCard);
 
 const mockNavigate = jest.fn();
 

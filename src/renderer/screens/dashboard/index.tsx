@@ -18,7 +18,6 @@ import {
   useTheme,
 } from '@mui/material';
 import { toast } from 'react-toastify';
-import AutoStoriesIcon from '@mui/icons-material/AutoStories';
 import AddIcon from '@mui/icons-material/Add';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
@@ -96,9 +95,9 @@ const ProjectTypeIcon: React.FC<{ connectionType?: string }> = ({
 };
 
 // Studio's own Home cards. Extensions add theirs to the same registry;
-// the gaps in `order` leave room between them (300 is the SQL Editor card,
-// 400 the Analytics card and 700 the Pipeline card, which their extensions
-// add).
+// the gaps in `order` leave room between them (200 is the Notebook card,
+// 300 the SQL Editor card, 400 the Analytics card and 700 the Pipeline card,
+// which their extensions add).
 const features: DashboardCard[] = [
   {
     id: 'dbt-project',
@@ -109,16 +108,6 @@ const features: DashboardCard[] = [
       'Create and open dbt projects, or Analytics projects for notebooks and SQL.',
     icon: DbtCardIcon,
     path: '/app/select-project',
-  },
-  {
-    id: 'notebook',
-    order: 200,
-    title: 'Notebook',
-    category: 'Analytics',
-    description:
-      'Create interactive notebooks for data exploration and analysis.',
-    icon: AutoStoriesIcon,
-    path: '/app/notebooks',
   },
   {
     id: 'datalake',

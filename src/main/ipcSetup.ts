@@ -14,7 +14,6 @@ import {
   registerRosettaCloudIpcHandlers,
   registerDuckLakeHandlers,
   registerLineageHandlers,
-  registerNotebooksHandlers,
   registerLanguageIntelligenceHandlers,
   registerAgentHandlers,
   registerMCPHandlers,
@@ -24,7 +23,6 @@ import {
   registerSecondBrainHandlers,
   registerIcebergDatalakeHandlers,
   registerBackupHandlers,
-  registerPythonNotebooksHandlers,
   registerPtyHandlers,
 } from './ipcHandlers';
 import registerDbtChartsHandlers from './ipcHandlers/dbtCharts.ipcHandlers';
@@ -48,8 +46,6 @@ const registerHandlers = (mainWindow: BrowserWindow) => {
   registerRosettaCloudIpcHandlers();
   registerDuckLakeHandlers();
   registerLineageHandlers();
-  registerNotebooksHandlers();
-  registerPythonNotebooksHandlers();
   registerLanguageIntelligenceHandlers();
   registerAgentHandlers();
   registerMCPHandlers();

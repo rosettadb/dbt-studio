@@ -1,6 +1,8 @@
 import type { ExtensionMainModule } from '../../extensionApi/main';
 import { analyticsManifest } from '../../extensions/analytics/manifest.shared';
 import { analyticsMain } from '../../extensions/analytics/main';
+import { notebooksManifest } from '../../extensions/notebooks/manifest.shared';
+import { notebooksMain } from '../../extensions/notebooks/main';
 import { pipelineManifest } from '../../extensions/pipeline/manifest.shared';
 import { pipelineMain } from '../../extensions/pipeline/main';
 import { sqlManifest } from '../../extensions/sql/manifest.shared';
@@ -22,4 +24,5 @@ export const builtinMainExtensions: BuiltinMainExtension[] = [
   { manifest: pipelineManifest, module: pipelineMain },
   { manifest: sqlManifest, module: sqlMain },
   { manifest: analyticsManifest, module: analyticsMain },
+  { manifest: notebooksManifest, module: notebooksMain },
 ];

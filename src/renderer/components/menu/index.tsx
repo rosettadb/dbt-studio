@@ -187,9 +187,7 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
           </Tooltip>
         )}
         {profile && <CloudLocalEnvironmentSwitch />}
-        {((isProjectSelected && isOnProjectDetails) ||
-          location.pathname.startsWith('/app/notebooks') ||
-          isOnAssistantScreen) && (
+        {((isProjectSelected && isOnProjectDetails) || isOnAssistantScreen) && (
           <Tooltip title="AI Assistant (beta)">
             <IconButton
               onClick={() => setIsChatOpen?.(!isChatOpen)}
