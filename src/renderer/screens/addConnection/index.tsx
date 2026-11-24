@@ -48,12 +48,15 @@ type ItemType = {
   dbtCompatible?: boolean;
 };
 
-const baseItems: ItemType[] = creatableConnections().map((ui) => ({
-  id: ui.type,
-  name: connectionLabel(ui.type) ?? ui.type,
-  icon: ui.icon,
-  disabled: false,
-}));
+// Read when the screen opens, not when the app loads: extensions add their
+// databases after that.
+const listItems = (): ItemType[] =>
+  creatableConnections().map((ui) => ({
+    id: ui.type,
+    name: connectionLabel(ui.type) ?? ui.type,
+    icon: ui.icon,
+    disabled: false,
+  }));
 
 const AddConnection: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -63,6 +66,7 @@ const AddConnection: React.FC = () => {
   const suggestedName = location.state?.suggestedName;
   const [selectedItem, setSelectedItem] = React.useState<ItemType>();
   const [onlyDbtCompatible, setOnlyDbtCompatible] = React.useState(false);
+  const baseItems = React.useMemo(listItems, []);
 
   const visibleItems = React.useMemo(
     () =>
@@ -71,7 +75,7 @@ const AddConnection: React.FC = () => {
           (!projectId || canUseAsDbtConnection(item.id)) &&
           (!onlyDbtCompatible || canUseAsDbtConnection(item.id)),
       ),
-    [projectId, onlyDbtCompatible],
+    [baseItems, projectId, onlyDbtCompatible],
   );
 
   // Auto-select connection type if duplicating
@@ -82,7 +86,7 @@ const AddConnection: React.FC = () => {
       );
       if (item) setSelectedItem(item);
     }
-  }, [duplicateData]);
+  }, [baseItems, duplicateData]);
 
   const handleBack = () => {
     navigate(-1);

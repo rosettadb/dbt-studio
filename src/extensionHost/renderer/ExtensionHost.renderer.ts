@@ -40,6 +40,8 @@ import {
 import { registerFileView } from '../../renderer/components/fileViews/registry';
 import { registerTerminalPanel } from '../../renderer/components/terminal/panels/registry';
 import { registerCommand } from '../../renderer/components/commandPalette/commands';
+import { registerConnectionUi } from '../../connections/core/uiRegistry.renderer';
+import { completeExtensionDescriptor } from '../../connections/registry.shared';
 
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
@@ -310,6 +312,27 @@ export class ExtensionHostRenderer {
       },
       workspaceTabs: {
         add: (screenId, tab) => track(workspaceTabRegistry(screenId).add(tab)),
+      },
+      connections: {
+        register: (connection) => {
+          const descriptor = completeExtensionDescriptor(
+            connection?.descriptor,
+          );
+          return track(
+            toDisposable(
+              registerConnectionUi(
+                {
+                  // The SQL Editor gets the saved settings as they are,
+                  // unless the extension maps them itself.
+                  sqlEditorInput: (conn) => ({ ...conn }),
+                  ...connection.ui,
+                  type: descriptor.type as any,
+                },
+                descriptor,
+              ),
+            ),
+          );
+        },
       },
       slots: {
         add: (slotId, contribution) =>

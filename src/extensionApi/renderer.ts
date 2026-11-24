@@ -20,10 +20,15 @@ import type {
 import type { Project, SettingsType } from '../types/backend';
 import type {
   Disposable,
+  ExtensionConnectionDescriptor,
   ExtensionDescription,
   ExtensionLogger,
   FileDidSaveEvent,
 } from './shared';
+import type {
+  ConnectionFormProps,
+  ConnectionUi,
+} from '../connections/core/ui.renderer';
 import type {
   FileViewDefinition,
   FileViewProps,
@@ -33,6 +38,19 @@ import type {
   TerminalPanelDefinition,
   TerminalPanelState,
 } from '../renderer/components/terminal/panels/types';
+
+export type { ConnectionFormProps, ConnectionUi };
+
+/**
+ * A database an extension adds, UI side: its facts (`descriptor`, the same
+ * as in the main half) and how it looks. `ui.icon` is an image URL;
+ * `ui.Form` is the add / edit form (without one the database has no tile on
+ * the add screen); `ui.sqlEditorInput` and `ui.listDetails` are optional.
+ */
+export interface ExtensionConnectionUi {
+  descriptor: ExtensionConnectionDescriptor;
+  ui: Omit<ConnectionUi<any>, 'type'>;
+}
 
 export type {
   EditorTabState,
@@ -294,6 +312,15 @@ export interface ExtensionRendererApi {
   readonly workspaceTabs: {
     /** `screenId` is one of `STUDIO_WORKSPACES`. */
     add: (screenId: string, tab: WorkspaceTab) => Disposable;
+  };
+  readonly connections: {
+    /**
+     * Adds the UI of a database: its tile and form on the add-connection
+     * screen, its icon and label in lists. The main half adds how to reach
+     * it with its own `api.connections.register`. A type that is already
+     * taken is refused.
+     */
+    register: (connection: ExtensionConnectionUi) => Disposable;
   };
   readonly slots: {
     /** Slot ids are published by the screen that owns the slot. */

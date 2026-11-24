@@ -10,10 +10,31 @@
 import type { BrowserWindow, IpcMainInvokeEvent, WebContents } from 'electron';
 import type {
   Disposable,
+  ExtensionConnectionDescriptor,
   ExtensionDescription,
   ExtensionLogger,
   FileDidSaveEvent,
 } from './shared';
+import type {
+  Connection,
+  QueryContext,
+  TestResult,
+} from '../connections/core/Connection.main';
+import type { ConnectionDefinition } from '../connections/core/connectorRegistry.main';
+
+export type { ConnectionDefinition, QueryContext, TestResult };
+
+/**
+ * A database an extension adds, main-process side: its facts
+ * (`descriptor`) and how to reach it. `validate`, `test`, `query` and
+ * `extractSchema` are required; see `ConnectionDefinition` for the rest.
+ * The UI half adds the form and the icon with its own
+ * `api.connections.register`.
+ */
+export type ExtensionConnection<Conn = any> = Omit<
+  ConnectionDefinition<Conn>,
+  'descriptor'
+> & { descriptor: ExtensionConnectionDescriptor };
 
 export interface ExtensionMainIpc {
   /**
@@ -76,6 +97,15 @@ export interface ExtensionMainApi {
   };
   readonly startup: {
     addTask: (task: StartupTask) => Disposable;
+  };
+  readonly connections: {
+    /**
+     * Adds a database Studio can connect to: it can be saved, tested,
+     * queried from the SQL Editor and Notebooks, and its tables show in the
+     * Data tree. Studio's own databases register the same way. A type that
+     * is already taken is refused. dbt projects cannot use it yet.
+     */
+    register: (connection: ExtensionConnection | Connection<any>) => Disposable;
   };
   /** A folder this extension may use for its own files. Created on demand. */
   readonly storagePath: string;

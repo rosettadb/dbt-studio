@@ -13,6 +13,8 @@ import { pathToFileURL } from 'url';
 import { extensionHost } from './index.main';
 import { installIpcErrorHandling } from '../../main/utils/ipcErrorHandler';
 import { builtinMainExtensions } from './builtinExtensions.main';
+// Studio's own databases, registered before any extension adds one.
+import '../../connections/registry.main';
 import {
   getExtensionsRoot,
   stageInstall,

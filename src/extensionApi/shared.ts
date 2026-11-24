@@ -17,6 +17,15 @@ export type {
 } from '../extensionHost/shared/protocol.shared';
 export { toDisposable } from '../extensionHost/shared/protocol.shared';
 
+export type {
+  ConnectionCapabilities,
+  ConnectionDescriptor,
+  SecretFieldSpec,
+  SqlRules,
+} from '../connections/core/descriptor.shared';
+export { DEFAULT_SECRETS } from '../connections/core/descriptor.shared';
+export type { ExtensionConnectionDescriptor } from '../connections/registry.shared';
+
 export interface ExtensionLogger {
   info: (...args: unknown[]) => void;
   warn: (...args: unknown[]) => void;

@@ -4,7 +4,7 @@ An extension adds to Studio without changing Studio's code: a sidebar item, a sc
 
 This guide covers what the extension system supports today. Sections are added as more injection points land (see `PLAN.md`).
 
-A complete working example is in [`examples/hello`](examples/hello).
+A complete working example is in [`examples/hello`](examples/hello). [`examples/clickhouse`](examples/clickhouse) adds a database connection.
 
 ---
 
@@ -313,6 +313,53 @@ api.settings.addPage({
 });
 ```
 
+### 4.8 A database connection
+
+A database has two parts, one in each half, with the same `descriptor` in both.
+
+The main half says how to reach it:
+
+```js
+api.connections.register({
+  descriptor: { type: 'clickhouse', displayName: 'ClickHouse' },
+  validate: async (conn) => { if (!conn.host) throw new Error('Host is required'); },
+  test: async (conn) => true,                       // can the server be reached
+  query: async (conn, sql, ctx) => ({               // one statement
+    success: true, data: [{ id: 1 }], fields: [{ name: 'id', type: -1 }], rowCount: 1,
+  }),                                               // on failure: { success: false, error: 'message' }
+  extractSchema: async (conn) => ({ tables: [] }),  // tables and columns for the Data tree
+});
+```
+
+`conn` is the object your form saved. `ctx.onCancelable(fn)` gives Studio the function that stops a running statement (the Stop button). Optional: `sameTarget(a, b)`, `nameHint(conn)`, `agentHint(ctx)`, `validatesOnSave`, `dispose()`.
+
+The UI half says how it looks:
+
+```js
+api.connections.register({
+  descriptor: { type: 'clickhouse', displayName: 'ClickHouse' },
+  ui: {
+    icon,                                  // an image URL
+    Form: ClickHouseForm,                  // add / edit form; receives { onCancel, connection, duplicateFrom, suggestedName }
+    listDetails: (conn) => `${conn.host}:${conn.port}`,   // the line under the name in the connection list
+  },
+});
+```
+
+The form saves with Studio's own hooks from `@rosetta/studio-api`: `useConfigureConnection` (new), `useUpdateConnection` (edit), `useTestConnection`, `useGetConnections` and `useConnectionNameValidation` for the name, and `ConnectionHeader` for the title bar with Save and Close. The saved object must have `type` (your descriptor's type) and `name`.
+
+In the descriptor only `type` and `displayName` are required. Optional: `aliases`, `secrets`, `sql.rules` (`quote`: `double` / `backtick` / `bracket`, `folding`, `limit`; used when Studio writes SQL for the Data tree menu), `capabilities.nativeExport`.
+
+From then on the database has a tile on the add-connection screen, can be saved, tested and edited, is listed with its icon, runs statements in the SQL Editor and Notebooks, and shows its tables in the Data tree. Studio's own twelve databases are registered through the same call.
+
+Limits today:
+
+- A type that already exists (a built-in one, or another extension's) is refused, and the extension fails to start with that message.
+- dbt projects cannot use a database added by an extension.
+- Connections saved for it stay in the list when the extension is disabled or removed; they cannot be used until it is back.
+
+`examples/clickhouse` is a complete adapter in two plain files, with no dependencies (it talks to ClickHouse over HTTP).
+
 ## 5. Libraries Studio shares with the UI half
 
 These must be Studio's own copies; do **not** bundle them. Mark them as externals:
@@ -392,6 +439,7 @@ exports.deactivate = () => { /* stop what you started outside api */ };
 | `api.bridge.request(operation, payload, { timeoutMs })` | Asks the UI half for something only the open UI knows; it answers with `api.bridge.handle`. Rejects after 15 s by default if no window answers. |
 | `api.workspace.onDidSaveFile(listener)` | Runs after a project file was written |
 | `api.windows.getMainWindow()` | Studio's main window, or null while it is not open |
+| `api.connections.register(connection)` | Adds a database Studio can connect to (section 4.8) |
 | `api.startup.addTask({ id, run })` | Work to do while Studio starts, behind the splash screen. `run({ setMessage })` can change the splash line. A task that throws is logged and Studio still starts. |
 | `api.storagePath` | A folder for the extension's own files |
 | `api.extensions.getExports(id)` | What another extension's main `activate` returned |

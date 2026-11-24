@@ -1,5 +1,7 @@
 export {
+  useConfigureConnection,
   useDuckLakeInstances,
+  useFilePicker,
   useGetConnectionById,
   useGetConnections,
   useGetSelectedProject,
@@ -8,4 +10,6 @@ export {
   useRenameDuckLakeColumn,
   useRenameDuckLakeTable,
   useSetConnectionEnvVariable,
+  useTestConnection,
+  useUpdateConnection,
 } from '../../renderer/controllers';

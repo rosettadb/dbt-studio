@@ -20,6 +20,7 @@ export * from './connectionsRegistry';
 export * from './connectionsRegistryShared';
 export * from './connectorsService';
 export * from './connectionCredentialTransfer';
+export * from './connectionForm';
 export * from './context';
 export * from './controllers';
 export * from './customTable';

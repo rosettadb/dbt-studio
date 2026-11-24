@@ -48,6 +48,8 @@ import {
 } from '../extensionHost/renderer/sharedModules.renderer';
 import { extensionHostRenderer } from '../extensionHost/renderer/index.renderer';
 import { builtinRendererExtensions } from '../extensionHost/renderer/builtinExtensions.renderer';
+// Studio's own databases, registered before any extension adds one.
+import '../connections/registry.renderer';
 import * as studioApiShared from '../extensionApi/shared';
 import * as studioApiRenderer from '../extensionApi/renderer';
 import * as studioApiStudio from '../extensionApi/studio';

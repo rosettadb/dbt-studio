@@ -33,6 +33,12 @@ import {
   writeState,
 } from './extensionStore.main';
 import { onDidSaveFile } from './fileEvents.main';
+import { Connection } from '../../connections/core/Connection.main';
+import {
+  connectorFromDefinition,
+  registerConnector,
+} from '../../connections/core/connectorRegistry.main';
+import { completeExtensionDescriptor } from '../../connections/registry.shared';
 
 // `__non_webpack_require__` is webpack's handle to Node's real `require`; it
 // does not exist when this file runs outside a webpack bundle (jest).
@@ -593,6 +599,23 @@ export class ExtensionHostMain {
             }),
           );
         },
+      },
+      connections: {
+        register: (connection) =>
+          track(
+            toDisposable(
+              registerConnector(
+                connection instanceof Connection
+                  ? connection
+                  : connectorFromDefinition({
+                      ...connection,
+                      descriptor: completeExtensionDescriptor(
+                        connection?.descriptor,
+                      ),
+                    }),
+              ),
+            ),
+          ),
       },
       get storagePath() {
         const storagePath = getExtensionStoragePath(id);
