@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron';
 import { ExtensionHostRenderer } from '../../../src/extensionHost/renderer/ExtensionHost.renderer';
+import { notebooksService } from '../../../src/extensions/notebooks/renderer/notebooks.service';
 import { ExtensionHostMain } from '../../../src/extensionHost/main/ExtensionHost.main';
 import {
   dashboardCards,
@@ -120,6 +121,15 @@ describe('Notebooks extension', () => {
       // Second: after Projects (100), before the SQL Editor (300)
       order: 200,
     });
+
+    // Its own code reaches the main process through `api.ipc`, bound when
+    // the extension is activated.
+    const invoke = jest
+      .spyOn(window.electron.ipcRenderer, 'invoke')
+      .mockResolvedValue([] as never);
+    await notebooksService.listNotebooks('c1');
+    expect(invoke).toHaveBeenCalledWith('notebooks:list', 'c1');
+    invoke.mockRestore();
 
     await host.apply([description('disabled')]);
 

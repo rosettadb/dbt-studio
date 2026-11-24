@@ -9,13 +9,14 @@ import {
   CellOutput,
   NotebookImportPreview,
 } from '../../../extensionApi/studio/notebooksTypes';
+import { ipc } from './ipc';
 
 export const notebooksService = {
   /**
    * List all notebooks for a connection
    */
   listNotebooks: async (connectionId: string): Promise<Notebook[]> => {
-    return window.electron.ipcRenderer.invoke('notebooks:list', connectionId);
+    return ipc.invoke('notebooks:list', connectionId);
   },
 
   /**
@@ -25,11 +26,7 @@ export const notebooksService = {
     connectionId: string,
     notebookId: string,
   ): Promise<Notebook | null> => {
-    return window.electron.ipcRenderer.invoke(
-      'notebooks:get',
-      connectionId,
-      notebookId,
-    );
+    return ipc.invoke('notebooks:get', connectionId, notebookId);
   },
 
   /**
@@ -40,12 +37,7 @@ export const notebooksService = {
     name: string,
     description?: string,
   ): Promise<Notebook> => {
-    return window.electron.ipcRenderer.invoke(
-      'notebooks:create',
-      connectionId,
-      name,
-      description,
-    );
+    return ipc.invoke('notebooks:create', connectionId, name, description);
   },
 
   /**
@@ -60,12 +52,7 @@ export const notebooksService = {
       cells?: NotebookCell[];
     },
   ): Promise<Notebook> => {
-    return window.electron.ipcRenderer.invoke(
-      'notebooks:update',
-      connectionId,
-      notebookId,
-      updates,
-    );
+    return ipc.invoke('notebooks:update', connectionId, notebookId, updates);
   },
 
   /**
@@ -76,12 +63,7 @@ export const notebooksService = {
     notebookId: string,
     newName: string,
   ): Promise<Notebook> => {
-    return window.electron.ipcRenderer.invoke(
-      'notebooks:rename',
-      connectionId,
-      notebookId,
-      newName,
-    );
+    return ipc.invoke('notebooks:rename', connectionId, notebookId, newName);
   },
 
   /**
@@ -92,19 +74,14 @@ export const notebooksService = {
     notebookId: string,
     newName?: string,
   ): Promise<Notebook> => {
-    return window.electron.ipcRenderer.invoke(
-      'notebooks:duplicate',
-      connectionId,
-      notebookId,
-      newName,
-    );
+    return ipc.invoke('notebooks:duplicate', connectionId, notebookId, newName);
   },
 
   /**
    * Select a notebook file to import
    */
   selectImportFile: async (): Promise<string | null> => {
-    return window.electron.ipcRenderer.invoke('notebooks:selectImportFile');
+    return ipc.invoke('notebooks:selectImportFile');
   },
 
   /**
@@ -112,10 +89,7 @@ export const notebooksService = {
    * details) without importing it
    */
   peekImportFile: async (filePath: string): Promise<NotebookImportPreview> => {
-    return window.electron.ipcRenderer.invoke(
-      'notebooks:peekImportFile',
-      filePath,
-    );
+    return ipc.invoke('notebooks:peekImportFile', filePath);
   },
 
   /**
@@ -125,11 +99,7 @@ export const notebooksService = {
     connectionId: string,
     filePath: string,
   ): Promise<Notebook> => {
-    return window.electron.ipcRenderer.invoke(
-      'notebooks:import',
-      connectionId,
-      filePath,
-    );
+    return ipc.invoke('notebooks:import', connectionId, filePath);
   },
 
   /**
@@ -139,11 +109,7 @@ export const notebooksService = {
     connectionId: string,
     filePath: string,
   ): Promise<Notebook[]> => {
-    return window.electron.ipcRenderer.invoke(
-      'notebooks:importAll',
-      connectionId,
-      filePath,
-    );
+    return ipc.invoke('notebooks:importAll', connectionId, filePath);
   },
 
   /**
@@ -153,11 +119,7 @@ export const notebooksService = {
     connectionId: string,
     notebookId: string,
   ): Promise<void> => {
-    return window.electron.ipcRenderer.invoke(
-      'notebooks:delete',
-      connectionId,
-      notebookId,
-    );
+    return ipc.invoke('notebooks:delete', connectionId, notebookId);
   },
 
   /**
@@ -171,7 +133,7 @@ export const notebooksService = {
     limit?: number,
     offset?: number,
   ): Promise<CellOutput> => {
-    return window.electron.ipcRenderer.invoke(
+    return ipc.invoke(
       'notebooks:runCell',
       connectionId,
       notebookId,
@@ -193,7 +155,7 @@ export const notebooksService = {
     limit: number,
     offset: number,
   ): Promise<CellOutput> => {
-    return window.electron.ipcRenderer.invoke(
+    return ipc.invoke(
       'notebooks:fetchCellPage',
       connectionId,
       notebookId,
@@ -211,11 +173,7 @@ export const notebooksService = {
     connectionId: string,
     notebookId: string,
   ): Promise<void> => {
-    return window.electron.ipcRenderer.invoke(
-      'notebooks:runAll',
-      connectionId,
-      notebookId,
-    );
+    return ipc.invoke('notebooks:runAll', connectionId, notebookId);
   },
 
   /**
@@ -236,7 +194,7 @@ export const notebooksService = {
    * List all archived notebooks
    */
   listArchivedNotebooks: async (): Promise<Record<string, Notebook[]>> => {
-    return window.electron.ipcRenderer.invoke('notebooks:archived:list');
+    return ipc.invoke('notebooks:archived:list');
   },
 
   /**
@@ -247,7 +205,7 @@ export const notebooksService = {
     notebookId: string,
     targetConnectionId: string,
   ): Promise<Notebook> => {
-    return window.electron.ipcRenderer.invoke(
+    return ipc.invoke(
       'notebooks:archived:restore',
       archivedConnectionKey,
       notebookId,
@@ -262,20 +220,13 @@ export const notebooksService = {
     connectionKey: string,
     notebookId: string,
   ): Promise<void> => {
-    return window.electron.ipcRenderer.invoke(
-      'notebooks:archived:delete',
-      connectionKey,
-      notebookId,
-    );
+    return ipc.invoke('notebooks:archived:delete', connectionKey, notebookId);
   },
 
   /**
    * Delete all archived notebooks (optionally for a specific connection)
    */
   deleteAllArchivedNotebooks: async (connectionKey?: string): Promise<void> => {
-    return window.electron.ipcRenderer.invoke(
-      'notebooks:archived:deleteAll',
-      connectionKey,
-    );
+    return ipc.invoke('notebooks:archived:deleteAll', connectionKey);
   },
 };

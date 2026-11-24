@@ -382,11 +382,15 @@ export class ExtensionHostRenderer {
             channel as Channels,
             listener,
           );
-          return track(
-            toDisposable(() => {
-              if (typeof off === 'function') off();
-            }),
-          );
+          // Tracked, so it is removed with the extension. Code that removes
+          // it itself (a component that unmounts) also takes it off the
+          // list, which then does not grow while screens open and close.
+          const subscription = toDisposable(() => {
+            if (typeof off === 'function') off();
+            const index = entry.tracked.indexOf(subscription);
+            if (index >= 0) entry.tracked.splice(index, 1);
+          });
+          return track(subscription);
         },
       },
       bridge: {

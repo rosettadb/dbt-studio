@@ -1,3 +1,5 @@
+import { ipc } from './ipc';
+
 export interface NotebookStatePayload {
   requestId: string;
   conversationId: number;
@@ -60,23 +62,17 @@ export const registerNotebookBridge = (
     const payload = args[0] as NotebookStatePayload;
     try {
       const state = handlers.getNotebookState();
-      await window.electron.ipcRenderer.invoke(
-        'agent:notebook:state-response',
-        {
-          requestId: payload.requestId,
-          success: true,
-          ...state,
-        },
-      );
+      await ipc.invoke('agent:notebook:state-response', {
+        requestId: payload.requestId,
+        success: true,
+        ...state,
+      });
     } catch (error) {
-      await window.electron.ipcRenderer.invoke(
-        'agent:notebook:state-response',
-        {
-          requestId: payload.requestId,
-          success: false,
-          error: (error as Error).message,
-        },
-      );
+      await ipc.invoke('agent:notebook:state-response', {
+        requestId: payload.requestId,
+        success: false,
+        error: (error as Error).message,
+      });
     }
   };
 
@@ -84,23 +80,17 @@ export const registerNotebookBridge = (
     const payload = args[0] as CellReadRequestPayload;
     try {
       const content = handlers.getCellContent(payload.cellId);
-      await window.electron.ipcRenderer.invoke(
-        'agent:notebook:cell-read-response',
-        {
-          requestId: payload.requestId,
-          success: true,
-          content,
-        },
-      );
+      await ipc.invoke('agent:notebook:cell-read-response', {
+        requestId: payload.requestId,
+        success: true,
+        content,
+      });
     } catch (error) {
-      await window.electron.ipcRenderer.invoke(
-        'agent:notebook:cell-read-response',
-        {
-          requestId: payload.requestId,
-          success: false,
-          error: (error as Error).message,
-        },
-      );
+      await ipc.invoke('agent:notebook:cell-read-response', {
+        requestId: payload.requestId,
+        success: false,
+        error: (error as Error).message,
+      });
     }
   };
 
@@ -108,23 +98,17 @@ export const registerNotebookBridge = (
     const payload = args[0] as { requestId: string; content: string };
     try {
       const cellId = handlers.addCell(payload.content);
-      await window.electron.ipcRenderer.invoke(
-        'agent:notebook:cell-add-response',
-        {
-          requestId: payload.requestId,
-          success: true,
-          cellId,
-        },
-      );
+      await ipc.invoke('agent:notebook:cell-add-response', {
+        requestId: payload.requestId,
+        success: true,
+        cellId,
+      });
     } catch (error) {
-      await window.electron.ipcRenderer.invoke(
-        'agent:notebook:cell-add-response',
-        {
-          requestId: payload.requestId,
-          success: false,
-          error: (error as Error).message,
-        },
-      );
+      await ipc.invoke('agent:notebook:cell-add-response', {
+        requestId: payload.requestId,
+        success: false,
+        error: (error as Error).message,
+      });
     }
   };
 
@@ -132,24 +116,18 @@ export const registerNotebookBridge = (
     const payload = args[0] as CellUpdateRequestPayload;
     try {
       handlers.setCellContent(payload.cellId, payload.content);
-      await window.electron.ipcRenderer.invoke(
-        'agent:notebook:cell-update-response',
-        {
-          requestId: payload.requestId,
-          success: true,
-          applied: true,
-        },
-      );
+      await ipc.invoke('agent:notebook:cell-update-response', {
+        requestId: payload.requestId,
+        success: true,
+        applied: true,
+      });
     } catch (error) {
-      await window.electron.ipcRenderer.invoke(
-        'agent:notebook:cell-update-response',
-        {
-          requestId: payload.requestId,
-          success: false,
-          applied: false,
-          error: (error as Error).message,
-        },
-      );
+      await ipc.invoke('agent:notebook:cell-update-response', {
+        requestId: payload.requestId,
+        success: false,
+        applied: false,
+        error: (error as Error).message,
+      });
     }
   };
 
@@ -159,24 +137,18 @@ export const registerNotebookBridge = (
       handlers.runCell(payload.cellId);
       // Run request doesn't wait for completion, it just triggers it.
       // The agent can then poll for results or wait for a push event if we implement one.
-      await window.electron.ipcRenderer.invoke(
-        'agent:notebook:cell-run-response',
-        {
-          requestId: payload.requestId,
-          success: true,
-        },
-      );
+      await ipc.invoke('agent:notebook:cell-run-response', {
+        requestId: payload.requestId,
+        success: true,
+      });
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('[NotebookBridge] Run request failed', error);
-      await window.electron.ipcRenderer.invoke(
-        'agent:notebook:cell-run-response',
-        {
-          requestId: payload.requestId,
-          success: false,
-          error: (error as Error).message,
-        },
-      );
+      await ipc.invoke('agent:notebook:cell-run-response', {
+        requestId: payload.requestId,
+        success: false,
+        error: (error as Error).message,
+      });
     }
   };
 
@@ -184,47 +156,32 @@ export const registerNotebookBridge = (
     const payload = args[0] as CellResultRequestPayload;
     try {
       const result = handlers.getCellResult(payload.cellId);
-      await window.electron.ipcRenderer.invoke(
-        'agent:notebook:cell-result-response',
-        {
-          requestId: payload.requestId,
-          success: true,
-          result,
-        },
-      );
+      await ipc.invoke('agent:notebook:cell-result-response', {
+        requestId: payload.requestId,
+        success: true,
+        result,
+      });
     } catch (error) {
-      await window.electron.ipcRenderer.invoke(
-        'agent:notebook:cell-result-response',
-        {
-          requestId: payload.requestId,
-          success: false,
-          error: (error as Error).message,
-        },
-      );
+      await ipc.invoke('agent:notebook:cell-result-response', {
+        requestId: payload.requestId,
+        success: false,
+        error: (error as Error).message,
+      });
     }
   };
 
-  const unsubState = window.electron.ipcRenderer.on(
-    'agent:notebook:state-request',
-    onStateRequest,
-  );
-  const unsubRead = window.electron.ipcRenderer.on(
+  const unsubState = ipc.on('agent:notebook:state-request', onStateRequest);
+  const unsubRead = ipc.on(
     'agent:notebook:cell-read-request',
     onCellReadRequest,
   );
-  const unsubAdd = window.electron.ipcRenderer.on(
-    'agent:notebook:cell-add-request',
-    onCellAddRequest,
-  );
-  const unsubUpdate = window.electron.ipcRenderer.on(
+  const unsubAdd = ipc.on('agent:notebook:cell-add-request', onCellAddRequest);
+  const unsubUpdate = ipc.on(
     'agent:notebook:cell-update-request',
     onCellUpdateRequest,
   );
-  const unsubRun = window.electron.ipcRenderer.on(
-    'agent:notebook:cell-run-request',
-    onCellRunRequest,
-  );
-  const unsubResult = window.electron.ipcRenderer.on(
+  const unsubRun = ipc.on('agent:notebook:cell-run-request', onCellRunRequest);
+  const unsubResult = ipc.on(
     'agent:notebook:cell-result-request',
     onCellResultRequest,
   );

@@ -22,6 +22,7 @@ import type {
   GetQueryResultsRequest,
 } from '../../../extensionApi/studio/types';
 import { QueryResultStore } from './queryResultStore';
+import { ipc } from './ipc';
 
 // Guard: only one active listener at a time, even if the SQL screen
 // unmounts and remounts (e.g. during hot reload or navigation).
@@ -62,13 +63,13 @@ export function registerQueryResultBridge(): () => void {
 
     // ✅ Reply via invoke so main-process ipcMain.handle receives it.
     // channel 'agent:editor:query-results-response' is registered in AgentChannels.
-    window.electron.ipcRenderer.invoke('agent:editor:query-results-response', {
+    ipc.invoke('agent:editor:query-results-response', {
       requestId: opts.requestId,
       snapshot: reply,
     });
   };
 
-  window.electron.ipcRenderer.on(
+  const stopListening = ipc.on(
     'agent:editor:query-results-request',
     // The preload strips the IpcRendererEvent and passes only the args,
     // so the handler receives the payload object directly.
@@ -77,9 +78,6 @@ export function registerQueryResultBridge(): () => void {
 
   return () => {
     registered = false;
-    window.electron.ipcRenderer.removeListener(
-      'agent:editor:query-results-request',
-      handler as (...args: unknown[]) => void,
-    );
+    stopListening();
   };
 }

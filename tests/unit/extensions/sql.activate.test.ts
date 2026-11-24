@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron';
 import { ExtensionHostRenderer } from '../../../src/extensionHost/renderer/ExtensionHost.renderer';
+import { SavedQueriesService } from '../../../src/extensions/sql/renderer/savedQueries.service';
 import { ExtensionHostMain } from '../../../src/extensionHost/main/ExtensionHost.main';
 import {
   dashboardCards,
@@ -74,6 +75,15 @@ describe('SQL Editor extension', () => {
       path: '/app/sql',
       order: 300,
     });
+
+    // Its own code reaches the main process through `api.ipc`, bound when
+    // the extension is activated.
+    const invoke = jest
+      .spyOn(window.electron.ipcRenderer, 'invoke')
+      .mockResolvedValue([] as never);
+    await SavedQueriesService.list('c1');
+    expect(invoke).toHaveBeenCalledWith('savedQueries:list', 'c1');
+    invoke.mockRestore();
 
     await host.apply([description('disabled')]);
 

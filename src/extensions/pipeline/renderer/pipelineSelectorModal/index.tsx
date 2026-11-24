@@ -31,6 +31,7 @@ import {
   isFileUnpushed,
 } from '../../../../extensionApi/studio/gitService';
 import { path, toPosix } from '../../../../extensionApi/studio/path';
+import { ipc } from '../ipc';
 
 interface PipelineSelectorModalProps {
   isOpen: boolean;
@@ -167,16 +168,16 @@ export const PipelineSelectorModal: React.FC<PipelineSelectorModalProps> = ({
       }
 
       // Cloud mode: commit and push
-      await window.electron.ipcRenderer.invoke('git:add', {
+      await ipc.invoke('git:add', {
         repoPath: project.path,
         files: ['rosetta/pipelines/pipeline.yml'],
       });
-      await window.electron.ipcRenderer.invoke('git:commit', {
+      await ipc.invoke('git:commit', {
         repoPath: project.path,
         message: 'chore: add default pipeline configuration',
       });
       try {
-        await window.electron.ipcRenderer.invoke('git:push', {
+        await ipc.invoke('git:push', {
           repoPath: project.path,
         });
       } catch {

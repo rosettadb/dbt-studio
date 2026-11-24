@@ -25,12 +25,16 @@ import {
   PipelineProjectChoiceDialog,
   pipelineDashboardCard,
 } from './PipelineHomeContributions';
+import { ipc } from './ipc';
 
 /**
  * UI half of the Pipelines extension: everything the pipeline tool adds to
  * Studio's screens.
  */
 const activate = (api: ExtensionRendererApi): void => {
+  // The extension's own code reaches the main process through `api.ipc`.
+  ipc.bind(api.ipc);
+
   // State of the local runner, around the whole app: the pipeline view, the
   // run dialogs and the runner logs panel all read it.
   api.app.addProvider({ id: 'pipeline.runner', Component: RunnerProvider });

@@ -1,11 +1,9 @@
 import { SavedQuery } from '../../../extensionApi/studio/types';
+import { ipc } from './ipc';
 
 export class SavedQueriesService {
   static async list(connectionId: string): Promise<SavedQuery[]> {
-    return window.electron.ipcRenderer.invoke(
-      'savedQueries:list',
-      connectionId,
-    );
+    return ipc.invoke('savedQueries:list', connectionId);
   }
 
   static async create(
@@ -13,7 +11,7 @@ export class SavedQueriesService {
     name: string,
     query: string,
   ): Promise<SavedQuery> {
-    return window.electron.ipcRenderer.invoke('savedQueries:create', {
+    return ipc.invoke('savedQueries:create', {
       connectionId,
       name,
       query,
@@ -25,7 +23,7 @@ export class SavedQueriesService {
     queryId: string,
     updates: { name?: string; query?: string },
   ): Promise<SavedQuery> {
-    return window.electron.ipcRenderer.invoke('savedQueries:update', {
+    return ipc.invoke('savedQueries:update', {
       connectionId,
       queryId,
       updates,
@@ -33,7 +31,7 @@ export class SavedQueriesService {
   }
 
   static async delete(connectionId: string, queryId: string): Promise<void> {
-    return window.electron.ipcRenderer.invoke('savedQueries:delete', {
+    return ipc.invoke('savedQueries:delete', {
       connectionId,
       queryId,
     });

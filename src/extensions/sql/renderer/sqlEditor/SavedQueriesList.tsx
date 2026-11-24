@@ -35,6 +35,7 @@ import {
   useCreateSavedQuery,
   useUpdateSavedQuery,
 } from '../savedQueries.controller';
+import { ipc } from '../ipc';
 
 interface SavedQueriesListProps {
   connectionId: string | undefined;
@@ -139,16 +140,13 @@ export const SavedQueriesList: React.FC<SavedQueriesListProps> = ({
     if (!connectionId) return;
 
     try {
-      const result = await window.electron.ipcRenderer.invoke(
-        'dialog:showOpenDialog',
-        {
-          properties: ['openFile', 'multiSelections'],
-          filters: [{ name: 'SQL Files', extensions: ['sql'] }],
-        },
-      );
+      const result = await ipc.invoke('dialog:showOpenDialog', {
+        properties: ['openFile', 'multiSelections'],
+        filters: [{ name: 'SQL Files', extensions: ['sql'] }],
+      });
 
       if (!result.canceled && result.filePaths && result.filePaths.length > 0) {
-        const fileContents = await window.electron.ipcRenderer.invoke(
+        const fileContents = await ipc.invoke(
           'utils:getFileContentList',
           result.filePaths,
         );

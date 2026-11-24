@@ -1,3 +1,5 @@
+import { ipc } from './ipc';
+
 type AnalyticsBridgeRequestPayload = {
   requestId: string;
   conversationId: number;
@@ -40,23 +42,17 @@ export const registerAnalyticsEditorBridge = (
 
     try {
       const markdownContent = handlers.getContent();
-      await window.electron.ipcRenderer.invoke(
-        'agent:analytics:read-response',
-        {
-          requestId: payload.requestId,
-          success: true,
-          markdownContent,
-        },
-      );
+      await ipc.invoke('agent:analytics:read-response', {
+        requestId: payload.requestId,
+        success: true,
+        markdownContent,
+      });
     } catch (error) {
-      await window.electron.ipcRenderer.invoke(
-        'agent:analytics:read-response',
-        {
-          requestId: payload.requestId,
-          success: false,
-          error: getErrorMessage(error),
-        },
-      );
+      await ipc.invoke('agent:analytics:read-response', {
+        requestId: payload.requestId,
+        success: false,
+        error: getErrorMessage(error),
+      });
     }
   };
 
@@ -65,24 +61,18 @@ export const registerAnalyticsEditorBridge = (
 
     try {
       await handlers.setContent(payload.markdownContent ?? '');
-      await window.electron.ipcRenderer.invoke(
-        'agent:analytics:update-response',
-        {
-          requestId: payload.requestId,
-          success: true,
-          applied: true,
-        },
-      );
+      await ipc.invoke('agent:analytics:update-response', {
+        requestId: payload.requestId,
+        success: true,
+        applied: true,
+      });
     } catch (error) {
-      await window.electron.ipcRenderer.invoke(
-        'agent:analytics:update-response',
-        {
-          requestId: payload.requestId,
-          success: false,
-          applied: false,
-          error: getErrorMessage(error),
-        },
-      );
+      await ipc.invoke('agent:analytics:update-response', {
+        requestId: payload.requestId,
+        success: false,
+        applied: false,
+        error: getErrorMessage(error),
+      });
     }
   };
 
@@ -91,12 +81,12 @@ export const registerAnalyticsEditorBridge = (
 
     try {
       await handlers.runQueries();
-      await window.electron.ipcRenderer.invoke('agent:analytics:run-response', {
+      await ipc.invoke('agent:analytics:run-response', {
         requestId: payload.requestId,
         success: true,
       });
     } catch (error) {
-      await window.electron.ipcRenderer.invoke('agent:analytics:run-response', {
+      await ipc.invoke('agent:analytics:run-response', {
         requestId: payload.requestId,
         success: false,
         error: getErrorMessage(error),
@@ -109,39 +99,24 @@ export const registerAnalyticsEditorBridge = (
 
     try {
       const results = handlers.getResults();
-      await window.electron.ipcRenderer.invoke(
-        'agent:analytics:query-results-response',
-        {
-          requestId: payload.requestId,
-          success: true,
-          ...results,
-        },
-      );
+      await ipc.invoke('agent:analytics:query-results-response', {
+        requestId: payload.requestId,
+        success: true,
+        ...results,
+      });
     } catch (error) {
-      await window.electron.ipcRenderer.invoke(
-        'agent:analytics:query-results-response',
-        {
-          requestId: payload.requestId,
-          success: false,
-          error: getErrorMessage(error),
-        },
-      );
+      await ipc.invoke('agent:analytics:query-results-response', {
+        requestId: payload.requestId,
+        success: false,
+        error: getErrorMessage(error),
+      });
     }
   };
 
-  const unsubRead = window.electron.ipcRenderer.on(
-    'agent:analytics:read-request',
-    onReadRequest,
-  );
-  const unsubUpdate = window.electron.ipcRenderer.on(
-    'agent:analytics:update-request',
-    onUpdateRequest,
-  );
-  const unsubRun = window.electron.ipcRenderer.on(
-    'agent:analytics:run-request',
-    onRunRequest,
-  );
-  const unsubResults = window.electron.ipcRenderer.on(
+  const unsubRead = ipc.on('agent:analytics:read-request', onReadRequest);
+  const unsubUpdate = ipc.on('agent:analytics:update-request', onUpdateRequest);
+  const unsubRun = ipc.on('agent:analytics:run-request', onRunRequest);
+  const unsubResults = ipc.on(
     'agent:analytics:query-results-request',
     onResultsRequest,
   );

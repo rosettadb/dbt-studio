@@ -1,3 +1,5 @@
+import { ipc } from './ipc';
+
 type MonacoReadRequestPayload = {
   requestId: string;
   conversationId: number;
@@ -45,13 +47,13 @@ export const registerSqlEditorBridge = (
 
     try {
       const content = handlers.getContent();
-      await window.electron.ipcRenderer.invoke('agent:editor:read-response', {
+      await ipc.invoke('agent:editor:read-response', {
         requestId: payload.requestId,
         success: true,
         content,
       });
     } catch (error) {
-      await window.electron.ipcRenderer.invoke('agent:editor:read-response', {
+      await ipc.invoke('agent:editor:read-response', {
         requestId: payload.requestId,
         success: false,
         error: (error as Error).message,
@@ -69,13 +71,13 @@ export const registerSqlEditorBridge = (
 
     try {
       handlers.setContent(payload.content ?? '');
-      await window.electron.ipcRenderer.invoke('agent:editor:update-response', {
+      await ipc.invoke('agent:editor:update-response', {
         requestId: payload.requestId,
         success: true,
         applied: true,
       });
     } catch (error) {
-      await window.electron.ipcRenderer.invoke('agent:editor:update-response', {
+      await ipc.invoke('agent:editor:update-response', {
         requestId: payload.requestId,
         success: false,
         applied: false,
@@ -102,22 +104,10 @@ export const registerSqlEditorBridge = (
     }
   };
 
-  const unsubRead = window.electron.ipcRenderer.on(
-    'agent:editor:read-request',
-    onReadRequest,
-  );
-  const unsubUpdate = window.electron.ipcRenderer.on(
-    'agent:editor:update-request',
-    onUpdateRequest,
-  );
-  const unsubQueryResult = window.electron.ipcRenderer.on(
-    'agent:editor:query-result',
-    onQueryResult,
-  );
-  const unsubRunQuery = window.electron.ipcRenderer.on(
-    'agent:editor:run-query',
-    onRunQuery,
-  );
+  const unsubRead = ipc.on('agent:editor:read-request', onReadRequest);
+  const unsubUpdate = ipc.on('agent:editor:update-request', onUpdateRequest);
+  const unsubQueryResult = ipc.on('agent:editor:query-result', onQueryResult);
+  const unsubRunQuery = ipc.on('agent:editor:run-query', onRunQuery);
 
   return () => {
     if (typeof unsubRead === 'function') unsubRead();

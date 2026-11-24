@@ -33,6 +33,7 @@ import { QueryResultVisualization } from '../../../../extensionApi/studio/queryR
 import { CellOutput } from '../../../../extensionApi/studio/notebooksTypes';
 import { CustomTable } from '../../../../extensionApi/studio/customTable';
 import { useFetchCellPage } from '../notebooks.controller';
+import { ipc } from '../ipc';
 
 const MAX_CHART_ROWS = 1000;
 
@@ -224,14 +225,11 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
       // DuckLake: Full dataset export via COPY TO
       const instanceId = connectionId.replace('ducklake-', '');
       try {
-        const result = await window.electron.ipcRenderer.invoke(
-          'dialog:showSaveDialog',
-          {
-            title: 'Export to JSON (full dataset)',
-            defaultPath: 'query_results.json',
-            filters: [{ name: 'JSON Files', extensions: ['json'] }],
-          },
-        );
+        const result = await ipc.invoke('dialog:showSaveDialog', {
+          title: 'Export to JSON (full dataset)',
+          defaultPath: 'query_results.json',
+          filters: [{ name: 'JSON Files', extensions: ['json'] }],
+        });
 
         if (result.canceled || !result.filePath) return;
 
@@ -240,7 +238,7 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
         const normalizedSql = normalizeSqlForCopy(sql);
         const copyQuery = `COPY (${normalizedSql}) TO '${escapedPath}' (FORMAT JSON)`;
 
-        await window.electron.ipcRenderer.invoke('ducklake:query:execute', {
+        await ipc.invoke('ducklake:query:execute', {
           instanceId,
           query: copyQuery,
         });
@@ -279,14 +277,11 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
       // DuckLake: Full dataset export via COPY TO
       const instanceId = connectionId.replace('ducklake-', '');
       try {
-        const result = await window.electron.ipcRenderer.invoke(
-          'dialog:showSaveDialog',
-          {
-            title: 'Export to CSV (full dataset)',
-            defaultPath: 'query_results.csv',
-            filters: [{ name: 'CSV Files', extensions: ['csv'] }],
-          },
-        );
+        const result = await ipc.invoke('dialog:showSaveDialog', {
+          title: 'Export to CSV (full dataset)',
+          defaultPath: 'query_results.csv',
+          filters: [{ name: 'CSV Files', extensions: ['csv'] }],
+        });
 
         if (result.canceled || !result.filePath) return;
 
@@ -295,7 +290,7 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
         const normalizedSql = normalizeSqlForCopy(sql);
         const copyQuery = `COPY (${normalizedSql}) TO '${escapedPath}' (FORMAT CSV, HEADER)`;
 
-        await window.electron.ipcRenderer.invoke('ducklake:query:execute', {
+        await ipc.invoke('ducklake:query:execute', {
           instanceId,
           query: copyQuery,
         });
@@ -341,14 +336,11 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
     handleExportMenuClose();
 
     try {
-      const result = await window.electron.ipcRenderer.invoke(
-        'dialog:showSaveDialog',
-        {
-          title: 'Export to Parquet (full dataset)',
-          defaultPath: 'query_results.parquet',
-          filters: [{ name: 'Parquet Files', extensions: ['parquet'] }],
-        },
-      );
+      const result = await ipc.invoke('dialog:showSaveDialog', {
+        title: 'Export to Parquet (full dataset)',
+        defaultPath: 'query_results.parquet',
+        filters: [{ name: 'Parquet Files', extensions: ['parquet'] }],
+      });
 
       if (result.canceled || !result.filePath) return;
 
@@ -361,13 +353,13 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
         const normalizedSql = normalizeSqlForCopy(sql);
         const copyQuery = `COPY (${normalizedSql}) TO '${escapedPath}' (FORMAT PARQUET)`;
 
-        await window.electron.ipcRenderer.invoke('ducklake:query:execute', {
+        await ipc.invoke('ducklake:query:execute', {
           instanceId,
           query: copyQuery,
         });
       } else {
         // Regular DB: Use connector export
-        await window.electron.ipcRenderer.invoke('connector:executeQuery', {
+        await ipc.invoke('connector:executeQuery', {
           connectionId,
           query: `COPY (${normalizeSqlForCopy(sql)}) TO '${escapeSqlLiteral(result.filePath)}' (FORMAT PARQUET)`,
         });
@@ -427,17 +419,14 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
             ctx.drawImage(img, 0, 0);
             const dataUrl = canvas.toDataURL('image/png');
             const base64data = dataUrl.split(',')[1];
-            const result = await window.electron.ipcRenderer.invoke(
-              'utils:saveBase64File',
-              {
-                data: base64data,
-                options: {
-                  title: 'Export Chart as PNG',
-                  defaultPath: 'chart.png',
-                  filters: [{ name: 'PNG Images', extensions: ['png'] }],
-                },
+            const result = await ipc.invoke('utils:saveBase64File', {
+              data: base64data,
+              options: {
+                title: 'Export Chart as PNG',
+                defaultPath: 'chart.png',
+                filters: [{ name: 'PNG Images', extensions: ['png'] }],
               },
-            );
+            });
             if (result.canceled) {
               resolve();
               return;

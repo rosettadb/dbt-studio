@@ -4,12 +4,16 @@ import type {
 } from '../../../extensionApi/renderer';
 import SqlScreen from './SqlScreen';
 import { sqlDashboardCard, sqlNavigationItem } from './contributions';
+import { ipc } from './ipc';
 
 /**
  * UI half of the SQL Editor extension: the SQL Editor screen with its
  * sidebar entry and Home card.
  */
 const activate = (api: ExtensionRendererApi): void => {
+  // The extension's own code reaches the main process through `api.ipc`.
+  ipc.bind(api.ipc);
+
   api.navigation.addItem(sqlNavigationItem);
 
   api.screens.add({

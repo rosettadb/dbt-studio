@@ -1,3 +1,5 @@
+import { ipc } from './ipc';
+
 export interface RemotePipelineTemplate {
   id: string;
   label: string;
@@ -14,16 +16,13 @@ export interface RemotePipelineTemplate {
 export const listPipelineTemplates = async (): Promise<
   RemotePipelineTemplate[]
 > => {
-  return window.electron.ipcRenderer.invoke('pipeline-templates:list');
+  return ipc.invoke('pipeline-templates:list');
 };
 
 export const fetchPipelineTemplateContent = async (
   url: string,
 ): Promise<string> => {
-  return window.electron.ipcRenderer.invoke(
-    'pipeline-templates:fetch-content',
-    url,
-  );
+  return ipc.invoke('pipeline-templates:fetch-content', url);
 };
 
 export const applyZipTemplate = async (
@@ -31,10 +30,5 @@ export const applyZipTemplate = async (
   url: string,
   mode: 'check' | 'replace' | 'skip',
 ): Promise<string[]> => {
-  return window.electron.ipcRenderer.invoke(
-    'pipeline-templates:apply-zip',
-    projectId,
-    url,
-    mode,
-  );
+  return ipc.invoke('pipeline-templates:apply-zip', projectId, url, mode);
 };

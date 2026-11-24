@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron';
 import { ExtensionHostRenderer } from '../../../src/extensionHost/renderer/ExtensionHost.renderer';
+import { AnalyticsPagesService } from '../../../src/extensions/analytics/renderer/analyticsPages.service';
 import { ExtensionHostMain } from '../../../src/extensionHost/main/ExtensionHost.main';
 import {
   dashboardCards,
@@ -92,6 +93,15 @@ describe('Analytics extension', () => {
       // Fourth: after the SQL Editor (300), before Data Lake (500)
       order: 400,
     });
+
+    // Its own code reaches the main process through `api.ipc`, bound when
+    // the extension is activated.
+    const invoke = jest
+      .spyOn(window.electron.ipcRenderer, 'invoke')
+      .mockResolvedValue([] as never);
+    await AnalyticsPagesService.list('c1');
+    expect(invoke).toHaveBeenCalledWith('analyticsPages:list', 'c1');
+    invoke.mockRestore();
 
     await host.apply([description('disabled')]);
 

@@ -26,6 +26,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
 import type { PluginWidget, PluginWidgetType } from '../shared/pipelineShared';
+import { ipc } from './ipc';
 
 // One form field of a pipeline step, drawn from a widget of the plugin's
 // manifest entry. A step value is whatever the pipeline file holds; every
@@ -390,14 +391,11 @@ const PathWidget: React.FC<StepWidgetProps> = ({
 }) => {
   const isDirectory = widget.type === 'directory';
   const browse = async () => {
-    const result = await window.electron.ipcRenderer.invoke(
-      'dialog:showOpenDialog',
-      {
-        properties: [isDirectory ? 'openDirectory' : 'openFile'],
-        title: widget.label,
-        defaultPath: projectPath,
-      },
-    );
+    const result = await ipc.invoke('dialog:showOpenDialog', {
+      properties: [isDirectory ? 'openDirectory' : 'openFile'],
+      title: widget.label,
+      defaultPath: projectPath,
+    });
     if (result?.canceled || !result?.filePaths?.length) return;
     onChange(toProjectRelativePath(result.filePaths[0], projectPath));
   };

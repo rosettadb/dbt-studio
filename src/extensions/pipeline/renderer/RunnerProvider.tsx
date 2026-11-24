@@ -10,6 +10,7 @@ import { getConnectionUi } from '../../../extensionApi/studio/connectionsRegistr
 import { useSecureStorage } from '../../../extensionApi/studio/hooks';
 import { useSetConnectionEnvVariable } from '../../../extensionApi/studio/controllers';
 import { materializeSnowflakeToken } from '../../../extensionApi/studio/connectorsService';
+import { ipc } from './ipc';
 
 export interface RunnerLogEntry {
   message: string;
@@ -137,20 +138,11 @@ export const RunnerProvider: React.FC<RunnerProviderProps> = ({ children }) => {
       }
     };
 
-    const unsubOutput = window.electron.ipcRenderer.on(
-      'runner:output',
-      handleOutput,
-    );
-    const unsubError = window.electron.ipcRenderer.on(
-      'runner:error',
-      handleError,
-    );
-    const unsubStarted = window.electron.ipcRenderer.on(
-      'runner:started',
-      handleStarted,
-    );
-    const unsubExit = window.electron.ipcRenderer.on('runner:exit', handleExit);
-    const unsubDone = window.electron.ipcRenderer.on('runner:done', handleDone);
+    const unsubOutput = ipc.on('runner:output', handleOutput);
+    const unsubError = ipc.on('runner:error', handleError);
+    const unsubStarted = ipc.on('runner:started', handleStarted);
+    const unsubExit = ipc.on('runner:exit', handleExit);
+    const unsubDone = ipc.on('runner:done', handleDone);
 
     return () => {
       if (typeof unsubOutput === 'function') unsubOutput();
@@ -256,7 +248,7 @@ export const RunnerProvider: React.FC<RunnerProviderProps> = ({ children }) => {
           );
         }
         await setupConnectionEnv(params.connectionName, params.connType);
-        return await window.electron.ipcRenderer.invoke('runner:run', {
+        return await ipc.invoke('runner:run', {
           taskId: buildRunnerTaskId(params.workspaceDir, params.pipelineFile),
           workspaceDir: params.workspaceDir,
           pipelineFile: params.pipelineFile,
@@ -275,7 +267,7 @@ export const RunnerProvider: React.FC<RunnerProviderProps> = ({ children }) => {
   const stop = useCallback(async () => {
     setState((prev) => ({ ...prev, status: 'stopping' }));
     try {
-      return await window.electron.ipcRenderer.invoke('runner:stop');
+      return await ipc.invoke('runner:stop');
     } catch (error) {
       setState((prev) => ({ ...prev, status: 'stopped' }));
       return {

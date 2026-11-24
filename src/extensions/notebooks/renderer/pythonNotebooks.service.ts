@@ -1,7 +1,7 @@
 /**
  * Python Notebooks Service (renderer)
  *
- * Thin wrappers over window.electron.ipcRenderer for Python notebooks, their
+ * Thin wrappers over the extension's IPC (`api.ipc`) for Python notebooks, their
  * environments, kernels and the managed interpreter registry.
  *
  * FE-03: every `ipcRenderer.on` subscription lives here and returns an
@@ -22,8 +22,11 @@ import type {
   PythonRuntimeInstallEvent,
   UpdatePythonNotebookInput,
 } from '../../../extensionApi/studio/pythonNotebooksTypes';
+import { ipc } from './ipc';
 
-const { ipcRenderer } = window.electron;
+// `api.ipc` of the extension (see ./ipc); the name is kept so the calls
+// below read as before.
+const ipcRenderer = ipc;
 
 export const pythonRuntimesService = {
   list: (): Promise<PythonRuntimeInfo[]> =>

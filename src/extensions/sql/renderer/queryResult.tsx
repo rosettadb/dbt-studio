@@ -33,6 +33,7 @@ import { QueryResultVisualization } from '../../../extensionApi/studio/queryResu
 import { CustomTable } from '../../../extensionApi/studio/customTable';
 import { underscoreToTitleCase } from '../../../extensionApi/studio/helpersUtils';
 import { DuckLakeService } from '../../../extensionApi/studio/duckLakeService';
+import { ipc } from './ipc';
 
 const SuccessContainer = styled(Box)(({ theme }) => ({
   backgroundColor: theme.palette.background.paper,
@@ -261,27 +262,21 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
     if (isDuckLake && exportContext?.duckLakeInstanceId && originalSql) {
       handleExportMenuClose();
       try {
-        const result = await window.electron.ipcRenderer.invoke(
-          'dialog:showSaveDialog',
-          {
-            title: 'Export to JSON (full dataset)',
-            defaultPath: 'query_results.json',
-            filters: [{ name: 'JSON Files', extensions: ['json'] }],
-          },
-        );
+        const result = await ipc.invoke('dialog:showSaveDialog', {
+          title: 'Export to JSON (full dataset)',
+          defaultPath: 'query_results.json',
+          filters: [{ name: 'JSON Files', extensions: ['json'] }],
+        });
         if (result.canceled || !result.filePath) return;
 
         setIsExporting(true);
         const escapedPath = result.filePath.replace(/'/g, "''");
         // DuckDB FORMAT JSON writes NDJSON (one JSON object per line)
         const exportQuery = `COPY (${originalSql}) TO '${escapedPath}' (FORMAT JSON)`;
-        const exportResult = await window.electron.ipcRenderer.invoke(
-          'ducklake:query:execute',
-          {
-            instanceId: exportContext.duckLakeInstanceId,
-            query: exportQuery,
-          },
-        );
+        const exportResult = await ipc.invoke('ducklake:query:execute', {
+          instanceId: exportContext.duckLakeInstanceId,
+          query: exportQuery,
+        });
         if (exportResult?.error) {
           throw new Error(exportResult.error);
         }
@@ -316,27 +311,21 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
     if (isDuckLake && exportContext?.duckLakeInstanceId && originalSql) {
       handleExportMenuClose();
       try {
-        const result = await window.electron.ipcRenderer.invoke(
-          'dialog:showSaveDialog',
-          {
-            title: 'Export to CSV (full dataset)',
-            defaultPath: 'query_results.csv',
-            filters: [{ name: 'CSV Files', extensions: ['csv'] }],
-          },
-        );
+        const result = await ipc.invoke('dialog:showSaveDialog', {
+          title: 'Export to CSV (full dataset)',
+          defaultPath: 'query_results.csv',
+          filters: [{ name: 'CSV Files', extensions: ['csv'] }],
+        });
         if (result.canceled || !result.filePath) return;
 
         setIsExporting(true);
         const escapedPath = result.filePath.replace(/'/g, "''");
         // HEADER (no value) is the correct DuckDB COPY CSV syntax for including header row
         const exportQuery = `COPY (${originalSql}) TO '${escapedPath}' (FORMAT CSV, HEADER)`;
-        const exportResult = await window.electron.ipcRenderer.invoke(
-          'ducklake:query:execute',
-          {
-            instanceId: exportContext.duckLakeInstanceId,
-            query: exportQuery,
-          },
-        );
+        const exportResult = await ipc.invoke('ducklake:query:execute', {
+          instanceId: exportContext.duckLakeInstanceId,
+          query: exportQuery,
+        });
         if (exportResult?.error) {
           throw new Error(exportResult.error);
         }
@@ -386,14 +375,11 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
     if (!canExportParquet || !resolvedOriginalSql) return;
 
     try {
-      const result = await window.electron.ipcRenderer.invoke(
-        'dialog:showSaveDialog',
-        {
-          title: 'Export to Parquet',
-          defaultPath: 'query_results.parquet',
-          filters: [{ name: 'Parquet Files', extensions: ['parquet'] }],
-        },
-      );
+      const result = await ipc.invoke('dialog:showSaveDialog', {
+        title: 'Export to Parquet',
+        defaultPath: 'query_results.parquet',
+        filters: [{ name: 'Parquet Files', extensions: ['parquet'] }],
+      });
 
       if (result.canceled || !result.filePath) {
         handleExportMenuClose();
@@ -411,7 +397,7 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
         isDuckLakeType(exportContext.connectionType) &&
         exportContext.duckLakeInstanceId
       ) {
-        const duckLakeExportResult = await window.electron.ipcRenderer.invoke(
+        const duckLakeExportResult = await ipc.invoke(
           'ducklake:query:execute',
           {
             instanceId: exportContext.duckLakeInstanceId,
@@ -426,13 +412,10 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
         !isDuckLakeType(exportContext.connectionType) &&
         exportContext.connectionId
       ) {
-        const duckDbExportResult = await window.electron.ipcRenderer.invoke(
-          'connector:executeQuery',
-          {
-            connectionId: exportContext.connectionId,
-            query: exportQuery,
-          },
-        );
+        const duckDbExportResult = await ipc.invoke('connector:executeQuery', {
+          connectionId: exportContext.connectionId,
+          query: exportQuery,
+        });
         if (duckDbExportResult?.error) {
           throw new Error(duckDbExportResult.error);
         }
@@ -503,17 +486,14 @@ export const QueryResult: React.FC<Props> = ({ results, exportContext }) => {
             const base64data = dataUrl.split(',')[1];
             // eslint-disable-next-line no-console
             console.log('[PNG Export] Canvas data URL length:', dataUrl.length);
-            const result = await window.electron.ipcRenderer.invoke(
-              'utils:saveBase64File',
-              {
-                data: base64data,
-                options: {
-                  title: 'Export Chart as PNG',
-                  defaultPath: 'chart.png',
-                  filters: [{ name: 'PNG Images', extensions: ['png'] }],
-                },
+            const result = await ipc.invoke('utils:saveBase64File', {
+              data: base64data,
+              options: {
+                title: 'Export Chart as PNG',
+                defaultPath: 'chart.png',
+                filters: [{ name: 'PNG Images', extensions: ['png'] }],
               },
-            );
+            });
             if (result.canceled) {
               resolve();
               return;

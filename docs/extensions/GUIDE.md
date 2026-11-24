@@ -102,6 +102,22 @@ A broken extension never stops Studio. It is listed as *Failed* or *Cannot start
 
 Every `add...` returns `{ dispose() }` if you want to remove something yourself before the extension stops.
 
+**Calling the main half from code outside `activate`.** Service files and components do not have `api`. Create one object for the extension, bind it in `activate`, and call it everywhere else:
+
+```ts
+// ipc.ts
+export const ipc = createExtensionIpc('My extension');   // from '@rosetta/studio-api'
+
+// index.ts
+activate(api) { ipc.bind(api.ipc); /* ... */ }
+
+// anywhere in the extension
+const pages = await ipc.invoke('myext:list', connectionId);
+const stop = ipc.on('myext:progress', (progress) => { /* ... */ });   // stop() when done
+```
+
+A listener added this way is removed when the extension is switched off, also when the code never called `stop()`. Studio's own extensions do all their backend calls this way (`src/extensions/sql/renderer/ipc.ts`).
+
 The types are in `src/extensionApi/renderer.ts`.
 
 ### 4.2 Sidebar item and screen

@@ -69,6 +69,8 @@ export {
   useSlot,
   useWorkspaceTabs,
 } from '../extensionHost/renderer/contributions.renderer';
+export { createExtensionIpc } from '../extensionHost/renderer/extensionIpc.renderer';
+export type { ExtensionIpc } from '../extensionHost/renderer/extensionIpc.renderer';
 
 /** An entry in the activity bar on the left. */
 export interface NavigationItem {

@@ -3,13 +3,11 @@ import {
   NewAnalyticsPage,
   UpdateAnalyticsPage,
 } from '../../../extensionApi/studio/analyticsPagesTypes';
+import { ipc } from './ipc';
 
 export class AnalyticsPagesService {
   static async list(connectionId: string): Promise<AnalyticsPage[]> {
-    return window.electron.ipcRenderer.invoke(
-      'analyticsPages:list',
-      connectionId,
-    );
+    return ipc.invoke('analyticsPages:list', connectionId);
   }
 
   /**
@@ -20,7 +18,7 @@ export class AnalyticsPagesService {
     connectionId: string,
     pageId: string,
   ): Promise<AnalyticsPage> {
-    return window.electron.ipcRenderer.invoke('analyticsPages:get', {
+    return ipc.invoke('analyticsPages:get', {
       connectionId,
       pageId,
     });
@@ -30,7 +28,7 @@ export class AnalyticsPagesService {
     connectionId: string,
     data: NewAnalyticsPage,
   ): Promise<AnalyticsPage> {
-    return window.electron.ipcRenderer.invoke('analyticsPages:create', {
+    return ipc.invoke('analyticsPages:create', {
       connectionId,
       data,
     });
@@ -41,7 +39,7 @@ export class AnalyticsPagesService {
     pageId: string,
     updates: UpdateAnalyticsPage,
   ): Promise<AnalyticsPage> {
-    return window.electron.ipcRenderer.invoke('analyticsPages:update', {
+    return ipc.invoke('analyticsPages:update', {
       connectionId,
       pageId,
       updates,
@@ -49,7 +47,7 @@ export class AnalyticsPagesService {
   }
 
   static async delete(connectionId: string, pageId: string): Promise<void> {
-    return window.electron.ipcRenderer.invoke('analyticsPages:delete', {
+    return ipc.invoke('analyticsPages:delete', {
       connectionId,
       pageId,
     });

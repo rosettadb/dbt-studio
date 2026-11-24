@@ -14,6 +14,7 @@ import type {
   PythonNotebookAgentRequest,
   PythonNotebookAgentResponse,
 } from '../../../extensionApi/studio/pythonNotebooksTypes';
+import { ipc } from './ipc';
 
 export const OTHER_NOTEBOOK_ERROR =
   'This chat belongs to another notebook. Open it to continue.';
@@ -22,10 +23,7 @@ const registry = new Map<string, PythonNotebookAgentHandlers>();
 let unsubscribe: (() => void) | null = null;
 
 const respond = (response: PythonNotebookAgentResponse) =>
-  window.electron.ipcRenderer.invoke(
-    'agent:python-notebook:response',
-    response,
-  );
+  ipc.invoke('agent:python-notebook:response', response);
 
 async function handleRequest(request: PythonNotebookAgentRequest) {
   try {
@@ -56,7 +54,7 @@ export function registerPythonNotebookBridge(
 ): () => void {
   registry.set(notebookId, handlers);
   if (!unsubscribe) {
-    const unsub = window.electron.ipcRenderer.on(
+    const unsub = ipc.on(
       'agent:python-notebook:request',
       (...args: unknown[]) => {
         handleRequest(args[0] as PythonNotebookAgentRequest).catch(

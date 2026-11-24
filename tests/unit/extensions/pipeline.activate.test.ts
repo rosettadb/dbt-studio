@@ -1,4 +1,5 @@
 import { ExtensionHostRenderer } from '../../../src/extensionHost/renderer/ExtensionHost.renderer';
+import { listPipelineTemplates } from '../../../src/extensions/pipeline/renderer/pipelineTemplates.service';
 import {
   appProviders,
   dashboardCards,
@@ -91,6 +92,15 @@ describe('Pipelines extension', () => {
     // The command the Home card hands to the project list
     expect(runCommand('pipeline.create')).toBe(true);
     expect(pipelineRunStore.getState().isCreateOpen).toBe(true);
+
+    // Its own code reaches the main process through `api.ipc`, bound when
+    // the extension is activated.
+    const invoke = jest
+      .spyOn(window.electron.ipcRenderer, 'invoke')
+      .mockResolvedValue([] as never);
+    await listPipelineTemplates();
+    expect(invoke).toHaveBeenCalledWith('pipeline-templates:list');
+    invoke.mockRestore();
 
     await host.apply([description('disabled')]);
 

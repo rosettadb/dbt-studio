@@ -7,12 +7,16 @@ import {
   notebooksDashboardCard,
   notebooksNavigationItem,
 } from './contributions';
+import { ipc } from './ipc';
 
 /**
  * UI half of the Notebooks extension: the Notebooks screen with its sidebar
  * entry and Home card.
  */
 const activate = (api: ExtensionRendererApi): void => {
+  // The extension's own code reaches the main process through `api.ipc`.
+  ipc.bind(api.ipc);
+
   api.navigation.addItem(notebooksNavigationItem);
 
   api.screens.add({

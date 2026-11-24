@@ -85,6 +85,7 @@ import {
   generateDuckLakeCompletions,
   mergeCompletions,
 } from '../../../extensionApi/studio/duckLakeCompletions';
+import { ipc } from './ipc';
 
 const QUERY_HISTORY_KEY = 'query_history_key';
 const EMPTY_ARRAY: Table[] = [];
@@ -663,7 +664,7 @@ const Sql = () => {
       // Push result to main process so studio_sql_get_agent_run_result can read it.
       // Include pushedAt so the main process can detect freshness vs. stale pushes.
       const pushedAt = Date.now();
-      window.electron.ipcRenderer.invoke('agent:editor:query-run-result', {
+      ipc.invoke('agent:editor:query-run-result', {
         snapshot,
         pushedAt,
       });
@@ -706,7 +707,7 @@ const Sql = () => {
       // produce a false 'Unknown error' and race with the real execution result.
       if (error != null) {
         const pushedAt = Date.now();
-        window.electron.ipcRenderer.invoke('agent:editor:query-run-result', {
+        ipc.invoke('agent:editor:query-run-result', {
           snapshot: errorSnapshot,
           pushedAt,
         });
