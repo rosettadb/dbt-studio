@@ -15,6 +15,8 @@ import { installIpcErrorHandling } from '../../main/utils/ipcErrorHandler';
 import { builtinMainExtensions } from './builtinExtensions.main';
 // Studio's own databases, registered before any extension adds one.
 import '../../connections/registry.main';
+import * as studioApiShared from '../../extensionApi/shared';
+import * as studioApiMain from '../../extensionApi/studioMain';
 import {
   getExtensionsRoot,
   stageInstall,
@@ -100,6 +102,12 @@ export const startExtensionHost = (): Promise<void> => {
   if (!startPromise) {
     // Handlers that extensions register must report errors like Studio's.
     installIpcErrorHandling();
+    // What an extension reads as `api.studio`: the same pieces the internal
+    // extensions import.
+    extensionHost.setStudioApi(() => ({
+      ...studioApiShared,
+      ...studioApiMain,
+    }));
     builtinMainExtensions.forEach(({ manifest, module }) =>
       extensionHost.registerBuiltin(manifest, module),
     );

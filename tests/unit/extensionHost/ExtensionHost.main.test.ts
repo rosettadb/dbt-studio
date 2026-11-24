@@ -7,6 +7,7 @@ import type {
   ExtensionMainApi,
   ExtensionMainModule,
 } from '../../../src/extensionApi/main';
+import { getScreenAgent } from '../../../src/main/services/ai/agents/screenAgents';
 
 const manifest = (name: string, extra: Record<string, unknown> = {}) => ({
   name,
@@ -251,6 +252,66 @@ describe('main extension host', () => {
       expect(fs.existsSync(installedAt)).toBe(false);
       expect(stateOf(host, id)).toBeUndefined();
       expect(ipcMain.removeHandler).toHaveBeenCalledWith('hello:ping');
+    });
+
+    it("gives an installed extension Studio's own backend pieces as api.studio", async () => {
+      // An extension that is not compiled into Studio: plain CommonJS that
+      // builds the AI agent of its screen from what `api` hands it, with no
+      // import from Studio.
+      const source = path.join(userData, 'source', 'agent');
+      writeExtension(
+        source,
+        'agent',
+        `exports.activate = (api) => {
+          const { ToolLoopAgent, tool, composeAgentRuntime } = api.studio;
+          api.agents.add('acme', (base, context) => {
+            const tools = { acme_ping: tool({ description: 'ping' }) };
+            const runtime = composeAgentRuntime(base, 'You are the Acme agent.', tools);
+            return new ToolLoopAgent({ model: base.model, ...runtime, mode: context.toolMode });
+          });
+          return { pieces: Object.keys(api.studio).sort() };
+        };`,
+      );
+      const host = newHost();
+      // What the app gives the host at start-up (there: Studio's real pieces).
+      class FakeToolLoopAgent {
+        config: unknown;
+
+        constructor(config: unknown) {
+          this.config = config;
+        }
+      }
+      host.setStudioApi(() => ({
+        ToolLoopAgent: FakeToolLoopAgent,
+        tool: (definition: unknown) => definition,
+        composeAgentRuntime: (
+          _base: unknown,
+          instructions: string,
+          tools: unknown,
+        ) => ({ instructions, tools }),
+      }));
+      await host.start();
+
+      const id = await host.install(source);
+
+      expect(stateOf(host, id)).toMatchObject({ state: 'active' });
+      expect(host.getExports(id)).toEqual({
+        pieces: ['ToolLoopAgent', 'composeAgentRuntime', 'tool'],
+      });
+      const agent = await getScreenAgent('acme')?.(
+        { model: 'the model' } as any,
+        { toolMode: 'chat' } as any,
+      );
+      expect(agent).toBeInstanceOf(FakeToolLoopAgent);
+      expect(agent.config).toEqual({
+        model: 'the model',
+        instructions: 'You are the Acme agent.',
+        tools: { acme_ping: { description: 'ping' } },
+        mode: 'chat',
+      });
+
+      await host.uninstall(id);
+      expect(getScreenAgent('acme')).toBeUndefined();
     });
 
     it('finds extensions already in the folder at start', async () => {

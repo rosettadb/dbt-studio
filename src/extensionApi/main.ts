@@ -55,6 +55,17 @@ export type ExtensionConnection<Conn = any> = Omit<
   'descriptor'
 > & { descriptor: ExtensionConnectionDescriptor };
 
+/**
+ * Studio's own backend pieces, the same ones the extensions that ship with
+ * Studio are built from: the connection and settings services, the JSON
+ * store and the database, the agent runtime and the tool sets an agent can
+ * be given, Studio's copies of the AI SDK and zod, the install queue, the
+ * process adapter. The list is `src/extensionApi/studioMain/index.ts` plus
+ * `src/extensionApi/shared.ts`.
+ */
+export type StudioMainApi = typeof import('./studioMain') &
+  typeof import('./shared');
+
 export interface ExtensionMainIpc {
   /**
    * Answers `api.ipc.invoke(channel, ...args)` from the UI half. Channel
@@ -157,6 +168,12 @@ export interface ExtensionMainApi {
       listener: (connectionId: string) => Promise<void> | void,
     ) => Disposable;
   };
+  /**
+   * Studio's own backend pieces (see `StudioMainApi`). An installed
+   * extension reads them here; an extension that ships with Studio imports
+   * the same things from `src/extensionApi/studioMain/`.
+   */
+  readonly studio: StudioMainApi;
   /** A folder this extension may use for its own files. Created on demand. */
   readonly storagePath: string;
   readonly log: ExtensionLogger;

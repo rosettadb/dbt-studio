@@ -8,6 +8,7 @@
  * Not listed: `duckLakeService` (its export is already in `services`) and
  * the transitional `pipelineShared`.
  */
+export * from './analyticsPagesTypes';
 export * from './chartDataTransformer';
 export * from './chartRenderer';
 export * from './chat';
@@ -39,10 +40,21 @@ export * from './ipcClient';
 export * from './layout';
 export * from './modal';
 export * from './modals';
+// `CompletionItem` of a notebook is listed as NotebookCompletionItem: the
+// name is taken by the editor's completion item in './types'.
+export type {
+  CellOutput,
+  CompletionItem as NotebookCompletionItem,
+  Notebook,
+  NotebookCell,
+  NotebookImportPreview,
+  SchemaInfo,
+} from './notebooksTypes';
 export * from './path';
 export * from './projectTypes';
 export * from './projectsService';
 export * from './pythonMonoIcon';
+export * from './pythonNotebooksTypes';
 export * from './queryKeys';
 export * from './queryResultVisualization';
 export * from './refreshProjectFiles';
@@ -55,6 +67,7 @@ export * from './secureStorageService';
 export * from './services';
 export * from './settingsLayout';
 export * from './shimmer';
+export * from './sidebarIcons';
 export * from './sqlSchemaCompletions';
 export * from './sqlStatements';
 export * from './tabContextMenu';

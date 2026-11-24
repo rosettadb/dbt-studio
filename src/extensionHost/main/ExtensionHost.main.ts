@@ -125,6 +125,9 @@ export class ExtensionHostMain {
 
   private mainWindow: BrowserWindow | null = null;
 
+  /** What extensions get as `api.studio`; set by the app when it starts. */
+  private studioApi: (() => unknown) | null = null;
+
   private startPromise: Promise<void> | null = null;
 
   /** Serialises changes so two of them never interleave. */
@@ -161,6 +164,15 @@ export class ExtensionHostMain {
       liveEnabled: true,
       codeLoaded: true,
     });
+  }
+
+  /**
+   * Gives the host Studio's own backend pieces, which extensions read as
+   * `api.studio`. The app sets it at start-up rather than the host importing
+   * them, so the host does not pull in Studio's services.
+   */
+  setStudioApi(provider: () => unknown): void {
+    this.studioApi = provider;
   }
 
   /** The window extensions get from `api.windows.getMainWindow()`. */
@@ -565,6 +577,8 @@ export class ExtensionHostMain {
       return disposable;
     };
     const prefix = `[extension ${id}]`;
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const host = this;
 
     return {
       extension: { ...entry.description },
@@ -629,6 +643,9 @@ export class ExtensionHostMain {
               ),
             ),
           ),
+      },
+      get studio() {
+        return (host.studioApi?.() ?? {}) as ExtensionMainApi['studio'];
       },
       get storagePath() {
         const storagePath = getExtensionStoragePath(id);

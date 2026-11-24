@@ -446,6 +446,7 @@ exports.deactivate = () => { /* stop what you started outside api */ };
 | `api.agents.add(screenKey, factory, options?)` | The AI agent of a screen (section 6.1) |
 | `api.projectAgent.addTools(toolset)` | Tools for the project agent (section 6.2) |
 | `api.startup.addTask({ id, run })` | Work to do while Studio starts, behind the splash screen. `run({ setMessage })` can change the splash line. A task that throws is logged and Studio still starts. |
+| `api.studio` | Studio's own backend pieces (below) |
 | `api.storagePath` | A folder for the extension's own files |
 | `api.extensions.getExports(id)` | What another extension's main `activate` returned |
 | `api.log` | Console output tagged with the extension id |
@@ -456,7 +457,26 @@ The types are in `src/extensionApi/main.ts`.
 
 `deactivate` runs when the extension is disabled or uninstalled, and when Studio quits (Studio waits for it).
 
-Pieces of Studio's main process that an internal extension may use are in `src/extensionApi/studioMain/` (the install queue, the process adapter, the settings / projects / task-manager services, types). `src/extensions/pipeline/main/index.ts` is a complete main half: backend handlers, a start-up task, and stopping a child process in `deactivate`.
+**Studio's own backend pieces: `api.studio`.** Everything the extensions that ship with Studio are built from is handed to every extension:
+
+```js
+exports.activate = (api) => {
+  const { ConnectorsService, ToolLoopAgent, tool, z, createStudioSqlTools, composeAgentRuntime } = api.studio;
+  // ...
+};
+```
+
+| Group | Pieces |
+|---|---|
+| Agents | `ToolLoopAgent`, `tool`, `stepCountIs`, `z` (Studio's copies of the AI SDK and zod: use these, not your own bundled copies), `composeAgentRuntime`, `AgentService` (the context of a running chat, the SQL editor bridge), `TerminalConfirmGate`, `truncateToolResult`, `isToolEnabled` |
+| Tool sets for an agent | `createStudioSqlTools`, `createSqlResultInspectorTools`, `createStudioDuckLakeTools`, `createStudioCloudTools`, `createStudioConnectionsTools`, `createDbtTools`, `createFilesystemTools` |
+| Connections and data | `ConnectorsService`, `DuckLakeService`, `getConnector`, `agentHintFor`, `databaseStore` (database.json), `MainDatabaseService` (SQLite), `onWillDeleteConnection` |
+| Settings, installs, processes | `SettingsService`, `ProjectsService`, `TaskManagerService`, `PythonRuntimesService`, `runInstallTask`, `ProcessAdapter`, `broadcastToRenderers`, `emitFileDidSave` |
+| Helpers | `toDisposable`, `extensionIdOf`, `DEFAULT_SECRETS` |
+
+The list is `src/extensionApi/studioMain/index.ts` plus `src/extensionApi/shared.ts`. Extensions that ship with Studio import the same files from `src/extensionApi/studioMain/` at build time; `tests/unit/extensionHost/apiParity.test.ts` fails when a file of that folder is not in the list, so an internal extension cannot use something an installed one does not get. The same test guards the UI side (`src/extensionApi/studio/` and `@rosetta/studio-api`).
+
+`src/extensions/pipeline/main/index.ts` is a complete main half: backend handlers, a start-up task, and stopping a child process in `deactivate`.
 
 ### 6.1 The AI agent of a screen
 
@@ -479,7 +499,7 @@ api.agents.add('sql', (base, context) => createSqlAgent(base, {
 
 One agent per screen key. `project` is Studio's own. While the extension is off, the chat of its screen cannot run.
 
-Shared tool sets an agent can use are in `src/extensionApi/studioMain/`: connection SQL tools (`sqlTools`), DuckLake, cloud storage, connections, and the read-only dbt and file tools of a linked project.
+Shared tool sets an agent can use are in `api.studio` (section 6): connection SQL tools, DuckLake, cloud storage, connections, and the dbt and file tools of a linked project. Build the agent with `api.studio.ToolLoopAgent` and `api.studio.tool`.
 
 When a tool has to reach something only the open window knows (the cells of the open notebook), the main half sends a request on its own channel to the window of the chat and waits for the answer: `AgentService.getAgentContext(conversationId)` gives that window (`context.event.sender`). `src/extensions/notebooks/main/notebookAgentBridge.ts` is a complete one, with time-out and factory-reset handling.
 
@@ -571,7 +591,7 @@ Examples: `tests/unit/extensions/sql.activate.test.ts` (both halves and the agen
 
 ## 9. Rules
 
-1. Reach Studio only through `api` and the shared libraries.
+1. Reach Studio only through `api` (`api.studio` in the main half) and the shared libraries (`@rosetta/studio-api` in the UI half).
 2. Register everything through `api` so it is removed with the extension; clean up the rest in `deactivate`.
 3. Prefix IPC channel names and ids with the extension's name.
 4. Do not change data that belongs to Studio or to another extension.
