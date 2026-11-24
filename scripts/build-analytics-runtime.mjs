@@ -43,9 +43,9 @@ const result = await esbuild.build({
     path.join(
       projectRoot,
       'src',
-      'renderer',
-      'components',
+      'extensions',
       'analytics',
+      'renderer',
       'staticRuntime',
       'AnalyticsStaticRuntime.tsx',
     ),

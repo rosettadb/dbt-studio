@@ -8,7 +8,7 @@ import {
   projectsServices,
 } from '../../../../extensionApi/studio/services';
 import { DuckLakeService } from '../../../../extensionApi/studio/duckLakeService';
-import { QueryHistoryType } from '../../../../extensionApi/studio/types';
+import { QueryHistoryType } from '../types';
 import * as connectionTypes from '../../../../extensionApi/studio/types';
 import type {
   ConnectionInput,

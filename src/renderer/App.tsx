@@ -52,8 +52,6 @@ import { builtinRendererExtensions } from '../extensionHost/renderer/builtinExte
 import * as studioApiShared from '../extensionApi/shared';
 import * as studioApiRenderer from '../extensionApi/renderer';
 import * as studioApiStudio from '../extensionApi/studio';
-// Analytics adds itself to the SQL Editor screen as a tab.
-import './components/analytics/registerWorkspaceTab';
 
 // What an installed extension gets when it asks for '@rosetta/studio-api':
 // the same API the internal extensions import.

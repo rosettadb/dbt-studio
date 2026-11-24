@@ -3,14 +3,14 @@ import {
   buildPieModel,
   buildScatterModel,
   inferColumns,
-} from '../../../../../src/renderer/components/analytics/bi/charts/chartModel';
+} from '../../../../../src/extensions/analytics/renderer/bi/charts/chartModel';
 import {
   filterRows,
   parseSort,
   sortRows,
   totalFor,
-} from '../../../../../src/renderer/components/analytics/bi/table/tableModel';
-import { ResultCache } from '../../../../../src/renderer/components/analytics/bi/runtime/resultCache';
+} from '../../../../../src/extensions/analytics/renderer/bi/table/tableModel';
+import { ResultCache } from '../../../../../src/extensions/analytics/renderer/bi/runtime/resultCache';
 
 const rows = [
   { month: '2026-02-01', category: 'A', revenue: 10, cost: 4 },

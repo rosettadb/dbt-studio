@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import type * as Monaco from 'monaco-editor';
-import { Project, QueryResponseType, Table } from './backend';
+import { Project, Table } from './backend';
 import { UserProfile } from './profile';
 
 export type AppContextType = {
@@ -30,22 +30,6 @@ export type ItemProps = {
   primaryKey?: boolean;
   foreignKey?: boolean;
   icon?: string;
-};
-
-export type QueryHistoryType = {
-  id: string;
-  query: string;
-  executedAt: Date;
-  results?: QueryResponseType;
-  // Project-based fields (optional for backwards compatibility)
-  projectId?: string;
-  projectName?: string;
-  // Connection-based fields (new)
-  connectionId?: string;
-  connectionName?: string;
-  // DuckLake-specific fields (new)
-  isDuckLake?: boolean;
-  instanceId?: string;
 };
 
 export type CompletionItem = Monaco.languages.CompletionItem;

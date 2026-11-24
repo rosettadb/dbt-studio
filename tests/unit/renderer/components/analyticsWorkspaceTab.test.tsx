@@ -1,12 +1,12 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { analyticsWorkspaceTab } from '../../../../src/renderer/components/analytics/workspaceTab';
+import { analyticsWorkspaceTab } from '../../../../src/extensions/analytics/renderer/workspaceTab';
 import type { WorkspaceTabProps } from '../../../../src/extensionApi/renderer';
 
 // The Analytics components have their own tests; here only what the tab
 // passes to them matters.
 jest.mock(
-  '../../../../src/renderer/components/analytics/AnalyticsPagesTreeView',
+  '../../../../src/extensions/analytics/renderer/AnalyticsPagesTreeView',
   () => ({
     AnalyticsPagesTreeView: ({
       connectionId,
@@ -34,7 +34,7 @@ jest.mock(
   }),
 );
 jest.mock(
-  '../../../../src/renderer/components/analytics/AnalyticsEditor',
+  '../../../../src/extensions/analytics/renderer/AnalyticsEditor',
   () => ({
     AnalyticsEditor: ({ connectionId, pageId }: any) => (
       <span>
@@ -44,7 +44,7 @@ jest.mock(
   }),
 );
 jest.mock(
-  '../../../../src/renderer/components/analytics/bi/gallery/AnalyticsPagesGallery',
+  '../../../../src/extensions/analytics/renderer/bi/gallery/AnalyticsPagesGallery',
   () => ({
     AnalyticsPagesGallery: ({ connectionId, onOpenPage }: any) => (
       <button type="button" onClick={() => onOpenPage('p3')}>

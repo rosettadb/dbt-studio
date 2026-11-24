@@ -5,6 +5,7 @@ import * as monaco from 'monaco-editor';
 import { useTheme, Box, CircularProgress, Typography } from '@mui/material';
 import { projectsServices } from '../../../../../extensionApi/studio/services';
 import { Container } from './styles';
+import './runGlyph.css';
 import { Shimmer } from '../../../../../extensionApi/studio/shimmer';
 import {
   parseSqlEditorStatements,

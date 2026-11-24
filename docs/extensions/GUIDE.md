@@ -169,7 +169,7 @@ navigate('/app/select-project', {
 
 The list shows `message`, and the project that is picked or created opens and runs the command (registered with `api.commands.add`, `hidden: true` if it should not be in the palette).
 
-**A tab in a connection screen.** The SQL Editor screen takes tabs from other extensions (Analytics is one): an entry in its side panel tabs, what the side panel shows, and what the main area shows while the tab is selected.
+**A tab in a connection screen.** The SQL Editor and Notebooks screens (`STUDIO_WORKSPACES.sql`, `STUDIO_WORKSPACES.notebooks`) take tabs from other extensions (Analytics adds one to each): an entry in the screen's side panel tabs, what the side panel shows, and what the main area shows while the tab is selected.
 
 ```js
 api.workspaceTabs.add(STUDIO_WORKSPACES.sql, {
@@ -177,13 +177,13 @@ api.workspaceTabs.add(STUDIO_WORKSPACES.sql, {
   order: 200,
   label: 'My tab',
   icon: MyIcon,
-  Sidebar: MySidebar,     // receives { connectionId, connectionName, state, setState }
+  Sidebar: MySidebar,     // receives { connectionId, connectionName, state, setState, onSchemaChange }
   Main: MyMain,           // same props
   assistant: (state) => ({ screenKey: 'sql' }),   // which AI assistant to use; optional
 });
 ```
 
-`state` is whatever the tab needs to remember while the screen is open (the item that is open, for example). `Sidebar` and `Main` share it, and it is reset when the connection changes.
+`state` is whatever the tab needs to remember while the screen is open (the item that is open, for example). `Sidebar` and `Main` share it, and it is reset when the connection changes. Call `onSchemaChange()` after the tab created or dropped a table, so the screen reloads its Data tree; a screen may not give one, so check it first.
 
 ### 4.4 File handlers
 
@@ -417,6 +417,8 @@ Lint enforces the boundary:
 If an internal extension needs something from Studio, it is exported through `src/extensionApi/`, which makes it available to installed extensions as well.
 
 The **SQL Editor** (`src/extensions/sql/`) is the second: a sidebar entry, a screen with the assistant button, a Home card, and saved queries in its main half.
+
+**Analytics** (`src/extensions/analytics/`) is the third: a tab in the SQL Editor and Notebooks screens, a Home card with `onSelect`, and in its main half the Analytics page channels and the static site export (which uses `api.windows.getMainWindow()` to report progress).
 
 The first internal extension is **Pipelines** (`src/extensions/pipeline/`): `manifest.shared.ts` is its manifest and `renderer/index.ts` its `activate`, which shows every UI injection point in use. `tests/unit/extensions/pipeline.activate.test.ts` shows how to test an extension through the real host.
 

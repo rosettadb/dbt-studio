@@ -20,7 +20,7 @@ import 'ace-builds/src-noconflict/theme-solarized_light';
 import 'ace-builds/src-noconflict/theme-dracula';
 import moment from 'moment';
 import { Container } from './styles';
-import { QueryHistoryType } from '../../../../../extensionApi/studio/types';
+import { QueryHistoryType } from '../../types';
 import { projectsServices } from '../../../../../extensionApi/studio/services';
 
 const formatQueryPreview = (query: string, maxLength: number = 30) => {

@@ -1,4 +1,6 @@
 import type { ExtensionRendererModule } from '../../extensionApi/renderer';
+import { analyticsManifest } from '../../extensions/analytics/manifest.shared';
+import { analyticsRenderer } from '../../extensions/analytics/renderer';
 import { pipelineManifest } from '../../extensions/pipeline/manifest.shared';
 import { pipelineRenderer } from '../../extensions/pipeline/renderer';
 import { sqlManifest } from '../../extensions/sql/manifest.shared';
@@ -19,4 +21,5 @@ export interface BuiltinRendererExtension {
 export const builtinRendererExtensions: BuiltinRendererExtension[] = [
   { manifest: pipelineManifest, module: pipelineRenderer },
   { manifest: sqlManifest, module: sqlRenderer },
+  { manifest: analyticsManifest, module: analyticsRenderer },
 ];

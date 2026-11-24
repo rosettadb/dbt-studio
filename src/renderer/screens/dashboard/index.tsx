@@ -55,14 +55,6 @@ const DbtCardIcon: React.FC = () => (
   />
 );
 
-const AnalyticsCardIcon: React.FC = () => (
-  <img
-    src={icons.analytics}
-    alt="analytics"
-    style={{ width: 28, height: 28, objectFit: 'contain' }}
-  />
-);
-
 const DataLakeCardIcon: React.FC = () => (
   <img
     src={icons.datalakeCard}
@@ -104,8 +96,9 @@ const ProjectTypeIcon: React.FC<{ connectionType?: string }> = ({
 };
 
 // Studio's own Home cards. Extensions add theirs to the same registry;
-// the gaps in `order` leave room between them (300 is the SQL Editor card
-// and 700 the Pipeline card, which their extensions add).
+// the gaps in `order` leave room between them (300 is the SQL Editor card,
+// 400 the Analytics card and 700 the Pipeline card, which their extensions
+// add).
 const features: DashboardCard[] = [
   {
     id: 'dbt-project',
@@ -126,16 +119,6 @@ const features: DashboardCard[] = [
       'Create interactive notebooks for data exploration and analysis.',
     icon: AutoStoriesIcon,
     path: '/app/notebooks',
-  },
-  {
-    id: 'analytics',
-    order: 400,
-    title: 'Analytics',
-    category: 'BI & Viz',
-    description: 'Visualize your data with powerful dashboards and charts.',
-    icon: AnalyticsCardIcon,
-    // navigated programmatically with state: { tab: 'analytics' }
-    path: '/app/sql',
   },
   {
     id: 'datalake',
@@ -279,11 +262,6 @@ const Dashboard: React.FC = () => {
   };
 
   const handleCardClick = (feature: DashboardCard) => {
-    if (feature.id === 'analytics') {
-      setIsSidebarOpen(true);
-      navigate('/app/sql', { state: { tab: 'analytics' } });
-      return;
-    }
     if (feature.onSelect) {
       feature.onSelect({
         navigate,

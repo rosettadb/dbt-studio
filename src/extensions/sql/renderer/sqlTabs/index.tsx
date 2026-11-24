@@ -9,7 +9,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { connectionIcon } from '../../../../extensionApi/studio/connectionsRegistry';
-import { SqlTabId, SqlTabState } from '../../../../extensionApi/studio/types';
+import { SqlTabId, SqlTabState } from '../types';
 import { TabContextMenu } from '../../../../extensionApi/studio/tabContextMenu';
 import { copyText } from '../../../../extensionApi/studio/clipboard';
 import {

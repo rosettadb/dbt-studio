@@ -1,6 +1,6 @@
 import { executeQueryForConnection } from '../../../../src/renderer/services/connectors.service';
 import { DuckLakeService } from '../../../../src/renderer/services/duckLake.service';
-import { executeAnalyticsQuery } from '../../../../src/renderer/utils/analyticsQueryEngine';
+import { executeAnalyticsQuery } from '../../../../src/extensions/analytics/renderer/utils/analyticsQueryEngine';
 
 jest.mock('../../../../src/renderer/services/connectors.service', () => ({
   executeQueryForConnection: jest.fn(),

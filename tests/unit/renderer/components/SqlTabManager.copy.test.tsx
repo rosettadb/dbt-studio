@@ -2,7 +2,7 @@ import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { SqlTabManager } from '../../../../src/extensions/sql/renderer/sqlTabs';
-import { SqlTabState } from '../../../../src/types/editor';
+import { SqlTabState } from '../../../../src/extensions/sql/renderer/types';
 
 const tab: SqlTabState = {
   id: 't1',

@@ -1,4 +1,5 @@
 export {
+  executeQueryForConnection,
   getConnectionQuery,
   materializeSnowflakeToken,
   updateConnectionQuery,

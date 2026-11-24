@@ -205,10 +205,17 @@ export interface WorkspaceTabProps<S = unknown> {
    */
   state: S | null;
   setState: (state: S | null) => void;
+  /**
+   * Call after the tab changed what the connection contains (created or
+   * dropped a table), so the screen reloads its Data tree. Not every
+   * screen gives one.
+   */
+  onSchemaChange?: () => void;
 }
 
 /**
- * A tab added to a screen that works on one connection (the SQL Editor):
+ * A tab added to a screen that works on one connection (the SQL Editor,
+ * Notebooks):
  * an entry in the screen's side panel tabs, what the side panel shows for
  * it, and what the main area shows while it is selected.
  */
@@ -226,6 +233,7 @@ export interface WorkspaceTab<S = any> {
 /** Screens that accept workspace tabs. */
 export const STUDIO_WORKSPACES = {
   sql: 'sql',
+  notebooks: 'notebooks',
 } as const;
 
 /** Slots Studio's own screens offer. Props are what each contribution gets. */

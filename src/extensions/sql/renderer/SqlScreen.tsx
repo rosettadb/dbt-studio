@@ -41,11 +41,8 @@ import { QueryResultStore } from './queryResultStore';
 import { registerQueryResultBridge } from './agentEditorBridge.service';
 import type { QueryResultSnapshot } from '../../../extensionApi/studio/types';
 import { useLocalStorage } from '../../../extensionApi/studio/hooks';
-import {
-  QueryHistoryType,
-  ConnectionInput,
-  Table,
-} from '../../../extensionApi/studio/types';
+import { ConnectionInput, Table } from '../../../extensionApi/studio/types';
+import { QueryHistoryType } from './types';
 import { AppLayout } from '../../../extensionApi/studio/layout';
 import { utils } from '../../../extensionApi/studio/helpers';
 import { SchemaViewContainer, SchemaViewGrid } from './screenStyles';

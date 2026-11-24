@@ -17,8 +17,6 @@ import registerLanguageIntelligenceHandlers from './languageIntelligence.ipcHand
 import { registerAgentHandlers } from './agent.ipcHandlers';
 import { registerMCPHandlers } from './mcp.ipcHandlers';
 import { registerSkillsHandlers } from './skills.ipcHandlers';
-import { registerAnalyticsPagesHandlers } from './analyticsPages.ipcHandlers';
-import { registerStaticSiteHandlers } from './staticSite.ipcHandlers';
 import registerFlowfileHandlers from './flowfile.ipcHandlers';
 import registerTaskManagerHandlers from './taskManager.ipcHandlers';
 import { registerSecondBrainHandlers } from './secondBrain.ipcHandlers';
@@ -49,8 +47,6 @@ export {
   registerAgentHandlers,
   registerMCPHandlers,
   registerSkillsHandlers,
-  registerAnalyticsPagesHandlers,
-  registerStaticSiteHandlers,
   registerFlowfileHandlers,
   registerTaskManagerHandlers,
   registerSecondBrainHandlers,

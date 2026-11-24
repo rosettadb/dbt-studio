@@ -2,6 +2,7 @@
 export { SNOWFLAKE_REAUTH_MESSAGE } from '../../types/backend';
 export type {
   ConnectionInput,
+  ConnectionModel,
   CustomError,
   FileNode,
   GetQueryResultsRequest,
@@ -20,12 +21,6 @@ export type {
   CloudStepStatus,
 } from '../../types/cloudAction';
 export type {
-  SqlPendingCloseState,
-  SqlTabId,
-  SqlTabState,
-} from '../../types/editor';
-export type {
   CompletionItem,
-  QueryHistoryType,
   SecureStorageAccount,
 } from '../../types/frontend';

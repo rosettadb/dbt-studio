@@ -1,10 +1,6 @@
 import React from 'react';
 import { v4 as uuidV4 } from 'uuid';
-import type {
-  SqlTabId,
-  SqlTabState,
-  SqlPendingCloseState,
-} from '../../../extensionApi/studio/types';
+import type { SqlTabId, SqlTabState, SqlPendingCloseState } from './types';
 import {
   getConnectionQuery,
   updateConnectionQuery,

@@ -2,7 +2,7 @@ import React from 'react';
 import { toast } from 'react-toastify';
 import { Box, Tooltip, IconButton } from '@mui/material';
 import { Save as SaveIcon } from '@mui/icons-material';
-import { QueryHistoryType } from '../../../../extensionApi/studio/types';
+import { QueryHistoryType } from '../types';
 import { QueryHistory } from './queryHistory';
 import { SaveQueryDialog } from './SaveQueryDialog';
 import { useCreateSavedQuery } from '../savedQueries.controller';

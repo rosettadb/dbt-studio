@@ -59,9 +59,11 @@ import {
   PanelHeaderDropdown,
 } from '../../components';
 import {
-  AnalyticsEditor,
-  AnalyticsPagesGallery,
-} from '../../components/analytics';
+  STUDIO_WORKSPACES,
+  useWorkspaceTabs,
+  type WorkspaceTab,
+  type WorkspaceTabProps,
+} from '../../../extensionApi/renderer';
 import { NotebooksSidebar } from '../../components/notebook/NotebooksSidebar';
 import { NotebookTabManager } from '../../components/notebook/NotebookTabManager';
 import {
@@ -91,6 +93,7 @@ import type { NotebookKind } from '../../../types/pythonNotebooks';
 import { ExportNotebookDialog } from '../../components/notebook/ExportNotebookDialog';
 import { ImportConnectionDialog } from '../../components/notebook/ImportConnectionDialog';
 import { ChatWindow } from '../../components/chat';
+import type { ChatWindowProps } from '../../components/chat';
 import {
   Table,
   SupportedConnectionTypes,
@@ -107,6 +110,8 @@ import {
 } from '../../hooks';
 
 const CHAT_MIN_WIDTH = 280;
+// The side panel's own tabs: Notebooks and Data. Contributed tabs come after.
+const OWN_SIDEBAR_TABS = 2;
 
 const VerticalSash = (_: number, active: boolean) => (
   <div
@@ -179,21 +184,25 @@ const Notebooks = () => {
     isHydrated: isSidebarHydrated,
   } = useNotebookSidebarState();
 
+  // The side panel has two tabs of its own (0: Notebooks, 1: Data); the tabs
+  // other tools contributed (for example Analytics) follow them.
   const [activeSidebarTab, setActiveSidebarTab] = useState(0);
-  const [activeAnalyticsPageId, setActiveAnalyticsPageId] = useState<
-    string | null
-  >(null);
+  const contributedTabs = useWorkspaceTabs(STUDIO_WORKSPACES.notebooks);
+  const activeContributedTab =
+    activeSidebarTab >= OWN_SIDEBAR_TABS
+      ? contributedTabs[activeSidebarTab - OWN_SIDEBAR_TABS]
+      : undefined;
+  // What each contributed tab keeps while the screen is open (Analytics: the
+  // open page), by tab id.
+  const [contributedTabState, setContributedTabState] = useState<
+    Record<string, unknown>
+  >({});
 
-  // Reset analytics page when switching connections to prevent showing
-  // a page from the previous connection
+  // Reset the contributed tabs when switching connections to prevent
+  // showing something (an Analytics page) from the previous connection
   useEffect(() => {
-    setActiveAnalyticsPageId(null);
+    setContributedTabState({});
   }, [activeConnectionId]);
-
-  const handleOpenAnalyticsPage = useCallback((pageId: string) => {
-    setActiveAnalyticsPageId(pageId);
-    // Future Phase 3: trigger main content to show analytics editor
-  }, []);
 
   const notebookTabManager = useNotebookTabManager();
 
@@ -1146,6 +1155,26 @@ const Notebooks = () => {
     );
   }
 
+  // What a contributed tab's side panel and main area get from this screen.
+  const getWorkspaceTabProps = (tab: WorkspaceTab): WorkspaceTabProps => ({
+    connectionId: activeConnectionId,
+    connectionName: activeConnection?.connection.name || 'Database',
+    state: contributedTabState[tab.id] ?? null,
+    setState: (next) =>
+      setContributedTabState((previous) => ({ ...previous, [tab.id]: next })),
+    onSchemaChange: handleRefreshSchema,
+  });
+  // The assistant follows the selected tab: the notebooks one, or the one a
+  // contributed tab asks for.
+  const contributedAssistant = activeContributedTab?.assistant?.(
+    contributedTabState[activeContributedTab.id] ?? null,
+  );
+  const assistantScreenKey = (contributedAssistant?.screenKey ??
+    'notebooks') as ChatWindowProps['screenKey'];
+  const assistantTargetKey = contributedAssistant
+    ? (contributedAssistant.pageId ?? 'none')
+    : (notebookTabManager.activeTabId ?? 'none');
+
   return (
     <AppLayout
       data-testid="notebooks-screen"
@@ -1265,12 +1294,8 @@ const Notebooks = () => {
               onImportPythonNotebook={handleImportPythonNotebook}
               onTabChange={setActiveSidebarTab}
               connectionId={activeConnectionId}
-              activeAnalyticsPageId={activeAnalyticsPageId}
-              onOpenAnalyticsPage={handleOpenAnalyticsPage}
-              onDeleteAnalyticsPage={(id) => {
-                if (id === activeAnalyticsPageId)
-                  setActiveAnalyticsPageId(null);
-              }}
+              workspaceTabs={contributedTabs}
+              getWorkspaceTabProps={getWorkspaceTabProps}
               onSchemaContextMenu={handleSchemaContextMenu}
             />
           )}
@@ -1362,7 +1387,7 @@ const Notebooks = () => {
                 );
               }
 
-              if (activeSidebarTab === 2) {
+              if (activeContributedTab) {
                 return (
                   <Box
                     sx={{
@@ -1372,18 +1397,10 @@ const Notebooks = () => {
                       flexDirection: 'column',
                     }}
                   >
-                    {activeAnalyticsPageId ? (
-                      <AnalyticsEditor
-                        connectionId={activeConnectionId}
-                        pageId={activeAnalyticsPageId}
-                        onSchemaChange={handleRefreshSchema}
-                      />
-                    ) : (
-                      <AnalyticsPagesGallery
-                        connectionId={activeConnectionId}
-                        onOpenPage={handleOpenAnalyticsPage}
-                      />
-                    )}
+                    <activeContributedTab.Main
+                      // eslint-disable-next-line react/jsx-props-no-spreading
+                      {...getWorkspaceTabProps(activeContributedTab)}
+                    />
                   </Box>
                 );
               }
@@ -1530,19 +1547,15 @@ const Notebooks = () => {
           >
             {isChatOpen && !isNarrow && (
               <ChatWindow
-                key={`${activeSidebarTab === 2 ? 'analytics' : 'notebooks'}-${activeConnectionId}-${activeSidebarTab === 2 ? (activeAnalyticsPageId ?? 'none') : (notebookTabManager.activeTabId ?? 'none')}`}
-                screenKey={activeSidebarTab === 2 ? 'analytics' : 'notebooks'}
+                key={`${assistantScreenKey}-${activeConnectionId}-${assistantTargetKey}`}
+                screenKey={assistantScreenKey}
                 connectionId={activeConnectionId ?? undefined}
                 notebookId={
-                  activeSidebarTab === 2
+                  contributedAssistant
                     ? undefined
                     : (notebookTabManager.activeTabId ?? undefined)
                 }
-                pageId={
-                  activeSidebarTab === 2
-                    ? (activeAnalyticsPageId ?? undefined)
-                    : undefined
-                }
+                pageId={contributedAssistant?.pageId}
                 projectId={
                   selectedProject?.id ? Number(selectedProject.id) : null
                 }
@@ -1568,19 +1581,15 @@ const Notebooks = () => {
             }}
           >
             <ChatWindow
-              key={`${activeSidebarTab === 2 ? 'analytics' : 'notebooks'}-mobile-${activeConnectionId}-${activeSidebarTab === 2 ? (activeAnalyticsPageId ?? 'none') : (notebookTabManager.activeTabId ?? 'none')}`}
-              screenKey={activeSidebarTab === 2 ? 'analytics' : 'notebooks'}
+              key={`${assistantScreenKey}-mobile-${activeConnectionId}-${assistantTargetKey}`}
+              screenKey={assistantScreenKey}
               connectionId={activeConnectionId ?? undefined}
               notebookId={
-                activeSidebarTab === 2
+                contributedAssistant
                   ? undefined
                   : (notebookTabManager.activeTabId ?? undefined)
               }
-              pageId={
-                activeSidebarTab === 2
-                  ? (activeAnalyticsPageId ?? undefined)
-                  : undefined
-              }
+              pageId={contributedAssistant?.pageId}
               projectId={
                 selectedProject?.id ? Number(selectedProject.id) : null
               }

@@ -6,17 +6,17 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { BiPagePreview } from '../../../../../src/renderer/components/analytics/bi/BiPagePreview';
+import { BiPagePreview } from '../../../../../src/extensions/analytics/renderer/bi/BiPagePreview';
 import {
   buildPageGraph,
   parsePage,
   resolveQuerySql,
   validatePage,
 } from '../../../../../src/shared/analyticsBi';
-import { resolveQueryDependencies } from '../../../../../src/renderer/utils/analyticsQueryEngine';
+import { resolveQueryDependencies } from '../../../../../src/extensions/analytics/renderer/utils/analyticsQueryEngine';
 
 jest.mock(
-  '../../../../../src/renderer/components/analytics/bi/markdown/MarkdownText',
+  '../../../../../src/extensions/analytics/renderer/bi/markdown/MarkdownText',
   () => jest.requireActual('./markdownTextMock'),
 );
 jest.mock('../../../../../src/renderer/services/connectors.service', () => ({

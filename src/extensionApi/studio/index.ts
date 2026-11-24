@@ -8,6 +8,8 @@
  * Not listed: `duckLakeService` (its export is already in `services`) and
  * the transitional `pipelineShared`.
  */
+export * from './chartDataTransformer';
+export * from './chartRenderer';
 export * from './chat';
 export * from './clipboard';
 export * from './cloudRunContext';
@@ -27,6 +29,7 @@ export * from './gitService';
 export * from './helpers';
 export * from './helpersUtils';
 export * from './hooks';
+export * from './icons';
 export * from './insertText';
 export * from './installTasks';
 export * from './ipcClient';

@@ -45,7 +45,7 @@ jest.mock('../../../../src/main/services/duckLake.service', () => ({
 (process as any).resourcesPath = '/mock/resources';
 
 // eslint-disable-next-line import/first
-import { StaticSiteService } from '../../../../src/main/services/staticSite.service';
+import { StaticSiteService } from '../../../../src/extensions/analytics/main/staticSite.service';
 
 const mockMainWindow = { webContents: { send: jest.fn() } } as any;
 

@@ -47,7 +47,7 @@ jest.mock('../../../../src/main/services/duckLake.service', () => ({
 // ─── Import after mocks ───────────────────────────────────────────────────────
 
 // eslint-disable-next-line import/first
-import { StaticSiteService } from '../../../../src/main/services/staticSite.service';
+import { StaticSiteService } from '../../../../src/extensions/analytics/main/staticSite.service';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

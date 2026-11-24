@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   Box,
   Tabs,
@@ -24,14 +24,19 @@ import {
   FileDownload,
   Upload,
   Close,
-  InsertChart,
 } from '@mui/icons-material';
 import { SchemaTreeViewerWithSchema } from '../schemaTreeViewer/SchemaTreeViewerWithSchema';
 import { NotebooksTreeView } from './NotebooksTreeView';
-import { AnalyticsPagesTreeView } from '../analytics';
 import { Table, SupportedConnectionTypes } from '../../../types/backend';
 import { Notebook } from '../../../types/notebooks';
 import type { SchemaTreeNodeRef } from '../schemaTreeViewer/types';
+import type {
+  WorkspaceTab,
+  WorkspaceTabProps,
+} from '../../../extensionApi/renderer';
+
+// The side panel's own tabs: Notebooks and Data. Contributed tabs come after.
+const OWN_TABS = 2;
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -91,11 +96,13 @@ interface NotebooksSidebarProps {
   onImportPythonNotebook?: () => void;
   onTabChange?: (tabIndex: number) => void;
 
-  // Analytics
   connectionId: string;
-  activeAnalyticsPageId: string | null;
-  onOpenAnalyticsPage: (pageId: string) => void;
-  onDeleteAnalyticsPage?: (pageId: string) => void;
+
+  // Tabs other tools contributed (for example Analytics); they follow the
+  // Notebooks and Data tabs.
+  workspaceTabs: ReadonlyArray<WorkspaceTab>;
+  /** What a contributed tab's side panel gets from the screen. */
+  getWorkspaceTabProps: (tab: WorkspaceTab) => WorkspaceTabProps;
 
   // Helper functions
   getConnectionName: (connectionKey: string) => string;
@@ -132,9 +139,8 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
   onImportPythonNotebook,
   onTabChange,
   connectionId,
-  activeAnalyticsPageId,
-  onOpenAnalyticsPage,
-  onDeleteAnalyticsPage,
+  workspaceTabs,
+  getWorkspaceTabProps,
   onSchemaContextMenu,
 }) => {
   const theme = useTheme();
@@ -152,6 +158,15 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
     },
     [onTabChange],
   );
+
+  // A contributed tab that went away (its extension was switched off) falls
+  // back to the Notebooks tab.
+  useEffect(() => {
+    if (activeTab >= OWN_TABS + workspaceTabs.length) {
+      setActiveTab(0);
+      onTabChange?.(0);
+    }
+  }, [activeTab, workspaceTabs.length, onTabChange]);
 
   const handleExportMenuOpen = useCallback(
     (event: React.MouseEvent<HTMLElement>) => {
@@ -255,13 +270,16 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
             id="notebooks-tab-1"
             aria-controls="notebooks-tabpanel-1"
           />
-          <Tab
-            icon={<InsertChart sx={{ fontSize: 16 }} />}
-            iconPosition="start"
-            label="Analytics"
-            id="notebooks-tab-2"
-            aria-controls="notebooks-tabpanel-2"
-          />
+          {workspaceTabs.map((tab, index) => (
+            <Tab
+              key={tab.id}
+              icon={<tab.icon sx={{ fontSize: 16 }} />}
+              iconPosition="start"
+              label={tab.label}
+              id={`notebooks-tab-${OWN_TABS + index}`}
+              aria-controls={`notebooks-tabpanel-${OWN_TABS + index}`}
+            />
+          ))}
         </Tabs>
       </Box>
 
@@ -497,18 +515,15 @@ export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
           </Box>
         </TabPanel>
 
-        {/* Analytics Tab */}
-        <TabPanel value={activeTab} index={2}>
-          <Box sx={{ height: '100%', overflow: 'hidden' }}>
-            <AnalyticsPagesTreeView
-              connectionId={connectionId}
-              connectionName={connectionName}
-              activePageId={activeAnalyticsPageId}
-              onOpenPage={onOpenAnalyticsPage}
-              onDeletePage={onDeleteAnalyticsPage}
-            />
-          </Box>
-        </TabPanel>
+        {/* Contributed tabs (Analytics) */}
+        {workspaceTabs.map((tab, index) => (
+          <TabPanel key={tab.id} value={activeTab} index={OWN_TABS + index}>
+            <Box sx={{ height: '100%', overflow: 'hidden' }}>
+              {/* eslint-disable-next-line react/jsx-props-no-spreading */}
+              <tab.Sidebar {...getWorkspaceTabProps(tab)} />
+            </Box>
+          </TabPanel>
+        ))}
       </Box>
     </Box>
   );
