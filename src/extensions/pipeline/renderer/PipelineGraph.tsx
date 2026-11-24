@@ -47,10 +47,7 @@ import { PipelineNode, type PipelineNodeData } from './PipelineNode';
 import { NodePalette } from './NodePalette';
 import { StepEditDialog } from './StepEditDialog';
 import { usePluginCatalog } from './pluginDefinitions';
-import {
-  defaultStepParams,
-  type MacroContext,
-} from '../../../extensionApi/studio/pipelineShared';
+import { defaultStepParams, type MacroContext } from '../shared/pipelineShared';
 import { serializePipelineConfig } from './serializePipeline';
 import { validatePipelineGraph } from './validatePipeline';
 import { useTerminalMinimize } from '../../../extensionApi/studio/terminal';

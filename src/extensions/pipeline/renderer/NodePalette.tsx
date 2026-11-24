@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Tooltip, Typography, useTheme } from '@mui/material';
 import { getPluginVisual, usePluginCatalog } from './pluginDefinitions';
-import type { PluginDefinition } from '../../../extensionApi/studio/pipelineShared';
+import type { PluginDefinition } from '../shared/pipelineShared';
 
 const PluginRow: React.FC<{
   plugin: PluginDefinition;

@@ -13,7 +13,7 @@ import {
   defaultInputState,
   parsePage,
   validatePage,
-} from '../../../../../src/shared/analyticsBi';
+} from '../../../../../src/extensions/analytics/shared/analyticsBi';
 import { BiPagePreview } from '../../../../../src/extensions/analytics/renderer/bi/BiPagePreview';
 import { AnalyticsExamplesSection } from '../../../../../src/extensions/analytics/renderer/bi/examples/AnalyticsExamplesSection';
 import { buildThumbnail } from '../../../../../src/extensions/analytics/renderer/bi/gallery/thumbnailModel';

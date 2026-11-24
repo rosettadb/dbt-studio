@@ -26,7 +26,7 @@ import {
 import type { PipelineStep } from './types';
 import type { CloudStepStatus } from '../../../extensionApi/studio/types';
 import { getPluginVisual, usePluginCatalog } from './pluginDefinitions';
-import { isEmptyParam } from '../../../extensionApi/studio/pipelineShared';
+import { isEmptyParam } from '../shared/pipelineShared';
 
 export type PipelineNodeData = PipelineStep & {
   stepIndex: number;

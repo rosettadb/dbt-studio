@@ -3,8 +3,8 @@ import { Tabs as MuiTabs, Tab as MuiTab, Box } from '@mui/material';
 import {
   getStringProp,
   getNumberProp,
-} from '../../../../../extensionApi/studio/analyticsComponentProps';
-import type { ParsedProps } from '../../../../../extensionApi/studio/analyticsComponentProps';
+} from '../../utils/analyticsComponentProps';
+import type { ParsedProps } from '../../utils/analyticsComponentProps';
 import type { AnalyticsComponentProps } from '../../registry/analyticsComponentRegistry';
 
 interface TabChildProps extends AnalyticsComponentProps {

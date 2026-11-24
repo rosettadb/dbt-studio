@@ -13,13 +13,13 @@ import {
 import {
   RunnerRequirementStatus,
   loadPluginDefinitions,
-} from '../../../extensionApi/studioMain/pipelineShared';
+} from './pipelineShared';
 import SettingsService from '../../../extensionApi/studioMain/settingsService';
 import { getRunnerToolEnvironment } from './runnerEnvironment';
 import {
   collectRequirements,
   type RequirementWithPlugins,
-} from '../../../extensionApi/studioMain/pipelineShared';
+} from './pipelineShared';
 
 const KISQL_GITHUB_REPO = 'kineticadb/kisql';
 const KISQL_UNIX_ASSET = 'kisql';

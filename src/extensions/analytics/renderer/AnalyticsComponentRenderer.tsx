@@ -27,9 +27,9 @@ import {
   getBooleanProp,
   getNumberProp,
   getArrayProp,
-} from '../../../extensionApi/studio/analyticsComponentProps';
-import { parseAnalyticsMarkdown } from '../../../extensionApi/studio/analyticsMarkdown';
-import type { ParsedProps } from '../../../extensionApi/studio/analyticsComponentProps';
+} from './utils/analyticsComponentProps';
+import { parseAnalyticsMarkdown } from './utils/analyticsMarkdown';
+import type { ParsedProps } from './utils/analyticsComponentProps';
 import {
   getComponentDefinition,
   validateComponentProps,

@@ -4,7 +4,7 @@ import { parsePipelineConfig } from '../../../../src/extensions/pipeline/rendere
 import { serializePipelineConfig } from '../../../../src/extensions/pipeline/renderer/serializePipeline';
 import { validatePipelineGraph } from '../../../../src/extensions/pipeline/renderer/validatePipeline';
 import type { PipelineNodeData } from '../../../../src/extensions/pipeline/renderer/PipelineNode';
-import { parsePluginManifest } from '../../../../src/shared/pluginManifest';
+import { parsePluginManifest } from '../../../../src/extensions/pipeline/shared/pluginManifest';
 import shipped from '../../__fixtures__/plugins.json';
 
 const PIPELINE = `name: graph

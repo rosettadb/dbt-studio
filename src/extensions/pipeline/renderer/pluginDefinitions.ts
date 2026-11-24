@@ -13,7 +13,7 @@ import StorageIcon from '@mui/icons-material/Storage';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import ExtensionIcon from '@mui/icons-material/Extension';
 import { useGetRunnerPlugins } from './pipelineControllers';
-import type { PluginDefinition } from '../../../extensionApi/studio/pipelineShared';
+import type { PluginDefinition } from '../shared/pipelineShared';
 
 // Which plugins exist and what their forms look like comes from the runner's
 // plugin manifest (useGetRunnerPlugins). This file only draws them.

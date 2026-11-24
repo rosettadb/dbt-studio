@@ -6,7 +6,7 @@ import SettingsService from '../../../../src/main/services/settings.service';
 import {
   loadPluginDefinitions,
   resolveProjectMacroDirs,
-} from '../../../../src/main/services/pluginManifest.service';
+} from '../../../../src/extensions/pipeline/main/pluginManifest.service';
 
 jest.mock('../../../../src/main/services/settings.service', () => ({
   __esModule: true,

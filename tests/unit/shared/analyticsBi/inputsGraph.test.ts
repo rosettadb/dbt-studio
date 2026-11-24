@@ -1,16 +1,16 @@
 /* eslint-disable no-template-curly-in-string -- these tests write page SQL that contains ${inputs...} */
-import { parsePage } from '../../../../src/shared/analyticsBi/parser';
+import { parsePage } from '../../../../src/extensions/analytics/shared/analyticsBi/parser';
 import {
   buildPageGraph,
   queriesAffectedByInputs,
   resolveQuerySql,
-} from '../../../../src/shared/analyticsBi/graph';
+} from '../../../../src/extensions/analytics/shared/analyticsBi/graph';
 import {
   defaultInputState,
   interpolateSql,
   resolveDatePreset,
   toSqlText,
-} from '../../../../src/shared/analyticsBi/inputs';
+} from '../../../../src/extensions/analytics/shared/analyticsBi/inputs';
 
 const PAGE = `
 \`\`\`sql regions

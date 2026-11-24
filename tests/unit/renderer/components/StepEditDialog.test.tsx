@@ -8,7 +8,7 @@ jest.mock(
   '../../../../src/extensions/pipeline/renderer/pipelineControllers',
   () => {
     const { parsePluginManifest } = jest.requireActual(
-      '../../../../src/shared/pluginManifest',
+      '../../../../src/extensions/pipeline/shared/pluginManifest',
     );
     const data = [
       ...parsePluginManifest(

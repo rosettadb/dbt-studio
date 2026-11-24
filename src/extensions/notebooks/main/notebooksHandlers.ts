@@ -4,7 +4,7 @@
  */
 
 import type { ExtensionMainApi } from '../../../extensionApi/main';
-import { NotebooksService } from '../../../extensionApi/studioMain/notebooksService';
+import { NotebooksService } from './notebooks.service';
 
 export function registerNotebooksHandlers(api: ExtensionMainApi) {
   // List notebooks for a connection

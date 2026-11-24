@@ -2,9 +2,9 @@
 import {
   collectRootIdentifiers,
   parseExpression,
-} from '../../../../extensionApi/studio/analyticsBiExpressions';
+} from '../../shared/analyticsBi/expressions/parser';
 
-export * from '../../../../extensionApi/studio/analyticsBi';
+export * from '../../shared/analyticsBi';
 
 /** Root identifiers an expression reads; [] when it doesn't parse. */
 export function collectRootIdentifiersOf(source: string): string[] {

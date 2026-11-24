@@ -39,6 +39,9 @@ import {
   registerConnector,
 } from '../../connections/core/connectorRegistry.main';
 import { completeExtensionDescriptor } from '../../connections/registry.shared';
+import { registerScreenAgent } from '../../main/services/ai/agents/screenAgents';
+import { registerProjectToolset } from '../../main/services/ai/agents/projectToolsets';
+import { onWillDeleteConnection } from '../../main/services/connectionEvents';
 
 // `__non_webpack_require__` is webpack's handle to Node's real `require`; it
 // does not exist when this file runs outside a webpack bundle (jest).
@@ -600,7 +603,17 @@ export class ExtensionHostMain {
           );
         },
       },
+      agents: {
+        add: (screenKey, factory, options) =>
+          track(toDisposable(registerScreenAgent(screenKey, factory, options))),
+      },
+      projectAgent: {
+        addTools: (toolset) =>
+          track(toDisposable(registerProjectToolset(toolset))),
+      },
       connections: {
+        onWillDelete: (listener) =>
+          track(toDisposable(onWillDeleteConnection(listener))),
         register: (connection) =>
           track(
             toDisposable(

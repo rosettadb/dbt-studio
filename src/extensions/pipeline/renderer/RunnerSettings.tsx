@@ -20,7 +20,7 @@ import {
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { SettingsType } from '../../../extensionApi/studio/types';
-import { RunnerRequirementStatus } from '../../../extensionApi/studio/pipelineShared';
+import { RunnerRequirementStatus } from '../shared/pipelineShared';
 import { ConfirmationModal } from '../../../extensionApi/studio/modals';
 import { useIsTaskTypeActive } from '../../../extensionApi/studio/hooks';
 import { isInstallCancelledError } from '../../../extensionApi/studio/installTasks';

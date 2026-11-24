@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Box, TextField, Typography, Stack } from '@mui/material';
-import { getStringProp } from '../../../../../extensionApi/studio/analyticsComponentProps';
-import type { ParsedProps } from '../../../../../extensionApi/studio/analyticsComponentProps';
+import { getStringProp } from '../../utils/analyticsComponentProps';
+import type { ParsedProps } from '../../utils/analyticsComponentProps';
 import type { AnalyticsComponentProps } from '../../registry/analyticsComponentRegistry';
 
 type Props = AnalyticsComponentProps & {

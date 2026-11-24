@@ -12,7 +12,7 @@ import {
   parsePage,
   resolveQuerySql,
   validatePage,
-} from '../../../../../src/shared/analyticsBi';
+} from '../../../../../src/extensions/analytics/shared/analyticsBi';
 import { resolveQueryDependencies } from '../../../../../src/extensions/analytics/renderer/utils/analyticsQueryEngine';
 
 jest.mock(
@@ -152,7 +152,7 @@ describe('legacy page compatibility', () => {
 
   it('engine: legacy is detected so the old renderer is used', () => {
     const { usesLegacyEngine } = jest.requireActual(
-      '../../../../../src/shared/analyticsBi',
+      '../../../../../src/extensions/analytics/shared/analyticsBi',
     );
     expect(
       usesLegacyEngine(`---\nengine: legacy\n---\n${LEGACY_PAGES.starter}`),

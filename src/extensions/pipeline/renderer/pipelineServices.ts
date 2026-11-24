@@ -2,7 +2,7 @@ import { client } from '../../../extensionApi/studio/ipcClient';
 import type {
   PluginDefinition,
   RunnerRequirementStatus,
-} from '../../../extensionApi/studio/pipelineShared';
+} from '../shared/pipelineShared';
 
 // Calls to the pipeline tool's main-process handlers.
 

@@ -9,6 +9,8 @@ import { parseExtensionManifest } from '../../../src/extensionHost/shared/manife
 import { analyticsManifest } from '../../../src/extensions/analytics/manifest.shared';
 import { analyticsRenderer } from '../../../src/extensions/analytics/renderer';
 import { analyticsMain } from '../../../src/extensions/analytics/main';
+import { createAnalyticsAgent } from '../../../src/extensions/analytics/main/analyticsAgent';
+import { getScreenAgent } from '../../../src/main/services/ai/agents/screenAgents';
 
 // ESM-only packages somewhere below the Analytics components; not under test.
 jest.mock('react-markdown', () => ({ __esModule: true, default: () => null }));
@@ -21,10 +23,26 @@ jest.mock(
   '../../../src/extensions/analytics/renderer/bi/markdown/MarkdownText',
   () => jest.requireActual('../renderer/analytics/bi/markdownTextMock'),
 );
-// The Analytics pages store is Studio's database; it has its own tests.
-jest.mock('../../../src/main/services/analyticsPages.service', () => ({
-  AnalyticsPagesService: {},
+// The agent itself is built from the AI SDK; not under test here.
+jest.mock('../../../src/extensions/analytics/main/analyticsAgent', () => ({
+  createAnalyticsAgent: jest.fn(async () => 'the analytics agent'),
 }));
+// Studio's agent runtime has its own tests; here only what the extension
+// asks of it matters.
+jest.mock('../../../src/main/services/agent.service', () => ({
+  __esModule: true,
+  default: {
+    onFactoryReset: jest.fn(() => () => undefined),
+    getAgentContext: jest.fn(),
+  },
+}));
+// The Analytics pages store has its own tests.
+jest.mock(
+  '../../../src/extensions/analytics/main/analyticsPages.service',
+  () => ({
+    AnalyticsPagesService: {},
+  }),
+);
 // The static site export has its own tests; here only its channels matter.
 jest.mock('../../../src/extensions/analytics/main/staticSite.service', () => ({
   StaticSiteService: {},
@@ -127,6 +145,40 @@ describe('Analytics extension', () => {
       'analytics:static-site:get-default-path',
       'analytics:static-site:folder-exists',
       'analytics:static-site:delete-build',
+      // What the Analytics editor answers the agent with
+      'agent:analytics:read-response',
+      'agent:analytics:update-response',
+      'agent:analytics:run-response',
+      'agent:analytics:query-results-response',
     ]);
+
+    // The AI agent of the Analytics tab
+    const base: any = { model: 'm' };
+    const context: any = {
+      conversationId: 3,
+      toolMode: 'agent',
+      connectionMeta: { name: 'c', type: 'duckdb' },
+      connectionId: 'c1',
+      pageId: 'p1',
+      notebookId: undefined,
+      enabledTools: {},
+      disabledTools: [],
+      skills: '',
+    };
+    await expect(getScreenAgent('analytics')?.(base, context)).resolves.toBe(
+      'the analytics agent',
+    );
+    expect(createAnalyticsAgent).toHaveBeenCalledWith(base, {
+      connectionMeta: context.connectionMeta,
+      connectionId: 'c1',
+      pageId: 'p1',
+      enabledTools: {},
+      skills: '',
+      conversationId: 3,
+      toolMode: 'agent',
+    });
+
+    await host.deactivateAll();
+    expect(getScreenAgent('analytics')).toBeUndefined();
   });
 });

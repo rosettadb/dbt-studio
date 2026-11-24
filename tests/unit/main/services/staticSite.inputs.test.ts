@@ -17,11 +17,14 @@ jest.mock('electron', () => ({
   dialog: { showOpenDialog: jest.fn() },
 }));
 
-jest.mock('../../../../src/main/services/analyticsPages.service', () => ({
-  AnalyticsPagesService: {
-    list: (...args: any[]) => mockListPages(...args),
-  },
-}));
+jest.mock(
+  '../../../../src/extensions/analytics/main/analyticsPages.service',
+  () => ({
+    AnalyticsPagesService: {
+      list: (...args: any[]) => mockListPages(...args),
+    },
+  }),
+);
 
 jest.mock('../../../../src/main/services/connectors.service', () => ({
   __esModule: true,

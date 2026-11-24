@@ -3,7 +3,7 @@ import type {
   InputState,
   InputValue,
   QueryStatus,
-} from '../../../../extensionApi/studio/analyticsBi';
+} from '../../shared/analyticsBi';
 
 export interface BiPageContextValue {
   results: Record<string, any[]>;

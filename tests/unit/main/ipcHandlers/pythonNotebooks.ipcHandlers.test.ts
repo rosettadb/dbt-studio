@@ -55,29 +55,47 @@ describe('pythonNotebooks.ipcHandlers', () => {
     };
 
     jest.doMock(
-      '../../../../src/main/services/pythonNotebooks.service',
+      '../../../../src/extensions/notebooks/main/pythonNotebooks.service',
       () => ({
         __esModule: true,
         default: notebooks,
       }),
     );
-    jest.doMock('../../../../src/main/services/notebookEnv.service', () => ({
-      __esModule: true,
-      default: env,
-    }));
-    jest.doMock('../../../../src/main/services/notebookKernel.service', () => ({
-      __esModule: true,
-      default: kernel,
-    }));
+    jest.doMock(
+      '../../../../src/extensions/notebooks/main/notebookEnv.service',
+      () => ({
+        __esModule: true,
+        default: env,
+      }),
+    );
+    jest.doMock(
+      '../../../../src/extensions/notebooks/main/notebookKernel.service',
+      () => ({
+        __esModule: true,
+        default: kernel,
+      }),
+    );
     jest.doMock('../../../../src/main/services/pythonRuntimes.service', () => ({
       __esModule: true,
       default: runtimes,
     }));
 
-    // The SQL notebooks store is not under test here.
-    jest.doMock('../../../../src/main/services/notebooks.service', () => ({
-      NotebooksService: {},
+    // The agent and Studio's agent runtime are not under test here.
+    jest.doMock(
+      '../../../../src/extensions/notebooks/main/notebooksAgent',
+      () => ({ createNotebooksAgent: jest.fn() }),
+    );
+    jest.doMock('../../../../src/main/services/agent.service', () => ({
+      __esModule: true,
+      default: { onFactoryReset: jest.fn(), getAgentContext: jest.fn() },
     }));
+    // The SQL notebooks store is not under test here.
+    jest.doMock(
+      '../../../../src/extensions/notebooks/main/notebooks.service',
+      () => ({
+        NotebooksService: {},
+      }),
+    );
 
     const electron = await import('electron');
     const { registerPythonNotebooksHandlers } = await import(

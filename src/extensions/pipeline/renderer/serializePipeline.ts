@@ -1,7 +1,7 @@
 import yaml from 'js-yaml';
 import type { Node, Edge } from 'reactflow';
 import type { PipelineNodeData } from './PipelineNode';
-import { isEmptyParam } from '../../../extensionApi/studio/pipelineShared';
+import { isEmptyParam } from '../shared/pipelineShared';
 
 function topoSort(
   nodes: Node<PipelineNodeData>[],

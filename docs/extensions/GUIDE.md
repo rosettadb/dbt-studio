@@ -1,8 +1,8 @@
 # Building a Studio extension
 
-An extension adds to Studio without changing Studio's code: a sidebar item, a screen, components inside existing screens, file handlers, bottom panels, commands, settings pages, backend handlers.
+An extension adds to Studio without changing Studio's code: a sidebar item, a screen, components inside existing screens, file handlers, bottom panels, commands, settings pages, backend handlers, a database connection, the AI agent of a screen, tools for the project agent.
 
-This guide covers what the extension system supports today. Sections are added as more injection points land (see `PLAN.md`).
+This guide covers what the extension system supports. Studio's own SQL Editor, Analytics, Notebooks and Pipelines are extensions built with exactly this API; section 7 says where to find a real example of each point. What is planned and not built yet is in `PLAN.md`.
 
 A complete working example is in [`examples/hello`](examples/hello). [`examples/clickhouse`](examples/clickhouse) adds a database connection.
 
@@ -81,6 +81,8 @@ A broken extension never stops Studio. It is listed as *Failed* or *Cannot start
 | `api.navigation.addItem(item)` | An item in the sidebar |
 | `api.screens.add(screen)` | A page under `/app/...` |
 | `api.slots.add(slotId, contribution)` | A component inside an existing screen's slot |
+| `api.workspaceTabs.add(screenId, tab)` | A tab in a screen that works on one connection (SQL Editor, Notebooks) |
+| `api.connections.register({ descriptor, ui })` | The tile, form, icon and label of a database (section 4.8) |
 | `api.dashboard.addCard(card)` | A card on Home |
 | `api.settings.addPage(page)` | A page in Settings |
 | `api.fileViews.add(view)` | A handler for a kind of file in the project editor |
@@ -440,6 +442,9 @@ exports.deactivate = () => { /* stop what you started outside api */ };
 | `api.workspace.onDidSaveFile(listener)` | Runs after a project file was written |
 | `api.windows.getMainWindow()` | Studio's main window, or null while it is not open |
 | `api.connections.register(connection)` | Adds a database Studio can connect to (section 4.8) |
+| `api.connections.onWillDelete(listener)` | Runs before a connection is deleted. Studio waits for it; a listener that throws stops the deletion and the user sees the message. A DuckLake instance comes as `ducklake-<id>`. |
+| `api.agents.add(screenKey, factory, options?)` | The AI agent of a screen (section 6.1) |
+| `api.projectAgent.addTools(toolset)` | Tools for the project agent (section 6.2) |
 | `api.startup.addTask({ id, run })` | Work to do while Studio starts, behind the splash screen. `run({ setMessage })` can change the splash line. A task that throws is logged and Studio still starts. |
 | `api.storagePath` | A folder for the extension's own files |
 | `api.extensions.getExports(id)` | What another extension's main `activate` returned |
@@ -453,6 +458,64 @@ The types are in `src/extensionApi/main.ts`.
 
 Pieces of Studio's main process that an internal extension may use are in `src/extensionApi/studioMain/` (the install queue, the process adapter, the settings / projects / task-manager services, types). `src/extensions/pipeline/main/index.ts` is a complete main half: backend handlers, a start-up task, and stopping a child process in `deactivate`.
 
+### 6.1 The AI agent of a screen
+
+A screen that opens the assistant gives its chat a `screenKey` (the SQL Editor uses `sql`). The extension that owns the screen says which agent answers there:
+
+```ts
+api.agents.add('sql', (base, context) => createSqlAgent(base, {
+  connectionMeta: context.connectionMeta,
+  enabledTools: context.enabledTools,
+  skills: context.skills,
+  conversationId: context.conversationId,
+  toolMode: context.toolMode,
+}));
+```
+
+- `base` is what Studio gives every agent: the model the user chose, the MCP tools, the skills, the step limit and the step hooks.
+- `context` is the run: `conversationId`, `toolMode` (`chat` is Ask, read-only; `agent` is Code), `connectionMeta` and `connectionId`, `notebookId`, `pageId`, `enabledTools` (the project tools the user allows, without the ones that write), `disabledTools`, `skills`.
+- The factory returns the agent (Studio's own are `ToolLoopAgent`s from the `ai` package, put together with `composeAgentRuntime`).
+- `options.emptyAnswerFallback(toolCalls)` may return what to say when the model ends a run without writing anything; null leaves Studio's general message.
+
+One agent per screen key. `project` is Studio's own. While the extension is off, the chat of its screen cannot run.
+
+Shared tool sets an agent can use are in `src/extensionApi/studioMain/`: connection SQL tools (`sqlTools`), DuckLake, cloud storage, connections, and the read-only dbt and file tools of a linked project.
+
+When a tool has to reach something only the open window knows (the cells of the open notebook), the main half sends a request on its own channel to the window of the chat and waits for the answer: `AgentService.getAgentContext(conversationId)` gives that window (`context.event.sender`). `src/extensions/notebooks/main/notebookAgentBridge.ts` is a complete one, with time-out and factory-reset handling.
+
+`src/extensions/sql/main/index.ts` (one agent), `src/extensions/analytics/main/index.ts` (agent and bridge) and `src/extensions/notebooks/main/index.ts` (agent, bridge, the empty-answer text, `onWillDelete`) are the examples.
+
+### 6.2 Tools for the project agent
+
+The assistant of the project screen is Studio's. An extension adds tools to it:
+
+```ts
+api.projectAgent.addTools({
+  id: 'pipeline',
+  tools: [
+    { name: 'studio_pipeline_list', description: 'List pipeline YAML files in the active project', readOnly: true },
+    { name: 'studio_pipeline_update', description: 'Update an existing validated pipeline ...', readOnly: false },
+  ],
+  createTools: (projectPath) => createStudioPipelineTools(projectPath),
+  promptSection: '### Pipeline Authoring Tools\n- studio_pipeline_list: ...\n\nAlways list before selecting a pipeline. ...',
+  context: { tag: 'pipeline_authoring_context', build: (projectPath, project) => buildProjectPipelineContext(projectPath, project) },
+  guardWrite: (projectPath, filePath) => (isPipelineFile(projectPath, filePath) ? 'Pipeline files must be written with the pipeline tools.' : null),
+});
+```
+
+| Field | What Studio does with it |
+|---|---|
+| `tools` | Names and one-line descriptions. A `readOnly` tool is offered in Ask mode and listed there; one that changes something is left out in Ask mode. They also show in the tool list of AI settings (`listDescription` if given). |
+| `createTools(projectPath)` | The tools themselves, keyed by name, built for every run. |
+| `promptSection` | A section of the tool list in the Code-mode instructions of dbt projects. |
+| `relatedTools` | Tools of Studio the section tells the agent to use; listed after yours for projects without dbt. |
+| `context` | A block of text built for every run and put into the instructions inside `<tag>...</tag>`. |
+| `guardWrite(projectPath, filePath)` | A message when the general file tools (`writeFile`, `writeDbtModel`) must not write that file because it belongs to your tools; null lets them. |
+
+The text goes into fixed places of the agent's instructions, so with one toolset the instructions read as if the tools were built in. A tool name that is already taken is refused. `src/extensions/pipeline/main/pipelineToolset.ts` is the example.
+
+How the chat shows a tool call (the line "Read pipeline", the result box) is still Studio's for every tool; an unknown tool gets the general display.
+
 ## 7. Internal extensions
 
 The tools that ship with Studio as extensions live in `src/extensions/<name>/` and are compiled into the app. They use the same `activate(api)` and the same API, and are listed in `src/extensionHost/main/builtinExtensions.main.ts` and `src/extensionHost/renderer/builtinExtensions.renderer.ts`.
@@ -464,18 +527,53 @@ Lint enforces the boundary:
 
 If an internal extension needs something from Studio, it is exported through `src/extensionApi/`, which makes it available to installed extensions as well.
 
-The **SQL Editor** (`src/extensions/sql/`) is the second: a sidebar entry, a screen with the assistant button, a Home card, and saved queries in its main half.
+The **SQL Editor** (`src/extensions/sql/`) is the second: a sidebar entry, a screen with the assistant button, a Home card, and in its main half the saved queries and the AI agent of the SQL Editor screen.
 
-**Analytics** (`src/extensions/analytics/`) is the third: a tab in the SQL Editor and Notebooks screens, a Home card with `onSelect`, and in its main half the Analytics page channels and the static site export (which uses `api.windows.getMainWindow()` to report progress).
+**Analytics** (`src/extensions/analytics/`) is the third: a tab in the SQL Editor and Notebooks screens, a Home card with `onSelect`, and in its main half the Analytics page channels, the static site export (which uses `api.windows.getMainWindow()` to report progress), and the AI agent of the Analytics tab.
 
-**Notebooks** (`src/extensions/notebooks/`) is the fourth: a sidebar entry, a screen that itself takes tabs from other extensions (`STUDIO_WORKSPACES.notebooks`), a Home card, and a main half whose `deactivate()` stops every running kernel when Studio quits or the extension is switched off.
+**Notebooks** (`src/extensions/notebooks/`) is the fourth: a sidebar entry, a screen that itself takes tabs from other extensions (`STUDIO_WORKSPACES.notebooks`), a Home card, and a main half with the notebook stores, environments and kernels, the AI agent of the Notebooks screen, and a `deactivate()` that stops every running kernel when Studio quits or the extension is switched off.
 
-The first internal extension is **Pipelines** (`src/extensions/pipeline/`): `manifest.shared.ts` is its manifest and `renderer/index.ts` its `activate`, which shows every UI injection point in use. `tests/unit/extensions/pipeline.activate.test.ts` shows how to test an extension through the real host.
+The first internal extension is **Pipelines** (`src/extensions/pipeline/`): `manifest.shared.ts` is its manifest and `renderer/index.ts` its `activate`, which shows most UI injection points in use. Its main half has the local runner, the pipeline templates, and the pipeline tools of the project agent (`main/pipelineToolset.ts`).
 
-## 8. Rules
+Where to look for a real example of each injection point:
+
+| Injection point | Example |
+|---|---|
+| Sidebar item, screen, Home card | `src/extensions/sql/renderer/index.ts`, `contributions.tsx` |
+| Screen with the assistant button | `src/extensions/notebooks/renderer/index.ts` (`assistant: true`) |
+| A tab in a connection screen | `src/extensions/analytics/renderer/workspaceTab.tsx` |
+| A screen that takes tabs from others | `src/extensions/sql/renderer/SqlScreen.tsx` (`useWorkspaceTabs`) |
+| Slots, file tree buttons, project menu entries | `src/extensions/pipeline/renderer/index.ts` |
+| File handler | `src/extensions/pipeline/renderer/PipelineFileView.tsx` |
+| Bottom panel, settings page, app provider, commands | `src/extensions/pipeline/renderer/index.ts` |
+| Home card with its own action | `src/extensions/analytics/renderer/contributions.tsx` (`onSelect`) |
+| Backend handlers | `src/extensions/sql/main/index.ts` |
+| Start-up task, stopping a process on `deactivate` | `src/extensions/pipeline/main/index.ts` |
+| Stopping kernels on `deactivate` | `src/extensions/notebooks/main/index.ts` |
+| Progress events to the main window | `src/extensions/analytics/main/staticSiteHandlers.ts` |
+| The AI agent of a screen | `src/extensions/sql/main/index.ts`, `sqlAgent.ts` |
+| An agent's bridge to the open window | `src/extensions/notebooks/main/notebookAgentBridge.ts` |
+| Tools for the project agent | `src/extensions/pipeline/main/pipelineToolset.ts` |
+| Before a connection is deleted | `src/extensions/notebooks/main/index.ts` (`onWillDelete`) |
+| A database connection | `docs/extensions/examples/clickhouse/` |
+
+## 8. Testing an extension
+
+Test it through the real hosts, not by calling its functions one by one: that is what proves the extension adds what it should and takes everything back.
+
+- **UI half:** create an `ExtensionHostRenderer`, `registerBuiltin(manifest, module)`, `apply([description])` with the state `active`, check the registries (`navigationItems`, `screens`, `dashboardCards`, `workspaceTabRegistry(screenId)`, the connection lookups), then `apply` again with `disabled` and check they are empty.
+- **Main half:** create an `ExtensionHostMain`, `registerBuiltin(manifest, module)`, `start()`, check `host.list()` says `active` and that `ipcMain.handle` got the channels; `deactivateAll()` and check what was given to Studio is gone (a screen agent, project agent tools, a database).
+- **An installed extension:** `host.install(folder)` runs the real install from a folder, as Settings → Extensions does.
+- Stop every host a test started (`deactivateAll()`), or what it registered stays for the next test.
+- Mock what is not under test at its own module (the AI SDK, a heavy service). Studio pieces reached through `src/extensionApi/` are mocked at their original Studio path; the API file only re-exports them.
+
+Examples: `tests/unit/extensions/sql.activate.test.ts` (both halves and the agent), `notebooks.activate.test.ts` (agent, bridge channels, connection deletion, kernel shutdown), `pipeline.main.test.ts` (handlers, start-up task, project agent tools), `clickhouseExample.test.ts` (install from a folder, a database used through Studio's services), `clickhouseExampleForm.test.tsx` (a UI script loaded the way the loader does).
+
+## 9. Rules
 
 1. Reach Studio only through `api` and the shared libraries.
 2. Register everything through `api` so it is removed with the extension; clean up the rest in `deactivate`.
 3. Prefix IPC channel names and ids with the extension's name.
 4. Do not change data that belongs to Studio or to another extension.
 5. If the extension cannot be switched live, say so with `requiresRestart`.
+6. Keep what users already have: the same routes, labels, stored keys and IPC channel names when a tool moves into an extension.

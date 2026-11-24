@@ -21,7 +21,7 @@ import {
   queriesAffectedByInputs,
   QueryStatus,
   resolveQuerySql,
-} from '../../../../../extensionApi/studio/analyticsBi';
+} from '../../../shared/analyticsBi';
 import { ResultCache } from './resultCache';
 
 export type QueryExecutor = (params: {

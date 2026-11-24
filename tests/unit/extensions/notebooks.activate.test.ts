@@ -10,8 +10,16 @@ import { parseExtensionManifest } from '../../../src/extensionHost/shared/manife
 import { notebooksManifest } from '../../../src/extensions/notebooks/manifest.shared';
 import { notebooksRenderer } from '../../../src/extensions/notebooks/renderer';
 import { notebooksMain } from '../../../src/extensions/notebooks/main';
+import { createNotebooksAgent } from '../../../src/extensions/notebooks/main/notebooksAgent';
+import { getScreenAgent } from '../../../src/main/services/ai/agents/screenAgents';
+import { emitWillDeleteConnection } from '../../../src/main/services/connectionEvents';
+import { listNotebooksOfConnection } from '../../../src/main/services/notebookCatalog';
 
 const mockShutdownAll = jest.fn(async () => undefined);
+const mockArchive = jest.fn(async (..._args: unknown[]) => undefined);
+const mockListNotebooks = jest.fn(async (..._args: unknown[]) => [
+  { id: 'n1' },
+]);
 
 // ESM-only packages somewhere below Studio's components; not under test.
 jest.mock('react-markdown', () => ({ __esModule: true, default: () => null }));
@@ -25,24 +33,47 @@ jest.mock('../../../src/renderer/components/chat', () => ({
 }));
 // The notebook stores, environments and kernels are Studio services with
 // their own tests; here only the channels and the shutdown matter.
-jest.mock('../../../src/main/services/notebooks.service', () => ({
-  NotebooksService: {},
+jest.mock('../../../src/extensions/notebooks/main/notebooks.service', () => ({
+  NotebooksService: {
+    archiveConnectionNotebooks: (...args: unknown[]) => mockArchive(...args),
+    listNotebooks: (...args: unknown[]) => mockListNotebooks(...args),
+  },
 }));
-jest.mock('../../../src/main/services/pythonNotebooks.service', () => ({
+jest.mock(
+  '../../../src/extensions/notebooks/main/pythonNotebooks.service',
+  () => ({
+    __esModule: true,
+    default: {},
+  }),
+);
+jest.mock('../../../src/extensions/notebooks/main/notebookEnv.service', () => ({
   __esModule: true,
   default: {},
 }));
-jest.mock('../../../src/main/services/notebookEnv.service', () => ({
-  __esModule: true,
-  default: {},
-}));
-jest.mock('../../../src/main/services/notebookKernel.service', () => ({
-  __esModule: true,
-  default: { shutdownAll: () => mockShutdownAll() },
-}));
+jest.mock(
+  '../../../src/extensions/notebooks/main/notebookKernel.service',
+  () => ({
+    __esModule: true,
+    default: { shutdownAll: () => mockShutdownAll() },
+  }),
+);
 jest.mock('../../../src/main/services/pythonRuntimes.service', () => ({
   __esModule: true,
   default: {},
+}));
+
+// The agent itself is built from the AI SDK; not under test here.
+jest.mock('../../../src/extensions/notebooks/main/notebooksAgent', () => ({
+  createNotebooksAgent: jest.fn(async () => 'the notebooks agent'),
+}));
+// Studio's agent runtime has its own tests; here only what the extension
+// asks of it matters.
+jest.mock('../../../src/main/services/agent.service', () => ({
+  __esModule: true,
+  default: {
+    onFactoryReset: jest.fn(() => () => undefined),
+    getAgentContext: jest.fn(),
+  },
 }));
 
 const description = (state: 'active' | 'disabled') => {
@@ -111,7 +142,8 @@ describe('Notebooks extension', () => {
       ([channel]) => channel as string,
     );
     // 18 SQL notebook channels, 2 interpreter channels, 22 Python notebook ones
-    expect(channels).toHaveLength(42);
+    // plus the 7 channels the open notebook answers the agent on
+    expect(channels).toHaveLength(49);
     expect(channels.filter((c) => c.startsWith('notebooks:'))).toHaveLength(18);
     expect(channels.filter((c) => c.startsWith('pythonRuntimes:'))).toEqual([
       'pythonRuntimes:list',
@@ -121,8 +153,65 @@ describe('Notebooks extension', () => {
       channels.filter((c) => c.startsWith('pythonNotebooks:')),
     ).toHaveLength(22);
 
+    expect(channels.filter((c) => c.startsWith('agent:'))).toEqual([
+      'agent:notebook:state-response',
+      'agent:notebook:cell-read-response',
+      'agent:notebook:cell-add-response',
+      'agent:notebook:cell-update-response',
+      'agent:notebook:cell-run-response',
+      'agent:notebook:cell-result-response',
+      'agent:python-notebook:response',
+    ]);
+
+    // The AI agent of the Notebooks screen
+    const base: any = { model: 'm' };
+    const context: any = {
+      conversationId: 5,
+      toolMode: 'agent',
+      connectionMeta: { name: 'c', type: 'duckdb' },
+      connectionId: 'c1',
+      notebookId: 'nb1',
+      enabledTools: {},
+      disabledTools: ['writeFile'],
+      skills: '',
+    };
+    await expect(getScreenAgent('notebooks')?.(base, context)).resolves.toBe(
+      'the notebooks agent',
+    );
+    expect(createNotebooksAgent).toHaveBeenCalledWith(base, {
+      connectionMeta: context.connectionMeta,
+      notebookId: 'nb1',
+      connectionId: 'c1',
+      enabledTools: {},
+      disabledTools: ['writeFile'],
+      skills: '',
+      conversationId: 5,
+      toolMode: 'agent',
+    });
+
+    // Deleting a connection archives its notebooks first, and stops when
+    // that fails
+    await emitWillDeleteConnection('c1');
+    expect(mockArchive).toHaveBeenCalledWith('c1');
+    mockArchive.mockRejectedValueOnce(new Error('disk full'));
+    await expect(emitWillDeleteConnection('ducklake-9')).rejects.toThrow(
+      'disk full',
+    );
+
+    // Studio's second brain can list a connection's notebooks
+    await expect(listNotebooksOfConnection('c1')).resolves.toEqual([
+      { id: 'n1' },
+    ]);
+
     expect(mockShutdownAll).not.toHaveBeenCalled();
     await host.deactivateAll();
     expect(mockShutdownAll).toHaveBeenCalledTimes(1);
+
+    // With the extension stopped, Studio's links to it are gone
+    expect(getScreenAgent('notebooks')).toBeUndefined();
+    mockArchive.mockClear();
+    await emitWillDeleteConnection('c2');
+    expect(mockArchive).not.toHaveBeenCalled();
+    await expect(listNotebooksOfConnection('c1')).resolves.toEqual([]);
   });
 });

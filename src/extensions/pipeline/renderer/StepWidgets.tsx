@@ -25,10 +25,7 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
-import type {
-  PluginWidget,
-  PluginWidgetType,
-} from '../../../extensionApi/studio/pipelineShared';
+import type { PluginWidget, PluginWidgetType } from '../shared/pipelineShared';
 
 // One form field of a pipeline step, drawn from a widget of the plugin's
 // manifest entry. A step value is whatever the pipeline file holds; every

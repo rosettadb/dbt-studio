@@ -6,7 +6,7 @@ import {
   Typography,
   useTheme,
 } from '@mui/material';
-import type { QueryStatus } from '../../../../../extensionApi/studio/analyticsBi';
+import type { QueryStatus } from '../../../shared/analyticsBi';
 
 /** Clickable SQL status badge shown where a SQL block sits on the page. */
 export const SqlBadge: React.FC<{

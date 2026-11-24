@@ -4,7 +4,7 @@ import CloudIcon from '@mui/icons-material/Cloud';
 import { PipelineGraph } from './PipelineGraph';
 import { parsePipelineConfig } from './parsePipelineConfig';
 import type { PipelineJob, PipelineStep } from './types';
-import type { MacroContext } from '../../../extensionApi/studio/pipelineShared';
+import type { MacroContext } from '../shared/pipelineShared';
 import { useCloudActionStatus } from '../../../extensionApi/studio/cloudRunController';
 import type {
   CloudActionStatus,

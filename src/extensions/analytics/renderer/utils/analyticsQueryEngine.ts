@@ -10,7 +10,7 @@ import { DuckLakeService } from '../../../../extensionApi/studio/duckLakeService
 import {
   buildQueryDependencyGraph,
   validateQueryReferences,
-} from '../../../../extensionApi/studio/analyticsQueryReferences';
+} from '../runtime/queryDependencyResolver';
 
 export type QueryExecutionResult = {
   name: string;

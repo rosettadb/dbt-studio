@@ -21,6 +21,25 @@ import type {
   TestResult,
 } from '../connections/core/Connection.main';
 import type { ConnectionDefinition } from '../connections/core/connectorRegistry.main';
+import type {
+  ProjectAgentToolset,
+  ProjectToolInfo,
+} from '../main/services/ai/agents/projectToolsets';
+import type {
+  ScreenAgentContext,
+  ScreenAgentFactory,
+  ScreenAgentOptions,
+  ScreenAgentToolCall,
+} from '../main/services/ai/agents/screenAgents';
+
+export type { ProjectAgentToolset, ProjectToolInfo };
+
+export type {
+  ScreenAgentContext,
+  ScreenAgentFactory,
+  ScreenAgentOptions,
+  ScreenAgentToolCall,
+};
 
 export type { ConnectionDefinition, QueryContext, TestResult };
 
@@ -98,6 +117,29 @@ export interface ExtensionMainApi {
   readonly startup: {
     addTask: (task: StartupTask) => Disposable;
   };
+  readonly agents: {
+    /**
+     * Adds the AI agent of a screen. The assistant opened on a screen whose
+     * chat uses this `screenKey` runs the agent `factory` builds: it gets
+     * Studio's base (model, MCP tools, skills, step limits) and the context
+     * of the run (connection, open notebook or page, Ask or Code mode). One
+     * agent per screen key; `project` is Studio's own.
+     */
+    add: (
+      screenKey: string,
+      factory: ScreenAgentFactory,
+      options?: ScreenAgentOptions,
+    ) => Disposable;
+  };
+  readonly projectAgent: {
+    /**
+     * Gives the project agent (the assistant of the project screen) a set
+     * of tools, with the text that tells it about them, a context block for
+     * its instructions, and optionally a rule about which project files may
+     * only be written with these tools.
+     */
+    addTools: (toolset: ProjectAgentToolset) => Disposable;
+  };
   readonly connections: {
     /**
      * Adds a database Studio can connect to: it can be saved, tested,
@@ -106,6 +148,14 @@ export interface ExtensionMainApi {
      * is already taken is refused. dbt projects cannot use it yet.
      */
     register: (connection: ExtensionConnection | Connection<any>) => Disposable;
+    /**
+     * Runs before a connection is deleted (a DuckLake instance comes as
+     * `ducklake-<id>`). The deletion waits for the listener; a listener
+     * that throws stops it and the user sees the message.
+     */
+    onWillDelete: (
+      listener: (connectionId: string) => Promise<void> | void,
+    ) => Disposable;
   };
   /** A folder this extension may use for its own files. Created on demand. */
   readonly storagePath: string;

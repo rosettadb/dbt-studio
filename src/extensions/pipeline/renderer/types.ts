@@ -1,5 +1,5 @@
 import type { CloudStepStatus } from '../../../extensionApi/studio/types';
-import type { StepParams } from '../../../extensionApi/studio/pipelineShared';
+import type { StepParams } from '../shared/pipelineShared';
 
 export interface PipelineStep {
   name: string;

@@ -1,5 +1,5 @@
 import './mocks';
-import { buildDialectHints } from '../../../../src/main/services/ai/agents/notebooksAgent.prompts';
+import { buildDialectHints } from '../../../../src/extensions/notebooks/main/notebooksAgent.prompts';
 import LineageService from '../../../../src/main/services/lineage.service';
 import { canUseAsDbtConnection } from '../../../../src/types/backend';
 

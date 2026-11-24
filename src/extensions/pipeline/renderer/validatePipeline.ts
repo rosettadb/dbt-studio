@@ -3,7 +3,7 @@ import type { PipelineNodeData } from './PipelineNode';
 import {
   validateStepParams,
   type PluginDefinition,
-} from '../../../extensionApi/studio/pipelineShared';
+} from '../shared/pipelineShared';
 
 export interface ValidationError {
   nodeId?: string;

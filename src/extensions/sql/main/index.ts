@@ -3,13 +3,26 @@ import type {
   ExtensionMainModule,
 } from '../../../extensionApi/main';
 import { SavedQueriesService } from './savedQueries.service';
+import { createSqlAgent } from './sqlAgent';
 
 /**
  * Main-process half of the SQL Editor extension: the saved queries of each
- * connection. Running queries is Studio's connections layer.
+ * connection and the AI agent of the SQL Editor screen. Running queries is
+ * Studio's connections layer.
  */
 
 const activate = (api: ExtensionMainApi): void => {
+  // The assistant of the SQL Editor screen.
+  api.agents.add('sql', (base, context) =>
+    createSqlAgent(base, {
+      connectionMeta: context.connectionMeta,
+      enabledTools: context.enabledTools,
+      skills: context.skills,
+      conversationId: context.conversationId,
+      toolMode: context.toolMode,
+    }),
+  );
+
   api.ipc.handle('savedQueries:list', async (_event, connectionId: string) => {
     return SavedQueriesService.list(connectionId);
   });

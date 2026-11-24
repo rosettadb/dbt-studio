@@ -1,4 +1,4 @@
-import type { ComponentNode } from '../../../../extensionApi/studio/analyticsBi';
+import type { ComponentNode } from '../../shared/analyticsBi';
 
 export type Row = Record<string, unknown>;
 

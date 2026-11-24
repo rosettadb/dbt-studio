@@ -3,7 +3,7 @@ import yaml from 'js-yaml';
 import path from 'path';
 import fs from 'fs';
 import { v4 as uuidV4 } from 'uuid';
-import { NotebooksService } from './notebooks.service';
+import { emitWillDeleteConnection } from './connectionEvents';
 import {
   BigQueryTestResponse,
   ConnectionInput,
@@ -470,9 +470,10 @@ export default class ConnectorsService {
       );
     }
 
-    // Archive notebooks for this connection
-    // If archival fails, abort the deletion to prevent orphaned notebooks
-    await NotebooksService.archiveConnectionNotebooks(connectionToDelete.id);
+    // Whatever is kept per connection is put away first (the Notebooks
+    // extension archives the connection's notebooks).
+    // If that fails, abort the deletion to prevent orphaned notebooks
+    await emitWillDeleteConnection(connectionToDelete.id);
 
     // Remove the connection from the database
     await databaseStore.updateField('connections', (current) =>

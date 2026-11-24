@@ -1,5 +1,5 @@
 import type { ExtensionMainApi } from '../../../extensionApi/main';
-import { AnalyticsPagesService } from '../../../extensionApi/studioMain/analyticsPagesService';
+import { AnalyticsPagesService } from './analyticsPages.service';
 import {
   NewAnalyticsPage,
   UpdateAnalyticsPage,

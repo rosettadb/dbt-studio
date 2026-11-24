@@ -9,11 +9,11 @@
 import { BrowserWindow, shell, dialog, app } from 'electron';
 import fs from 'fs';
 import path from 'path';
-import { AnalyticsPagesService } from '../../../extensionApi/studioMain/analyticsPagesService';
+import { AnalyticsPagesService } from './analyticsPages.service';
 import ConnectorsService from '../../../extensionApi/studioMain/connectorsService';
 import MainDatabaseService from '../../../extensionApi/studioMain/mainDatabaseService';
 import SettingsService from '../../../extensionApi/studioMain/settingsService';
-import { extractQueryReferences } from '../../../extensionApi/studioMain/analyticsQueryReferences';
+import { extractQueryReferences } from '../renderer/runtime/queryDependencyResolver';
 import DuckLakeService from '../../../extensionApi/studioMain/duckLakeService';
 import {
   buildPageGraph,
@@ -22,7 +22,7 @@ import {
   interpolateSql,
   parsePage,
   type InputState,
-} from '../../../extensionApi/studioMain/analyticsBi';
+} from '../shared/analyticsBi';
 import {
   toSlug,
   generateSiteShell,

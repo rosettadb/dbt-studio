@@ -10,7 +10,7 @@ import type { CustomError } from '../../../extensionApi/studio/types';
 import type {
   PluginDefinition,
   RunnerRequirementStatus,
-} from '../../../extensionApi/studio/pipelineShared';
+} from '../shared/pipelineShared';
 import * as pipelineServices from './pipelineServices';
 
 // react-query hooks over the pipeline tool's main-process handlers.

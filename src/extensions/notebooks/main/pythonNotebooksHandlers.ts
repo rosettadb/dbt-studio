@@ -5,9 +5,9 @@
  */
 
 import type { ExtensionMainApi } from '../../../extensionApi/main';
-import PythonNotebooksService from '../../../extensionApi/studioMain/pythonNotebooksService';
-import NotebookEnvService from '../../../extensionApi/studioMain/notebookEnvService';
-import NotebookKernelService from '../../../extensionApi/studioMain/notebookKernelService';
+import PythonNotebooksService from './pythonNotebooks.service';
+import NotebookEnvService from './notebookEnv.service';
+import NotebookKernelService from './notebookKernel.service';
 import PythonRuntimesService from '../../../extensionApi/studioMain/pythonRuntimesService';
 import type {
   CreatePythonNotebookInput,

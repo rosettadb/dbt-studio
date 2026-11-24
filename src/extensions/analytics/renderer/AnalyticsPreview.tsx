@@ -9,7 +9,7 @@ import {
   parseAnalyticsMarkdown,
   extractFrontmatterTitle,
   type AnalyticsBlock,
-} from '../../../extensionApi/studio/analyticsMarkdown';
+} from './utils/analyticsMarkdown';
 import { AnalyticsComponentRenderer } from './AnalyticsComponentRenderer';
 import { markdownComponents } from './bi/markdown/markdownComponents';
 import { SqlBadge } from './bi/ui/placeholders';
@@ -18,7 +18,7 @@ import {
   usesLegacyEngine,
   type InputState,
   type InputValue,
-} from '../../../extensionApi/studio/analyticsBi';
+} from '../shared/analyticsBi';
 
 // Shared with the Plan 97 engine; SqlBadge is re-exported for old imports.
 export { SqlBadge } from './bi/ui/placeholders';

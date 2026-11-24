@@ -12,7 +12,7 @@ import { DbtCoreVersionService } from '../../dbtCoreVersion.service';
 import AgentService from '../../agent.service';
 import SecureStorageService from '../../secureStorage.service';
 import { TerminalConfirmGate } from './terminalConfirmGate';
-import { isProtectedPipelineWritePath } from './studio/pipeline.tools';
+import { findProjectWriteGuard } from '../agents/projectToolsets';
 import FileMutationRollbackService from '../fileMutationRollback.service';
 import { emitFileDidSave } from '../../../../extensionHost/main/fileEvents.main';
 import { isDbtRuntimeChanging } from '../../../utils/installTask';
@@ -372,12 +372,10 @@ export const writeDbtModel = tool({
     let mutationId: string | undefined;
     try {
       assertWithinProject(filePath, projectPath);
-      if (isProtectedPipelineWritePath(projectPath, filePath)) {
-        return {
-          error:
-            'Pipeline files must be generated or updated with studio_pipeline_generate or studio_pipeline_update.',
-        };
-      }
+      // Files that belong to a contributed toolset (pipelines) are written
+      // with its own tools.
+      const guarded = findProjectWriteGuard(projectPath, filePath);
+      if (guarded) return { error: guarded };
 
       // Only allow writing SQL and YAML files
       if (!/\.(sql|yml|yaml)$/i.test(filePath)) {
@@ -744,12 +742,10 @@ export function createDbtTools(
         let mutationId: string | undefined;
         try {
           assertWithinProject(filePath, projectPath);
-          if (isProtectedPipelineWritePath(projectPath, filePath)) {
-            return {
-              error:
-                'Pipeline files must be generated or updated with studio_pipeline_generate or studio_pipeline_update.',
-            };
-          }
+          // Files that belong to a contributed toolset (pipelines) are written
+          // with its own tools.
+          const guarded = findProjectWriteGuard(projectPath, filePath);
+          if (guarded) return { error: guarded };
           if (!/\.(sql|yml|yaml)$/i.test(filePath))
             return {
               error: 'Only .sql, .yml, and .yaml files can be written.',

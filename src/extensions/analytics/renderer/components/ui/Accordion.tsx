@@ -9,8 +9,8 @@ import { ExpandMore } from '@mui/icons-material';
 import {
   getStringProp,
   getBooleanProp,
-} from '../../../../../extensionApi/studio/analyticsComponentProps';
-import type { ParsedProps } from '../../../../../extensionApi/studio/analyticsComponentProps';
+} from '../../utils/analyticsComponentProps';
+import type { ParsedProps } from '../../utils/analyticsComponentProps';
 import type { AnalyticsComponentProps } from '../../registry/analyticsComponentRegistry';
 
 type Props = AnalyticsComponentProps & {

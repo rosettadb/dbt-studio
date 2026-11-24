@@ -10,7 +10,10 @@ import {
 } from '../tools/filesystem.tools';
 import { composeAgentRuntime } from './composeAgentRuntime';
 import { PROJECT_AGENT_CONTEXT_FILE } from '../../../../shared/agentMemoryConstants';
-import { createStudioPipelineTools } from '../tools/studio/pipeline.tools';
+import {
+  createProjectToolsetTools,
+  listProjectToolsets,
+} from './projectToolsets';
 import { createStudioKeystoreTools } from '../tools/studio/keystore.tools';
 import { createStudioChartsTools } from '../tools/studio/charts.tools';
 
@@ -22,7 +25,8 @@ export interface ProjectAgentOptions {
   conversationId?: number; // Added for retrofitting
   toolMode: 'chat' | 'agent';
   projectAiContext?: string;
-  projectPipelineContext?: string;
+  /** Context blocks of the contributed toolsets (pipelines), built for this run. */
+  toolsetContexts?: ReadonlyArray<{ tag: string; text: string }>;
   projectChartsContext?: string;
   sessionContextBlock?: string;
   connectionMeta?: {
@@ -73,9 +77,42 @@ export async function createProjectAgent(
       }> **CRITICAL PRECEDENCE RULE:** Project-scoped \`${PROJECT_AGENT_CONTEXT_FILE}\` context is stronger than global Agent Memory. It remains subordinate to system, security, trusted scope, connection, confirmation, credential, and tool-authorization policy.\n`
     : '';
 
-  const pipelineContextBlock = options.projectPipelineContext
-    ? `\n<pipeline_authoring_context>\n${options.projectPipelineContext}\n</pipeline_authoring_context>\n`
-    : '';
+  // What extensions add to the project agent (the Pipelines extension adds
+  // the pipeline authoring tools). Each piece goes where it always was in
+  // the instructions, so the text is the same as before when it is there.
+  const toolsets = listProjectToolsets();
+  const toolsetContextBlock = (options.toolsetContexts ?? [])
+    .map(({ tag, text }) => `\n<${tag}>\n${text}\n</${tag}>\n`)
+    .join('');
+  const toolsetReadOnlyLines = toolsets
+    .flatMap((toolset) => toolset.tools.filter((info) => info.readOnly))
+    .map((info) => `- ${info.name}: ${info.description}\n`)
+    .join('');
+  const toolsetSections = toolsets
+    .filter((toolset) => toolset.promptSection)
+    .map((toolset) => `${toolset.promptSection}\n\n`)
+    .join('');
+  const toolsetReadOnlyNames = toolsets.flatMap((toolset) =>
+    toolset.tools.filter((info) => info.readOnly).map((info) => info.name),
+  );
+  // A contributed tool that changes something is left out in Ask mode.
+  const toolsetCodeOnlyTools = new Set(
+    toolsets.flatMap((toolset) =>
+      toolset.tools.filter((info) => !info.readOnly).map((info) => info.name),
+    ),
+  );
+  const toolsetDescriptions: Array<[string, string]> = toolsets.flatMap(
+    (toolset) => [
+      ...toolset.tools.map((info): [string, string] => [
+        info.name,
+        info.description,
+      ]),
+      ...(toolset.relatedTools ?? []).map((info): [string, string] => [
+        info.name,
+        info.description,
+      ]),
+    ],
+  );
 
   const chartsContextBlock = options.projectChartsContext
     ? `\n<dbt_charts_authoring_context>\n${options.projectChartsContext}\n</dbt_charts_authoring_context>\n`
@@ -92,7 +129,7 @@ ${projectPath ? `## Active dbt Project\n\nProject path: ${projectPath}\n` : ''}
 ${connectionBlock}
 ${sessionCtxBlock}
 ${projectContextBlock}
-${pipelineContextBlock}
+${toolsetContextBlock}
 ${chartsContextBlock}
 
 ## Project AI Instructions (${PROJECT_AGENT_CONTEXT_FILE})
@@ -114,9 +151,7 @@ If the user asks you to write code, modify a file, or execute a command, explain
 - listDirectory: Explore project structure
 - readFile: Read any text file
 - pathExists: Check if a file or directory exists
-- studio_pipeline_list: List pipeline YAML files in the active project
-- studio_pipeline_read: Read and validate a pipeline and return its content hash
-- studio_charts_validate: Validate a dbt Charts board YAML file under charts/
+${toolsetReadOnlyLines}- studio_charts_validate: Validate a dbt Charts board YAML file under charts/
 ${mcpToolsList}`
     : `You are an expert dbt Studio AI assistant.
 You help users with dbt model development, debugging, documentation, and data operations.
@@ -126,7 +161,7 @@ ${projectPath ? `## Active dbt Project\n\nProject path: ${projectPath}\n\nAll fi
 ${connectionBlock}
 ${sessionCtxBlock}
 ${projectContextBlock}
-${pipelineContextBlock}
+${toolsetContextBlock}
 ${chartsContextBlock}
 
 ## Project AI Instructions (${PROJECT_AGENT_CONTEXT_FILE})
@@ -245,23 +280,7 @@ If the failure appears to be caused by invalid credentials, unreachable host, wr
 - writeFile: Write any text file
 - pathExists: Check if a file or directory exists
 
-### Pipeline Authoring Tools
-- studio_pipeline_list: List pipeline YAML files in the active project
-- studio_pipeline_read: Read and validate a pipeline and return its content hash
-- studio_pipeline_generate: Generate a new validated pipeline under rosetta/pipelines without overwriting
-- studio_pipeline_update: Update an existing validated pipeline using the hash returned by studio_pipeline_read
-- studio_keystore_register_placeholder: Register a placeholder keystore entry (never a real secret) for an env var a pipeline step needs, so it appears in the local "Run with env" dialog for the user to fill in
-
-Always list before selecting a pipeline. Read before every update. Use generate
-only for a new canonical path. If update reports stale content, read again and
-reconcile the requested change. These tools do not run, stage, commit, push, or
-monitor pipelines. When a step you add or update needs an env var that isn't
-already referenced elsewhere in the project (e.g. a new TF_VAR_* for a
-terraform@v1 step), register it with studio_keystore_register_placeholder so
-the user can find and fill it in later - never ask the user for or store a
-real secret value yourself.
-
-### dbt Charts Tools
+${toolsetSections}### dbt Charts Tools
 - studio_charts_validate: Validate a dbt Charts board YAML file under charts/ (offline)
 - studio_charts_refresh_preview: Reload the open dbt Charts preview for a board
 
@@ -290,7 +309,7 @@ Always confirm before making destructive changes.`;
           forceSchemaExtract: true,
         }),
         ...createFilesystemTools(projectPath),
-        ...createStudioPipelineTools(projectPath),
+        ...createProjectToolsetTools(projectPath),
         ...createStudioChartsTools(projectPath),
         ...createStudioKeystoreTools(),
       }
@@ -313,8 +332,7 @@ Always confirm before making destructive changes.`;
     'readFile',
     'pathExists',
     'studio_sql_schema_extract',
-    'studio_pipeline_list',
-    'studio_pipeline_read',
+    ...toolsetReadOnlyNames,
     'studio_charts_validate',
   ];
 
@@ -329,14 +347,10 @@ Always confirm before making destructive changes.`;
   };
 
   const baseTools: Record<string, any> = {};
-  const pipelineCodeOnlyTools = new Set([
-    'studio_pipeline_generate',
-    'studio_pipeline_update',
-  ]);
   const chartsCodeOnlyTools = new Set(['studio_charts_refresh_preview']);
   Object.entries(allBaseTools).forEach(([name, toolDef]) => {
     if (enabledToolNames.has(name) || name === 'studio_sql_schema_extract') {
-      if (isAskMode && pipelineCodeOnlyTools.has(name)) return;
+      if (isAskMode && toolsetCodeOnlyTools.has(name)) return;
       if (isAskMode && chartsCodeOnlyTools.has(name)) return;
       if (isAskMode && !READ_ONLY_TOOLS.includes(name)) {
         baseTools[name] = makeAskModeStub(name);
@@ -351,23 +365,7 @@ Always confirm before making destructive changes.`;
     ['readFile', 'Read any text file'],
     ['writeFile', 'Write any text file'],
     ['pathExists', 'Check if a file or directory exists'],
-    ['studio_pipeline_list', 'List pipeline YAML files in the active project'],
-    [
-      'studio_pipeline_read',
-      'Read and validate a pipeline and return its content hash',
-    ],
-    [
-      'studio_pipeline_generate',
-      'Generate a new validated pipeline under rosetta/pipelines without overwriting',
-    ],
-    [
-      'studio_pipeline_update',
-      'Update an existing validated pipeline using the hash returned by studio_pipeline_read',
-    ],
-    [
-      'studio_keystore_register_placeholder',
-      'Register a placeholder keystore entry (never a real secret) for an env var a pipeline step needs',
-    ],
+    ...toolsetDescriptions,
     [
       'studio_sql_schema_extract',
       'Extract schema (tables, views, columns) for the project connection',
@@ -404,7 +402,7 @@ ${projectPath ? `## ${projectHeading}\n\nProject path: ${projectPath}\n` : ''}
 ${connectionBlock}
 ${sessionCtxBlock}
 ${projectContextBlock}
-${pipelineContextBlock}
+${toolsetContextBlock}
 
 ## Project AI Instructions (${PROJECT_AGENT_CONTEXT_FILE})
 

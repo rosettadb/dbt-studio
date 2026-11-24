@@ -12,8 +12,8 @@ import { useEffect, useRef } from 'react';
 import {
   buildAgentNotebookState,
   summarizeCell,
-} from '../../../../extensionApi/studio/notebookAgentSummary';
-import type { CellRunPhase } from '../../../../extensionApi/studio/notebookAgentSummary';
+} from '../../shared/notebookAgentSummary';
+import type { CellRunPhase } from '../../shared/notebookAgentSummary';
 import { registerPythonNotebookBridge } from '../pythonNotebookBridge.service';
 import {
   PYTHON_IDENTIFIER,

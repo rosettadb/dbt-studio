@@ -7,11 +7,12 @@ import { SettingsService } from '../../../extensionApi/studioMain/services';
 import {
   loadPluginDefinitions,
   resolveProjectMacroDirs,
-} from '../../../extensionApi/studioMain/pipelineShared';
+} from './pipelineShared';
 import RunnerService from './runner.service';
 import { registerRunnerHandlers, stopRunner } from './runnerHandlers';
 import { registerPipelineTemplatesHandlers } from './pipelineTemplatesHandlers';
 import { extractRequiredEnvVars, listPipelines } from './pipelineProjects';
+import { pipelineToolset } from './pipelineToolset';
 
 /**
  * Main-process half of the Pipelines extension: running a pipeline with the
@@ -32,6 +33,9 @@ const activate = (api: ExtensionMainApi): void => {
 
   registerRunnerHandlers(api);
   registerPipelineTemplatesHandlers(api);
+
+  // The pipeline authoring tools of the project agent.
+  api.projectAgent.addTools(pipelineToolset);
 
   // The plugins of the local runner, for the pipeline designer.
   api.ipc.handle('runner:plugins:manifest', async () => {

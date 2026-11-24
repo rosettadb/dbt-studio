@@ -10,6 +10,8 @@ import { parseExtensionManifest } from '../../../src/extensionHost/shared/manife
 import { sqlManifest } from '../../../src/extensions/sql/manifest.shared';
 import { sqlRenderer } from '../../../src/extensions/sql/renderer';
 import { sqlMain } from '../../../src/extensions/sql/main';
+import { createSqlAgent } from '../../../src/extensions/sql/main/sqlAgent';
+import { getScreenAgent } from '../../../src/main/services/ai/agents/screenAgents';
 
 // ESM-only packages somewhere below Studio's components; not under test.
 jest.mock('react-markdown', () => ({ __esModule: true, default: () => null }));
@@ -20,6 +22,10 @@ jest.mock('rehype-sanitize', () => () => undefined);
 // The assistant pane has its own tests and does not load under jest as is.
 jest.mock('../../../src/renderer/components/chat', () => ({
   ChatWindow: () => null,
+}));
+// The agent itself is built from the AI SDK; not under test here.
+jest.mock('../../../src/extensions/sql/main/sqlAgent', () => ({
+  createSqlAgent: jest.fn(async () => 'the sql agent'),
 }));
 // The saved queries are kept in Studio's JSON store.
 jest.mock('../../../src/main/database', () => ({
@@ -92,5 +98,38 @@ describe('SQL Editor extension', () => {
       'savedQueries:update',
       'savedQueries:delete',
     ]);
+
+    await host.deactivateAll();
+  });
+
+  it('provides the AI agent of the SQL Editor screen, and takes it back', async () => {
+    const host = new ExtensionHostMain({ studioVersion: '1.7.8' });
+    host.registerBuiltin(sqlManifest, sqlMain);
+    await host.start();
+    expect(host.list()).toMatchObject([{ id: 'rosetta.sql', state: 'active' }]);
+
+    const base: any = { model: 'm' };
+    const context: any = {
+      conversationId: 7,
+      toolMode: 'chat',
+      connectionMeta: { name: 'c', type: 'postgres' },
+      connectionId: 'c1',
+      enabledTools: { readFile: true },
+      disabledTools: [],
+      skills: 'skills',
+    };
+    await expect(getScreenAgent('sql')?.(base, context)).resolves.toBe(
+      'the sql agent',
+    );
+    expect(createSqlAgent).toHaveBeenCalledWith(base, {
+      connectionMeta: context.connectionMeta,
+      enabledTools: context.enabledTools,
+      skills: 'skills',
+      conversationId: 7,
+      toolMode: 'chat',
+    });
+
+    await host.deactivateAll();
+    expect(getScreenAgent('sql')).toBeUndefined();
   });
 });

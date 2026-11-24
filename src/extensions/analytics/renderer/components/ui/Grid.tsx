@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box } from '@mui/material';
-import { getNumberProp } from '../../../../../extensionApi/studio/analyticsComponentProps';
-import type { ParsedProps } from '../../../../../extensionApi/studio/analyticsComponentProps';
+import { getNumberProp } from '../../utils/analyticsComponentProps';
+import type { ParsedProps } from '../../utils/analyticsComponentProps';
 import type { AnalyticsComponentProps } from '../../registry/analyticsComponentRegistry';
 
 type Props = AnalyticsComponentProps & {

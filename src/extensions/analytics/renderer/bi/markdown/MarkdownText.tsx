@@ -12,7 +12,7 @@ import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
-import type { MarkdownNode } from '../../../../../extensionApi/studio/analyticsBi';
+import type { MarkdownNode } from '../../../shared/analyticsBi';
 import { markdownComponents } from './markdownComponents';
 
 const sanitizeSchema = {

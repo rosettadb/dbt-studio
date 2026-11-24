@@ -10,6 +10,12 @@ import type { ChatMessage } from '../../../../src/main/schemas/mainDatabase.sche
 import { estimateMessagesTokens } from '../../../../src/main/services/ai/tokenEstimator';
 import MainDatabaseService from '../../../../src/main/services/mainDatabase.service';
 import { getVercelModel } from '../../../../src/main/services/ai/agentAdapter';
+import { registerProjectToolset } from '../../../../src/main/services/ai/agents/projectToolsets';
+import { pipelineToolset } from '../../../../src/extensions/pipeline/main/pipelineToolset';
+
+// The pipeline tools reach the project agent the way the Pipelines extension
+// gives them.
+registerProjectToolset(pipelineToolset);
 
 // Mock everything agent.service imports
 jest.mock('fs-extra', () => ({
@@ -43,15 +49,15 @@ jest.mock('../../../../src/main/services/ai/agents/projectAgent', () => ({
   createProjectAgent: jest.fn(),
 }));
 
-jest.mock('../../../../src/main/services/ai/agents/sqlAgent', () => ({
+jest.mock('../../../../src/extensions/sql/main/sqlAgent', () => ({
   createSqlAgent: jest.fn(),
 }));
 
-jest.mock('../../../../src/main/services/ai/agents/notebooksAgent', () => ({
+jest.mock('../../../../src/extensions/notebooks/main/notebooksAgent', () => ({
   createNotebooksAgent: jest.fn(),
 }));
 
-jest.mock('../../../../src/main/services/ai/agents/analyticsAgent', () => ({
+jest.mock('../../../../src/extensions/analytics/main/analyticsAgent', () => ({
   createAnalyticsAgent: jest.fn(),
 }));
 
@@ -97,20 +103,19 @@ jest.mock('../../../../src/main/services/ai/tools/filesystem.tools', () => ({
   },
 }));
 
-jest.mock(
-  '../../../../src/main/services/ai/tools/studio/pipeline.tools',
-  () => ({
-    PROJECT_PIPELINE_TOOL_NAMES: {
-      studio_pipeline_list: true,
-      studio_pipeline_read: true,
-      studio_pipeline_generate: true,
-      studio_pipeline_update: true,
-    },
-    buildProjectPipelineContext: jest
-      .fn()
-      .mockResolvedValue('## Project Pipelines\n\n- Existing pipelines: none'),
-  }),
-);
+jest.mock('../../../../src/extensions/pipeline/main/pipeline.tools', () => ({
+  PROJECT_PIPELINE_TOOL_NAMES: {
+    studio_pipeline_list: true,
+    studio_pipeline_read: true,
+    studio_pipeline_generate: true,
+    studio_pipeline_update: true,
+  },
+  buildProjectPipelineContext: jest
+    .fn()
+    .mockResolvedValue('## Project Pipelines\n\n- Existing pipelines: none'),
+  createStudioPipelineTools: jest.fn(() => ({})),
+  isProtectedPipelineWritePath: jest.fn(() => false),
+}));
 
 jest.mock('../../../../src/main/services/ai/tokenEstimator', () => ({
   estimateTokens: jest.fn().mockReturnValue(10),

@@ -7,7 +7,7 @@ import {
   canonicalPropName,
   ComponentNode,
   tryEvaluate,
-} from '../../../../extensionApi/studio/analyticsBi';
+} from '../../shared/analyticsBi';
 import { BiPageContextValue, buildScope } from './context';
 
 export interface ResolvedComponent {

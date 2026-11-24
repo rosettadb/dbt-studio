@@ -1,7 +1,7 @@
 import React from 'react';
 import { useQuery } from 'react-query';
 import { getPluginMacroDirs } from './pipelineServices';
-import type { MacroContext } from '../../../extensionApi/studio/pipelineShared';
+import type { MacroContext } from '../shared/pipelineShared';
 
 /**
  * Values for the macros a plugin's widget defaults may hold

@@ -7,6 +7,7 @@ import { pipelineManifest } from '../../../src/extensions/pipeline/manifest.shar
 import { pipelineMain } from '../../../src/extensions/pipeline/main';
 import RunnerService from '../../../src/extensions/pipeline/main/runner.service';
 import { TaskManagerService } from '../../../src/main/services';
+import { projectToolsetToolNames } from '../../../src/main/services/ai/agents/projectToolsets';
 
 // Studio's side of the API, stubbed: only the extension is under test.
 // The runner's process adapter is created when the extension's code loads,
@@ -38,14 +39,26 @@ jest.mock('../../../src/main/services/settings.service', () => ({
   __esModule: true,
   default: {},
 }));
-jest.mock('../../../src/main/services/pluginManifest.service', () => ({
-  getPluginDefinitions: jest.fn(),
-  loadPluginDefinitions: jest.fn(),
-  resolveProjectMacroDirs: jest.fn(),
-}));
+jest.mock(
+  '../../../src/extensions/pipeline/main/pluginManifest.service',
+  () => ({
+    getPluginDefinitions: jest.fn(),
+    loadPluginDefinitions: jest.fn(),
+    resolveProjectMacroDirs: jest.fn(),
+  }),
+);
 jest.mock('../../../src/main/utils/installTask', () => ({
   downloadForInstall: jest.fn(),
   runInstallTask: jest.fn(),
+}));
+// The pipeline authoring tools are built from the AI SDK; here only that
+// the toolset is given to the project agent matters.
+jest.mock('../../../src/extensions/pipeline/main/pipelineToolset', () => ({
+  pipelineToolset: {
+    id: 'pipeline',
+    tools: [{ name: 'studio_pipeline_list', description: '', readOnly: true }],
+    createTools: () => ({}),
+  },
 }));
 jest.mock('../../../src/extensions/pipeline/main/runner.service', () => ({
   __esModule: true,
@@ -71,10 +84,15 @@ const { mockAdapter } = jest.requireMock('../../../src/main/adapters') as {
 
 let userData: string;
 
+// Hosts started by a test. Each is stopped after the test, so what the
+// extension gave Studio (its tools for the project agent) is taken back.
+const startedHosts: ExtensionHostMain[] = [];
+
 const startHost = async () => {
   const host = new ExtensionHostMain({ studioVersion: '1.7.8' });
   host.registerBuiltin(pipelineManifest, pipelineMain);
   await host.start();
+  startedHosts.push(host);
   return host;
 };
 
@@ -96,9 +114,23 @@ beforeEach(() => {
   (TaskManagerService.create as jest.Mock).mockClear();
 });
 
-afterEach(() => fs.removeSync(userData));
+afterEach(async () => {
+  await Promise.all(startedHosts.splice(0).map((host) => host.deactivateAll()));
+  fs.removeSync(userData);
+});
 
 describe('Pipelines extension, main half', () => {
+  it('gives the project agent its pipeline tools, and takes them back', async () => {
+    const host = await startHost();
+    expect(host.list()).toMatchObject([
+      { id: 'rosetta.pipeline', state: 'active' },
+    ]);
+    expect(projectToolsetToolNames()).toEqual(['studio_pipeline_list']);
+
+    await host.deactivateAll();
+    expect(projectToolsetToolNames()).toEqual([]);
+  });
+
   it('answers the same channels the pipeline tool always used', async () => {
     const host = await startHost();
 

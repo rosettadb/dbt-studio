@@ -31,7 +31,7 @@ import {
   type MacroContext,
   type PluginWidget,
   type StepParams,
-} from '../../../extensionApi/studio/pipelineShared';
+} from '../shared/pipelineShared';
 
 interface StepEditDialogProps {
   open: boolean;
