@@ -1,10 +1,14 @@
 import * as fs from 'fs';
+import path from 'path';
 import { shell } from 'electron';
 import type {
   ExtensionMainApi,
   ExtensionMainModule,
 } from '../../../extensionApi/main';
-import { getMediaMimeType, isMediaFile } from '../shared/mediaTypes';
+import {
+  getMediaMimeTypeFromExtension,
+  isMediaExtension,
+} from '../shared/mediaTypes';
 
 const MAX_MEDIA_FILE_BYTES = 250 * 1024 * 1024; // 250 MB
 
@@ -17,6 +21,11 @@ export interface MediaFilePayload {
 /**
  * Main-process half of the Media Viewer extension: reads binary media files
  * for the renderer and opens media files in the OS default application.
+ *
+ * Files from any location on disk are allowed — the viewer is used not only
+ * for project files but also for dragged-in assets from anywhere on the
+ * filesystem.  `fs.promises.realpath` is called to resolve symlinks so we
+ * always stat and read the actual on-disk file.
  */
 const activate = (api: ExtensionMainApi): void => {
   api.ipc.handle(
@@ -25,11 +34,15 @@ const activate = (api: ExtensionMainApi): void => {
       if (!filePath || typeof filePath !== 'string') {
         throw new Error('A valid file path is required.');
       }
-      if (!isMediaFile(filePath)) {
-        throw new Error(`Unsupported media file type: ${filePath}`);
+      const ext = path.extname(filePath).toLowerCase();
+      if (!isMediaExtension(ext)) {
+        throw new Error('Unsupported media file type.');
       }
 
-      const stats = await fs.promises.stat(filePath);
+      // Resolve symlinks so we always operate on the real on-disk path.
+      const resolvedPath = await fs.promises.realpath(filePath);
+
+      const stats = await fs.promises.stat(resolvedPath);
       if (!stats.isFile()) {
         throw new Error('Selected path is not a file.');
       }
@@ -39,7 +52,7 @@ const activate = (api: ExtensionMainApi): void => {
         );
       }
 
-      const buffer = await fs.promises.readFile(filePath);
+      const buffer = await fs.promises.readFile(resolvedPath);
       return {
         data: new Uint8Array(
           buffer.buffer,
@@ -47,7 +60,7 @@ const activate = (api: ExtensionMainApi): void => {
           buffer.byteLength,
         ),
         size: stats.size,
-        mimeType: getMediaMimeType(filePath),
+        mimeType: getMediaMimeTypeFromExtension(ext),
       };
     },
   );
@@ -58,7 +71,8 @@ const activate = (api: ExtensionMainApi): void => {
       if (!filePath || typeof filePath !== 'string') {
         throw new Error('A valid file path is required.');
       }
-      return shell.openPath(filePath);
+      const resolvedPath = await fs.promises.realpath(filePath);
+      return shell.openPath(resolvedPath);
     },
   );
 };

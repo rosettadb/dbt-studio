@@ -25,15 +25,15 @@ import type {
   FileViewProps,
 } from '../../../extensionApi/renderer';
 import { Editor } from '../../../extensionApi/studio/editor';
+import { path } from '../../../extensionApi/studio/path';
 import { useRefreshProjectFiles } from '../../../extensionApi/studio/refreshProjectFiles';
 import { useTabs } from '../../../extensionApi/studio/tabs';
 import type { MediaFilePayload } from '../main';
 import {
   formatDuration,
   formatFileSize,
-  getLowerExtension,
-  getMediaKind,
-  isMediaFile,
+  getMediaKindFromExtension,
+  isMediaExtension,
 } from '../shared/mediaTypes';
 import { ipc } from './ipc';
 
@@ -56,8 +56,8 @@ const MediaFileView: React.FC<FileViewProps> = ({ tab, project }) => {
   const { updateTabContent, markTabSaved, setTabError, openFile } = useTabs();
   const refreshProjectFiles = useRefreshProjectFiles();
 
-  const mediaKind = getMediaKind(tab.path);
-  const ext = getLowerExtension(tab.path);
+  const ext = path.extname(tab.path).toLowerCase();
+  const mediaKind = getMediaKindFromExtension(ext);
   const extLabel = ext ? ext.slice(1).toUpperCase() : 'MEDIA';
   const isSvg = ext === '.svg';
 
@@ -65,6 +65,10 @@ const MediaFileView: React.FC<FileViewProps> = ({ tab, project }) => {
   const [fileSize, setFileSize] = React.useState<number | null>(null);
   const [loading, setLoading] = React.useState<boolean>(true);
   const [error, setError] = React.useState<string | null>(null);
+  // Separate state for external-open failures so they never unmount a loaded preview.
+  const [openExternalError, setOpenExternalError] = React.useState<
+    string | null
+  >(null);
   const [reloadNonce, setReloadNonce] = React.useState(0);
 
   const [zoomMode, setZoomMode] = React.useState<ZoomMode>('fit');
@@ -130,16 +134,19 @@ const MediaFileView: React.FC<FileViewProps> = ({ tab, project }) => {
   }, [tab.path, reloadNonce]);
 
   const handleOpenExternal = React.useCallback(async () => {
+    setOpenExternalError(null);
     try {
       const openError = (await ipc.invoke(
         'media:openExternal',
         tab.path,
       )) as string;
       if (openError) {
-        setError(openError);
+        // Report in its own state — do not touch `error` so a loaded preview
+        // stays mounted and a playing video keeps its playback position.
+        setOpenExternalError(openError);
       }
     } catch (err) {
-      setError(
+      setOpenExternalError(
         err instanceof Error
           ? err.message
           : 'Failed to open file in external application.',
@@ -147,19 +154,35 @@ const MediaFileView: React.FC<FileViewProps> = ({ tab, project }) => {
     }
   }, [tab.path]);
 
+  /**
+   * Calculate the scale at which the image is currently displayed in 'fit'
+   * mode so that zooming in/out starts from the actual visible size rather
+   * than an arbitrary 100%.
+   * Falls back to 1 when no layout dimensions are known yet.
+   */
+  const viewportRef = React.useRef<HTMLDivElement | null>(null);
+  const fitScale = React.useMemo(() => {
+    if (!dimensions || !viewportRef.current) return 1;
+    const { clientWidth, clientHeight } = viewportRef.current;
+    const padding = 48; // 3 × 8 px MUI spacing on each side
+    const availW = Math.max(1, clientWidth - padding);
+    const availH = Math.max(1, clientHeight - padding);
+    return Math.min(availW / dimensions.width, availH / dimensions.height, 1);
+  }, [dimensions]);
+
   const handleZoomIn = React.useCallback(() => {
     setZoomMode((prev) => {
-      const current = prev === 'fit' ? 1 : prev;
+      const current = prev === 'fit' ? fitScale : prev;
       return clampZoom(current * ZOOM_STEP);
     });
-  }, []);
+  }, [fitScale]);
 
   const handleZoomOut = React.useCallback(() => {
     setZoomMode((prev) => {
-      const current = prev === 'fit' ? 1 : prev;
+      const current = prev === 'fit' ? fitScale : prev;
       return clampZoom(current / ZOOM_STEP);
     });
-  }, []);
+  }, [fitScale]);
 
   const handleWheelZoom = React.useCallback(
     (event: React.WheelEvent<HTMLDivElement>) => {
@@ -350,6 +373,7 @@ const MediaFileView: React.FC<FileViewProps> = ({ tab, project }) => {
         </Box>
       ) : (
         <Box
+          ref={viewportRef}
           onWheel={handleWheelZoom}
           sx={{
             flex: 1,
@@ -362,6 +386,28 @@ const MediaFileView: React.FC<FileViewProps> = ({ tab, project }) => {
             p: 3,
           }}
         >
+          {openExternalError && (
+            <Box
+              sx={{
+                position: 'absolute',
+                bottom: 16,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 10,
+                px: 2,
+                py: 1,
+                borderRadius: 1,
+                bgcolor: 'error.main',
+                color: 'error.contrastText',
+                fontSize: 13,
+                maxWidth: 420,
+                textAlign: 'center',
+                pointerEvents: 'none',
+              }}
+            >
+              {openExternalError}
+            </Box>
+          )}
           {loading && (
             <Box
               sx={{
@@ -524,6 +570,6 @@ const MediaFileView: React.FC<FileViewProps> = ({ tab, project }) => {
 export const mediaFileView: FileViewDefinition = {
   id: 'media',
   priority: 10,
-  matches: (tab) => isMediaFile(tab.path),
+  matches: (tab) => isMediaExtension(path.extname(tab.path)),
   Component: MediaFileView,
 };

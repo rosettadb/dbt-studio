@@ -28,33 +28,18 @@ const MIME_BY_EXTENSION: Record<string, string> = {
   '.avi': 'video/x-msvideo',
 };
 
-export const getLowerExtension = (filePath: string): string => {
-  const normalized = filePath.split('?')[0].split('#')[0];
-  const lastSlash = Math.max(
-    normalized.lastIndexOf('/'),
-    normalized.lastIndexOf('\\'),
-  );
-  const baseName =
-    lastSlash >= 0 ? normalized.slice(lastSlash + 1) : normalized;
-  const dotIndex = baseName.lastIndexOf('.');
-  if (dotIndex <= 0) return '';
-  return baseName.slice(dotIndex).toLowerCase();
-};
-
-export const getMediaKind = (filePath: string): MediaKind | null => {
-  const ext = getLowerExtension(filePath);
-  if ((IMAGE_EXTENSIONS as readonly string[]).includes(ext)) return 'image';
-  if ((VIDEO_EXTENSIONS as readonly string[]).includes(ext)) return 'video';
+export const getMediaKindFromExtension = (ext: string): MediaKind | null => {
+  const lower = ext.toLowerCase();
+  if ((IMAGE_EXTENSIONS as readonly string[]).includes(lower)) return 'image';
+  if ((VIDEO_EXTENSIONS as readonly string[]).includes(lower)) return 'video';
   return null;
 };
 
-export const isMediaFile = (filePath: string): boolean =>
-  getMediaKind(filePath) !== null;
+export const isMediaExtension = (ext: string): boolean =>
+  getMediaKindFromExtension(ext) !== null;
 
-export const getMediaMimeType = (filePath: string): string => {
-  const ext = getLowerExtension(filePath);
-  return MIME_BY_EXTENSION[ext] ?? 'application/octet-stream';
-};
+export const getMediaMimeTypeFromExtension = (ext: string): string =>
+  MIME_BY_EXTENSION[ext.toLowerCase()] ?? 'application/octet-stream';
 
 export const formatFileSize = (bytes: number): string => {
   if (!Number.isFinite(bytes) || bytes < 0) return '0 B';

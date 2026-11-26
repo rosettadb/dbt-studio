@@ -14,9 +14,9 @@ import {
   VIDEO_EXTENSIONS,
   formatDuration,
   formatFileSize,
-  getMediaKind,
-  getMediaMimeType,
-  isMediaFile,
+  getMediaKindFromExtension,
+  getMediaMimeTypeFromExtension,
+  isMediaExtension,
 } from '../../../src/extensions/media/shared/mediaTypes';
 
 jest.mock('react-markdown', () => ({ __esModule: true, default: () => null }));
@@ -44,26 +44,22 @@ describe('Media Viewer extension', () => {
 
   it('recognizes all supported image and video extensions case-insensitively', () => {
     for (const ext of IMAGE_EXTENSIONS) {
-      expect(getMediaKind(`/project/assets/file${ext}`)).toBe('image');
-      expect(getMediaKind(`/project/assets/file${ext.toUpperCase()}`)).toBe(
-        'image',
-      );
-      expect(isMediaFile(`/project/assets/file${ext}`)).toBe(true);
+      expect(getMediaKindFromExtension(ext)).toBe('image');
+      expect(getMediaKindFromExtension(ext.toUpperCase())).toBe('image');
+      expect(isMediaExtension(ext)).toBe(true);
     }
 
     for (const ext of VIDEO_EXTENSIONS) {
-      expect(getMediaKind(`/project/assets/clip${ext}`)).toBe('video');
-      expect(getMediaKind(`/project/assets/clip${ext.toUpperCase()}`)).toBe(
-        'video',
-      );
-      expect(isMediaFile(`/project/assets/clip${ext}`)).toBe(true);
+      expect(getMediaKindFromExtension(ext)).toBe('video');
+      expect(getMediaKindFromExtension(ext.toUpperCase())).toBe('video');
+      expect(isMediaExtension(ext)).toBe(true);
     }
 
-    expect(isMediaFile('/project/models/users.sql')).toBe(false);
-    expect(isMediaFile('/project/README.md')).toBe(false);
-    expect(getMediaKind('/project/data.csv')).toBeNull();
-    expect(getMediaMimeType('/project/logo.PNG')).toBe('image/png');
-    expect(getMediaMimeType('/project/demo.mp4')).toBe('video/mp4');
+    expect(isMediaExtension('.sql')).toBe(false);
+    expect(isMediaExtension('.md')).toBe(false);
+    expect(getMediaKindFromExtension('.csv')).toBeNull();
+    expect(getMediaMimeTypeFromExtension('.PNG')).toBe('image/png');
+    expect(getMediaMimeTypeFromExtension('.mp4')).toBe('video/mp4');
   });
 
   it('formats file sizes and durations cleanly', () => {
@@ -140,20 +136,22 @@ describe('Media Viewer extension', () => {
       const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
       await fs.writeFile(imagePath, pngBytes);
 
+      // ✓ Read a valid media file (anywhere on disk — no project confinement).
       const result = await handlers.get('media:readFile')!({}, imagePath);
       expect(result.mimeType).toBe('image/png');
       expect(result.size).toBe(4);
       expect(Array.from(result.data)).toEqual([0x89, 0x50, 0x4e, 0x47]);
 
+      // ✓ Reject unsupported file extensions.
       await expect(
         handlers.get('media:readFile')!({}, path.join(tempDir, 'notes.txt')),
       ).rejects.toThrow('Unsupported media file type');
 
-      const openPathSpy = jest
-        .spyOn(shell, 'openPath')
-        .mockResolvedValue('');
+      // ✓ Open externally resolves symlinks before handing off to the OS.
+      const resolvedImagePath = await fs.realpath(imagePath);
+      const openPathSpy = jest.spyOn(shell, 'openPath').mockResolvedValue('');
       await handlers.get('media:openExternal')!({}, imagePath);
-      expect(openPathSpy).toHaveBeenCalledWith(imagePath);
+      expect(openPathSpy).toHaveBeenCalledWith(resolvedImagePath);
 
       await host.deactivateAll();
       expect(handlers.has('media:readFile')).toBe(false);
