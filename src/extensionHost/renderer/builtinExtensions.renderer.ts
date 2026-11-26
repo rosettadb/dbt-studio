@@ -1,6 +1,8 @@
 import type { ExtensionRendererModule } from '../../extensionApi/renderer';
 import { analyticsManifest } from '../../extensions/analytics/manifest.shared';
 import { analyticsRenderer } from '../../extensions/analytics/renderer';
+import { mediaManifest } from '../../extensions/media/manifest.shared';
+import { mediaRenderer } from '../../extensions/media/renderer';
 import { notebooksManifest } from '../../extensions/notebooks/manifest.shared';
 import { notebooksRenderer } from '../../extensions/notebooks/renderer';
 import { pipelineManifest } from '../../extensions/pipeline/manifest.shared';
@@ -25,4 +27,5 @@ export const builtinRendererExtensions: BuiltinRendererExtension[] = [
   { manifest: sqlManifest, module: sqlRenderer },
   { manifest: analyticsManifest, module: analyticsRenderer },
   { manifest: notebooksManifest, module: notebooksRenderer },
+  { manifest: mediaManifest, module: mediaRenderer },
 ];
