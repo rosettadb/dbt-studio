@@ -3,13 +3,11 @@ import {
   FileDialogProperties,
   SettingsType,
   RosettaVersionInfo,
-  RunnerRequirementStatus,
   InstallResult,
   PythonInstallInfo,
   PythonVersionInfo,
 } from '../../types/backend';
 import { client } from '../config/client';
-import type { PluginDefinition } from '../../shared/pluginManifest';
 import { SecureStorageAccount } from '../../types/frontend';
 
 export const getSettings = async (): Promise<SettingsType> => {
@@ -90,41 +88,6 @@ export const resetFactorySettings = async (): Promise<void> => {
   await client.post<void, void>('settings:reset-factory', undefined);
 };
 
-// KiSQL (Kinetica CLI) services
-export const checkKisqlVersion = async (): Promise<{
-  installed: boolean;
-  version?: string;
-  path?: string;
-  latestSha?: string;
-  updateAvailable?: boolean;
-}> => {
-  const { data } = await client.get<{
-    installed: boolean;
-    version?: string;
-    path?: string;
-    latestSha?: string;
-    updateAvailable?: boolean;
-  }>('kisql:check');
-  return data;
-};
-
-export const installKisql = async (): Promise<{
-  success: boolean;
-  version: string;
-  path: string;
-  error?: string;
-}> => {
-  const { data } = await client.post<
-    undefined,
-    { success: boolean; version: string; path: string; error?: string }
-  >('kisql:install', undefined);
-  return data;
-};
-
-export const uninstallKisql = async (): Promise<void> => {
-  await client.get('kisql:uninstall');
-};
-
 export const restartApp = async (): Promise<void> => {
   await client.post<void, void>('settings:restart', undefined);
 };
@@ -184,40 +147,6 @@ export const installPythonVersion = async (
     version,
   );
   return data;
-};
-
-export const checkRunnerRequirements = async (): Promise<
-  RunnerRequirementStatus[]
-> => {
-  const { data } = await client.get<RunnerRequirementStatus[]>(
-    'runner:requirements:check',
-  );
-  return data;
-};
-
-export const getRunnerPlugins = async (): Promise<PluginDefinition[]> => {
-  const { data } = await client.get<PluginDefinition[]>(
-    'runner:plugins:manifest',
-  );
-  return data;
-};
-
-export const getPluginMacroDirs = async (
-  projectPath: string,
-): Promise<{ dbtDir: string; rosettaDir: string }> => {
-  const { data } = await client.post<
-    string,
-    { dbtDir: string; rosettaDir: string }
-  >('runner:plugins:macros', projectPath);
-  return data;
-};
-
-export const installPySpark = async (): Promise<void> => {
-  await client.get<void>('runner:pyspark:install');
-};
-
-export const uninstallPySpark = async (): Promise<void> => {
-  await client.get<void>('runner:pyspark:uninstall');
 };
 
 // DuckDB management services

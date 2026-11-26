@@ -3,11 +3,11 @@ import {
   formatAxisValue,
   formatFromColumnName,
   formatValue,
-} from '../../../../src/shared/analyticsBi/format';
-import { validatePage } from '../../../../src/shared/analyticsBi/validate';
-import { buildComponentReference } from '../../../../src/shared/analyticsBi/reference';
-import { COMPONENT_SPECS } from '../../../../src/shared/analyticsBi/specs';
-import { usesLegacyEngine } from '../../../../src/shared/analyticsBi';
+} from '../../../../src/extensions/analytics/shared/analyticsBi/format';
+import { validatePage } from '../../../../src/extensions/analytics/shared/analyticsBi/validate';
+import { buildComponentReference } from '../../../../src/extensions/analytics/shared/analyticsBi/reference';
+import { COMPONENT_SPECS } from '../../../../src/extensions/analytics/shared/analyticsBi/specs';
+import { usesLegacyEngine } from '../../../../src/extensions/analytics/shared/analyticsBi';
 
 describe('formatValue', () => {
   it.each([
@@ -138,7 +138,9 @@ describe('dates', () => {
     detectDateGrain,
     formatDateForGrain,
     formatValue: fv,
-  } = jest.requireActual('../../../../src/shared/analyticsBi/format');
+  } = jest.requireActual(
+    '../../../../src/extensions/analytics/shared/analyticsBi/format',
+  );
 
   it('parses the shapes warehouses return, as UTC', () => {
     expect(toDate('2026-01-05')?.toISOString()).toBe(

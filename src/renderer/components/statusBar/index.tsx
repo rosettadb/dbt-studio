@@ -11,7 +11,7 @@ import { useTaskManager } from '../../context';
 import { Icon } from '../icon';
 import { DbtMonoIcon } from '../icon/DbtMonoIcon';
 import { icons, rosettaIcon } from '../../../../assets';
-import { PythonMonoIcon } from '../notebook/NotebookKindIcon';
+import { PythonMonoIcon } from '../icon/PythonMonoIcon';
 
 const FS = 12; // base font size for all items
 

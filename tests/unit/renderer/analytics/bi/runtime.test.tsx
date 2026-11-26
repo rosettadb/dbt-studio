@@ -2,9 +2,12 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import {
   QueryExecutor,
   useAnalyticsPageRuntime,
-} from '../../../../../src/renderer/components/analytics/bi/runtime/useAnalyticsPageRuntime';
+} from '../../../../../src/extensions/analytics/renderer/bi/runtime/useAnalyticsPageRuntime';
 
-jest.mock('../../../../../src/renderer/utils/analyticsQueryEngine', () => ({}));
+jest.mock(
+  '../../../../../src/extensions/analytics/renderer/utils/analyticsQueryEngine',
+  () => ({}),
+);
 
 const PAGE = `
 \`\`\`sql regions

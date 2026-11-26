@@ -1,25 +1,30 @@
 import type { EditorTabState } from '../../../types/editor';
+import { createRegistry } from '../../../extensionHost/renderer/registry.renderer';
+import type { Disposable } from '../../../extensionHost/shared/protocol.shared';
 import type { FileViewDefinition } from './types';
 
-const views: FileViewDefinition[] = [];
-let fallback: FileViewDefinition | null = null;
+// Highest priority first; equal priorities keep registration order.
+export const fileViewRegistry = createRegistry<FileViewDefinition<any>>({
+  compare: (a, b) => (b.priority ?? 0) - (a.priority ?? 0),
+});
 
-export const registerFileView = (view: FileViewDefinition): void => {
-  const existing = views.findIndex((v) => v.id === view.id);
-  if (existing >= 0) {
-    views[existing] = view;
-    return;
-  }
-  views.push(view);
-};
+let fallback: FileViewDefinition<any> | null = null;
+
+// The disposer takes the view out again (used when an extension is disabled).
+export const registerFileView = (view: FileViewDefinition<any>): Disposable =>
+  fileViewRegistry.add(view);
 
 // The view used when nothing else matches (the plain code editor).
-export const registerFallbackFileView = (view: FileViewDefinition): void => {
+export const registerFallbackFileView = (
+  view: FileViewDefinition<any>,
+): void => {
   fallback = view;
 };
 
-export const resolveFileView = (tab: EditorTabState): FileViewDefinition => {
-  const match = views.find((view) => view.matches(tab));
+export const resolveFileView = (
+  tab: EditorTabState,
+): FileViewDefinition<any> => {
+  const match = fileViewRegistry.list().find((view) => view.matches(tab));
   if (match) return match;
   if (!fallback) {
     throw new Error('No fallback file view registered');
@@ -27,4 +32,5 @@ export const resolveFileView = (tab: EditorTabState): FileViewDefinition => {
   return fallback;
 };
 
-export const listFileViews = (): ReadonlyArray<FileViewDefinition> => views;
+export const listFileViews = (): ReadonlyArray<FileViewDefinition<any>> =>
+  fileViewRegistry.list();

@@ -1,13 +1,9 @@
 import { BrowserWindow, dialog, ipcMain, app } from 'electron';
 import { initializeDataStorage } from '../utils/setupHelpers';
 import { FileDialogProperties, SettingsType } from '../../types/backend';
-import { SettingsService, RunnerService } from '../services';
+import { SettingsService } from '../services';
 import { SettingsChannels } from '../../types/ipc';
 import { DbtCoreVersionService } from '../services/dbtCoreVersion.service';
-import {
-  loadPluginDefinitions,
-  resolveProjectMacroDirs,
-} from '../services/pluginManifest.service';
 import {
   isDbtV2SwitchQueued,
   removeQueuedInstalls,
@@ -35,11 +31,6 @@ const handlerChannels: SettingsChannels[] = [
   'version:python:uninstall',
   'version:python:versions:check',
   'version:python:versions:install',
-  'runner:plugins:manifest',
-  'runner:plugins:macros',
-  'runner:requirements:check',
-  'runner:pyspark:install',
-  'runner:pyspark:uninstall',
   'settings:reset-factory',
   'settings:restart',
   'dbt:versions:list',
@@ -54,9 +45,6 @@ const handlerChannels: SettingsChannels[] = [
   'dbt:package:uninstall',
   'dbt:packageVersions:list',
   'dbt:packageVersion:install',
-  'kisql:install',
-  'kisql:uninstall',
-  'kisql:check',
 ];
 
 const isAdapterBlockedByV2Switch = (packageName: string) =>
@@ -185,34 +173,6 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
     },
   );
 
-  // The plugins of the local runner, for the pipeline designer.
-  ipcMain.handle('runner:plugins:manifest', async () => {
-    return loadPluginDefinitions();
-  });
-
-  ipcMain.handle(
-    'runner:plugins:macros',
-    async (_event, projectPath: string) => {
-      return resolveProjectMacroDirs(projectPath);
-    },
-  );
-
-  ipcMain.handle('runner:requirements:check', async () => {
-    return RunnerService.checkRequirements();
-  });
-
-  ipcMain.handle('runner:pyspark:install', async () => {
-    return runInstallTask('install:pyspark', 'Installing PySpark', () =>
-      SettingsService.installPackage('pyspark'),
-    );
-  });
-
-  ipcMain.handle('runner:pyspark:uninstall', async () => {
-    return runInstallTask('install:pyspark', 'Uninstalling PySpark', () =>
-      SettingsService.uninstallPySpark(),
-    );
-  });
-
   ipcMain.handle('settings:reset-factory', async (event) => {
     return SettingsService.resetFactorySettings(event.sender.session);
   });
@@ -326,23 +286,6 @@ const registerSettingsHandlers = (mainWindow: BrowserWindow) => {
         stoppable: !isDbtRuntimeSubject(req.packageName),
         endsOnSignal: true,
       },
-    );
-  });
-
-  // KiSQL (Kinetica CLI) handlers
-  ipcMain.handle('kisql:check', async () => {
-    return RunnerService.checkKisqlVersion();
-  });
-
-  ipcMain.handle('kisql:install', async () => {
-    return runInstallTask('install:runner', 'Installing KiSQL', () =>
-      RunnerService.installKisql(),
-    );
-  });
-
-  ipcMain.handle('kisql:uninstall', async () => {
-    return runInstallTask('install:runner', 'Uninstalling KiSQL', () =>
-      RunnerService.uninstallKisql(),
     );
   });
 };

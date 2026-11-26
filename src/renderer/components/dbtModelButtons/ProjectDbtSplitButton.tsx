@@ -1,9 +1,5 @@
 import React from 'react';
-import {
-  PlayCircleOutline,
-  StopCircleOutlined,
-  AccountTree,
-} from '@mui/icons-material';
+import { PlayCircleOutline, StopCircleOutlined } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { SplitButton } from '../splitButton';
 import { usePaletteCommands } from '../commandPalette/commands';
@@ -17,7 +13,6 @@ import {
 } from '../../../types/backend';
 import { useAppContext, useDbt, useProcess, useRosettaDBT } from '../../hooks';
 import { useRefreshProjectFiles } from '../../hooks/useRefreshProjectFiles';
-import { useTabs } from '../../context/TabsProvider';
 import {
   useCloudActionStatus,
   useGetConnectionById,
@@ -29,16 +24,17 @@ import {
   IncrementalModal,
   RawLayerModal,
   PushToCloudModal,
-  PipelineSelectorModal,
-  RunWithEnvModal,
 } from '../modals';
 import { path } from '../../lib/path';
+import { projectMenuItems } from '../../../extensionHost/renderer/contributions.renderer';
+import { useRegistry } from '../../../extensionHost/renderer/registry.renderer';
 
 interface ProjectDbtSplitButtonProps {
   project: Project;
 }
 
-// Project-level dbt / Rosetta / pipeline actions. Self-contained: it reads
+// Project-level dbt / Rosetta actions, plus the entries extensions add to
+// this menu. Self-contained: it reads
 // settings, environment and the project's connection itself, refreshes the
 // file tree through the shared query cache, and opens files through the tabs
 // store. Which bottom panel surfaces a run is decided by the panels
@@ -50,7 +46,6 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
   const { env: environment } = useAppContext();
   const { data: connection } = useGetConnectionById(project.connectionId);
   const refreshProjectFiles = useRefreshProjectFiles();
-  const { openFile } = useTabs();
 
   const rosettaPath = settings?.rosettaPath;
   const dbtPath = settings?.dbtPath;
@@ -99,12 +94,8 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
   const [stagingModal, setStagingModal] = React.useState(false);
   const [openRawLayerModal, setOpenRawLayerModal] = React.useState(false);
   const [incrementalModal, setIncrementalModal] = React.useState(false);
-  const [pipelineModal, setPipelineModal] = React.useState(false);
-  const [pipelineArgs, setPipelineArgs] = React.useState('');
-  const [localPipelineModal, setLocalPipelineModal] = React.useState(false);
-  const [localPipelineFile, setLocalPipelineFile] = React.useState<
-    string | null
-  >(null);
+  // Entries extensions added to this menu (for example "Run Pipeline").
+  const contributedItems = useRegistry(projectMenuItems);
 
   React.useEffect(() => {
     setRawPath(project.rawLayerDir || path.join(project.path, 'models', 'raw'));
@@ -347,31 +338,15 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
       subTitle: 'Seed the dbt project',
       localOnly: false,
     },
-    {
-      name: 'Run Pipeline',
-      onClick: () => {
-        setPipelineModal(true);
-      },
-      leftIcon: <AccountTree sx={{ fontSize: 16 }} />,
-      subTitle: 'Run a pipeline on the cloud',
-      localOnly: false,
-      cloudOnly: true,
-      dividerBefore: true,
-    },
-    {
-      name: 'Run Pipeline (Local Runner)',
-      onClick: () => {
-        if (!settings?.runnerPath) {
-          toast.info('The local runner is not available on this machine');
-          return;
-        }
-        setLocalPipelineModal(true);
-      },
-      leftIcon: <AccountTree sx={{ fontSize: 16 }} />,
-      subTitle: 'Run a pipeline on this machine',
-      localOnly: true,
-      dividerBefore: true,
-    },
+    ...contributedItems.map((item) => ({
+      name: item.name,
+      onClick: () => item.onSelect({ project, settings }),
+      leftIcon: <item.icon />,
+      subTitle: item.subTitle,
+      localOnly: item.localOnly ?? false,
+      cloudOnly: item.cloudOnly,
+      dividerBefore: item.dividerBefore,
+    })),
   ];
 
   // Filter menu items based on environment
@@ -542,56 +517,9 @@ export const ProjectDbtSplitButton: React.FC<ProjectDbtSplitButtonProps> = ({
       {runInCloudModal && (
         <PushToCloudModal
           isOpen={!!runInCloudModal}
-          onClose={() => {
-            setRunInCloudModal(undefined);
-            setPipelineArgs('');
-          }}
+          onClose={() => setRunInCloudModal(undefined)}
           project={project}
           command={runInCloudModal}
-          initialDbtArguments={
-            runInCloudModal === 'pipeline' ? pipelineArgs : undefined
-          }
-        />
-      )}
-      {pipelineModal && (
-        <PipelineSelectorModal
-          isOpen={pipelineModal}
-          onClose={() => setPipelineModal(false)}
-          mode="cloud"
-          project={project}
-          onCreated={openFile}
-          onSelect={(pipeline) => {
-            setPipelineModal(false);
-            setPipelineArgs(`--pipeline_name ${pipeline.name}`);
-            setRunInCloudModal('pipeline');
-          }}
-        />
-      )}
-      {localPipelineModal && (
-        <PipelineSelectorModal
-          isOpen={localPipelineModal}
-          onClose={() => setLocalPipelineModal(false)}
-          mode="local"
-          project={project}
-          onCreated={openFile}
-          onSelect={(pipeline) => {
-            setLocalPipelineModal(false);
-            if (!settings?.runnerPath) {
-              toast.error('Local runner is not installed.');
-              return;
-            }
-            const ext = pipeline.path.slice(pipeline.path.lastIndexOf('.'));
-            setLocalPipelineFile(`${pipeline.name}${ext}`);
-          }}
-        />
-      )}
-      {localPipelineFile && (
-        <RunWithEnvModal
-          isOpen={!!localPipelineFile}
-          onClose={() => setLocalPipelineFile(null)}
-          project={project}
-          pipelineRelativePath={localPipelineFile}
-          connectionName={connection?.connection?.name}
         />
       )}
     </>

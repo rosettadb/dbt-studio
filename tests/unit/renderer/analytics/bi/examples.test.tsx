@@ -7,19 +7,19 @@ import {
   executeExampleQuery,
   getExamplePage,
   isExamplePageId,
-} from '../../../../../src/renderer/components/analytics/bi/examples';
+} from '../../../../../src/extensions/analytics/renderer/bi/examples';
 import {
   buildPageGraph,
   defaultInputState,
   parsePage,
   validatePage,
-} from '../../../../../src/shared/analyticsBi';
-import { BiPagePreview } from '../../../../../src/renderer/components/analytics/bi/BiPagePreview';
-import { AnalyticsExamplesSection } from '../../../../../src/renderer/components/analytics/bi/examples/AnalyticsExamplesSection';
-import { buildThumbnail } from '../../../../../src/renderer/components/analytics/bi/gallery/thumbnailModel';
+} from '../../../../../src/extensions/analytics/shared/analyticsBi';
+import { BiPagePreview } from '../../../../../src/extensions/analytics/renderer/bi/BiPagePreview';
+import { AnalyticsExamplesSection } from '../../../../../src/extensions/analytics/renderer/bi/examples/AnalyticsExamplesSection';
+import { buildThumbnail } from '../../../../../src/extensions/analytics/renderer/bi/gallery/thumbnailModel';
 
 jest.mock(
-  '../../../../../src/renderer/components/analytics/bi/markdown/MarkdownText',
+  '../../../../../src/extensions/analytics/renderer/bi/markdown/MarkdownText',
   () => jest.requireActual('./markdownTextMock'),
 );
 

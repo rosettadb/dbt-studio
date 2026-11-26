@@ -16,7 +16,11 @@ jest.mock('../../../../src/main/services/pythonRuntimes.service', () => ({
 
 describe('NotebookEnvService', () => {
   const load = async () =>
-    (await import('../../../../src/main/services/notebookEnv.service')).default;
+    (
+      await import(
+        '../../../../src/extensions/notebooks/main/notebookEnv.service'
+      )
+    ).default;
 
   it('roots every venv under userData/notebook-venvs/<notebookId>', async () => {
     const NotebookEnvService = await load();
@@ -56,7 +60,7 @@ describe('NotebookEnvService', () => {
 
   it('strips ANSI and progress-bar noise from forwarded pip output', async () => {
     const { stripControlSequences } = await import(
-      '../../../../src/main/services/notebookEnv.service'
+      '../../../../src/extensions/notebooks/main/notebookEnv.service'
     );
     const raw =
       '\u001b[2K\u001b[38;2;249;38;114m━━━━━━━━\u001b[0m 1.2/3.4 MB \u001b[31m1.0 MB/s\u001b[0m';

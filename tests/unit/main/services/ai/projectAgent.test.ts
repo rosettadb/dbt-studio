@@ -44,17 +44,16 @@ jest.mock('../../../../../src/main/services/ai/tools/filesystem.tools', () => {
   );
   return { createFilesystemTools: () => tools, filesystemTools: tools };
 });
-jest.mock(
-  '../../../../../src/main/services/ai/tools/studio/pipeline.tools',
-  () => ({
-    createStudioPipelineTools: () => ({
-      studio_pipeline_list: {},
-      studio_pipeline_read: {},
-      studio_pipeline_generate: {},
-      studio_pipeline_update: {},
-    }),
+jest.mock('../../../../../src/extensions/pipeline/main/pipeline.tools', () => ({
+  createStudioPipelineTools: () => ({
+    studio_pipeline_list: {},
+    studio_pipeline_read: {},
+    studio_pipeline_generate: {},
+    studio_pipeline_update: {},
   }),
-);
+  buildProjectPipelineContext: jest.fn(),
+  isProtectedPipelineWritePath: jest.fn(() => false),
+}));
 jest.mock(
   '../../../../../src/main/services/ai/tools/studio/keystore.tools',
   () => ({
@@ -76,6 +75,14 @@ jest.mock(
 
 // eslint-disable-next-line import/first
 import { createProjectAgent } from '../../../../../src/main/services/ai/agents/projectAgent';
+// eslint-disable-next-line import/first
+import { registerProjectToolset } from '../../../../../src/main/services/ai/agents/projectToolsets';
+// eslint-disable-next-line import/first
+import { pipelineToolset } from '../../../../../src/extensions/pipeline/main/pipelineToolset';
+
+// The pipeline tools reach the project agent the way the Pipelines extension
+// gives them.
+registerProjectToolset(pipelineToolset);
 
 const DBT_TOOLS = [
   'readDbtModel',

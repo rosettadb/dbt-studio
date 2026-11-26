@@ -4,6 +4,8 @@ import path from 'path';
 import { createFilesystemTools } from '../../../../../src/main/services/ai/tools/filesystem.tools';
 import { createDbtTools } from '../../../../../src/main/services/ai/tools/dbt.tools';
 import FileMutationRollbackService from '../../../../../src/main/services/ai/fileMutationRollback.service';
+import { registerProjectToolset } from '../../../../../src/main/services/ai/agents/projectToolsets';
+import { pipelineToolset } from '../../../../../src/extensions/pipeline/main/pipelineToolset';
 
 jest.mock('ai', () => ({
   tool: jest.fn((definition) => definition),
@@ -27,6 +29,10 @@ jest.mock('../../../../../src/main/services/secureStorage.service', () => ({
   __esModule: true,
   default: {},
 }));
+
+// The rule that pipeline files are written only with the pipeline tools
+// comes from the Pipelines extension's toolset.
+registerProjectToolset(pipelineToolset);
 
 describe('Project Agent generic pipeline write guards', () => {
   let projectPath: string;

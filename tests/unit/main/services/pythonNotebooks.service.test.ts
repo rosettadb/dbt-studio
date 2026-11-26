@@ -18,15 +18,18 @@ jest.mock('electron', () => ({
 
 // The SQL notebook service drags in the connectors stack; only its two path
 // helpers are needed here, so replicate them against the temp userData dir.
-jest.mock('../../../../src/main/services/notebooks.service', () => ({
-  normalizeConnectionKey: (connectionId: string) =>
-    connectionId.startsWith('ducklake-')
-      ? `ducklake:${connectionId.replace('ducklake-', '')}`
-      : `db:${connectionId}`,
-  getConnectionDir: (connectionKey: string) =>
-    // eslint-disable-next-line global-require
-    require('path').join(tmpUserData, 'notebooks', connectionKey),
-}));
+jest.mock(
+  '../../../../src/extensions/notebooks/main/notebooks.service',
+  () => ({
+    normalizeConnectionKey: (connectionId: string) =>
+      connectionId.startsWith('ducklake-')
+        ? `ducklake:${connectionId.replace('ducklake-', '')}`
+        : `db:${connectionId}`,
+    getConnectionDir: (connectionKey: string) =>
+      // eslint-disable-next-line global-require
+      require('path').join(tmpUserData, 'notebooks', connectionKey),
+  }),
+);
 
 // SQL cells run queries through the connectors / DuckLake services; neither
 // stack is needed here beyond the query entry points and the connection
@@ -54,43 +57,49 @@ jest.mock('../../../../src/main/services/settings.service', () => ({
   RECOMMENDED_PYTHON_VERSION: '3.10.17',
 }));
 
-jest.mock('../../../../src/main/services/notebookEnv.service', () => ({
-  __esModule: true,
-  default: {
-    getVenvDir: (id: string) => `/venvs/${id}`,
-    getStatus: jest.fn(async (_id: string, fallback: string) => ({
-      pythonVersion: fallback,
-      venvPath: '/venvs/x',
-      status: 'ready',
-    })),
-    createEnv: jest.fn(async () => ({ status: 'ready' })),
-    deleteEnv: jest.fn(async () => undefined),
-    freeze: jest.fn(async () => ['pandas==2.2.0']),
-    installPackages: jest.fn(async () => ''),
-  },
-}));
+jest.mock(
+  '../../../../src/extensions/notebooks/main/notebookEnv.service',
+  () => ({
+    __esModule: true,
+    default: {
+      getVenvDir: (id: string) => `/venvs/${id}`,
+      getStatus: jest.fn(async (_id: string, fallback: string) => ({
+        pythonVersion: fallback,
+        venvPath: '/venvs/x',
+        status: 'ready',
+      })),
+      createEnv: jest.fn(async () => ({ status: 'ready' })),
+      deleteEnv: jest.fn(async () => undefined),
+      freeze: jest.fn(async () => ['pandas==2.2.0']),
+      installPackages: jest.fn(async () => ''),
+    },
+  }),
+);
 
-jest.mock('../../../../src/main/services/notebookKernel.service', () => ({
-  __esModule: true,
-  default: {
-    shutdown: jest.fn(async () => undefined),
-    execute: jest.fn(async (_nb: string, cellId: string) => ({
-      cellId,
-      status: 'ok',
-      execution_count: 7,
-      outputs: [
-        { output_type: 'stream', name: 'stdout', text: 'a\n' },
-        { output_type: 'stream', name: 'stdout', text: 'b\n' },
-        {
-          output_type: 'execute_result',
-          execution_count: 7,
-          data: { 'text/plain': '42' },
-          metadata: {},
-        },
-      ],
-    })),
-  },
-}));
+jest.mock(
+  '../../../../src/extensions/notebooks/main/notebookKernel.service',
+  () => ({
+    __esModule: true,
+    default: {
+      shutdown: jest.fn(async () => undefined),
+      execute: jest.fn(async (_nb: string, cellId: string) => ({
+        cellId,
+        status: 'ok',
+        execution_count: 7,
+        outputs: [
+          { output_type: 'stream', name: 'stdout', text: 'a\n' },
+          { output_type: 'stream', name: 'stdout', text: 'b\n' },
+          {
+            output_type: 'execute_result',
+            execution_count: 7,
+            data: { 'text/plain': '42' },
+            metadata: {},
+          },
+        ],
+      })),
+    },
+  }),
+);
 
 describe('PythonNotebooksService', () => {
   const connectionId = 'conn-abc';
@@ -100,13 +109,18 @@ describe('PythonNotebooksService', () => {
   });
 
   const load = async () =>
-    (await import('../../../../src/main/services/pythonNotebooks.service'))
-      .default;
+    (
+      await import(
+        '../../../../src/extensions/notebooks/main/pythonNotebooks.service'
+      )
+    ).default;
 
   it('creates an nbformat 4 file with studio metadata and kicks off env creation', async () => {
     const service = await load();
     const envService = (
-      await import('../../../../src/main/services/notebookEnv.service')
+      await import(
+        '../../../../src/extensions/notebooks/main/notebookEnv.service'
+      )
     ).default;
 
     const created = await service.createNotebook(connectionId, {
@@ -362,7 +376,9 @@ describe('PythonNotebooksService', () => {
   it('runs SQL cells on the connection and hands the rows to the kernel', async () => {
     const service = await load();
     const kernelService = (
-      await import('../../../../src/main/services/notebookKernel.service')
+      await import(
+        '../../../../src/extensions/notebooks/main/notebookKernel.service'
+      )
     ).default;
     const [notebook] = await service.listNotebooks(connectionId);
     (kernelService.execute as jest.Mock).mockClear();
@@ -429,7 +445,9 @@ describe('PythonNotebooksService', () => {
   it('reports SQL failures and row-less statements without touching the kernel', async () => {
     const service = await load();
     const kernelService = (
-      await import('../../../../src/main/services/notebookKernel.service')
+      await import(
+        '../../../../src/extensions/notebooks/main/notebookKernel.service'
+      )
     ).default;
     const [notebook] = await service.listNotebooks(connectionId);
     (kernelService.execute as jest.Mock).mockClear();
@@ -492,7 +510,9 @@ describe('PythonNotebooksService', () => {
   it('caps SQL results at 100,000 rows and falls back when the wrapper is rejected', async () => {
     const service = await load();
     const kernelService = (
-      await import('../../../../src/main/services/notebookKernel.service')
+      await import(
+        '../../../../src/extensions/notebooks/main/notebookKernel.service'
+      )
     ).default;
     const [notebook] = await service.listNotebooks(connectionId);
     (kernelService.execute as jest.Mock).mockClear();
@@ -577,7 +597,7 @@ describe('PythonNotebooksService', () => {
   describe('buildFallbackTable', () => {
     it('turns rows into the interactive-table payload', async () => {
       const { buildFallbackTable } = await import(
-        '../../../../src/main/services/pythonNotebooks.service'
+        '../../../../src/extensions/notebooks/main/pythonNotebooks.service'
       );
       const info = buildFallbackTable(
         ['id', 'first_order', 'name'],
@@ -602,7 +622,7 @@ describe('PythonNotebooksService', () => {
 
     it('caps rows at 20,000', async () => {
       const { buildFallbackTable } = await import(
-        '../../../../src/main/services/pythonNotebooks.service'
+        '../../../../src/extensions/notebooks/main/pythonNotebooks.service'
       );
       const rows = Array.from({ length: 25_000 }, (_, i) => ({ i }));
       const info = buildFallbackTable(['i'], rows);
@@ -612,7 +632,7 @@ describe('PythonNotebooksService', () => {
 
     it('sends no rows when the floor still exceeds the size cap', async () => {
       const { buildFallbackTable } = await import(
-        '../../../../src/main/services/pythonNotebooks.service'
+        '../../../../src/extensions/notebooks/main/pythonNotebooks.service'
       );
       const big = 'x'.repeat(60_000);
       const rows = Array.from({ length: 200 }, () => ({ s: big }));
@@ -627,7 +647,7 @@ describe('PythonNotebooksService', () => {
   describe('isWrapperRejection', () => {
     it('matches wrapper errors only', async () => {
       const { isWrapperRejection } = await import(
-        '../../../../src/main/services/pythonNotebooks.service'
+        '../../../../src/extensions/notebooks/main/pythonNotebooks.service'
       );
       expect(isWrapperRejection("Duplicate column name 'id'")).toBe(true);
       expect(
@@ -651,7 +671,7 @@ describe('PythonNotebooksService', () => {
     ) => string;
     beforeAll(async () => {
       ({ boundSqlQuery } = await import(
-        '../../../../src/main/services/pythonNotebooks.service'
+        '../../../../src/extensions/notebooks/main/pythonNotebooks.service'
       ));
     });
 
@@ -712,10 +732,14 @@ describe('PythonNotebooksService', () => {
   it('deletes the file, the kernel and the environment together', async () => {
     const service = await load();
     const envService = (
-      await import('../../../../src/main/services/notebookEnv.service')
+      await import(
+        '../../../../src/extensions/notebooks/main/notebookEnv.service'
+      )
     ).default;
     const kernelService = (
-      await import('../../../../src/main/services/notebookKernel.service')
+      await import(
+        '../../../../src/extensions/notebooks/main/notebookKernel.service'
+      )
     ).default;
     const [notebook] = await service.listNotebooks(connectionId);
 
@@ -768,7 +792,9 @@ describe('PythonNotebooksService', () => {
     it('writes an .ipynb with the same id, removes the .json and builds the env on the recommended python', async () => {
       const service = await load();
       const envService = (
-        await import('../../../../src/main/services/notebookEnv.service')
+        await import(
+          '../../../../src/extensions/notebooks/main/notebookEnv.service'
+        )
       ).default;
       (envService.createEnv as jest.Mock).mockClear();
       await fs.writeJson(path.join(dir, 'legacy-sql.json'), legacy);

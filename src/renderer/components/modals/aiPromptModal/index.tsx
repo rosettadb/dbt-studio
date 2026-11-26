@@ -15,7 +15,7 @@ import 'ace-builds/src-noconflict/theme-tomorrow';
 import 'ace-builds/src-noconflict/theme-dracula';
 
 import { toast } from 'react-toastify';
-import { Container } from '../../sqlEditor/queryHistory/styles';
+import { Container } from '../promptCard.styles';
 
 type Props = {
   isOpen: boolean;

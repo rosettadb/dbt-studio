@@ -14,7 +14,7 @@ import type * as monaco from 'monaco-editor';
 import {
   parseSqlEditorStatements,
   type ParsedStatement,
-} from '../../components/sqlEditor/editorComponent/statements';
+} from '../../../connections/core/sqlStatements.shared';
 
 export type InsertTextOptions = {
   /** Insert at this position instead of the current selection. */

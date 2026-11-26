@@ -1,0 +1,10 @@
+{
+  "name": "hello",
+  "publisher": "studio-examples",
+  "displayName": "Hello",
+  "description": "Example extension: a sidebar item, a screen, a command and a backend call.",
+  "version": "1.0.0",
+  "engines": { "rosettaStudio": ">=1.7.8" },
+  "main": "main.js",
+  "renderer": "renderer.js"
+}

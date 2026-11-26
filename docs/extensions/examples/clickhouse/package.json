@@ -1,0 +1,10 @@
+{
+  "name": "clickhouse",
+  "publisher": "studio-examples",
+  "displayName": "ClickHouse",
+  "description": "Example extension: adds ClickHouse as a database connection (over its HTTP interface).",
+  "version": "1.0.0",
+  "engines": { "rosettaStudio": ">=1.7.8" },
+  "main": "main.js",
+  "renderer": "renderer.js"
+}

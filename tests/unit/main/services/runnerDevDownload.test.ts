@@ -3,7 +3,7 @@ import fs from 'fs-extra';
 import os from 'os';
 import path from 'path';
 import { app } from 'electron';
-import RunnerService from '../../../../src/main/services/runner.service';
+import RunnerService from '../../../../src/extensions/pipeline/main/runner.service';
 import { downloadForInstall } from '../../../../src/main/utils/installTask';
 
 jest.mock('../../../../src/main/services/settings.service', () => ({

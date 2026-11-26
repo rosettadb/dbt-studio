@@ -404,6 +404,7 @@ const ChartsFileView: React.FC<FileViewProps> = ({ tab, project }) => {
 
 export const chartsFileView: FileViewDefinition = {
   id: 'dbt-charts',
+  priority: 100,
   matches: (tab) => looksLikeChartsPath(tab.path),
   Component: ChartsFileView,
 };

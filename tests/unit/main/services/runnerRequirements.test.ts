@@ -1,12 +1,12 @@
 import fs from 'fs-extra';
 import os from 'os';
 import path from 'path';
-import RunnerService from '../../../../src/main/services/runner.service';
+import RunnerService from '../../../../src/extensions/pipeline/main/runner.service';
 import SettingsService from '../../../../src/main/services/settings.service';
 import {
   loadPluginDefinitions,
   resolveProjectMacroDirs,
-} from '../../../../src/main/services/pluginManifest.service';
+} from '../../../../src/extensions/pipeline/main/pluginManifest.service';
 
 jest.mock('../../../../src/main/services/settings.service', () => ({
   __esModule: true,

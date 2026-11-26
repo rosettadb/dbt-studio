@@ -14,11 +14,16 @@ import {
   RosettaCloudService,
   DuckLakeConnectionManager,
   FlowfileService,
-  RunnerService,
 } from './services';
 import { copyAssetsToUserData } from './utils/fileHelper';
 import { MCPClientManager } from './services/ai/mcp/mcpClientManager';
 import ChatGptAuthService from './services/ai/chatgpt/chatgptAuth.service';
+import { extensionHost } from '../extensionHost/main/index.main';
+import {
+  handleExtensionProtocol,
+  startExtensionHost,
+} from '../extensionHost/main/ipc.main';
+import { EXTENSION_SCHEME } from '../extensionHost/shared/protocol.shared';
 
 const isProd = process.env.NODE_ENV === 'production';
 const isDebug =
@@ -46,6 +51,16 @@ protocol.registerSchemesAsPrivileged([
   },
   {
     scheme: 'html-preview',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+    },
+  },
+  {
+    // Files of installed extensions, loaded by the window as scripts.
+    scheme: EXTENSION_SCHEME,
     privileges: {
       standard: true,
       secure: true,
@@ -199,14 +214,10 @@ if (!gotTheLock) {
             }
           }
 
-          try {
-            await RunnerService.downloadRunnerForDevelopment(() =>
-              updateMessage('Downloading the local runner...'),
-            );
-            await RunnerService.copyBundledRunnerToUserData();
-          } catch (e) {
-            console.error('Failed to set up the local runner:', e);
-          }
+          // Extensions prepare what they need before the window opens (the
+          // Pipelines extension puts the local runner in place).
+          await startExtensionHost();
+          await extensionHost.runStartupTasks(updateMessage);
 
           const fakeStages = [
             { message: 'Loading settings...', delay: 1000 },
@@ -260,6 +271,8 @@ if (!gotTheLock) {
           bypassCustomProtocolHandlers: true,
         });
       });
+
+      protocol.handle(EXTENSION_SCHEME, handleExtensionProtocol);
 
       app.on('activate', () => {
         if (windowManager) {
@@ -334,6 +347,14 @@ ipcMain.handle('windows:closeSetup', () => {
 // Cleanup DuckLake connections before app quits
 app.on('before-quit', async (event) => {
   event.preventDefault();
+
+  try {
+    // Let extensions stop what they started (processes, kernels, sockets)
+    await extensionHost.deactivateAll();
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('[App] Error while stopping extensions:', error);
+  }
 
   try {
     // Disconnect all DuckLake connections to prevent memory leaks

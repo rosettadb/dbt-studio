@@ -15,7 +15,7 @@ import { toast } from 'react-toastify';
 import 'ace-builds/src-noconflict/theme-tomorrow';
 import 'ace-builds/src-noconflict/theme-dracula';
 
-import { Container } from '../../sqlEditor/queryHistory/styles';
+import { Container } from '../promptCard.styles';
 import { GenerateDashboardResponseType } from '../../../../types/backend';
 
 type Props = {

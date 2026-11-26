@@ -7,7 +7,6 @@ import {
   registerGitHandlers,
   registerUtilsHandlers,
   registerProcessHandlers,
-  registerRunnerHandlers,
   registerSecureStorageHandlers,
   registerUpdateHandlers,
   registerCloudExplorerHandlers,
@@ -15,25 +14,20 @@ import {
   registerRosettaCloudIpcHandlers,
   registerDuckLakeHandlers,
   registerLineageHandlers,
-  registerNotebooksHandlers,
   registerLanguageIntelligenceHandlers,
   registerAgentHandlers,
   registerMCPHandlers,
   registerSkillsHandlers,
-  registerSavedQueriesHandlers,
-  registerAnalyticsPagesHandlers,
-  registerStaticSiteHandlers,
   registerFlowfileHandlers,
-  registerPipelineTemplatesHandlers,
   registerTaskManagerHandlers,
   registerSecondBrainHandlers,
   registerIcebergDatalakeHandlers,
   registerBackupHandlers,
-  registerPythonNotebooksHandlers,
   registerPtyHandlers,
 } from './ipcHandlers';
 import registerDbtChartsHandlers from './ipcHandlers/dbtCharts.ipcHandlers';
 import { installIpcErrorHandling } from './utils/ipcErrorHandler';
+import { registerExtensionHostHandlers } from '../extensionHost/main/ipc.main';
 
 const registerHandlers = (mainWindow: BrowserWindow) => {
   installIpcErrorHandling();
@@ -45,7 +39,6 @@ const registerHandlers = (mainWindow: BrowserWindow) => {
   registerUtilsHandlers();
   registerProcessHandlers(mainWindow);
   registerPtyHandlers(mainWindow);
-  registerRunnerHandlers(mainWindow);
   registerSecureStorageHandlers();
   registerUpdateHandlers();
   registerCloudExplorerHandlers();
@@ -53,22 +46,18 @@ const registerHandlers = (mainWindow: BrowserWindow) => {
   registerRosettaCloudIpcHandlers();
   registerDuckLakeHandlers();
   registerLineageHandlers();
-  registerNotebooksHandlers();
-  registerPythonNotebooksHandlers();
   registerLanguageIntelligenceHandlers();
   registerAgentHandlers();
   registerMCPHandlers();
   registerSkillsHandlers();
-  registerSavedQueriesHandlers();
-  registerAnalyticsPagesHandlers();
-  registerStaticSiteHandlers(mainWindow);
   registerFlowfileHandlers();
   registerDbtChartsHandlers();
-  registerPipelineTemplatesHandlers();
   registerTaskManagerHandlers(mainWindow);
   registerSecondBrainHandlers();
   registerIcebergDatalakeHandlers();
   registerBackupHandlers(mainWindow);
+  // Last, so extensions start after Studio's own handlers are in place.
+  registerExtensionHostHandlers(mainWindow);
 };
 
 export default registerHandlers;

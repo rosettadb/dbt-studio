@@ -27,6 +27,8 @@ import { Content, EditorContainer, Header, NoFileSelected } from './styles';
 import { useAppContext } from '../../hooks';
 import { AppLayout } from '../../layouts';
 import ChatScreen from '../chat';
+import { Slot, STUDIO_SLOTS } from '../../../extensionApi/renderer';
+import { runCommand } from '../../components/commandPalette/commands';
 
 const VerticalSash = (_: number, active: boolean) => (
   <div
@@ -80,16 +82,11 @@ const ProjectDetails: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();
-  const openCreatePipeline = React.useMemo(() => {
-    const state = location.state as { openCreatePipeline?: boolean } | null;
-    return state?.openCreatePipeline === true;
-  }, []);
-
-  // Clear the nav state so a back-navigation doesn't re-trigger the modal
-  React.useEffect(() => {
-    if (openCreatePipeline) {
-      navigate(location.pathname, { replace: true, state: {} });
-    }
+  // A command to run once this screen is open, handed over by the project
+  // list (for example "create a pipeline", started from the Home card).
+  const pendingCommand = React.useMemo(() => {
+    const state = location.state as { runCommand?: unknown } | null;
+    return typeof state?.runCommand === 'string' ? state.runCommand : undefined;
   }, []);
 
   const [verticalSizes, setVerticalSizes] = React.useState<(number | string)[]>(
@@ -99,6 +96,15 @@ const ProjectDetails: React.FC = () => {
 
   const { isChatOpen, setIsSidebarOpen } = useAppContext();
   const { data: project, isLoading } = useGetSelectedProject();
+
+  // Run the handed-over command once, and clear the nav state so a
+  // back-navigation doesn't run it again. Without a project this screen
+  // redirects, so there is nothing for the command to act on.
+  React.useEffect(() => {
+    if (!pendingCommand) return;
+    navigate(location.pathname, { replace: true, state: {} });
+    if (project?.id) runCommand(pendingCommand);
+  }, []);
   const { data: projects = [] } = useGetProjects();
   const { mutateAsync: selectProject } = useSelectProject();
   // Set while a project switch is loading, so a second pick can't overtake it
@@ -289,11 +295,7 @@ const ProjectDetails: React.FC = () => {
               pt: sidebarTab === 'explorer' ? 1 : 0,
             }}
           >
-            <ProjectSidebar
-              activeTab={sidebarTab}
-              project={project}
-              openCreatePipeline={openCreatePipeline}
-            />
+            <ProjectSidebar activeTab={sidebarTab} project={project} />
           </Box>
         </Box>
       }
@@ -363,6 +365,8 @@ const ProjectDetails: React.FC = () => {
           </Box>
         </Pane>
       </SplitPane>
+      {/* Dialogs and the like that extensions keep mounted on this screen */}
+      <Slot id={STUDIO_SLOTS.projectOverlays} props={{ project }} />
     </AppLayout>
   );
 };

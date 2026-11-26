@@ -248,26 +248,6 @@ const registerProjectHandlers = () => {
       return ProjectsService.extractProfileEnvVars(body.projectId);
     },
   );
-
-  ipcMain.handle(
-    'project:extractRequiredEnvVars',
-    async (
-      _event,
-      body: { projectId: string; pipelineRelativePath?: string },
-    ) => {
-      return ProjectsService.extractRequiredEnvVars(
-        body.projectId,
-        body.pipelineRelativePath,
-      );
-    },
-  );
-
-  ipcMain.handle(
-    'project:listPipelines',
-    async (_event, body: { projectId: string }) => {
-      return ProjectsService.listPipelines(body.projectId);
-    },
-  );
 };
 
 export default registerProjectHandlers;

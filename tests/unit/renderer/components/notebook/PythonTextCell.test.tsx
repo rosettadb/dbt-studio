@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 
-import { PythonTextCell } from '../../../../../src/renderer/components/notebook/python/PythonTextCell';
+import { PythonTextCell } from '../../../../../src/extensions/notebooks/renderer/notebook/python/PythonTextCell';
 
 jest.mock('react-markdown', () => ({
   __esModule: true,

@@ -4,6 +4,11 @@ import {
   getDescriptor,
   type SupportedConnectionTypes,
 } from './registry.shared';
+import {
+  getConnectionUi,
+  listConnectionUis,
+  registerConnectionUi,
+} from './core/uiRegistry.renderer';
 import type { ConnectionFormProps, ConnectionUi } from './core/ui.renderer';
 import { postgresUi } from './postgres/postgres.ui';
 import { snowflakeUi } from './snowflake/snowflake.ui';
@@ -35,20 +40,14 @@ export const connectionUis: {
   ducklake: ducklakeUi,
 };
 
-const isKnown = (type: string): type is SupportedConnectionTypes =>
-  Object.prototype.hasOwnProperty.call(connectionUis, type);
+// Studio's own databases come in through the same call extensions use.
+CONNECTION_TYPES.forEach((type) => registerConnectionUi(connectionUis[type]));
 
-export function getConnectionUi(
-  type: string | null | undefined,
-): ConnectionUi<any> | undefined {
-  return type && isKnown(type) ? connectionUis[type] : undefined;
-}
+export { getConnectionUi, registerConnectionUi };
 
-/** Add-screen tiles, in CONNECTION_TYPES order. */
+/** Add-screen tiles: Studio's own in CONNECTION_TYPES order, then the ones extensions added. */
 export function creatableConnections(): ConnectionUi<any>[] {
-  return CONNECTION_TYPES.map((type) => connectionUis[type]).filter(
-    (ui) => !!ui.Form,
-  );
+  return listConnectionUis().filter((ui) => !!ui.Form);
 }
 
 /** The form for a type. Unknown types (and DuckLake) get the Postgres form, as today's `default:` case. */

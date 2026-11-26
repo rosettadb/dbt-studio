@@ -28,6 +28,11 @@ import {
   resolveProjectMutationPath,
 } from '../components/chat/pipelineToolResults';
 import type { EditorTabId } from '../../types/editor';
+import {
+  emitFileDidClose,
+  emitFileDidOpen,
+  setSavedContentSink,
+} from '../../extensionHost/renderer/documents.renderer';
 
 export interface RevealPosition {
   path: string;
@@ -175,11 +180,13 @@ export const TabsProvider: React.FC<TabsProviderProps> = ({ children }) => {
     await Promise.all(
       modified.map(async (tab) => {
         try {
-          await projectsServices.saveFileContent({
-            path: tab.path,
-            content: tab.content,
-          });
-          markTabSavedByPath(tab.path, tab.content);
+          // A pre-save hook may change what is written (a formatter), so
+          // the tab is marked saved against what actually went to disk.
+          const written = await projectsServices.saveDocument(
+            { path: tab.path, content: tab.content },
+            { reason: 'manual' },
+          );
+          markTabSavedByPath(tab.path, written.content);
           setTabErrorByPath(tab.path, undefined);
         } catch (error: any) {
           setTabErrorByPath(tab.path, error?.message);
@@ -194,13 +201,14 @@ export const TabsProvider: React.FC<TabsProviderProps> = ({ children }) => {
       const tab = tabs.find((t) => t.id === tabId);
       if (!tab) return;
       try {
-        await projectsServices.saveFileContent({
-          path: tab.path,
-          content: tab.content,
-        });
-        // `tab` is the snapshot that was written; the tab stays modified if
-        // it was edited while the write was in flight.
-        markTabSavedByPath(tab.path, tab.content);
+        const written = await projectsServices.saveDocument(
+          { path: tab.path, content: tab.content },
+          { reason: 'manual' },
+        );
+        // `written` is what went to disk (the snapshot, or what a pre-save
+        // hook made of it); the tab stays modified if it was edited while
+        // the write was in flight.
+        markTabSavedByPath(tab.path, written.content);
         setTabErrorByPath(tab.path, undefined);
         await refreshProjectFiles();
       } catch (error: any) {
@@ -247,6 +255,33 @@ export const TabsProvider: React.FC<TabsProviderProps> = ({ children }) => {
     },
     [closeOthersKeepingModified],
   );
+
+  // A pre-save hook changed what was written: show that in the open tab.
+  const { updateTabContentByPath } = manager;
+  useEffect(() => {
+    setSavedContentSink((path, content) =>
+      updateTabContentByPath(path, content, { markModified: false }),
+    );
+    return () => setSavedContentSink(null);
+  }, [updateTabContentByPath]);
+
+  // Tell extensions which files were opened and closed in the editor
+  // (preview tabs are not files).
+  const openPathsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!isHydrated) return;
+    const openPaths = new Set(
+      tabs.map((tab) => tab.path).filter((path) => !isVirtualPreviewPath(path)),
+    );
+    const previous = openPathsRef.current;
+    openPathsRef.current = openPaths;
+    openPaths.forEach((path) => {
+      if (!previous.has(path)) emitFileDidOpen(path);
+    });
+    previous.forEach((path) => {
+      if (!openPaths.has(path)) emitFileDidClose(path);
+    });
+  }, [tabs, isHydrated]);
 
   // Switching to another project starts it with an empty editor.
   const previousProjectPathRef = useRef<string | undefined>();

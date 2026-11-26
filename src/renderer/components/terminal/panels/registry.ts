@@ -1,18 +1,21 @@
+import {
+  byOrder,
+  createRegistry,
+} from '../../../../extensionHost/renderer/registry.renderer';
+import type { Disposable } from '../../../../extensionHost/shared/protocol.shared';
 import type { TerminalPanelDefinition } from './types';
 
-const panels: TerminalPanelDefinition[] = [];
+// Tab order: by `order`, then registration order.
+export const terminalPanelRegistry = createRegistry<TerminalPanelDefinition>({
+  compare: byOrder,
+});
 
-export const registerTerminalPanel = (panel: TerminalPanelDefinition): void => {
-  const existing = panels.findIndex((p) => p.id === panel.id);
-  if (existing >= 0) {
-    panels[existing] = panel;
-    return;
-  }
-  panels.push(panel);
-};
+// The disposer takes the panel out again (used when an extension is disabled).
+export const registerTerminalPanel = (
+  panel: TerminalPanelDefinition,
+): Disposable => terminalPanelRegistry.add(panel);
 
-// Registration order is tab order.
 export const listTerminalPanels = (): ReadonlyArray<TerminalPanelDefinition> =>
-  panels;
+  terminalPanelRegistry.list();
 
 export const DEFAULT_TERMINAL_PANEL_ID = 'terminal';

@@ -4,6 +4,7 @@ import { ConnectionInput, ConnectionModel } from './backend';
 // Requirements: 4.1, 4.6
 
 import { CloudProvider, CloudStorageConfig } from './frontend';
+import type { ExtensionHostChannels } from '../extensionHost/shared/protocol.shared';
 
 export type TestChannels = 'test:create' | 'test:getAll';
 
@@ -678,7 +679,8 @@ export type Channels =
   | PipelineTemplatesChannels
   | SecondBrainChannels
   | IcebergChannels
-  | BackupChannels;
+  | BackupChannels
+  | ExtensionHostChannels;
 
 export type ConfigureConnectionBody = {
   projectId?: string;

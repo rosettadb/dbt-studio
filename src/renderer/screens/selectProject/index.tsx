@@ -101,28 +101,37 @@ const PROJECTS_VIEW_STORAGE_KEY = 'selectProject.view';
 const SelectProject: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  // Set by the Dashboard Pipeline card: the project picked or created here
-  // opens with the Create Pipeline dialog. The Dashboard New Project button
-  // sets only startNewProject, to open the new project form.
-  const [pipelineNavigationState] = React.useState(() => {
+  // How this screen was entered. `afterOpen` is set by whoever needs a
+  // project first (the Home Pipeline card): the project picked or created
+  // here opens and then runs that command, and `message` is shown as a
+  // banner meanwhile. `startNewProject` opens the new project form.
+  const [entryState] = React.useState(() => {
     const state = location.state as {
-      forPipeline?: boolean;
+      afterOpen?: { command?: unknown; message?: unknown };
       startNewProject?: boolean;
     } | null;
+    const command = state?.afterOpen?.command;
+    const message = state?.afterOpen?.message;
     return {
-      forPipeline: state?.forPipeline === true,
+      afterOpen:
+        typeof command === 'string'
+          ? {
+              command,
+              message: typeof message === 'string' ? message : undefined,
+            }
+          : undefined,
       startNewProject: state?.startNewProject === true,
     };
   });
-  const { forPipeline } = pipelineNavigationState;
-  const projectScreenState = forPipeline
-    ? { openCreatePipeline: true }
+  const { afterOpen } = entryState;
+  const projectScreenState = afterOpen
+    ? { runCommand: afterOpen.command }
     : undefined;
 
-  // Clear the nav state so a back-navigation doesn't re-enter pipeline mode
+  // Clear the nav state so a back-navigation doesn't re-enter that mode
   // or reopen the new project form
   React.useEffect(() => {
-    if (forPipeline || pipelineNavigationState.startNewProject) {
+    if (afterOpen || entryState.startNewProject) {
       navigate(location.pathname, { replace: true, state: {} });
     }
   }, []);
@@ -150,7 +159,7 @@ const SelectProject: React.FC = () => {
     },
   );
   const [isAddingProject, setIsAddingProject] = React.useState(
-    pipelineNavigationState.startNewProject,
+    entryState.startNewProject,
   );
   const [newProject, setNewProject] = React.useState({
     name: '',
@@ -838,9 +847,9 @@ const SelectProject: React.FC = () => {
                 <TaglineText>Manage your projects</TaglineText>
               </TaglineContainer>
 
-              {forPipeline && (
+              {afterOpen?.message && (
                 <Alert severity="info" sx={{ mb: 2 }}>
-                  Pick the project to add a pipeline to, or create a new one.
+                  {afterOpen.message}
                 </Alert>
               )}
 

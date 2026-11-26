@@ -2,7 +2,7 @@ import {
   getPipelineCloudFile,
   getPipelineRelativeName,
   getPipelineRelativePath,
-} from '../../../../src/renderer/components/pipelineView/getPipelineRelativeName';
+} from '../../../../src/extensions/pipeline/renderer/getPipelineRelativeName';
 
 describe('getPipelineRelativeName', () => {
   const projectPath = '/projects/demo';

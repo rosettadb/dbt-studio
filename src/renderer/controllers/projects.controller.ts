@@ -9,6 +9,7 @@ import {
 import { CustomError, FileNode, Project } from '../../types/backend';
 import { QUERY_KEYS } from '../config/constants';
 import { projectsServices } from '../services';
+import type { FileSaveReason } from '../../extensionHost/renderer/documents.renderer';
 
 export const useGetProjects = (
   customOptions?: UseQueryOptions<Project[], CustomError, Project[]>,
@@ -192,17 +193,16 @@ export const useGetFileContent = (
   });
 };
 
+type SaveFileVariables = {
+  path: string;
+  content: string;
+  // Why the file is saved; pre-save hooks see it. Default: programmatic.
+  reason?: FileSaveReason;
+};
+
 export const useSaveFileContent = (
-  customOptions?: UseMutationOptions<
-    boolean,
-    CustomError,
-    { path: string; content: string }
-  >,
-): UseMutationResult<
-  boolean,
-  CustomError,
-  { path: string; content: string }
-> => {
+  customOptions?: UseMutationOptions<boolean, CustomError, SaveFileVariables>,
+): UseMutationResult<boolean, CustomError, SaveFileVariables> => {
   const { onSuccess: onCustomSuccess, onError: onCustomError } =
     customOptions || {};
   const queryClient = useQueryClient();
@@ -228,32 +228,6 @@ export const useExtractProfileEnvVars = (projectId?: string) => {
     enabled: !!projectId,
     queryFn: async () => {
       return projectsServices.extractProfileEnvVars(projectId!);
-    },
-  });
-};
-
-export const useExtractRequiredEnvVars = (
-  projectId?: string,
-  pipelineRelativePath?: string,
-) => {
-  return useQuery({
-    queryKey: ['extractRequiredEnvVars', projectId, pipelineRelativePath],
-    enabled: !!projectId,
-    queryFn: async () => {
-      return projectsServices.extractRequiredEnvVars(
-        projectId!,
-        pipelineRelativePath,
-      );
-    },
-  });
-};
-
-export const useListPipelines = (projectId?: string) => {
-  return useQuery({
-    queryKey: ['listPipelines', projectId],
-    enabled: !!projectId,
-    queryFn: async () => {
-      return projectsServices.listPipelines(projectId!);
     },
   });
 };

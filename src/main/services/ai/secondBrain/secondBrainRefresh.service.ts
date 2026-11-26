@@ -14,7 +14,7 @@ import MainDatabaseService, {
 } from '../../mainDatabase.service';
 import ProjectsService from '../../projects.service';
 import ConnectorsService from '../../connectors.service';
-import { NotebooksService } from '../../notebooks.service';
+import { listNotebooksOfConnection } from '../../notebookCatalog';
 import { DbtCoreVersionService } from '../../dbtCoreVersion.service';
 import { getVercelModel } from '../agentAdapter';
 import SecondBrainService, {
@@ -185,7 +185,7 @@ type SecondBrainRefreshDependencies = {
   collectSessions?: typeof MainDatabaseService.getSecondBrainSessionEvidence;
   collectAnalytics?: typeof MainDatabaseService.getSecondBrainAnalyticsEvidence;
   loadConnections?: typeof ConnectorsService.loadConnections;
-  listNotebooks?: typeof NotebooksService.listNotebooks;
+  listNotebooks?: typeof listNotebooksOfConnection;
   collectGitStatus?: (projectPath: string) => Promise<Record<string, unknown>>;
   collectDbtRuntimeEvidence?: typeof DbtCoreVersionService.getInstalledDbtCore;
 };
@@ -432,7 +432,7 @@ export default class SecondBrainRefreshService {
 
   private readonly loadConnections: typeof ConnectorsService.loadConnections;
 
-  private readonly listNotebooks: typeof NotebooksService.listNotebooks;
+  private readonly listNotebooks: typeof listNotebooksOfConnection;
 
   private readonly collectGitStatus: (
     projectPath: string,
@@ -462,7 +462,7 @@ export default class SecondBrainRefreshService {
     this.loadConnections =
       dependencies.loadConnections ?? ConnectorsService.loadConnections;
     this.listNotebooks =
-      dependencies.listNotebooks ?? NotebooksService.listNotebooks;
+      dependencies.listNotebooks ?? listNotebooksOfConnection;
     this.collectGitStatus =
       dependencies.collectGitStatus ??
       (async (projectPath) => {

@@ -8,15 +8,12 @@ import useRosettaExtract from './useRosettaExtract';
 import useRosettaDBT from './useRosettaDBT';
 import useDbt from './useDbt';
 import useProcess from './useProcessContext';
-import useRunner from './useRunnerContext';
 import useSecureStorage from './useSecureStorage';
 import useTabManager from './useTabManager';
 import useDuckLakeConnection from './useDuckLakeConnection';
 import { useMonacoAutocomplete } from './useMonacoAutocomplete';
 import { useSchemaForConnection } from './useSchemaForConnection';
 import { useSchemaObjectDrop } from './useSchemaObjectDrop';
-import { useNotebookConnectionState } from './useNotebookConnectionState';
-import { useNotebookSidebarState } from './useNotebookSidebarState';
 import { useToolMode } from './useToolMode';
 import { useProjectQueryResultsPanel } from './useProjectQueryResultsPanel';
 import { useProjectSqlExecution } from './useProjectSqlExecution';
@@ -37,15 +34,12 @@ export {
   useRosettaDBT,
   useDbt,
   useProcess,
-  useRunner,
   useSecureStorage,
   useTabManager,
   useDuckLakeConnection,
   useMonacoAutocomplete,
   useSchemaForConnection,
   useSchemaObjectDrop,
-  useNotebookConnectionState,
-  useNotebookSidebarState,
   useToolMode,
   useProjectQueryResultsPanel,
   useProjectSqlExecution,

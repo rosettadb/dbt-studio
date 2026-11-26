@@ -4,7 +4,7 @@ import {
   expandMacros,
   parsePluginManifest,
   validateStepParams,
-} from '../../../src/shared/pluginManifest';
+} from '../../../src/extensions/pipeline/shared/pluginManifest';
 import shipped from '../__fixtures__/plugins.json';
 
 const byId = (raw: unknown) =>

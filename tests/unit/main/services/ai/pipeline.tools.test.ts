@@ -13,7 +13,7 @@ import {
   resolvePipelineReadPath,
   validatePipelineContent,
   updateProjectPipeline,
-} from '../../../../../src/main/services/ai/tools/studio/pipeline.tools';
+} from '../../../../../src/extensions/pipeline/main/pipeline.tools';
 
 jest.mock('ai', () => ({
   tool: jest.fn((definition) => definition),
@@ -21,18 +21,21 @@ jest.mock('ai', () => ({
 
 // The plugins come from the runner's plugin manifest; the fixture is a copy
 // of the one the runner ships.
-jest.mock('../../../../../src/main/services/pluginManifest.service', () => {
-  const { parsePluginManifest } = jest.requireActual(
-    '../../../../../src/shared/pluginManifest',
-  );
-  const plugins = parsePluginManifest(
-    jest.requireActual('../../../__fixtures__/plugins.json'),
-  );
-  return {
-    loadPluginDefinitions: jest.fn(async () => plugins),
-    getPluginDefinitions: jest.fn(() => plugins),
-  };
-});
+jest.mock(
+  '../../../../../src/extensions/pipeline/main/pluginManifest.service',
+  () => {
+    const { parsePluginManifest } = jest.requireActual(
+      '../../../../../src/extensions/pipeline/shared/pluginManifest',
+    );
+    const plugins = parsePluginManifest(
+      jest.requireActual('../../../__fixtures__/plugins.json'),
+    );
+    return {
+      loadPluginDefinitions: jest.fn(async () => plugins),
+      getPluginDefinitions: jest.fn(() => plugins),
+    };
+  },
+);
 
 const VALID_PIPELINE = `name: "CI"
 jobs:

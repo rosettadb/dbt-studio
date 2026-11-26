@@ -93,56 +93,6 @@ export const registerAgentHandlers = () => {
     ) => AgentService.resolveEditorUpdateResponse(payload),
   );
 
-  ipcMain.handle('agent:notebook:state-response', async (_event, payload) =>
-    AgentService.resolveNotebookBridgeResponse(payload),
-  );
-
-  ipcMain.handle('agent:notebook:cell-read-response', async (_event, payload) =>
-    AgentService.resolveNotebookBridgeResponse(payload),
-  );
-
-  ipcMain.handle('agent:notebook:cell-add-response', async (_event, payload) =>
-    AgentService.resolveNotebookBridgeResponse(payload),
-  );
-
-  ipcMain.handle(
-    'agent:notebook:cell-update-response',
-    async (_event, payload) =>
-      AgentService.resolveNotebookBridgeResponse(payload),
-  );
-
-  ipcMain.handle('agent:notebook:cell-run-response', async (_event, payload) =>
-    AgentService.resolveNotebookBridgeResponse(payload),
-  );
-
-  ipcMain.handle(
-    'agent:notebook:cell-result-response',
-    async (_event, payload) =>
-      AgentService.resolveNotebookBridgeResponse(payload),
-  );
-
-  ipcMain.handle('agent:python-notebook:response', async (_event, payload) =>
-    AgentService.resolveNotebookBridgeResponse(payload),
-  );
-
-  ipcMain.handle('agent:analytics:read-response', async (_event, payload) =>
-    AgentService.resolveAnalyticsBridgeResponse(payload),
-  );
-
-  ipcMain.handle('agent:analytics:update-response', async (_event, payload) =>
-    AgentService.resolveAnalyticsBridgeResponse(payload),
-  );
-
-  ipcMain.handle('agent:analytics:run-response', async (_event, payload) =>
-    AgentService.resolveAnalyticsBridgeResponse(payload),
-  );
-
-  ipcMain.handle(
-    'agent:analytics:query-results-response',
-    async (_event, payload) =>
-      AgentService.resolveAnalyticsBridgeResponse(payload),
-  );
-
   // Thin wrapper — all logic in AgentEditorBridgeService (BE-01)
   ipcMain.handle(
     'agent:editor:get-query-results',

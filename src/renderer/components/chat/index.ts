@@ -1,6 +1,7 @@
 export { ChatInputBox } from './ChatInputBox';
 export { ChatMessageList } from './ChatMessageList';
 export { ChatWindow } from './ChatWindow';
+export type { ChatWindowProps } from './ChatWindow';
 export { MessageRenderer } from './MessageRenderer';
 export { NewChatButton } from './NewChatButton';
 export { SessionHistoryButton } from './SessionHistoryButton';

@@ -22,7 +22,11 @@ jest.mock('../../../../src/renderer/hooks/useRefreshProjectFiles', () => ({
 jest.mock('../../../../src/renderer/services', () => ({
   projectsServices: {
     getFileContent: jest.fn().mockResolvedValue('on disk'),
-    saveFileContent: jest.fn().mockResolvedValue(undefined),
+    // Resolves with what was written, as the real save does.
+    saveDocument: jest.fn(async (body: { content: string }) => ({
+      saved: true,
+      content: body.content,
+    })),
   },
 }));
 
@@ -39,7 +43,7 @@ jest.mock('../../../../src/renderer/lib/monaco/viewStateStore', () => ({
   clearViewState: jest.fn(),
 }));
 
-const saveFileContent = projectsServices.saveFileContent as jest.Mock;
+const saveDocument = projectsServices.saveDocument as jest.Mock;
 
 const wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <TabsProvider>{children}</TabsProvider>
@@ -47,13 +51,13 @@ const wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 
 const FILE = '/proj/models/a.sql';
 
-// Holds the next saveFileContent call open until `finish` is called.
+// Holds the next save open until `finish` is called.
 const holdNextWrite = () => {
   let finish!: () => void;
-  saveFileContent.mockImplementationOnce(
-    () =>
-      new Promise<void>((resolve) => {
-        finish = resolve;
+  saveDocument.mockImplementationOnce(
+    (body: { content: string }) =>
+      new Promise((resolve) => {
+        finish = () => resolve({ saved: true, content: body.content });
       }),
   );
   return () => finish();
@@ -86,10 +90,10 @@ describe('TabsProvider - saving while the tab is edited', () => {
       await result.current.saveTab(FILE);
     });
 
-    expect(saveFileContent).toHaveBeenCalledWith({
-      path: FILE,
-      content: 'first edit',
-    });
+    expect(saveDocument).toHaveBeenCalledWith(
+      { path: FILE, content: 'first edit' },
+      { reason: 'manual' },
+    );
     expect(tabOf(result).isModified).toBe(false);
     expect(tabOf(result).savedContent).toBe('first edit');
   });
@@ -110,10 +114,10 @@ describe('TabsProvider - saving while the tab is edited', () => {
       await saving;
     });
 
-    expect(saveFileContent).toHaveBeenCalledWith({
-      path: FILE,
-      content: 'first edit',
-    });
+    expect(saveDocument).toHaveBeenCalledWith(
+      { path: FILE, content: 'first edit' },
+      { reason: 'manual' },
+    );
     expect(tabOf(result).content).toBe('second edit');
     expect(tabOf(result).savedContent).toBe('first edit');
     expect(tabOf(result).isModified).toBe(true);

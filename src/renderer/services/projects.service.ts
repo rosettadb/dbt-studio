@@ -1,5 +1,10 @@
 import { client } from '../config/client';
 import {
+  notifySavedContentChanged,
+  runWillSaveParticipants,
+  type FileSaveReason,
+} from '../../extensionHost/renderer/documents.renderer';
+import {
   GenerateDashboardResponseType,
   ConnectionInput,
   FileNode,
@@ -140,15 +145,43 @@ export const searchInFiles = async (body: {
   return data;
 };
 
-export const saveFileContent = async (body: {
-  path: string;
-  content: string;
-}): Promise<boolean> => {
+/**
+ * Writes a project file. This is the one way a file is saved from the
+ * window, so it is where the pre-save hooks run: extensions may change the
+ * content before it is written (docs/extensions/GUIDE.md). Resolves with
+ * the content that was written.
+ */
+export const saveDocument = async (
+  body: { path: string; content: string },
+  options: { reason?: FileSaveReason } = {},
+): Promise<{ saved: boolean; content: string }> => {
+  const content = await runWillSaveParticipants({
+    path: body.path,
+    content: body.content,
+    reason: options.reason ?? 'programmatic',
+  });
   const { data } = await client.post<
     { path: string; content: string },
     boolean
-  >('project:updateFile', body);
-  return data;
+  >('project:updateFile', { path: body.path, content });
+  // A hook changed what was written: an open tab must show what is on disk.
+  if (content !== body.content) notifySavedContentChanged(body.path, content);
+  return { saved: data, content };
+};
+
+export const saveFileContent = async (
+  body: {
+    path: string;
+    content: string;
+    reason?: FileSaveReason;
+  },
+  options: { reason?: FileSaveReason } = {},
+): Promise<boolean> => {
+  const { saved } = await saveDocument(
+    { path: body.path, content: body.content },
+    { reason: options.reason ?? body.reason },
+  );
+  return saved;
 };
 
 export const getProjectPath = async (body: {
@@ -369,26 +402,5 @@ export const extractProfileEnvVars = async (
     { projectId: string },
     { name: string; value?: string }[]
   >('project:extractProfileEnvVars', { projectId });
-  return data;
-};
-
-export const extractRequiredEnvVars = async (
-  projectId: string,
-  pipelineRelativePath?: string,
-): Promise<{ name: string; value?: string; sources: string[] }[]> => {
-  const { data } = await client.post<
-    { projectId: string; pipelineRelativePath?: string },
-    { name: string; value?: string; sources: string[] }[]
-  >('project:extractRequiredEnvVars', { projectId, pipelineRelativePath });
-  return data;
-};
-
-export const listPipelines = async (
-  projectId: string,
-): Promise<{ name: string; path: string }[]> => {
-  const { data } = await client.post<
-    { projectId: string },
-    { name: string; path: string }[]
-  >('project:listPipelines', { projectId });
   return data;
 };

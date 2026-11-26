@@ -7,13 +7,13 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 
-import { AnalyticsPagesTreeView } from '../../../../src/renderer/components/analytics/AnalyticsPagesTreeView';
+import { AnalyticsPagesTreeView } from '../../../../src/extensions/analytics/renderer/AnalyticsPagesTreeView';
 import type { AnalyticsPage } from '../../../../src/types/analyticsPages';
 
 const mockUseGetAnalyticsPages = jest.fn();
 
 jest.mock(
-  '../../../../src/renderer/controllers/analyticsPages.controller',
+  '../../../../src/extensions/analytics/renderer/analyticsPages.controller',
   () => ({
     useGetAnalyticsPages: (...args: any[]) => mockUseGetAnalyticsPages(...args),
     useCreateAnalyticsPage: () => ({ mutate: jest.fn(), isLoading: false }),
@@ -22,22 +22,28 @@ jest.mock(
   }),
 );
 
-jest.mock('../../../../src/renderer/controllers/staticSite.controller', () => ({
-  useGetStaticSiteState: () => ({ data: null, refetch: jest.fn() }),
-  useDeleteStaticSiteBuild: () => ({ mutate: jest.fn(), isLoading: false }),
-}));
-
-jest.mock('../../../../src/renderer/services/staticSite.service', () => ({
-  StaticSiteService: { subscribeToBuildProgress: jest.fn(() => () => {}) },
-}));
+jest.mock(
+  '../../../../src/extensions/analytics/renderer/staticSite.controller',
+  () => ({
+    useGetStaticSiteState: () => ({ data: null, refetch: jest.fn() }),
+    useDeleteStaticSiteBuild: () => ({ mutate: jest.fn(), isLoading: false }),
+  }),
+);
 
 jest.mock(
-  '../../../../src/renderer/components/analytics/StaticSiteBuildDialog',
+  '../../../../src/extensions/analytics/renderer/staticSite.service',
+  () => ({
+    StaticSiteService: { subscribeToBuildProgress: jest.fn(() => () => {}) },
+  }),
+);
+
+jest.mock(
+  '../../../../src/extensions/analytics/renderer/StaticSiteBuildDialog',
   () => ({ StaticSiteBuildDialog: () => null }),
 );
 
 jest.mock(
-  '../../../../src/renderer/components/analytics/AnalyticsPageItem',
+  '../../../../src/extensions/analytics/renderer/AnalyticsPageItem',
   () => ({ AnalyticsPageItem: () => null }),
 );
 
