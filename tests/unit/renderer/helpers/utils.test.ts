@@ -184,6 +184,14 @@ describe('renderer/helpers/utils', () => {
     it('should treat .sql as editable', () => {
       expect(isEditableFile('/x/model.sql')).toBe(true);
     });
+
+    it('should treat binary media files as non-editable and .svg as editable', () => {
+      expect(isEditableFile('/x/logo.png')).toBe(false);
+      expect(isEditableFile('/x/photo.JPG')).toBe(false);
+      expect(isEditableFile('/x/clip.mp4')).toBe(false);
+      expect(isEditableFile('/x/video.webm')).toBe(false);
+      expect(isEditableFile('/x/icon.svg')).toBe(true);
+    });
   });
 
   describe('compileCommand', () => {

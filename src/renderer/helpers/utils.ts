@@ -214,7 +214,23 @@ export const extractModelNameFromPath = (filePath: string): string => {
 /**
  * List of file extensions that should not be edited as text
  */
-const NON_EDITABLE_EXTENSIONS = ['.duckdb', '.db', '.sqlite', '.sqlite3'];
+const NON_EDITABLE_EXTENSIONS = [
+  '.duckdb',
+  '.db',
+  '.sqlite',
+  '.sqlite3',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.webp',
+  '.bmp',
+  '.ico',
+  '.mp4',
+  '.webm',
+  '.mov',
+  '.avi',
+];
 
 /**
  * Gets the file extension from a file path
