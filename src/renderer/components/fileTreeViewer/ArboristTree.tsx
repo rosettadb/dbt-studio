@@ -36,8 +36,6 @@ interface ArboristTreeProps {
   selectedPath?: string;
   projectPath: string;
   copyPath: (source: string, target: string) => Promise<void>;
-  onRunPipeline?: (filePath: string) => void;
-  onRunPipelineLocal?: (filePath: string) => void;
   revealFolderPath?: string | null;
   onFolderRevealed?: () => void;
 }
@@ -73,8 +71,6 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
   selectedPath,
   projectPath,
   copyPath,
-  onRunPipeline,
-  onRunPipelineLocal,
   revealFolderPath,
   onFolderRevealed,
 }) => {
@@ -520,8 +516,6 @@ export const ArboristTree: React.FC<ArboristTreeProps> = ({
                 onCreateFolder={onCreateFolder}
                 onDelete={handleDelete}
                 onRefresh={onRefresh}
-                onRunPipeline={onRunPipeline}
-                onRunPipelineLocal={onRunPipelineLocal}
                 dragOverFolder={dragOverFolder}
                 projectPath={projectPath}
               />

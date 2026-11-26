@@ -84,7 +84,12 @@ jest.mock('../../../../assets', () => ({ icons: {} }));
 
 const PIPELINE_NOTE =
   'Pick the project to add a pipeline to, or create a new one.';
-const OPEN_CREATE_PIPELINE = { state: { openCreatePipeline: true } };
+// The project opens with the command the project list was asked to run.
+const OPEN_CREATE_PIPELINE = { state: { runCommand: 'pipeline.create' } };
+const AFTER_OPEN = {
+  command: 'pipeline.create',
+  message: 'Pick the project to add a pipeline to, or create a new one.',
+};
 
 const renderProjectList = (state: unknown) => {
   mockLocation = { pathname: '/app/select-project', state };
@@ -100,7 +105,7 @@ describe('SelectProject pipeline mode', () => {
   });
 
   it('shows the pipeline note and opens the picked project with Create Pipeline', async () => {
-    renderProjectList({ forPipeline: true, startNewProject: false });
+    renderProjectList({ afterOpen: AFTER_OPEN, startNewProject: false });
 
     expect(screen.getByText(PIPELINE_NOTE)).toBeInTheDocument();
 
@@ -116,7 +121,7 @@ describe('SelectProject pipeline mode', () => {
   });
 
   it('clears the navigation state so Back does not re-enter pipeline mode', () => {
-    renderProjectList({ forPipeline: true, startNewProject: false });
+    renderProjectList({ afterOpen: AFTER_OPEN, startNewProject: false });
 
     expect(mockNavigate).toHaveBeenCalledWith('/app/select-project', {
       replace: true,
@@ -126,7 +131,7 @@ describe('SelectProject pipeline mode', () => {
 
   it('opens the New Project form and opens the new project with Create Pipeline', async () => {
     mockAddProject.mockResolvedValue({ id: '9', name: 'pipeline_proj' });
-    renderProjectList({ forPipeline: true, startNewProject: true });
+    renderProjectList({ afterOpen: AFTER_OPEN, startNewProject: true });
 
     expect(screen.getByTestId('new-project-form')).toBeInTheDocument();
 
@@ -144,7 +149,7 @@ describe('SelectProject pipeline mode', () => {
 
   it('opens an imported project with Create Pipeline', async () => {
     mockAddProjectFromFolder.mockResolvedValue({ id: '5', name: 'imported' });
-    renderProjectList({ forPipeline: true, startNewProject: false });
+    renderProjectList({ afterOpen: AFTER_OPEN, startNewProject: false });
 
     fireEvent.click(screen.getByTestId('import-project-btn'));
 

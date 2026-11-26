@@ -42,12 +42,9 @@ jest.mock('../../../../../src/main/services/ai/tools/filesystem.tools', () => ({
   createFilesystemTools: () => ({}),
   filesystemTools: {},
 }));
-jest.mock(
-  '../../../../../src/main/services/ai/tools/studio/pipeline.tools',
-  () => ({
-    createStudioPipelineTools: () => ({}),
-  }),
-);
+jest.mock('../../../../../src/extensions/pipeline/main/pipeline.tools', () => ({
+  createStudioPipelineTools: () => ({}),
+}));
 jest.mock(
   '../../../../../src/main/services/ai/tools/studio/keystore.tools',
   () => ({

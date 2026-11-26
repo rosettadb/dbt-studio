@@ -9,11 +9,11 @@ import {
 } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 
-import { DataFrameTableOutput } from '../../../../../src/renderer/components/notebook/python/DataFrameTableOutput';
+import { DataFrameTableOutput } from '../../../../../src/extensions/notebooks/renderer/notebook/python/DataFrameTableOutput';
 import {
   PythonCellOutputs,
   outputsToText,
-} from '../../../../../src/renderer/components/notebook/python/PythonCellOutputs';
+} from '../../../../../src/extensions/notebooks/renderer/notebook/python/PythonCellOutputs';
 import {
   DATAFRAME_MIME,
   DataFrameTableInfo,

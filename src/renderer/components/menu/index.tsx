@@ -8,7 +8,7 @@ import {
 } from '@mui/material';
 import { OpenInNew } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import { useLocation } from 'react-router-dom';
+import { matchPath, useLocation } from 'react-router-dom';
 import {
   IconsContainer,
   StyledToolbar,
@@ -33,6 +33,8 @@ import { useAppContext } from '../../hooks';
 import { ExpandRightIcon } from '../sidebar/collapse-icons';
 import { CommandPalette } from '../commandPalette';
 import { CloudLocalEnvironmentSwitch } from './CloudLocalEnvironmentSwitch';
+import { screens as screenRegistry } from '../../../extensionHost/renderer/contributions.renderer';
+import { useRegistry } from '../../../extensionHost/renderer/registry.renderer';
 
 type MenuProps = {
   actions?: React.ReactNode;
@@ -74,6 +76,14 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
   const isProjectSelected = Boolean(project?.id);
   const isOnHome = location.pathname === '/app';
   const isOnProjectDetails = location.pathname === '/app/dbt-project';
+  // Screens added through the screen registry say whether they have the
+  // AI assistant.
+  const registeredScreens = useRegistry(screenRegistry);
+  const isOnAssistantScreen = registeredScreens.some(
+    (screen) =>
+      screen.assistant &&
+      screen.paths.some((path) => matchPath(`/app/${path}`, location.pathname)),
+  );
 
   // Home has no top bar: its search and cloud controls are in the Dashboard
   // header. The sign-in hooks above still run, so logging in from Home works.
@@ -177,9 +187,7 @@ export const Menu: React.FC<MenuProps> = ({ actions }) => {
           </Tooltip>
         )}
         {profile && <CloudLocalEnvironmentSwitch />}
-        {((isProjectSelected && isOnProjectDetails) ||
-          location.pathname === '/app/sql' ||
-          location.pathname.startsWith('/app/notebooks')) && (
+        {((isProjectSelected && isOnProjectDetails) || isOnAssistantScreen) && (
           <Tooltip title="AI Assistant (beta)">
             <IconButton
               onClick={() => setIsChatOpen?.(!isChatOpen)}

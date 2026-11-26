@@ -1,10 +1,10 @@
 import React from 'react';
 import { render } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { BiPagePreview } from '../../../../../src/renderer/components/analytics/bi/BiPagePreview';
+import { BiPagePreview } from '../../../../../src/extensions/analytics/renderer/bi/BiPagePreview';
 
 jest.mock(
-  '../../../../../src/renderer/components/analytics/bi/markdown/MarkdownText',
+  '../../../../../src/extensions/analytics/renderer/bi/markdown/MarkdownText',
   () => jest.requireActual('./markdownTextMock'),
 );
 

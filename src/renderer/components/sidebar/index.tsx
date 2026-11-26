@@ -11,7 +11,8 @@ import {
 import { useTheme } from '@mui/material/styles';
 import { useLocation } from 'react-router-dom';
 import { CollapseLeftIcon } from './collapse-icons';
-import { getMainElements, getBottomElements } from './elements';
+import { useNavigationItems, type SidebarItem } from './elements';
+import { isNavigationItemActive } from '../../../extensionHost/renderer/contributions.renderer';
 import {
   ACTIVITY_BAR_COLLAPSED_WIDTH,
   ACTIVITY_BAR_EXPANDED_WIDTH,
@@ -23,7 +24,6 @@ import {
   StyledNavLink,
 } from './styles';
 import { useAppContext } from '../../hooks';
-import { useLastDataLakeRoute } from '../../hooks/useLastDataLakeRoute';
 import { useGetSelectedProject } from '../../controllers';
 import { logo, rosettaIcon } from '../../../../assets';
 
@@ -31,6 +31,98 @@ type Props = {
   content?: React.ReactNode;
   panelHeaderLeft?: React.ReactNode;
   panelTitle?: string;
+};
+
+const useNoTargetPath = (): string | undefined => undefined;
+
+type SidebarNavItemProps = {
+  element: SidebarItem;
+  isActive: boolean;
+  isBarExpanded: boolean;
+};
+
+// One activity-bar entry. A component of its own so an item's
+// `useTargetPath` hook runs in a stable place.
+const SidebarNavItem: React.FC<SidebarNavItemProps> = ({
+  element,
+  isActive,
+  isBarExpanded,
+}) => {
+  const theme = useTheme();
+  const isDisabled = element.disabled;
+  // An item can supply a hook for where it opens (the data lake reopens the
+  // page that was open last); otherwise it opens its own path.
+  const useTargetPath = element.useTargetPath ?? useNoTargetPath;
+  const targetPath = useTargetPath() ?? element.path;
+
+  const listItem = (
+    <ListItem
+      sx={{
+        cursor: isDisabled ? 'not-allowed' : 'pointer',
+        m: 0,
+        opacity: isDisabled ? 0.5 : 1,
+        backgroundColor: isActive ? theme.palette.divider : 'transparent',
+        '&:hover': {
+          backgroundColor: isDisabled
+            ? 'transparent'
+            : theme.palette.action.hover,
+        },
+        transition: 'all 0.2s ease',
+        pointerEvents: isDisabled ? 'none' : 'auto',
+        py: 0,
+        minHeight: 48,
+        // 6px left keeps the expanded icon centre (~28px) where it sits in the collapsed bar
+        pl: isBarExpanded ? 0.75 : 0,
+        pr: isBarExpanded ? 1 : 0,
+        justifyContent: isBarExpanded ? undefined : 'center',
+      }}
+    >
+      <ListItemIcon
+        sx={{
+          cursor: isDisabled ? 'not-allowed' : 'pointer',
+          opacity: isDisabled ? 0.5 : 1,
+          minWidth: isBarExpanded ? 44 : 0,
+          width: isBarExpanded ? 44 : undefined,
+          justifyContent: 'center',
+          '& > *': { transform: 'scale(1.08)' },
+        }}
+      >
+        <element.icon />
+      </ListItemIcon>
+      {isBarExpanded && (
+        <ListItemText
+          primary={element.label}
+          primaryTypographyProps={{
+            fontSize: 13,
+            noWrap: true,
+          }}
+        />
+      )}
+    </ListItem>
+  );
+
+  const wrapped = (
+    <StyledNavLink
+      to={targetPath}
+      data-testid={element.testId}
+      style={{
+        cursor: 'pointer',
+        pointerEvents: isDisabled ? 'none' : 'auto',
+      }}
+    >
+      {listItem}
+    </StyledNavLink>
+  );
+
+  if (isBarExpanded) {
+    return wrapped;
+  }
+
+  return (
+    <Tooltip title={element.label} placement="right" arrow>
+      {wrapped}
+    </Tooltip>
+  );
 };
 
 export const Sidebar: React.FC<Props> = ({
@@ -44,27 +136,11 @@ export const Sidebar: React.FC<Props> = ({
   const location = useLocation();
 
   const [isBarExpanded, setIsBarExpanded] = React.useState(false);
-  const lastDataLakeRoute = useLastDataLakeRoute();
 
   const isProjectSelected = Boolean(selectedProject?.id);
 
-  const activeItemPath = React.useMemo(() => {
-    const path = location.pathname;
-    if (path.includes('dbt-project')) return '/app/dbt-project';
-    if (path.includes('cloud-explorer')) return '/app/cloud-explorer';
-    if (path.includes('data-lake') || path.includes('datalake'))
-      return '/app/data-lake';
-    if (path.includes('flows')) return '/app/flows';
-    if (path.includes('connection')) return '/app/connections';
-    if (path.includes('notebooks')) return '/app/notebooks';
-    if (path.includes('sql')) return '/app/sql';
-    if (path.includes('settings')) return '/app/settings';
-    if (path === '/app') return '/app';
-    return '';
-  }, [location.pathname]);
-
-  const mainElements = getMainElements(isProjectSelected);
-  const bottomElements = getBottomElements();
+  const { main: mainElements, bottom: bottomElements } =
+    useNavigationItems(isProjectSelected);
 
   const activityBarWidth = isBarExpanded
     ? ACTIVITY_BAR_EXPANDED_WIDTH
@@ -81,81 +157,6 @@ export const Sidebar: React.FC<Props> = ({
     }
     setIsBarExpanded(false);
   }, [location.pathname, setIsSidebarOpen]);
-
-  const renderItem = (element: (typeof mainElements)[0], isActive: boolean) => {
-    const isDisabled = element.disabled;
-    const targetPath =
-      element.path === '/app/data-lake' ? lastDataLakeRoute : element.path;
-
-    const listItem = (
-      <ListItem
-        sx={{
-          cursor: isDisabled ? 'not-allowed' : 'pointer',
-          m: 0,
-          opacity: isDisabled ? 0.5 : 1,
-          backgroundColor: isActive ? theme.palette.divider : 'transparent',
-          '&:hover': {
-            backgroundColor: isDisabled
-              ? 'transparent'
-              : theme.palette.action.hover,
-          },
-          transition: 'all 0.2s ease',
-          pointerEvents: isDisabled ? 'none' : 'auto',
-          py: 0,
-          minHeight: 48,
-          // 6px left keeps the expanded icon centre (~28px) where it sits in the collapsed bar
-          pl: isBarExpanded ? 0.75 : 0,
-          pr: isBarExpanded ? 1 : 0,
-          justifyContent: isBarExpanded ? undefined : 'center',
-        }}
-      >
-        <ListItemIcon
-          sx={{
-            cursor: isDisabled ? 'not-allowed' : 'pointer',
-            opacity: isDisabled ? 0.5 : 1,
-            minWidth: isBarExpanded ? 44 : 0,
-            width: isBarExpanded ? 44 : undefined,
-            justifyContent: 'center',
-            '& > *': { transform: 'scale(1.08)' },
-          }}
-        >
-          <element.icon />
-        </ListItemIcon>
-        {isBarExpanded && (
-          <ListItemText
-            primary={element.text}
-            primaryTypographyProps={{
-              fontSize: 13,
-              noWrap: true,
-            }}
-          />
-        )}
-      </ListItem>
-    );
-
-    const wrapped = (
-      <StyledNavLink
-        to={targetPath}
-        data-testid={element.testId}
-        style={{
-          cursor: 'pointer',
-          pointerEvents: isDisabled ? 'none' : 'auto',
-        }}
-      >
-        {listItem}
-      </StyledNavLink>
-    );
-
-    if (isBarExpanded) {
-      return <React.Fragment key={element.text}>{wrapped}</React.Fragment>;
-    }
-
-    return (
-      <Tooltip key={element.text} title={element.text} placement="right" arrow>
-        {wrapped}
-      </Tooltip>
-    );
-  };
 
   return (
     <StyledDrawer
@@ -217,16 +218,26 @@ export const Sidebar: React.FC<Props> = ({
         {/* Main items */}
         <Box sx={{ flex: 1 }}>
           <List sx={{ width: '100%', pt: 0.5 }}>
-            {mainElements.map((el) =>
-              renderItem(el, activeItemPath === el.path),
-            )}
+            {mainElements.map((el) => (
+              <SidebarNavItem
+                key={el.id}
+                element={el}
+                isActive={isNavigationItemActive(el, location.pathname)}
+                isBarExpanded={isBarExpanded}
+              />
+            ))}
           </List>
         </Box>
 
         <List sx={{ width: '100%', pb: 0.5 }}>
-          {bottomElements.map((el) =>
-            renderItem(el, activeItemPath === el.path),
-          )}
+          {bottomElements.map((el) => (
+            <SidebarNavItem
+              key={el.id}
+              element={el}
+              isActive={isNavigationItemActive(el, location.pathname)}
+              isBarExpanded={isBarExpanded}
+            />
+          ))}
         </List>
       </ActivityBar>
 

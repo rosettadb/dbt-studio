@@ -2,7 +2,7 @@ import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 
-import { SchemaTreeViewerWithSchema } from '../../../../src/renderer/screens/sql/SchemaTreeViewerWithSchema';
+import { SchemaTreeViewerWithSchema } from '../../../../src/renderer/components/schemaTreeViewer/SchemaTreeViewerWithSchema';
 import { SCHEMA_OBJECT_MIME } from '../../../../src/renderer/utils/sql/schemaDragPayload';
 import type { Table } from '../../../../src/types/backend';
 

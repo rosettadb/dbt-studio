@@ -1,5 +1,5 @@
 import React from 'react';
-import { CloudLogViewer } from '../../pipelineView/CloudLogViewer';
+import { CloudLogViewer } from './CloudLogViewer';
 import { useActiveCloudRun } from '../../../context/CloudRunProvider';
 import type { TerminalPanelDefinition } from './types';
 

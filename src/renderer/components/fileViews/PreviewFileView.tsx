@@ -49,6 +49,8 @@ const PreviewFileView: React.FC<FileViewProps> = ({ tab, project }) => {
 
 export const previewFileView: FileViewDefinition = {
   id: 'preview',
+  // Above every other view: a preview tab is never a pipeline or a chart.
+  priority: 300,
   matches: (tab) => getPreviewSourcePath(tab.path) !== null,
   Component: PreviewFileView,
 };

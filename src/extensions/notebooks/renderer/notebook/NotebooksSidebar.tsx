@@ -1,0 +1,533 @@
+import React, { useState, useCallback, useEffect } from 'react';
+import {
+  Box,
+  Tabs,
+  Tab,
+  IconButton,
+  Tooltip,
+  Typography,
+  useTheme,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
+  TextField,
+  InputAdornment,
+} from '@mui/material';
+import {
+  TableChart,
+  Description,
+  LibraryBooks,
+  Refresh,
+  Add,
+  Search,
+  FileDownload,
+  Upload,
+  Close,
+} from '@mui/icons-material';
+import { SchemaTreeViewerWithSchema } from '../../../../extensionApi/studio/schemaTreeViewer';
+import { NotebooksTreeView } from './NotebooksTreeView';
+import {
+  Table,
+  SupportedConnectionTypes,
+} from '../../../../extensionApi/studio/types';
+import { Notebook } from '../../../../extensionApi/studio/notebooksTypes';
+import type { SchemaTreeNodeRef } from '../../../../extensionApi/studio/schemaTreeContextMenu';
+import type {
+  WorkspaceTab,
+  WorkspaceTabProps,
+} from '../../../../extensionApi/renderer';
+
+// The side panel's own tabs: Notebooks and Data. Contributed tabs come after.
+const OWN_TABS = 2;
+
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
+}
+
+const TabPanel: React.FC<TabPanelProps> = ({ children, value, index }) => {
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`notebooks-tabpanel-${index}`}
+      aria-labelledby={`notebooks-tab-${index}`}
+      style={{ height: '100%', overflow: 'auto' }}
+    >
+      {value === index && <Box sx={{ height: '100%' }}>{children}</Box>}
+    </div>
+  );
+};
+
+interface NotebooksSidebarProps {
+  // Connection info
+  connectionName: string;
+  connectionType: SupportedConnectionTypes;
+
+  // Schema data
+  schema: Table[];
+  isLoadingSchema: boolean;
+
+  // Notebooks data
+  notebooks: Notebook[];
+  isLoadingNotebooks: boolean;
+
+  // Archived notebooks
+  archivedNotebooks: Record<string, Notebook[]>;
+  showArchived: boolean;
+
+  // Callbacks
+  onRefresh: () => void;
+  onCreateNotebook: () => void;
+  onOpenNotebook: (notebookId: string) => void;
+  onRenameNotebook: (notebookId: string, currentName: string) => void;
+  onDuplicateNotebook: (notebookId: string, currentName: string) => void;
+  onDeleteNotebook: (notebookId: string, notebookName: string) => void;
+  onRestoreNotebook: (connectionKey: string, notebookId: string) => void;
+  onDeleteArchivedNotebook: (
+    connectionKey: string,
+    notebookId: string,
+    notebookName: string,
+  ) => void;
+  onToggleArchived: (show: boolean) => void;
+  onExportAllNotebooks?: () => void;
+  onExportSelected?: () => void;
+  onImportAllNotebooks?: () => void;
+  /** Import a Jupyter `.ipynb` file as a Python notebook */
+  onImportPythonNotebook?: () => void;
+  onTabChange?: (tabIndex: number) => void;
+
+  connectionId: string;
+
+  // Tabs other tools contributed (for example Analytics); they follow the
+  // Notebooks and Data tabs.
+  workspaceTabs: ReadonlyArray<WorkspaceTab>;
+  /** What a contributed tab's side panel gets from the screen. */
+  getWorkspaceTabProps: (tab: WorkspaceTab) => WorkspaceTabProps;
+
+  // Helper functions
+  getConnectionName: (connectionKey: string) => string;
+
+  /** Right-click on a Data tree row (optional). */
+  onSchemaContextMenu?: (
+    event: React.MouseEvent<HTMLDivElement>,
+    node: SchemaTreeNodeRef,
+  ) => void;
+}
+
+export const NotebooksSidebar: React.FC<NotebooksSidebarProps> = ({
+  connectionName,
+  connectionType,
+  schema,
+  isLoadingSchema,
+  notebooks,
+  isLoadingNotebooks,
+  archivedNotebooks,
+  showArchived,
+  onRefresh,
+  onCreateNotebook,
+  onOpenNotebook,
+  onRenameNotebook,
+  onDuplicateNotebook,
+  onDeleteNotebook,
+  onRestoreNotebook,
+  onDeleteArchivedNotebook,
+  onToggleArchived,
+  getConnectionName,
+  onExportAllNotebooks,
+  onExportSelected,
+  onImportAllNotebooks,
+  onImportPythonNotebook,
+  onTabChange,
+  connectionId,
+  workspaceTabs,
+  getWorkspaceTabProps,
+  onSchemaContextMenu,
+}) => {
+  const theme = useTheme();
+  const [activeTab, setActiveTab] = useState(0);
+  const [exportMenuAnchor, setExportMenuAnchor] = useState<null | HTMLElement>(
+    null,
+  );
+  const [addMenuAnchor, setAddMenuAnchor] = useState<null | HTMLElement>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const handleTabChange = useCallback(
+    (_event: React.SyntheticEvent, newValue: number) => {
+      setActiveTab(newValue);
+      onTabChange?.(newValue);
+    },
+    [onTabChange],
+  );
+
+  // A contributed tab that went away (its extension was switched off) falls
+  // back to the Notebooks tab.
+  useEffect(() => {
+    if (activeTab >= OWN_TABS + workspaceTabs.length) {
+      setActiveTab(0);
+      onTabChange?.(0);
+    }
+  }, [activeTab, workspaceTabs.length, onTabChange]);
+
+  const handleExportMenuOpen = useCallback(
+    (event: React.MouseEvent<HTMLElement>) => {
+      setExportMenuAnchor(event.currentTarget);
+    },
+    [],
+  );
+
+  const handleExportMenuClose = useCallback(() => {
+    setExportMenuAnchor(null);
+  }, []);
+
+  const handleAddMenuOpen = useCallback(
+    (event: React.MouseEvent<HTMLElement>) => {
+      setAddMenuAnchor(event.currentTarget);
+    },
+    [],
+  );
+
+  const handleAddMenuClose = useCallback(() => {
+    setAddMenuAnchor(null);
+  }, []);
+
+  const handleExportAll = useCallback(() => {
+    handleExportMenuClose();
+    onExportAllNotebooks?.();
+  }, [handleExportMenuClose, onExportAllNotebooks]);
+
+  const handleExportSelected = useCallback(() => {
+    handleExportMenuClose();
+    onExportSelected?.();
+  }, [handleExportMenuClose, onExportSelected]);
+
+  const handleCreateNotebook = useCallback(() => {
+    handleAddMenuClose();
+    onCreateNotebook();
+  }, [handleAddMenuClose, onCreateNotebook]);
+
+  const handleImportAllNotebooks = useCallback(() => {
+    handleAddMenuClose();
+    onImportAllNotebooks?.();
+  }, [handleAddMenuClose, onImportAllNotebooks]);
+
+  const handleImportPythonNotebook = useCallback(() => {
+    handleAddMenuClose();
+    onImportPythonNotebook?.();
+  }, [handleAddMenuClose, onImportPythonNotebook]);
+
+  const handleSearchChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      setSearchQuery(event.target.value);
+    },
+    [],
+  );
+
+  const handleClearSearch = useCallback(() => {
+    setSearchQuery('');
+  }, []);
+
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        bgcolor: 'background.paper',
+      }}
+    >
+      {/* Tabs */}
+      <Box
+        sx={{
+          borderBottom: `1px solid ${theme.palette.divider}`,
+          bgcolor: 'background.paper',
+        }}
+      >
+        <Tabs
+          value={activeTab}
+          onChange={handleTabChange}
+          variant="fullWidth"
+          sx={{
+            minHeight: 40,
+            '& .MuiTab-root': {
+              minHeight: 40,
+              fontSize: '0.75rem',
+              textTransform: 'none',
+              py: 0.5,
+            },
+          }}
+        >
+          <Tab
+            icon={<LibraryBooks sx={{ fontSize: 16 }} />}
+            iconPosition="start"
+            label="Notebooks"
+            id="notebooks-tab-0"
+            aria-controls="notebooks-tabpanel-0"
+          />
+          <Tab
+            icon={<TableChart sx={{ fontSize: 16 }} />}
+            iconPosition="start"
+            label="Data"
+            id="notebooks-tab-1"
+            aria-controls="notebooks-tabpanel-1"
+          />
+          {workspaceTabs.map((tab, index) => (
+            <Tab
+              key={tab.id}
+              icon={<tab.icon sx={{ fontSize: 16 }} />}
+              iconPosition="start"
+              label={tab.label}
+              id={`notebooks-tab-${OWN_TABS + index}`}
+              aria-controls={`notebooks-tabpanel-${OWN_TABS + index}`}
+            />
+          ))}
+        </Tabs>
+      </Box>
+
+      {/* Action Buttons Bar */}
+      <Box
+        sx={{
+          display: 'flex',
+          gap: 0.5,
+          p: 1,
+          borderBottom: `1px solid ${theme.palette.divider}`,
+          bgcolor: 'background.paper',
+        }}
+      >
+        {/* Search Input - always visible */}
+        <TextField
+          fullWidth
+          size="small"
+          placeholder={
+            activeTab === 0
+              ? 'Search notebooks...'
+              : 'Search tables, columns...'
+          }
+          value={searchQuery}
+          onChange={handleSearchChange}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <Search sx={{ fontSize: 16, color: 'text.secondary' }} />
+              </InputAdornment>
+            ),
+            endAdornment: searchQuery && (
+              <InputAdornment position="end">
+                <IconButton
+                  size="small"
+                  onClick={handleClearSearch}
+                  aria-label="Clear search"
+                  sx={{ width: 20, height: 20 }}
+                >
+                  <Close sx={{ fontSize: 14 }} />
+                </IconButton>
+              </InputAdornment>
+            ),
+          }}
+          sx={{
+            '& .MuiOutlinedInput-root': {
+              height: 32,
+              fontSize: '0.8rem',
+              bgcolor: theme.palette.background.default,
+            },
+          }}
+        />
+
+        {/* Refresh Button */}
+        <Tooltip title="Refresh">
+          <IconButton
+            size="small"
+            onClick={onRefresh}
+            sx={{
+              width: 28,
+              height: 28,
+              bgcolor: 'transparent',
+              '&:hover': { bgcolor: 'rgba(0,0,0,0.05)' },
+            }}
+          >
+            <Refresh sx={{ fontSize: 16 }} />
+          </IconButton>
+        </Tooltip>
+
+        {/* Notebooks tab specific actions */}
+        {activeTab === 0 && (
+          <>
+            <Tooltip title="Export">
+              <IconButton
+                size="small"
+                onClick={handleExportMenuOpen}
+                aria-controls="export-menu"
+                aria-haspopup="true"
+                sx={{
+                  width: 28,
+                  height: 28,
+                  bgcolor: 'transparent',
+                  '&:hover': { bgcolor: 'rgba(0,0,0,0.05)' },
+                }}
+              >
+                <FileDownload sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Add">
+              <IconButton
+                size="small"
+                onClick={handleAddMenuOpen}
+                aria-controls="add-menu"
+                aria-haspopup="true"
+                sx={{
+                  width: 28,
+                  height: 28,
+                  bgcolor: 'transparent',
+                  '&:hover': { bgcolor: 'rgba(0,0,0,0.05)' },
+                }}
+              >
+                <Add sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+          </>
+        )}
+      </Box>
+
+      {/* Export Menu (for Notebooks tab) */}
+      <Menu
+        id="export-menu"
+        anchorEl={exportMenuAnchor}
+        open={Boolean(exportMenuAnchor)}
+        onClose={handleExportMenuClose}
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'left',
+        }}
+        transformOrigin={{
+          vertical: 'top',
+          horizontal: 'left',
+        }}
+      >
+        <MenuItem onClick={handleExportAll}>
+          <ListItemIcon>
+            <FileDownload fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Export All Notebooks (JSON)</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={handleExportSelected} disabled>
+          <ListItemIcon>
+            <FileDownload fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Export Selected</ListItemText>
+        </MenuItem>
+      </Menu>
+
+      {/* Add Menu (for Notebooks tab) */}
+      <Menu
+        id="add-menu"
+        anchorEl={addMenuAnchor}
+        open={Boolean(addMenuAnchor)}
+        onClose={handleAddMenuClose}
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'left',
+        }}
+        transformOrigin={{
+          vertical: 'top',
+          horizontal: 'left',
+        }}
+      >
+        <MenuItem onClick={handleCreateNotebook}>
+          <ListItemIcon>
+            <Description fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Add New Notebook</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={handleImportAllNotebooks}>
+          <ListItemIcon>
+            <Upload fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Import Notebooks (JSON)</ListItemText>
+        </MenuItem>
+        {onImportPythonNotebook && (
+          <MenuItem onClick={handleImportPythonNotebook}>
+            <ListItemIcon>
+              <Upload fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Import Jupyter Notebook (.ipynb)</ListItemText>
+          </MenuItem>
+        )}
+      </Menu>
+
+      {/* Tab Panels */}
+      <Box sx={{ flex: 1, overflow: 'hidden' }}>
+        {/* Notebooks Tab */}
+        <TabPanel value={activeTab} index={0}>
+          <Box sx={{ height: '100%', overflow: 'auto', p: 1 }}>
+            <NotebooksTreeView
+              notebooks={notebooks}
+              isLoading={isLoadingNotebooks}
+              archivedNotebooks={archivedNotebooks}
+              showArchived={showArchived}
+              onOpenNotebook={onOpenNotebook}
+              onRenameNotebook={onRenameNotebook}
+              onDuplicateNotebook={onDuplicateNotebook}
+              onDeleteNotebook={onDeleteNotebook}
+              onRestoreNotebook={onRestoreNotebook}
+              onDeleteArchivedNotebook={onDeleteArchivedNotebook}
+              onToggleArchived={onToggleArchived}
+              getConnectionName={getConnectionName}
+              filter={searchQuery}
+            />
+          </Box>
+        </TabPanel>
+
+        {/* Data Tab */}
+        <TabPanel value={activeTab} index={1}>
+          <Box sx={{ height: '100%', overflow: 'auto', p: 1 }}>
+            {isLoadingSchema && (
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  p: 2,
+                }}
+              >
+                <Typography variant="body2" color="text.secondary">
+                  Loading schema...
+                </Typography>
+              </Box>
+            )}
+            {!isLoadingSchema && schema.length > 0 && (
+              <SchemaTreeViewerWithSchema
+                databaseName={connectionName}
+                type={connectionType}
+                schema={schema}
+                isLoading={isLoadingSchema}
+                filter={searchQuery}
+                connectionId={connectionId}
+                draggable
+                onContextMenu={onSchemaContextMenu}
+              />
+            )}
+            {!isLoadingSchema && schema.length === 0 && (
+              <Box sx={{ p: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  No schema available
+                </Typography>
+              </Box>
+            )}
+          </Box>
+        </TabPanel>
+
+        {/* Contributed tabs (Analytics) */}
+        {workspaceTabs.map((tab, index) => (
+          <TabPanel key={tab.id} value={activeTab} index={OWN_TABS + index}>
+            <Box sx={{ height: '100%', overflow: 'hidden' }}>
+              {/* eslint-disable-next-line react/jsx-props-no-spreading */}
+              <tab.Sidebar {...getWorkspaceTabProps(tab)} />
+            </Box>
+          </TabPanel>
+        ))}
+      </Box>
+    </Box>
+  );
+};

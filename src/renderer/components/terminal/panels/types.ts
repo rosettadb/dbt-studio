@@ -25,6 +25,10 @@ export interface TerminalPanelState {
 export interface TerminalPanelDefinition {
   id: string;
   label: string;
+  // Position among the tabs, lowest first. Panels without one come after
+  // those with one, in the order they were registered. Studio's own panels
+  // use 100, 200, ... so an extension can place a panel between them.
+  order?: number;
   useState: (ctx: TerminalPanelContext) => TerminalPanelState;
   Component: React.ComponentType<TerminalPanelContext>;
   Label?: React.ComponentType<

@@ -1,4 +1,4 @@
-import { applyMarkdownFormat } from '../../../../src/renderer/components/notebook/python/markdownFormatting';
+import { applyMarkdownFormat } from '../../../../src/extensions/notebooks/renderer/notebook/python/markdownFormatting';
 
 describe('applyMarkdownFormat', () => {
   it('wraps the selection in bold and selects the inner text', () => {

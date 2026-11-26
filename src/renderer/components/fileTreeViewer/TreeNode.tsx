@@ -9,19 +9,20 @@ import {
   CreateNewFolder as CreateFolderIcon,
   NoteAdd as CreateFileIcon,
   Delete as DeleteIcon,
-  PlayArrow as PlayIcon,
   Cached as RefreshIcon,
   InsertChartOutlined as ChartBoardIcon,
 } from '@mui/icons-material';
 import { getClassWithColor } from 'file-icons-js';
-import { toast } from 'react-toastify';
-import { isFileUnpushed } from '../../services/git.service';
-import { path, splitSegments, toPosix } from '../../lib/path';
 import { YamlFileIcon } from '../fileIcon';
 import { FileNode, FileStatuses } from './types';
 import { GitStatusBadge } from './GitStatusBadge';
-import { PipelineThumbnailPreview } from './PipelineThumbnailPreview';
 import { isChartsBoardPath, isChartsPartial } from '../../../shared/dbtCharts';
+import type { FileTreeRow } from '../../../extensionApi/renderer';
+import {
+  fileTreeHoverPreviews,
+  fileTreeRowActions,
+} from '../../../extensionHost/renderer/contributions.renderer';
+import { useRegistry } from '../../../extensionHost/renderer/registry.renderer';
 
 // Pixels each tree level is indented by. The indent guides below are drawn
 // at the same step, halfway between each ancestor folder's icon and its
@@ -129,29 +130,9 @@ interface TreeNodeProps extends NodeRendererProps<FileNode> {
   onCreateFolder: (parentPath: string) => void;
   onDelete: (path: string) => void;
   onRefresh: () => void;
-  onRunPipeline?: (filePath: string) => void;
-  onRunPipelineLocal?: (filePath: string) => void;
   dragOverFolder?: string | null;
   projectPath: string;
 }
-
-const isPipelineYaml = (filePath: string): boolean => {
-  const parts = splitSegments(filePath);
-  const fileName = parts[parts.length - 1] || '';
-  const dirParts = parts.slice(0, -1);
-  const isYaml =
-    (fileName.endsWith('.yml') || fileName.endsWith('.yaml')) &&
-    fileName !== 'main.conf';
-  // Deprecated location, kept for backward compatibility during the
-  // transition to rosetta/pipelines/. Remove once projects have migrated.
-  // Matches any depth under rosetta/pipelines/ or .rosetta/ so pipelines
-  // nested in subdirectories are still recognized.
-  const isLegacyLocation = dirParts.includes('.rosetta');
-  const isCurrentLocation = dirParts.some(
-    (dir, i) => dir === 'rosetta' && dirParts[i + 1] === 'pipelines',
-  );
-  return isYaml && (isLegacyLocation || isCurrentLocation);
-};
 
 export const TreeNode: React.FC<TreeNodeProps> = ({
   node,
@@ -163,15 +144,27 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
   onCreateFolder,
   onDelete,
   onRefresh,
-  onRunPipeline,
-  onRunPipelineLocal,
   dragOverFolder,
   projectPath,
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const isFolder = node.data.type === 'folder';
   const gitStatus = fileStatuses[node.data.path];
-  const isPipeline = !isFolder && isPipelineYaml(node.data.path);
+  // What extensions contributed for this row: a preview shown when the
+  // pointer rests on the name, and buttons at the right end.
+  const row: FileTreeRow = {
+    path: node.data.path,
+    name: node.data.name,
+    isFolder,
+    projectPath,
+    gitStatus,
+  };
+  const HoverPreview = useRegistry(fileTreeHoverPreviews).find((preview) =>
+    preview.when(row),
+  )?.Component;
+  const rowActions = useRegistry(fileTreeRowActions).filter((action) =>
+    action.when(row),
+  );
   const isExternalDragOver = isFolder && dragOverFolder === node.data.path;
   const isRootFolder = node.data.path === projectPath;
 
@@ -304,9 +297,10 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
           />
         ) : (
           <>
-            {isPipeline ? (
+            {HoverPreview ? (
               <Tooltip
-                title={<PipelineThumbnailPreview filePath={node.data.path} />}
+                // eslint-disable-next-line react/jsx-props-no-spreading
+                title={<HoverPreview {...row} />}
                 placement="right"
                 enterDelay={500}
                 enterNextDelay={500}
@@ -370,58 +364,11 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
           <RefreshIcon sx={{ fontSize: 16 }} />
         </IconButton>
       )}
-      {!node.isEditing && isPipeline && onRunPipeline && (
-        <IconButton
-          size="small"
-          onClick={async (e) => {
-            e.stopPropagation();
-            if (gitStatus) {
-              toast.error(
-                `Pipeline has uncommitted changes (${gitStatus}). Commit and push before running.`,
-              );
-              return;
-            }
-            // Check for unpushed commits (git wants a `/`-separated path
-            // relative to the repo root)
-            const relativePath = toPosix(
-              path.relative(projectPath, node.data.path),
-            );
-            try {
-              const unpushed = await isFileUnpushed(projectPath, relativePath);
-              if (unpushed) {
-                toast.error(
-                  'Pipeline has unpushed changes. Push your commits before running on cloud.',
-                );
-                return;
-              }
-            } catch {
-              // If check fails, allow proceeding
-            }
-            onRunPipeline(node.data.path);
-          }}
-          title={
-            gitStatus
-              ? `Pipeline has uncommitted changes (${gitStatus})`
-              : 'Run Pipeline'
-          }
-          sx={{ padding: '4px', color: 'success.main', flexShrink: 0 }}
-        >
-          <PlayIcon sx={{ fontSize: 16 }} />
-        </IconButton>
-      )}
-      {!node.isEditing && isPipeline && onRunPipelineLocal && (
-        <IconButton
-          size="small"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRunPipelineLocal(node.data.path);
-          }}
-          title="Run Pipeline (Local Runner)"
-          sx={{ padding: '4px', color: 'success.main', flexShrink: 0 }}
-        >
-          <PlayIcon sx={{ fontSize: 16 }} />
-        </IconButton>
-      )}
+      {!node.isEditing &&
+        rowActions.map((action) => (
+          // eslint-disable-next-line react/jsx-props-no-spreading
+          <action.Component key={action.id} {...row} />
+        ))}
     </NodeContainer>
   );
 };

@@ -4,7 +4,7 @@ import {
   parseSqlEditorStatements,
   ParsedStatement,
   SqlStatementModel,
-} from '../../renderer/components/sqlEditor/editorComponent/statements';
+} from '../core/sqlStatements.shared';
 
 // SQL*Plus slash delimiters are meaningful only outside strings and comments.
 function findBlockEnd(

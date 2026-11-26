@@ -3,13 +3,13 @@ import {
   collectSqlNodes,
   parsePage,
   slotPlaceholder,
-} from '../../../../src/shared/analyticsBi/parser';
+} from '../../../../src/extensions/analytics/shared/analyticsBi/parser';
 import type {
   ComponentNode,
   EachNode,
   IfNode,
   MarkdownNode,
-} from '../../../../src/shared/analyticsBi/types';
+} from '../../../../src/extensions/analytics/shared/analyticsBi/types';
 
 describe('analytics page parser', () => {
   it('reads frontmatter, sql blocks, text and components', () => {

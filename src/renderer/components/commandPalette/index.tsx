@@ -29,7 +29,7 @@ import {
 import { useTabs } from '../../context/TabsProvider';
 import { path as nodePath } from '../../lib/path';
 import { projectsServices } from '../../services';
-import { getBottomElements, getMainElements } from '../sidebar/elements';
+import { useNavigationItems } from '../sidebar/elements';
 import { LetterAvatar } from '../letterAvatar';
 import { HighlightedLine, toRelativePath } from '../searchInFiles';
 import { FileNode, FileSearchResult, Project } from '../../../types/backend';
@@ -146,6 +146,11 @@ export const CommandPalette: React.FC = () => {
   const { data: projects = [] } = useGetProjects();
   const { data: selectedProject } = useGetSelectedProject();
   const { mutateAsync: selectProject } = useSelectProject();
+  const navigation = useNavigationItems(!!selectedProject?.id);
+  const navigationElements = React.useMemo(
+    () => [...navigation.main, ...navigation.bottom],
+    [navigation],
+  );
 
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState('');
@@ -315,11 +320,11 @@ export const CommandPalette: React.FC = () => {
           icon: <Code sx={{ fontSize: 16 }} />,
           run: command.run,
         })),
-        ...[...getMainElements(!!selectedProject?.id), ...getBottomElements()]
+        ...navigationElements
           .filter((element) => !element.disabled)
           .map((element) => ({
             id: `command-navigate-${element.path}`,
-            label: `Go to ${element.text}`,
+            label: `Go to ${element.label}`,
             description: element.description,
             icon: <ArrowForward sx={{ fontSize: 16 }} />,
             run: () => navigate(element.path),
@@ -353,15 +358,12 @@ export const CommandPalette: React.FC = () => {
           ]
         : [];
     }
-    const screenItems: PaletteItem[] = [
-      ...getMainElements(!!selectedProject?.id),
-      ...getBottomElements(),
-    ]
+    const screenItems: PaletteItem[] = navigationElements
       .filter((element) => !element.disabled)
-      .filter((element) => element.text.toLowerCase().includes(lowerQuery))
+      .filter((element) => element.label.toLowerCase().includes(lowerQuery))
       .map((element) => ({
         id: `goto-${element.path}`,
-        label: element.text,
+        label: element.label,
         description: element.description,
         icon: <ArrowForward sx={{ fontSize: 16 }} />,
         run: () => navigate(element.path),
@@ -510,6 +512,7 @@ export const CommandPalette: React.FC = () => {
     setIsChatOpen,
     lowerQuery,
     selectedProject?.id,
+    navigationElements,
     projects,
     projectEntries,
     projectPath,

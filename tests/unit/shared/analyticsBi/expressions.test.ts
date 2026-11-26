@@ -3,12 +3,12 @@ import {
   evaluateExpression,
   tryEvaluate,
   UnknownIdentifierError,
-} from '../../../../src/shared/analyticsBi/expressions/evaluate';
+} from '../../../../src/extensions/analytics/shared/analyticsBi/expressions/evaluate';
 import {
   collectInputNames,
   parseExpression,
-} from '../../../../src/shared/analyticsBi/expressions/parser';
-import { ExpressionSyntaxError } from '../../../../src/shared/analyticsBi/expressions/tokenizer';
+} from '../../../../src/extensions/analytics/shared/analyticsBi/expressions/parser';
+import { ExpressionSyntaxError } from '../../../../src/extensions/analytics/shared/analyticsBi/expressions/tokenizer';
 
 const orders = [
   { region: 'EMEA', total: 1200.5, orders: 10 },

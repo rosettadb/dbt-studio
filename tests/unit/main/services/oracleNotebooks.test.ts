@@ -1,4 +1,4 @@
-import { NotebooksService } from '../../../../src/main/services/notebooks.service';
+import { NotebooksService } from '../../../../src/extensions/notebooks/main/notebooks.service';
 import {
   buildPagedQuery,
   buildCountQuery,

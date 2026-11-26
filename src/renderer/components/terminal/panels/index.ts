@@ -6,22 +6,22 @@ import { processPanel } from './ProcessPanel';
 import { queryResultsPanel } from './QueryResultsPanel';
 import { runHistoryPanel } from './RunHistoryPanel';
 import { cloudLogsPanel } from './CloudLogsPanel';
-import { runnerLogsPanel } from './RunnerLogsPanel';
 import { chartsServerPanel } from '../../dbtCharts/ChartsServerPanel';
 
-// Registration order is tab order. Adding a bottom panel = one module
-// exporting a TerminalPanelDefinition + one line here.
-registerTerminalPanel(terminalPanel);
-registerTerminalPanel(shellPanel);
-registerTerminalPanel(lineagePanel);
-registerTerminalPanel(processPanel);
-registerTerminalPanel(queryResultsPanel);
-registerTerminalPanel(runHistoryPanel);
-registerTerminalPanel(cloudLogsPanel);
-registerTerminalPanel(runnerLogsPanel);
-registerTerminalPanel(chartsServerPanel);
+// `order` is tab order. Adding a bottom panel = one module exporting a
+// TerminalPanelDefinition + one line here. 800 is left for the runner logs
+// panel, which the pipeline tool registers itself.
+registerTerminalPanel({ ...terminalPanel, order: 100 });
+registerTerminalPanel({ ...shellPanel, order: 200 });
+registerTerminalPanel({ ...lineagePanel, order: 300 });
+registerTerminalPanel({ ...processPanel, order: 400 });
+registerTerminalPanel({ ...queryResultsPanel, order: 500 });
+registerTerminalPanel({ ...runHistoryPanel, order: 600 });
+registerTerminalPanel({ ...cloudLogsPanel, order: 700 });
+registerTerminalPanel({ ...chartsServerPanel, order: 900 });
 
 export {
+  terminalPanelRegistry,
   registerTerminalPanel,
   listTerminalPanels,
   DEFAULT_TERMINAL_PANEL_ID,

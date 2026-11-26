@@ -75,13 +75,6 @@ a:hover {
   left: 3px !important;
 }
 
-.run-query-glyph {
-  background: url("data:image/svg+xml;utf8,<svg width='16' height='16' fill='limegreen' xmlns='http://www.w3.org/2000/svg'><path d='M4 3v10l9-5z'/></svg>")
-  center center no-repeat;
-  background-size: 14px 14px;
-  cursor: pointer;
-}
-
 @keyframes spin {
   to {
     transform: rotate(360deg);

@@ -21,7 +21,7 @@ import {
   SettingsStack,
   SettingsStatus,
 } from './SettingsLayout';
-import { PythonMonoIcon } from '../notebook/NotebookKindIcon';
+import { PythonMonoIcon } from '../icon/PythonMonoIcon';
 import { useActiveInstallTasks, useIsTaskTypeActive } from '../../hooks';
 import {
   FINISH_BEFORE_PYTHON_INSTALL_TYPES,

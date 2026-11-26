@@ -30,7 +30,6 @@ import {
   DbtSettings,
   PythonSettings,
   RosettaSettings,
-  RunnerSettings,
   AboutSettings,
   AIProvidersSettings,
   DuckDBSettings,
@@ -40,7 +39,9 @@ import {
   BackupSettings,
 } from '../../components';
 import { AppLayout } from '../../layouts';
-import { settingsSidebarCategories } from './settingsElements';
+import { mergeRegisteredPages } from './settingsElements';
+import { settingsPages } from '../../../extensionHost/renderer/contributions.renderer';
+import { useRegistry } from '../../../extensionHost/renderer/registry.renderer';
 import { useSettingsWarningStyle } from '../../components/settings/SettingsLayout';
 
 const Settings: React.FC = () => {
@@ -56,6 +57,15 @@ const Settings: React.FC = () => {
   const { mutate: getFiles } = useFilePicker();
   const location = useLocation();
   const currentSection = location.pathname.split('/').pop() || 'general';
+  // Pages registered by Studio and by extensions, next to the built-in ones.
+  const registeredPages = useRegistry(settingsPages);
+  const sidebarCategories = React.useMemo(
+    () => mergeRegisteredPages(registeredPages),
+    [registeredPages],
+  );
+  const registeredPage = registeredPages.find(
+    (page) => page.id === currentSection,
+  );
 
   const [localSettings, setLocalSettings] = React.useState<SettingsType>({
     rosettaPath: '',
@@ -125,13 +135,13 @@ const Settings: React.FC = () => {
   };
 
   const getSectionTitle = (section: string) => {
+    if (registeredPage) return registeredPage.label;
     if (section === 'dbt') return 'dbt™ Core';
     if (section === 'python') return 'Python';
     if (section === 'ai-providers') return 'AI Settings';
     if (section === 'profile') return 'Rosetta Cloud';
     if (section === 'duckdb') return 'DuckDB';
     if (section === 'flowfile') return 'Flowfile';
-    if (section === 'runner') return 'Local Runner';
     if (section === 'keystore') return 'Keystore';
     if (section === 'task-manager') return 'Task Manager';
     if (section === 'backup') return 'Backup & Restore';
@@ -153,7 +163,6 @@ const Settings: React.FC = () => {
     rosetta: 'Rosetta CLI versions and installation.',
     duckdb: 'Local DuckDB instance used for caching, data preview and storage.',
     flowfile: 'Install and manage Flowfile.',
-    runner: 'Run pipelines on this machine and manage their tool dependencies.',
     about: 'Version, help links and advanced options.',
   };
 
@@ -191,8 +200,6 @@ const Settings: React.FC = () => {
         return <PythonSettings settings={localSettings} />;
       case 'rosetta':
         return <RosettaSettings settings={localSettings} />;
-      case 'runner':
-        return <RunnerSettings settings={localSettings} />;
       case 'flowfile':
         return (
           <FlowfileSettings
@@ -209,6 +216,7 @@ const Settings: React.FC = () => {
       case 'about':
         return <AboutSettings />;
       default:
+        if (registeredPage) return <registeredPage.Component />;
         return <Typography>Select a settings category</Typography>;
     }
   };
@@ -247,7 +255,7 @@ const Settings: React.FC = () => {
                 '& .MuiListItemText-primary': { fontSize: 13 },
               }}
             >
-              {settingsSidebarCategories.map((category, categoryIndex) => (
+              {sidebarCategories.map((category, categoryIndex) => (
                 <React.Fragment key={category.label || `cat-${categoryIndex}`}>
                   {categoryIndex > 0 && (
                     <Box
@@ -337,8 +345,12 @@ const Settings: React.FC = () => {
         >
           <div>
             <Title>{getSectionTitle(currentSection)}</Title>
-            {sectionDescriptions[currentSection] && (
-              <Description>{sectionDescriptions[currentSection]}</Description>
+            {(registeredPage?.description ??
+              sectionDescriptions[currentSection]) && (
+              <Description>
+                {registeredPage?.description ??
+                  sectionDescriptions[currentSection]}
+              </Description>
             )}
           </div>
           <div style={{ maxWidth: 820 }}>{renderContent()}</div>

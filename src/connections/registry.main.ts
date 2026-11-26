@@ -4,6 +4,13 @@ import {
   type SupportedConnectionTypes,
 } from './registry.shared';
 import { Connection, type SecretMaterializer } from './core/Connection.main';
+import {
+  connectorFromDefinition,
+  getConnector,
+  listConnectors,
+  registerConnector,
+  type ConnectionDefinition,
+} from './core/connectorRegistry.main';
 import { ConnectionDbt } from './core/ConnectionDbt.main';
 import {
   defaultAgentHint,
@@ -24,7 +31,7 @@ import { MySqlConnector } from './mysql/MySqlConnector.main';
 import { SpannerConnector } from './spanner/SpannerConnector.main';
 import { DuckLakeConnector } from './ducklake/DuckLakeConnector.main';
 
-/** One instance per database. A missing key fails tsc. */
+/** Studio's own databases: one instance each. A missing key fails tsc. */
 export const connectors: {
   readonly [K in SupportedConnectionTypes]: Connection<any>;
 } = {
@@ -42,15 +49,11 @@ export const connectors: {
   ducklake: new DuckLakeConnector(),
 };
 
-const isKnown = (type: string): type is SupportedConnectionTypes =>
-  Object.prototype.hasOwnProperty.call(connectors, type);
+// Studio's own databases come in through the same call extensions use.
+Object.values(connectors).forEach((connector) => registerConnector(connector));
 
-/** Exact type. Unknown or removed types (a legacy 'db2' row) return undefined. */
-export function getConnector(
-  type: string | undefined,
-): Connection<any> | undefined {
-  return type && isKnown(type) ? connectors[type] : undefined;
-}
+export { connectorFromDefinition, getConnector, registerConnector };
+export type { ConnectionDefinition };
 
 /** Type or alias ('postgresql'). For the agents. */
 export function findConnector(
@@ -95,7 +98,7 @@ export function requireDbtConnector(
 export function dbtConnectorForAdapter(
   adapterType: string,
 ): ConnectionDbt<any, any> | undefined {
-  return Object.values(connectors).find(
+  return listConnectors().find(
     (c): c is ConnectionDbt<any, any> =>
       isDbtConnector(c) && c.dbtAdapterType === adapterType,
   );
@@ -118,7 +121,7 @@ export function findSecretMaterializer(
 ):
   | { materialize: SecretMaterializer['materialize']; connectionName: string }
   | undefined {
-  const match = Object.values(connectors)
+  const match = listConnectors()
     .flatMap((connector) => connector.secretMaterializers)
     .find((m) => envKey.startsWith(m.prefix));
   return match
@@ -143,5 +146,5 @@ export function sanitizeForStorage<
 }
 
 export function disposeConnectors(): void {
-  Object.values(connectors).forEach((connector) => connector.dispose());
+  listConnectors().forEach((connector) => connector.dispose());
 }

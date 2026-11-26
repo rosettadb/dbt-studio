@@ -2,7 +2,8 @@ import React from 'react';
 import { Box } from '@mui/material';
 import { UnsavedChangesDialog } from '../editor/unsavedChangesDialog';
 import { useTabs } from '../../context/TabsProvider';
-import { resolveFileView } from './registry';
+import { fileViewRegistry, resolveFileView } from './registry';
+import { useRegistry } from '../../../extensionHost/renderer/registry.renderer';
 import { EditorTabs } from './CodeFileView';
 import type { Project } from '../../../types/backend';
 
@@ -24,12 +25,17 @@ export const ActiveFileView: React.FC<Props> = ({ project, emptyState }) => {
     onCancelClose,
   } = useTabs();
 
-  const View = activeTab ? resolveFileView(activeTab).Component : null;
+  // Re-resolve when a view is added or removed (an extension switched on
+  // or off) while a tab is open.
+  useRegistry(fileViewRegistry);
+  const view = activeTab ? resolveFileView(activeTab) : null;
+  const View = view?.Component ?? null;
 
   return (
     <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
       {activeTab && View ? (
-        <View tab={activeTab} project={project} />
+        // eslint-disable-next-line react/jsx-props-no-spreading
+        <View tab={activeTab} project={project} {...view?.props} />
       ) : (
         // Keep the (empty) editor mounted so its OS drag-and-drop target
         // stays live; the message is a non-interactive overlay above it.

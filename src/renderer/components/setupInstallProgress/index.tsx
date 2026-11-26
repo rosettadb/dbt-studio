@@ -19,7 +19,7 @@ import { flowfileInstall } from '../../services/flowfile.service';
 import { InstallResult } from '../../../types/backend';
 import { SettingsStatus } from '../settings/SettingsLayout';
 import { DbtLine } from '../dbtSetup';
-import { PythonMonoIcon } from '../notebook/NotebookKindIcon';
+import { PythonMonoIcon } from '../icon/PythonMonoIcon';
 import { DbtMonoIcon } from '../icon/DbtMonoIcon';
 
 type RowKey = 'python' | 'dbt' | 'flowfile';

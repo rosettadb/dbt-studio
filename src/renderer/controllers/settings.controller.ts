@@ -13,13 +13,11 @@ import {
   FileDialogProperties,
   SettingsType,
   RosettaVersionInfo,
-  RunnerRequirementStatus,
   InstallResult,
   PythonInstallInfo,
   PythonVersionInfo,
 } from '../../types/backend';
 import { QUERY_KEYS } from '../config/constants';
-import type { PluginDefinition } from '../../shared/pluginManifest';
 import { useApiKey } from './rosettaCloud.controller';
 
 export const useGetSettings = (
@@ -323,37 +321,6 @@ export const useInstallPythonVersion = (
   });
 };
 
-// The plugins of the local runner, read from its plugin manifest. The
-// manifest only changes when the runner does (an app update).
-export const useGetRunnerPlugins = () =>
-  useQuery<PluginDefinition[], CustomError>({
-    queryKey: [QUERY_KEYS.GET_RUNNER_PLUGINS],
-    queryFn: () => settingsServices.getRunnerPlugins(),
-    staleTime: Infinity,
-  });
-
-export const useCheckRunnerRequirements = (
-  customOptions?: UseMutationOptions<
-    RunnerRequirementStatus[],
-    CustomError,
-    void
-  >,
-): UseMutationResult<RunnerRequirementStatus[], CustomError, void> => {
-  const { onSuccess: onCustomSuccess, onError: onCustomError } =
-    customOptions || {};
-  return useMutation({
-    mutationFn: async () => {
-      return settingsServices.checkRunnerRequirements();
-    },
-    onSuccess: (...args) => {
-      onCustomSuccess?.(...args);
-    },
-    onError: (...args) => {
-      onCustomError?.(...args);
-    },
-  });
-};
-
 // DuckDB hooks
 export const useGetDuckDbMetadata = (
   customOptions?: UseQueryOptions<any, CustomError, any>,
@@ -429,106 +396,5 @@ export const useDiagnoseDuckDb = (
     },
     ...customOptions,
     refetchInterval: 5000, // Auto-refresh every 5s when open
-  });
-};
-
-// KiSQL (Kinetica CLI) controllers
-export const useCheckKisqlVersion = (
-  customOptions?: UseMutationOptions<
-    {
-      installed: boolean;
-      version?: string;
-      path?: string;
-      latestSha?: string;
-      updateAvailable?: boolean;
-    },
-    CustomError,
-    void
-  >,
-): UseMutationResult<
-  {
-    installed: boolean;
-    version?: string;
-    path?: string;
-    latestSha?: string;
-    updateAvailable?: boolean;
-  },
-  CustomError,
-  void
-> => {
-  const { onSuccess: onCustomSuccess, onError: onCustomError } =
-    customOptions || {};
-  return useMutation({
-    mutationFn: async () => settingsServices.checkKisqlVersion(),
-    onSuccess: (...args) => onCustomSuccess?.(...args),
-    onError: (...args) => onCustomError?.(...args),
-  });
-};
-
-export const useInstallKisql = (
-  customOptions?: UseMutationOptions<
-    { success: boolean; version: string; path: string; error?: string },
-    CustomError,
-    void
-  >,
-): UseMutationResult<
-  { success: boolean; version: string; path: string; error?: string },
-  CustomError,
-  void
-> => {
-  const { onSuccess: onCustomSuccess, onError: onCustomError } =
-    customOptions || {};
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async () => settingsServices.installKisql(),
-    onSuccess: async (...args) => {
-      await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
-      onCustomSuccess?.(...args);
-    },
-    onError: (...args) => onCustomError?.(...args),
-  });
-};
-
-export const useUninstallKisql = (
-  customOptions?: UseMutationOptions<void, CustomError, void>,
-): UseMutationResult<void, CustomError, void> => {
-  const { onSuccess: onCustomSuccess, onError: onCustomError } =
-    customOptions || {};
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async () => settingsServices.uninstallKisql(),
-    onSuccess: async (...args) => {
-      await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
-      onCustomSuccess?.(...args);
-    },
-    onError: (...args) => onCustomError?.(...args),
-  });
-};
-
-export const useInstallPySpark = (
-  customOptions?: UseMutationOptions<void, CustomError, void>,
-): UseMutationResult<void, CustomError, void> => {
-  const { onSuccess: onCustomSuccess, onError: onCustomError } =
-    customOptions || {};
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async () => settingsServices.installPySpark(),
-    onSuccess: async (...args) => {
-      await queryClient.invalidateQueries([QUERY_KEYS.GET_SETTINGS]);
-      onCustomSuccess?.(...args);
-    },
-    onError: (...args) => onCustomError?.(...args),
-  });
-};
-
-export const useUninstallPySpark = (
-  customOptions?: UseMutationOptions<void, CustomError, void>,
-): UseMutationResult<void, CustomError, void> => {
-  const { onSuccess: onCustomSuccess, onError: onCustomError } =
-    customOptions || {};
-  return useMutation({
-    mutationFn: async () => settingsServices.uninstallPySpark(),
-    onSuccess: (...args) => onCustomSuccess?.(...args),
-    onError: (...args) => onCustomError?.(...args),
   });
 };

@@ -1,5 +1,5 @@
 import { parseOracleEditorStatements } from '../../../src/connections/oracle/oracle.statements.renderer';
-import { parseSqlEditorStatements } from '../../../src/renderer/components/sqlEditor/editorComponent/statements';
+import { parseSqlEditorStatements } from '../../../src/connections/core/sqlStatements.shared';
 
 function parse(sql: string, type = 'oracle') {
   const parser =

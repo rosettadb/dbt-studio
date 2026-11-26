@@ -29,10 +29,11 @@ import { useProcess } from '../../hooks';
 import { Project } from '../../../types/backend';
 import {
   DEFAULT_TERMINAL_PANEL_ID,
-  listTerminalPanels,
+  terminalPanelRegistry,
   TerminalPanelContext,
   TerminalPanelDefinition,
 } from './panels';
+import { useRegistry } from '../../../extensionHost/renderer/registry.renderer';
 import { tabButtonSx } from './panels/tabButtonSx';
 
 type TerminalMinimizeContextValue = {
@@ -87,7 +88,9 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
   const { mode } = useColorScheme();
   const theme = useTheme();
   const { isRunning, stop } = useProcess();
-  const panels = listTerminalPanels();
+  // Follows the registry, so a panel added or removed by an extension
+  // shows up or goes away without a reload.
+  const panels = useRegistry(terminalPanelRegistry);
   const ctx = React.useMemo<TerminalPanelContext>(
     () => ({ project }),
     [project],
@@ -196,14 +199,17 @@ export const TerminalLayout: React.FC<Props> = ({ children, project }) => {
 
   // A panel that disappeared while selected falls back to the terminal so
   // the body is never blank.
+  // The same when its panel was removed altogether (its extension was
+  // switched off).
   React.useEffect(() => {
     if (
       selectedId !== DEFAULT_TERMINAL_PANEL_ID &&
-      visibility[selectedId] === false
+      (visibility[selectedId] === false ||
+        !panels.some((panel) => panel.id === selectedId))
     ) {
       setSelectedId(DEFAULT_TERMINAL_PANEL_ID);
     }
-  }, [selectedId, visibility]);
+  }, [selectedId, visibility, panels]);
 
   const handleQuickStop = async () => {
     await stop();

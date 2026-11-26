@@ -5,9 +5,10 @@ import { IpcMainInvokeEvent, app, BrowserWindow } from 'electron';
 import { generateText, type ModelMessage } from 'ai';
 import { buildBaseAgentConfig } from './ai/agents/baseAgentConfig';
 import { createProjectAgent } from './ai/agents/projectAgent';
-import { createSqlAgent } from './ai/agents/sqlAgent';
-import { createNotebooksAgent } from './ai/agents/notebooksAgent';
-import { createAnalyticsAgent } from './ai/agents/analyticsAgent';
+import {
+  getScreenAgent,
+  getScreenAgentOptions,
+} from './ai/agents/screenAgents';
 import { EnrichedConnectionMeta } from './ai/agents/agentTypes';
 import ConnectorsService from './connectors.service';
 import { getVercelModel } from './ai/agentAdapter';
@@ -34,11 +35,6 @@ import type {
 } from '../schemas/mainDatabase.schema';
 import type { AISettingsConfig, Project } from '../../types/backend';
 import type {
-  PythonNotebookAgentArgs,
-  PythonNotebookAgentOp,
-  PythonNotebookAgentResult,
-} from '../../types/pythonNotebooks';
-import type {
   ChatStreamChunkPayload,
   AgentContextUsagePayload,
   AgentContextCompactedPayload,
@@ -54,9 +50,11 @@ import SecondBrainRuntimeService from './ai/secondBrain/secondBrainRuntime.servi
 import { createSecondBrainTools } from './ai/tools/studio/secondBrain.tools';
 import { readProjectAgentContext } from './ai/projectAgentContext';
 import {
-  buildProjectPipelineContext,
-  PROJECT_PIPELINE_TOOL_NAMES,
-} from './ai/tools/studio/pipeline.tools';
+  buildProjectToolsetContexts,
+  listProjectToolsets,
+  projectToolsetReadOnlyNames,
+  projectToolsetToolNames,
+} from './ai/agents/projectToolsets';
 import { STUDIO_KEYSTORE_TOOL_NAMES } from './ai/tools/studio/keystore.tools';
 import {
   buildProjectChartsContext,
@@ -223,27 +221,10 @@ const pendingEditorBridgeRequests = new Map<
   }
 >();
 
-const NOTEBOOK_BRIDGE_TIMEOUT_MS = 15_000;
-
-const pendingNotebookBridgeRequests = new Map<
-  string,
-  {
-    resolve: (value: any) => void;
-    reject: (reason?: unknown) => void;
-    timeout: ReturnType<typeof setTimeout>;
-    type: string;
-  }
->();
-
-const pendingAnalyticsBridgeRequests = new Map<
-  string,
-  {
-    resolve: (value: any) => void;
-    reject: (reason?: unknown) => void;
-    timeout: ReturnType<typeof setTimeout>;
-    type: string;
-  }
->();
+// What to do when Studio is factory reset: code that waits for an answer
+// from a window (the notebook and Analytics bridges of the extensions) fails
+// what it is waiting for.
+const factoryResetListeners = new Set<(error: Error) => void>();
 
 // Per-conversation agent context — replaces the static singleton to prevent
 // race conditions when multiple conversations run concurrently (#4)
@@ -270,16 +251,12 @@ const TOOL_CATEGORIES = {
     'listDirectory',
     'readFile',
     'pathExists',
-    'studio_pipeline_list',
-    'studio_pipeline_read',
     'studio_charts_validate',
   ],
   action: [
     'writeDbtModel',
     'runDbtCommand',
     'writeFile',
-    'studio_pipeline_generate',
-    'studio_pipeline_update',
     'studio_keystore_register_placeholder',
     'studio_charts_refresh_preview',
   ],
@@ -292,17 +269,22 @@ export function getToolsForMode(
   const allTools = {
     ...dbtTools,
     ...filesystemTools,
-    ...PROJECT_PIPELINE_TOOL_NAMES,
+    // The tools extensions gave the project agent (pipelines)
+    ...Object.fromEntries(
+      projectToolsetToolNames().map((name) => [name, true]),
+    ),
     ...STUDIO_KEYSTORE_TOOL_NAMES,
     ...DBT_CHARTS_TOOL_NAMES,
   };
 
   if (mode === 'chat') {
+    const contributedAnalysisTools = projectToolsetReadOnlyNames();
     // Chat Mode: only analysis tools
     return Object.fromEntries(
       Object.entries(allTools).filter(
         ([name]) =>
-          TOOL_CATEGORIES.analysis.includes(name) &&
+          (TOOL_CATEGORIES.analysis.includes(name) ||
+            contributedAnalysisTools.includes(name)) &&
           aiSettings.tools[name] !== false,
       ),
     );
@@ -658,295 +640,6 @@ class AgentService {
       conversationId,
       query,
     });
-  }
-
-  // ─── Notebook Agent Bridge (Phase 1) ──────────────────────────────────────────
-
-  private static async requestNotebookBridge(
-    conversationId: number,
-    type: string,
-    requestChannel: string,
-    responseChannel: string,
-    payload: object = {},
-    options: { timeoutMs?: number; timeoutMessage?: string } = {},
-  ): Promise<any> {
-    const context = this.getAgentContext(conversationId);
-    if (!context) {
-      throw new Error(`No active context for conversation ${conversationId}`);
-    }
-
-    const requestId = `notebook-bridge-${Date.now()}-${Math.random()
-      .toString(36)
-      .slice(2, 10)}`;
-
-    return new Promise<any>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        pendingNotebookBridgeRequests.delete(requestId);
-        reject(
-          new Error(
-            options.timeoutMessage ??
-              `Timed out waiting for ${type} response from renderer`,
-          ),
-        );
-      }, options.timeoutMs ?? NOTEBOOK_BRIDGE_TIMEOUT_MS);
-
-      pendingNotebookBridgeRequests.set(requestId, {
-        resolve,
-        reject,
-        timeout,
-        type,
-      });
-
-      context.event.sender.send(requestChannel, {
-        requestId,
-        conversationId,
-        ...payload,
-      });
-    });
-  }
-
-  public static resolveNotebookBridgeResponse(payload: {
-    requestId: string;
-    success: boolean;
-    [key: string]: any;
-  }): void {
-    const request = pendingNotebookBridgeRequests.get(payload.requestId);
-    if (!request) return;
-
-    pendingNotebookBridgeRequests.delete(payload.requestId);
-    clearTimeout(request.timeout);
-
-    if (payload.success) {
-      request.resolve(payload);
-    } else {
-      request.reject(new Error(payload.error || 'Renderer request failed'));
-    }
-  }
-
-  /**
-   * Python notebook agent bridge: runs one typed op in the open
-   * PythonNotebookEditor. The notebook id comes from the agent context, never
-   * from tool input, and the editor answers only for its own notebook.
-   */
-  public static async requestPythonNotebook<K extends PythonNotebookAgentOp>(
-    conversationId: number,
-    op: K,
-    args: PythonNotebookAgentArgs<K>,
-    timeoutMs: number = NOTEBOOK_BRIDGE_TIMEOUT_MS,
-  ): Promise<PythonNotebookAgentResult<K>> {
-    const context = this.getAgentContext(conversationId);
-    if (!context?.notebookId) {
-      throw new Error('No notebook is open in this chat.');
-    }
-    const response = await this.requestNotebookBridge(
-      conversationId,
-      op,
-      'agent:python-notebook:request',
-      'agent:python-notebook:response',
-      { notebookId: context.notebookId, op, args },
-      {
-        timeoutMs,
-        timeoutMessage:
-          "The notebook didn't answer. Make sure it's open in the Notebooks screen.",
-      },
-    );
-    return response.data as PythonNotebookAgentResult<K>;
-  }
-
-  public static async requestNotebookState(conversationId: number) {
-    return this.requestNotebookBridge(
-      conversationId,
-      'state',
-      'agent:notebook:state-request',
-      'agent:notebook:state-response',
-    );
-  }
-
-  public static async requestNotebookCellRead(
-    conversationId: number,
-    cellId: string,
-  ) {
-    return this.requestNotebookBridge(
-      conversationId,
-      'cell-read',
-      'agent:notebook:cell-read-request',
-      'agent:notebook:cell-read-response',
-      { cellId },
-    );
-  }
-
-  public static async requestNotebookCellAdd(
-    conversationId: number,
-    content: string,
-  ): Promise<{ cellId: string }> {
-    return this.requestNotebookBridge(
-      conversationId,
-      `cell-add-${Date.now()}`,
-      'agent:notebook:cell-add-request',
-      'agent:notebook:cell-add-response',
-      { content },
-    );
-  }
-
-  public static async requestNotebookCellUpdate(
-    conversationId: number,
-    cellId: string,
-    content: string,
-  ) {
-    return this.requestNotebookBridge(
-      conversationId,
-      'cell-update',
-      'agent:notebook:cell-update-request',
-      'agent:notebook:cell-update-response',
-      { cellId, content },
-    );
-  }
-
-  public static async requestNotebookCellRun(
-    conversationId: number,
-    cellId: string,
-  ) {
-    const context = this.getAgentContext(conversationId);
-    if (!context) {
-      throw new Error(`No active context for conversation ${conversationId}`);
-    }
-    return this.requestNotebookBridge(
-      conversationId,
-      `cell-run-${cellId}`,
-      'agent:notebook:cell-run-request',
-      'agent:notebook:cell-run-response',
-      { cellId },
-    );
-  }
-
-  public static async requestNotebookCellResult(
-    conversationId: number,
-    cellId: string,
-  ) {
-    return this.requestNotebookBridge(
-      conversationId,
-      'cell-result',
-      'agent:notebook:cell-result-request',
-      'agent:notebook:cell-result-response',
-      { cellId },
-    );
-  }
-
-  // ─── Analytics Agent Bridge ───────────────────────────────────────────────
-
-  private static async requestAnalyticsBridge(
-    conversationId: number,
-    type: string,
-    requestChannel: string,
-    responseChannel: string,
-    payload: object = {},
-  ): Promise<any> {
-    const context = this.getAgentContext(conversationId);
-    if (!context) {
-      throw new Error(`No active context for conversation ${conversationId}`);
-    }
-    if (context.screenKey !== 'analytics') {
-      throw new Error(
-        `Analytics bridge only available in Analytics screen (current: ${context.screenKey})`,
-      );
-    }
-    if (!context.connectionId) {
-      throw new Error('Analytics bridge requires an active connectionId');
-    }
-    if (!context.pageId) {
-      throw new Error('Analytics bridge requires an active pageId');
-    }
-
-    const requestId = `analytics-bridge-${Date.now()}-${Math.random()
-      .toString(36)
-      .slice(2, 10)}`;
-
-    return new Promise<any>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        pendingAnalyticsBridgeRequests.delete(requestId);
-        reject(
-          new Error(
-            `Timed out waiting for ${type} response from Analytics renderer`,
-          ),
-        );
-      }, 15000);
-
-      pendingAnalyticsBridgeRequests.set(requestId, {
-        resolve,
-        reject,
-        timeout,
-        type: responseChannel,
-      });
-
-      context.event.sender.send(requestChannel, {
-        requestId,
-        conversationId,
-        connectionId: context.connectionId,
-        pageId: context.pageId,
-        ...payload,
-      });
-    });
-  }
-
-  public static resolveAnalyticsBridgeResponse(payload: {
-    requestId: string;
-    success: boolean;
-    error?: string;
-    [key: string]: any;
-  }): void {
-    const request = pendingAnalyticsBridgeRequests.get(payload.requestId);
-    if (!request) return;
-
-    pendingAnalyticsBridgeRequests.delete(payload.requestId);
-    clearTimeout(request.timeout);
-
-    if (payload.success) {
-      request.resolve(payload);
-    } else {
-      request.reject(
-        new Error(payload.error || 'Analytics renderer request failed'),
-      );
-    }
-  }
-
-  public static async requestAnalyticsEditorRead(conversationId: number) {
-    return this.requestAnalyticsBridge(
-      conversationId,
-      'analytics-read',
-      'agent:analytics:read-request',
-      'agent:analytics:read-response',
-    );
-  }
-
-  public static async requestAnalyticsEditorUpdate(
-    conversationId: number,
-    markdownContent: string,
-  ) {
-    return this.requestAnalyticsBridge(
-      conversationId,
-      'analytics-update',
-      'agent:analytics:update-request',
-      'agent:analytics:update-response',
-      { markdownContent },
-    );
-  }
-
-  public static async requestAnalyticsEditorRun(conversationId: number) {
-    return this.requestAnalyticsBridge(
-      conversationId,
-      'analytics-run',
-      'agent:analytics:run-request',
-      'agent:analytics:run-response',
-    );
-  }
-
-  public static async requestAnalyticsEditorResults(conversationId: number) {
-    return this.requestAnalyticsBridge(
-      conversationId,
-      'analytics-query-results',
-      'agent:analytics:query-results-request',
-      'agent:analytics:query-results-response',
-    );
   }
 
   // ─── Context Compaction ──────────────────────────────────────────────────────
@@ -1580,18 +1273,16 @@ COMBINED SUMMARY:`,
       }
 
       let sessionContextBlock = '';
-      let projectPipelineContext: string | undefined;
+      let projectToolsetContexts: Array<{ tag: string; text: string }> = [];
       let projectChartsContext: string | undefined;
       const projectAiContext =
         screenKey === 'project' && request.includeProjectAiContext
           ? await readProjectAgentContext(projectPath)
           : undefined;
       if (screenKey === 'project' && projectPath) {
-        projectPipelineContext = await buildProjectPipelineContext(
+        projectToolsetContexts = await buildProjectToolsetContexts(
           projectPath,
-          {
-            hasDbt: projectHasDbt || projectTypeUnknown,
-          },
+          { hasDbt: projectHasDbt || projectTypeUnknown },
         );
         try {
           projectChartsContext = await buildProjectChartsContext(projectPath);
@@ -1632,65 +1323,51 @@ COMBINED SUMMARY:`,
         delete agentEnabledTools.writeDbtModel;
         delete agentEnabledTools.runDbtCommand;
         delete agentEnabledTools.writeFile;
-        delete agentEnabledTools.studio_pipeline_list;
-        delete agentEnabledTools.studio_pipeline_read;
-        delete agentEnabledTools.studio_pipeline_generate;
-        delete agentEnabledTools.studio_pipeline_update;
+        projectToolsetToolNames().forEach((name) => {
+          delete agentEnabledTools[name];
+        });
         delete agentEnabledTools.studio_keystore_register_placeholder;
         delete agentEnabledTools.studio_charts_validate;
         delete agentEnabledTools.studio_charts_refresh_preview;
       }
 
-      switch (request.screenKey ?? 'project') {
-        case 'sql':
-          agent = await createSqlAgent(base, {
-            connectionMeta,
-            enabledTools: agentEnabledTools,
-            skills: base.skillsPrompt,
-            conversationId,
-            toolMode: request.toolMode || 'agent',
-          });
-          break;
-        case 'notebooks':
-          agent = await createNotebooksAgent(base, {
-            connectionMeta,
-            notebookId: request.notebookId,
-            connectionId: request.connectionId,
-            enabledTools: agentEnabledTools,
-            disabledTools: Object.entries(aiSettings.tools ?? {})
-              .filter(([, enabled]) => enabled === false)
-              .map(([name]) => name),
-            skills: base.skillsPrompt,
-            conversationId,
-            toolMode: request.toolMode || 'agent',
-          });
-          break;
-        case 'analytics':
-          agent = await createAnalyticsAgent(base, {
-            connectionMeta,
-            connectionId: request.connectionId,
-            pageId: request.pageId,
-            enabledTools: agentEnabledTools,
-            skills: base.skillsPrompt,
-            conversationId,
-            toolMode: request.toolMode || 'agent',
-          });
-          break;
-        default:
-          agent = await createProjectAgent(base, {
-            projectPath,
-            enabledTools,
-            skills: base.skillsPrompt,
-            conversationId,
-            toolMode: request.toolMode || 'agent',
-            projectAiContext,
-            projectPipelineContext,
-            projectChartsContext,
-            sessionContextBlock,
-            connectionMeta: projectConnectionMeta,
-            hasDbt: projectHasDbt,
-            projectTypeUnknown,
-          });
+      if (isProjectAgent) {
+        agent = await createProjectAgent(base, {
+          projectPath,
+          enabledTools,
+          skills: base.skillsPrompt,
+          conversationId,
+          toolMode: request.toolMode || 'agent',
+          projectAiContext,
+          toolsetContexts: projectToolsetContexts,
+          projectChartsContext,
+          sessionContextBlock,
+          connectionMeta: projectConnectionMeta,
+          hasDbt: projectHasDbt,
+          projectTypeUnknown,
+        });
+      } else {
+        // The agent of every other screen comes from the extension that
+        // owns the screen (SQL Editor, Notebooks, Analytics).
+        const createScreenAgent = getScreenAgent(screenKey);
+        if (!createScreenAgent) {
+          throw new Error(
+            `The AI assistant of this screen is not available (${screenKey}).`,
+          );
+        }
+        agent = await createScreenAgent(base, {
+          conversationId,
+          toolMode: request.toolMode || 'agent',
+          connectionMeta,
+          connectionId: request.connectionId,
+          notebookId: request.notebookId,
+          pageId: request.pageId,
+          enabledTools: agentEnabledTools,
+          disabledTools: Object.entries(aiSettings.tools ?? {})
+            .filter(([, enabled]) => enabled === false)
+            .map(([name]) => name),
+          skills: base.skillsPrompt,
+        });
       }
 
       const abortController = new AbortController();
@@ -1970,45 +1647,14 @@ COMBINED SUMMARY:`,
 
         // Guard against empty responses (e.g. Gemini Flash Lite silent failures)
         if (!fullContent.trim()) {
-          const notebookStateCall =
-            (request.screenKey ?? 'project') === 'notebooks'
-              ? [...collectedToolCalls]
-                  .reverse()
-                  .find((tc) => tc.toolName === 'notebooks_get_state')
-              : undefined;
-          const notebookState = (notebookStateCall?.output as any)?.data;
-          const notebookCells = Array.isArray(notebookState?.cells)
-            ? notebookState.cells
-            : [];
-          const notebookFallback =
-            notebookStateCall && (notebookStateCall.output as any)?.ok !== false
-              ? [
-                  `I inspected ${notebookState?.notebookName || notebookState?.name || 'the active notebook'}.`,
-                  `It has ${notebookCells.length} cell${notebookCells.length === 1 ? '' : 's'}.`,
-                  ...notebookCells
-                    .slice(0, 3)
-                    .map((cell: any, index: number) => {
-                      // Python notebooks: preview / output label; legacy SQL: contentPreview / hasOutput
-                      const preview =
-                        cell.preview ||
-                        cell.contentPreview ||
-                        cell.content ||
-                        '(empty cell)';
-                      let outputText = ' No output is currently available.';
-                      if (typeof cell.output === 'string' && cell.output) {
-                        outputText = ` Output: ${cell.output}.`;
-                      } else if (cell.hasOutput) {
-                        outputText = ` Output is available${typeof cell.outputRowCount === 'number' ? ` (${cell.outputRowCount} rows loaded)` : ''}.`;
-                      }
-                      return `Cell ${index + 1} is ${cell.type || 'unknown'}: \`${String(preview).trim()}\`.${outputText}`;
-                    }),
-                  notebookCells.some((cell: any) => cell.status === 'error')
-                    ? 'At least one cell has an error output.'
-                    : 'I do not see a notebook execution error in the state returned by the tool.',
-                ].join(' ')
-              : null;
+          // The screen's agent may know something better to say (the
+          // Notebooks one describes the notebook it inspected).
+          const screenFallback =
+            getScreenAgentOptions(
+              request.screenKey ?? 'project',
+            )?.emptyAnswerFallback?.(collectedToolCalls) ?? null;
           const fallback =
-            notebookFallback ||
+            screenFallback ||
             "I wasn't able to generate a response. Please try rephrasing your message or switching to a different model.";
           fullContent = fallback;
           sendChunk({ conversationId, chunk: fallback, done: false });
@@ -2096,6 +1742,17 @@ COMBINED SUMMARY:`,
     return { success: false, message: 'No active agent execution found' };
   }
 
+  /**
+   * Runs `listener` when Studio is factory reset, with the error to fail
+   * pending work with. Returns the function that removes it.
+   */
+  static onFactoryReset(listener: (error: Error) => void): () => void {
+    factoryResetListeners.add(listener);
+    return () => {
+      factoryResetListeners.delete(listener);
+    };
+  }
+
   static cancelAllForFactoryReset(): void {
     TerminalConfirmGate.abortAll();
     activeAgents.forEach((controller) => controller.abort());
@@ -2104,17 +1761,14 @@ COMBINED SUMMARY:`,
     activeCompactions.clear();
 
     const resetError = new Error('Factory reset is in progress');
-    [
-      pendingEditorBridgeRequests,
-      pendingNotebookBridgeRequests,
-      pendingAnalyticsBridgeRequests,
-    ].forEach((requests) => {
+    [pendingEditorBridgeRequests].forEach((requests) => {
       requests.forEach(({ reject, timeout }) => {
         clearTimeout(timeout);
         reject(resetError);
       });
       requests.clear();
     });
+    factoryResetListeners.forEach((listener) => listener(resetError));
   }
 
   /**
@@ -2174,26 +1828,14 @@ COMBINED SUMMARY:`,
           description: 'Check if a file or directory exists',
           category: 'filesystem',
         },
-        {
-          name: 'studio_pipeline_list',
-          description: 'List pipeline YAML files in the active project',
-          category: 'dbt',
-        },
-        {
-          name: 'studio_pipeline_read',
-          description: 'Read and validate a pipeline YAML file',
-          category: 'dbt',
-        },
-        {
-          name: 'studio_pipeline_generate',
-          description: 'Generate a new validated pipeline YAML file',
-          category: 'dbt',
-        },
-        {
-          name: 'studio_pipeline_update',
-          description: 'Update a pipeline using a read content hash',
-          category: 'dbt',
-        },
+        // The tools extensions gave the project agent (pipelines)
+        ...listProjectToolsets().flatMap((toolset) =>
+          toolset.tools.map((info) => ({
+            name: info.name,
+            description: info.listDescription ?? info.description,
+            category: 'dbt',
+          })),
+        ),
         {
           name: 'studio_keystore_register_placeholder',
           description:

@@ -6,8 +6,9 @@ import { z } from 'zod';
 import * as fs from 'fs';
 import * as path from 'path';
 import AgentService from '../../agent.service';
-import { isProtectedPipelineWritePath } from './studio/pipeline.tools';
+import { findProjectWriteGuard } from '../agents/projectToolsets';
 import FileMutationRollbackService from '../fileMutationRollback.service';
+import { emitFileDidSave } from '../../../../extensionHost/main/fileEvents.main';
 
 const MAX_FILE_SIZE = 1_000_000; // 1 MB for general files
 const MAX_DIRECTORY_DEPTH = 5;
@@ -201,12 +202,10 @@ export const writeFile = tool({
     let mutationId: string | undefined;
     try {
       assertWithinProject(filePath, projectPath);
-      if (isProtectedPipelineWritePath(projectPath, filePath)) {
-        return {
-          error:
-            'Pipeline files must be generated or updated with studio_pipeline_generate or studio_pipeline_update.',
-        };
-      }
+      // Files that belong to a contributed toolset (pipelines) are written
+      // with its own tools.
+      const guarded = findProjectWriteGuard(projectPath, filePath);
+      if (guarded) return { error: guarded };
 
       const context = AgentService.currentAgentContext;
       if (context) {
@@ -223,6 +222,7 @@ export const writeFile = tool({
       }
 
       fs.writeFileSync(filePath, content, 'utf-8');
+      emitFileDidSave(filePath, 'agent');
 
       return {
         success: true,
@@ -432,12 +432,10 @@ export function createFilesystemTools(
         let mutationId: string | undefined;
         try {
           assertWithinProject(filePath, projectPath);
-          if (isProtectedPipelineWritePath(projectPath, filePath)) {
-            return {
-              error:
-                'Pipeline files must be generated or updated with studio_pipeline_generate or studio_pipeline_update.',
-            };
-          }
+          // Files that belong to a contributed toolset (pipelines) are written
+          // with its own tools.
+          const guarded = findProjectWriteGuard(projectPath, filePath);
+          if (guarded) return { error: guarded };
 
           const context = AgentService.currentAgentContext;
           if (context) {
@@ -449,6 +447,7 @@ export function createFilesystemTools(
           const dir = path.dirname(filePath);
           if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
           fs.writeFileSync(filePath, content, 'utf-8');
+          emitFileDidSave(filePath, 'agent');
           onFileWritten?.(filePath);
           return {
             success: true,

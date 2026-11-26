@@ -10,11 +10,23 @@ import {
 
 import Dashboard from '../../../../src/renderer/screens/dashboard';
 import SelectProject from '../../../../src/renderer/screens/selectProject';
+// The Pipeline card and its "where should it go" dialog are added to Home by
+// the pipeline tool, not by the Dashboard itself.
+import {
+  dashboardCards,
+  slotRegistry,
+} from '../../../../src/extensionHost/renderer/contributions.renderer';
+import { STUDIO_SLOTS } from '../../../../src/extensionApi/renderer';
+import {
+  PipelineProjectChoiceDialog,
+  pipelineDashboardCard,
+} from '../../../../src/extensions/pipeline/renderer/PipelineHomeContributions';
+import { pipelineRunStore } from '../../../../src/extensions/pipeline/renderer/pipelineRunStore';
 
 // Flow test: the real Dashboard and project list screens behind a real router.
 // Only data loading and the backend are mocked. The project screen is a probe
-// that shows the navigation state it received; the real project screen opens
-// Create Pipeline when that state has `openCreatePipeline: true`.
+// that shows the navigation state it received; the real project screen runs
+// the command in that state (`pipeline.create` opens Create Pipeline).
 
 // Each test renders both full screens; under full-suite load that can pass
 // the default 10s limit.
@@ -112,12 +124,25 @@ jest.mock('../../../../assets', () => ({
   rosettaIcon: 'rosetta.png',
 }));
 
-jest.mock('../../../../src/renderer/assets/icons/lucide/route.svg', () => ({
-  ReactComponent: () => null,
-}));
+jest.mock(
+  '../../../../src/extensions/pipeline/renderer/assets/route.svg',
+  () => ({
+    ReactComponent: () => null,
+  }),
+);
 
 const PIPELINE_NOTE =
   'Pick the project to add a pipeline to, or create a new one.';
+
+beforeAll(() => {
+  dashboardCards.add(pipelineDashboardCard);
+  slotRegistry(STUDIO_SLOTS.homeOverlays).add({
+    id: 'pipeline.project-choice',
+    Component: PipelineProjectChoiceDialog,
+  });
+});
+
+beforeEach(() => pipelineRunStore.reset());
 
 const ProjectScreenProbe: React.FC = () => {
   const location = useLocation();
@@ -168,7 +193,9 @@ describe('Dashboard Pipeline flow', () => {
     expect(await screen.findByText(PIPELINE_NOTE)).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('project-card-jaffle_shop'));
 
-    expect(await projectScreenState()).toEqual({ openCreatePipeline: true });
+    expect(await projectScreenState()).toEqual({
+      runCommand: 'pipeline.create',
+    });
     expect(mockSelectProject).toHaveBeenCalledWith({ projectId: '1' });
   });
 
@@ -183,7 +210,9 @@ describe('Dashboard Pipeline flow', () => {
     fireEvent.click(screen.getByText('Fill name'));
     fireEvent.click(screen.getByText('Create project'));
 
-    expect(await projectScreenState()).toEqual({ openCreatePipeline: true });
+    expect(await projectScreenState()).toEqual({
+      runCommand: 'pipeline.create',
+    });
     expect(mockSelectProject).toHaveBeenCalledWith({ projectId: '9' });
   });
 

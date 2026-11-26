@@ -1,7 +1,7 @@
 import fs from 'fs-extra';
 import os from 'os';
 import path from 'path';
-import { discoverSparkHome } from '../../../../src/main/services/sparkEnvironment';
+import { discoverSparkHome } from '../../../../src/extensions/pipeline/main/sparkEnvironment';
 
 describe('discoverSparkHome', () => {
   let venvDir: string;
