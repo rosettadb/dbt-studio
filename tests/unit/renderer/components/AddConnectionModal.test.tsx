@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { toast } from 'react-toastify';
 
@@ -100,6 +100,71 @@ describe('AddConnectionModal', () => {
     expect(toast.success).toHaveBeenCalledTimes(1);
   });
 
+  it('shows each connection with its database icon and readable type label', () => {
+    renderModal({
+      isOpen: true,
+      onClose: jest.fn(),
+      onUpdateProject: jest.fn(),
+      project: { id: 'p1', name: 'My Project' } as any,
+      connections: [
+        { id: 'c1', connection: { name: 'Conn 1', type: 'postgres' } },
+        { id: 'c2', connection: { name: 'Conn 2', type: 'snowflake' } },
+      ] as any,
+    });
+
+    act(() => {
+      fireEvent.mouseDown(screen.getByLabelText('Connection'));
+    });
+
+    expect(screen.getByRole('img', { name: 'PostgreSQL' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Snowflake' })).toBeInTheDocument();
+    expect(screen.getByText('(PostgreSQL)')).toBeInTheDocument();
+    expect(screen.getByText('(Snowflake)')).toBeInTheDocument();
+  });
+
+  it('keeps the icon visible once a connection is selected', () => {
+    renderModal({
+      isOpen: true,
+      onClose: jest.fn(),
+      onUpdateProject: jest.fn(),
+      project: { id: 'p1', name: 'My Project' } as any,
+      connections: [
+        { id: 'c1', connection: { name: 'Conn 1', type: 'postgres' } },
+      ] as any,
+    });
+
+    act(() => {
+      fireEvent.mouseDown(screen.getByLabelText('Connection'));
+    });
+    act(() => {
+      fireEvent.click(screen.getByText('Conn 1'));
+    });
+
+    const select = screen.getByRole('combobox', { name: 'Connection' });
+    expect(
+      within(select).getByRole('img', { name: 'PostgreSQL' }),
+    ).toBeInTheDocument();
+  });
+
+  it('falls back to a generic icon for a connection with no registered icon', () => {
+    renderModal({
+      isOpen: true,
+      onClose: jest.fn(),
+      onUpdateProject: jest.fn(),
+      project: { id: 'p2', name: 'Lake', type: 'analytics' } as any,
+      connections: [
+        { id: 'c3', connection: { name: 'Mystery', type: 'custom-db' } },
+      ] as any,
+    });
+
+    act(() => {
+      fireEvent.mouseDown(screen.getByLabelText('Connection'));
+    });
+
+    expect(screen.getByTestId('StorageIcon')).toBeInTheDocument();
+    expect(screen.getByText('(custom-db)')).toBeInTheDocument();
+  });
+
   it('should show toast error when project is missing (even if a connection is selected)', () => {
     const onClose = jest.fn();
     const onUpdateProject = jest.fn();
@@ -147,6 +212,9 @@ describe('AddConnectionModal', () => {
     act(() => {
       fireEvent.mouseDown(screen.getByLabelText('Connection'));
     });
+
+    expect(screen.getByRole('img', { name: 'DuckLake' })).toBeInTheDocument();
+
     act(() => {
       fireEvent.click(screen.getByText('sales_lake'));
     });
