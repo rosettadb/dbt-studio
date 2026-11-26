@@ -23,6 +23,37 @@ const SHORTCUTS: Record<string, MarkdownFormatAction> = {
   k: 'link',
 };
 
+const markdownComponents = {
+  pre: ({ children }: React.HTMLAttributes<HTMLPreElement>) => {
+    const child = Array.isArray(children) ? children[0] : children;
+    const className = React.isValidElement<{ className?: string }>(child)
+      ? child.props.className
+      : '';
+    const lang = className?.match(/language-(\S+)/)?.[1];
+
+    return (
+      <pre>
+        {lang && (
+          <Box
+            component="span"
+            sx={{
+              display: 'block',
+              fontSize: 10,
+              fontWeight: 600,
+              color: 'text.secondary',
+              mb: 0.5,
+              userSelect: 'none',
+            }}
+          >
+            {`${lang} code`}
+          </Box>
+        )}
+        {children}
+      </pre>
+    );
+  },
+};
+
 interface PythonTextCellProps {
   source: string;
   onChange: (source: string) => void;
@@ -216,7 +247,9 @@ export const PythonTextCell: React.FC<PythonTextCellProps> = ({
       }}
     >
       {source.trim() ? (
-        <Markdown remarkPlugins={[remarkGfm]}>{source}</Markdown>
+        <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+          {source}
+        </Markdown>
       ) : (
         <Typography variant="body2" color="text.secondary" fontStyle="italic">
           Empty text cell. Double-click to edit.
