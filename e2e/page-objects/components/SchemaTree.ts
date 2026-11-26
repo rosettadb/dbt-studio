@@ -24,6 +24,7 @@ export type SchemaTreeMenuAction =
   | 'generate-count-by'
   | 'preview'
   | 'rename'
+  | 'er-diagram'
   | 'refresh';
 
 export class SchemaTreeComponent extends BasePage {
@@ -76,6 +77,17 @@ export class SchemaTreeComponent extends BasePage {
   /** Expand a table node so its columns mount. */
   async expandTable(table: string, schema?: string): Promise<void> {
     await this.tableRow(table, schema).click();
+  }
+
+  /** Right-click a schema and pick a context-menu action. */
+  async runSchemaAction(
+    schema: string,
+    action: SchemaTreeMenuAction,
+  ): Promise<void> {
+    await this.schemaRow(schema).click({ button: 'right' });
+    await expect(this.contextMenu).toBeVisible();
+    await this.menuItem(action).click();
+    await expect(this.contextMenu).toBeHidden();
   }
 
   /** Right-click a table and pick a context-menu action. */

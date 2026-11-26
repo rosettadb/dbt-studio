@@ -150,6 +150,44 @@ describe('SchemaTreeContextMenu', () => {
     );
     expect(screen.queryByRole('menuitem')).toBeNull();
   });
+
+  it('offers the ER diagram on schemas only, when the host supports it', () => {
+    const schemaNode: SchemaTreeNodeRef = { kind: 'schema', schema: 'sales' };
+    const { rerender } = wrap(
+      <SchemaTreeContextMenu
+        state={{ mouseX: 10, mouseY: 10, node: schemaNode }}
+        onClose={() => {}}
+        onAction={() => {}}
+        capabilities={{ erDiagram: true }}
+      />,
+    );
+    expect(menuItems()).toEqual(['copy-name', 'er-diagram']);
+    expect(screen.getByText('Show ER diagram')).toBeInTheDocument();
+
+    const renderFor = (
+      node: SchemaTreeNodeRef,
+      capabilities: { erDiagram?: boolean },
+    ) =>
+      rerender(
+        <ThemeProvider theme={theme}>
+          <SchemaTreeContextMenu
+            state={{ mouseX: 10, mouseY: 10, node }}
+            onClose={() => {}}
+            onAction={() => {}}
+            capabilities={capabilities}
+          />
+        </ThemeProvider>,
+      );
+
+    renderFor(schemaNode, {});
+    expect(menuItems()).not.toContain('er-diagram');
+    renderFor(tableNode, { erDiagram: true });
+    expect(menuItems()).not.toContain('er-diagram');
+    renderFor(columnNode, { erDiagram: true });
+    expect(menuItems()).not.toContain('er-diagram');
+    renderFor({ kind: 'database', databaseName: 'db' }, { erDiagram: true });
+    expect(menuItems()).not.toContain('er-diagram');
+  });
 });
 
 describe('buildActionText', () => {
@@ -329,5 +367,34 @@ describe('useSchemaTreeContextMenu', () => {
     fireEvent.click(screen.getByTestId('schema-tree-rename-confirm'));
 
     expect(onRename).toHaveBeenCalledWith(columnNode, 'order_number');
+  });
+
+  it('opens the ER diagram for the right-clicked schema', () => {
+    const onShowErDiagram = jest.fn();
+    const SchemaHost = () => {
+      const { onContextMenu, menu } = useSchemaTreeContextMenu({
+        connectionType: 'postgres',
+        onShowErDiagram,
+      });
+      return (
+        <>
+          <div
+            data-testid="row"
+            onContextMenu={(e) =>
+              onContextMenu(e, { kind: 'schema', schema: 'sales' })
+            }
+          >
+            row
+          </div>
+          {menu}
+        </>
+      );
+    };
+    wrap(<SchemaHost />);
+
+    fireEvent.contextMenu(screen.getByTestId('row'));
+    fireEvent.click(screen.getByTestId('schema-tree-menu-er-diagram'));
+
+    expect(onShowErDiagram).toHaveBeenCalledWith('sales');
   });
 });
