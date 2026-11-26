@@ -78,6 +78,7 @@ import {
   useRenameDuckLakeColumn,
 } from '../../../extensionApi/studio/controllers';
 import { SchemaTreeViewerWithSchema } from '../../../extensionApi/studio/schemaTreeViewer';
+import { ErDiagramModal } from '../../../extensionApi/studio/erDiagram';
 import { SavedQueriesList } from './sqlEditor/SavedQueriesList';
 import { SqlEditorActions } from './sqlEditor/SqlEditorActions';
 import { AppContext } from '../../../extensionApi/studio/context';
@@ -859,6 +860,9 @@ const Sql = () => {
     ],
   );
 
+  // Schema whose ER diagram is open, or null when it is closed.
+  const [erDiagramSchema, setErDiagramSchema] = useState<string | null>(null);
+
   const { onContextMenu: handleSchemaContextMenu, menu: schemaContextMenu } =
     useSchemaTreeContextMenu({
       connectionType: connectionInput?.type,
@@ -867,6 +871,7 @@ const Sql = () => {
       onRename: handleSchemaRename,
       describeRename: describeSchemaRename,
       onRefresh: handleRefreshSchema,
+      onShowErDiagram: setErDiagramSchema,
     });
 
   const renderSash = () => (
@@ -1181,6 +1186,13 @@ const Sql = () => {
             </Box>
           )}
           {schemaContextMenu}
+          <ErDiagramModal
+            isOpen={erDiagramSchema !== null}
+            onClose={() => setErDiagramSchema(null)}
+            sourceName={activeConnectionName}
+            tables={isDuckLakeConnection ? duckLakeTables : activeSchema}
+            initialSchema={erDiagramSchema ?? undefined}
+          />
         </Box>
       }
     >

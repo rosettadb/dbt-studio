@@ -10,6 +10,7 @@ import {
 import {
   ContentCopy,
   Code,
+  AccountTree,
   DriveFileRenameOutline,
   Input,
   PlayArrow,
@@ -31,6 +32,7 @@ export type SchemaTreeMenuAction =
   | 'generate-count-by'
   | 'preview'
   | 'rename'
+  | 'er-diagram'
   | 'refresh';
 
 export type SchemaTreeContextMenuState = {
@@ -48,6 +50,8 @@ export type SchemaTreeMenuCapabilities = {
   rename?: boolean;
   /** Host can refresh the schema. */
   refresh?: boolean;
+  /** Host can show an ER diagram of a schema. */
+  erDiagram?: boolean;
 };
 
 type Props = {
@@ -95,6 +99,16 @@ const buildEntries = (
         push(item('insert-name', 'Insert name', <Input fontSize="small" />));
       }
       push(item('copy-name', 'Copy name', copyIcon));
+      if (caps.erDiagram) {
+        push(
+          divider(),
+          item(
+            'er-diagram',
+            'Show ER diagram',
+            <AccountTree fontSize="small" />,
+          ),
+        );
+      }
       break;
 
     case 'table':

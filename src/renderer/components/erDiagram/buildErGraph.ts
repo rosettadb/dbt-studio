@@ -1,0 +1,215 @@
+/**
+ * Turns a list of tables into the boxes (tables) and lines (relationships)
+ * of an ER diagram. Pure on purpose so it can be unit tested.
+ *
+ * A line comes from a real foreign key when the connector reports one.
+ * Otherwise it is guessed from the column name: `customer_id` (or
+ * `customerId`) points at a table named `customer` or its plural
+ * (`customers`, `addresses`, `categories`), on that table's primary key,
+ * `id`, or a column with the same name. Data lakes like DuckLake have no keys at all,
+ * so for them every line is a guess.
+ */
+
+export type ErColumnInput = {
+  name: string;
+  typeName: string;
+  primaryKey?: boolean;
+  foreignKeys?: Array<{
+    primaryTableSchema: string;
+    primaryTableName: string;
+    primaryColumnName: string;
+  }>;
+};
+
+export type ErTableInput = {
+  name: string;
+  schema: string;
+  type?: string;
+  columns: ErColumnInput[];
+};
+
+export type ErColumn = {
+  name: string;
+  typeName: string;
+  isPrimaryKey: boolean;
+  /** Points at another table, by a real or guessed relationship. */
+  isForeignKey: boolean;
+};
+
+export type ErTable = {
+  id: string;
+  name: string;
+  schema: string;
+  isView: boolean;
+  columns: ErColumn[];
+};
+
+export type ErRelationship = {
+  id: string;
+  /** The table that is pointed at (holds the key). */
+  parentTableId: string;
+  parentColumn: string;
+  /** The table whose column points at the parent. */
+  childTableId: string;
+  childColumn: string;
+  /** True when guessed from column names, false for a real foreign key. */
+  inferred: boolean;
+};
+
+export type ErGraph = {
+  tables: ErTable[];
+  relationships: ErRelationship[];
+};
+
+export const erTableId = (schema: string, name: string) => `${schema}.${name}`;
+
+/** `customer_id` / `customerId` → `customer`; anything else → null. */
+const referencedNameFromColumn = (columnName: string): string | null => {
+  const snake = /^(.+)_id$/i.exec(columnName);
+  if (snake) return snake[1].toLowerCase();
+  const camel = /^(.+[a-z0-9])Id$/.exec(columnName);
+  if (camel) return camel[1].toLowerCase();
+  return null;
+};
+
+const candidateTableNames = (base: string): string[] => {
+  const names = [base, `${base}s`, `${base}es`];
+  if (base.endsWith('y')) names.push(`${base.slice(0, -1)}ies`);
+  return names;
+};
+
+/** The column a guessed relationship points at, or null when there is none. */
+const findReferencedColumn = (
+  target: ErTableInput,
+  childColumnName: string,
+): string | null => {
+  const primaryKeys = target.columns.filter((c) => c.primaryKey);
+  if (primaryKeys.length === 1) return primaryKeys[0].name;
+  const byName = (name: string) =>
+    target.columns.find((c) => c.name.toLowerCase() === name.toLowerCase());
+  return byName('id')?.name ?? byName(childColumnName)?.name ?? null;
+};
+
+export const buildErGraph = (tables: ErTableInput[]): ErGraph => {
+  const tableById = new Map<string, ErTableInput>();
+  // Lower-case name → table, for guessing. First one wins if two schemas
+  // have the same table name.
+  const tableByLowerName = new Map<string, ErTableInput>();
+  tables.forEach((table) => {
+    tableById.set(erTableId(table.schema, table.name), table);
+    const lower = table.name.toLowerCase();
+    if (!tableByLowerName.has(lower)) tableByLowerName.set(lower, table);
+  });
+
+  const relationships: ErRelationship[] = [];
+  const seenRelationshipIds = new Set<string>();
+  // Columns that point at another table, as `tableId\0column`.
+  const foreignKeyColumns = new Set<string>();
+
+  const addRelationship = (relationship: Omit<ErRelationship, 'id'>) => {
+    const id = `${relationship.childTableId}.${relationship.childColumn}->${relationship.parentTableId}.${relationship.parentColumn}`;
+    if (seenRelationshipIds.has(id)) return;
+    seenRelationshipIds.add(id);
+    relationships.push({ id, ...relationship });
+    foreignKeyColumns.add(
+      `${relationship.childTableId}\0${relationship.childColumn}`,
+    );
+  };
+
+  tables.forEach((table) => {
+    const childTableId = erTableId(table.schema, table.name);
+
+    table.columns.forEach((column) => {
+      // Only keys whose table and column are in the diagram can be drawn.
+      const realKeys = (column.foreignKeys ?? []).filter((fk) =>
+        tableById
+          .get(erTableId(fk.primaryTableSchema, fk.primaryTableName))
+          ?.columns.some((c) => c.name === fk.primaryColumnName),
+      );
+      if (realKeys.length > 0) {
+        realKeys.forEach((fk) =>
+          addRelationship({
+            parentTableId: erTableId(
+              fk.primaryTableSchema,
+              fk.primaryTableName,
+            ),
+            parentColumn: fk.primaryColumnName,
+            childTableId,
+            childColumn: column.name,
+            inferred: false,
+          }),
+        );
+        return;
+      }
+
+      const base = referencedNameFromColumn(column.name);
+      if (!base) return;
+      const target = candidateTableNames(base)
+        .map((name) => tableByLowerName.get(name))
+        .find((candidate) => candidate !== undefined);
+      // A table's own `customer_id` key is not a line to itself.
+      if (!target || target === table) return;
+      const parentColumn = findReferencedColumn(target, column.name);
+      if (!parentColumn) return;
+
+      addRelationship({
+        parentTableId: erTableId(target.schema, target.name),
+        parentColumn,
+        childTableId,
+        childColumn: column.name,
+        inferred: true,
+      });
+    });
+  });
+
+  const erTables: ErTable[] = tables.map((table) => {
+    const id = erTableId(table.schema, table.name);
+    return {
+      id,
+      name: table.name,
+      schema: table.schema,
+      isView: (table.type ?? '').toUpperCase().includes('VIEW'),
+      columns: table.columns.map((column) => ({
+        name: column.name,
+        typeName: column.typeName,
+        isPrimaryKey: !!column.primaryKey,
+        isForeignKey: foreignKeyColumns.has(`${id}\0${column.name}`),
+      })),
+    };
+  });
+
+  return { tables: erTables, relationships };
+};
+
+/**
+ * Only one table, the tables it points at and the tables pointing at it,
+ * with the lines that touch it. Used on a single table's page.
+ */
+export const relatedTablesGraph = (
+  graph: ErGraph,
+  tableId: string,
+): ErGraph => {
+  const relationships = graph.relationships.filter(
+    (r) => r.parentTableId === tableId || r.childTableId === tableId,
+  );
+  const keptIds = new Set<string>([tableId]);
+  // 🔗 only on columns whose line is still drawn.
+  const keptForeignKeys = new Set<string>();
+  relationships.forEach((r) => {
+    keptIds.add(r.parentTableId);
+    keptIds.add(r.childTableId);
+    keptForeignKeys.add(`${r.childTableId}\0${r.childColumn}`);
+  });
+  return {
+    tables: graph.tables
+      .filter((t) => keptIds.has(t.id))
+      .map((t) => ({
+        ...t,
+        columns: t.columns.map((c) => ({
+          ...c,
+          isForeignKey: keptForeignKeys.has(`${t.id}\0${c.name}`),
+        })),
+      })),
+    relationships,
+  };
+};

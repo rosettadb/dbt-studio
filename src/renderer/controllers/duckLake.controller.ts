@@ -439,6 +439,19 @@ export function useDuckLakeTables(instanceId: string) {
   });
 }
 
+/** Every schema with its tables and columns, in one call (ER diagram). */
+export function useDuckLakeSchema(instanceId: string, enabled = true) {
+  return useQuery({
+    // Not under `tables`: a table named "schema" would share the key.
+    queryKey: [...duckLakeKeys.instance(instanceId), 'erSchema'] as const,
+    queryFn: () => DuckLakeService.extractSchema(instanceId),
+    enabled: !!instanceId && enabled,
+    // Fresh on every open, so table changes always show.
+    staleTime: 0,
+    retry: 1,
+  });
+}
+
 export function useDuckLakeViews(instanceId: string, enabled = true) {
   return useQuery({
     queryKey: duckLakeKeys.views(instanceId),

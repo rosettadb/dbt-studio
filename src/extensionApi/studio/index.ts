@@ -29,6 +29,7 @@ export * from './customTablePagination';
 export * from './duckLakeCompletions';
 export * from './ducklakeShared';
 export * from './editor';
+export * from './erDiagram';
 export * from './gitService';
 export * from './helpers';
 export * from './helpersUtils';
