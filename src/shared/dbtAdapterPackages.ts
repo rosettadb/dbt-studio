@@ -38,7 +38,7 @@ export const DBT_ADAPTER_PACKAGE_DESCRIPTIONS: Record<
   'dbt-redshift': 'Adapter for Amazon Redshift',
   'dbt-databricks': 'Adapter for Databricks',
   'dbt-duckdb': 'Adapter for DuckDB - embedded analytics database',
-  'dbt-kinetica': 'Adapter for Kinetica (installed from GitHub, dbt-core 1.8+)',
+  'dbt-kinetica': 'Adapter for Kinetica (dbt-core 1.8+, Python 3.10+)',
 };
 
 export type PackageInstallSource = {
@@ -49,21 +49,14 @@ export type PackageInstallSource = {
 };
 
 /**
- * Packages that pip cannot resolve from PyPI. The requirement is a source
- * archive pinned to a reviewed commit SHA (never a mutable branch) so the
- * installed code cannot change under us. To pick up upstream changes, review
- * the new commit and bump the SHA here; `docs/adapters/kinetica.md` shows the
- * same command.
+ * Packages that pip cannot resolve from PyPI. The requirement should be a
+ * source archive pinned to a reviewed commit SHA (never a mutable branch) so
+ * the installed code cannot change under us. Empty while every adapter is
+ * published on PyPI.
  */
 export const DBT_PACKAGE_INSTALL_SOURCES: Partial<
   Record<DbtAdapterPackage, PackageInstallSource>
-> = {
-  'dbt-kinetica': {
-    homepage: 'https://github.com/rosettadb/kinetica-dbt-adapter',
-    requirement:
-      'dbt-kinetica @ https://github.com/rosettadb/kinetica-dbt-adapter/archive/92f4866dad614d24aa1f771585d249ab30a4ac6a.zip',
-  },
-};
+> = {};
 
 export const isSourceInstalledPackage = (packageName: string): boolean =>
   packageName in DBT_PACKAGE_INSTALL_SOURCES;
