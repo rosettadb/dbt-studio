@@ -136,9 +136,10 @@ export function extractSQLiteSchema(config: SQLiteConnection): Table[] {
       )
       .all() as { name: string; type: 'table' | 'view' }[];
 
-    return objects.map((object) => {
+    const objectsWithColumns = objects.map((object) => {
+      const quotedName = quoteSQLiteIdentifier(object.name);
       const columns = database!
-        .prepare(`PRAGMA table_xinfo(${quoteSQLiteIdentifier(object.name)})`)
+        .prepare(`PRAGMA table_xinfo(${quotedName})`)
         .all() as {
         cid: number;
         name: string;
@@ -146,27 +147,83 @@ export function extractSQLiteSchema(config: SQLiteConnection): Table[] {
         notnull: number;
         pk: number;
       }[];
-
-      return {
-        name: object.name,
-        type: object.type.toUpperCase(),
-        schema: 'main',
-        columns: columns.map((column) => ({
-          name: column.name,
-          typeName: column.type || 'UNKNOWN',
-          ordinalPosition: column.cid + 1,
-          primaryKeySequenceId: column.pk,
-          columnDisplaySize: 0,
-          scale: 0,
-          precision: 0,
-          columnProperties: [],
-          autoincrement: false,
-          primaryKey: column.pk > 0,
-          nullable: column.notnull === 0,
-          foreignKeys: [],
-        })),
-      };
+      const foreignKeyRows =
+        object.type === 'table'
+          ? (database!
+              .prepare(`PRAGMA foreign_key_list(${quotedName})`)
+              .all() as {
+              id: number;
+              table: string;
+              from: string;
+              to: string | null;
+              on_delete: string;
+            }[])
+          : [];
+      return { object, columns, foreignKeyRows };
     });
+
+    // A key names its tables and columns as typed (`REFERENCES Customers(ID)`)
+    // and SQLite ignores case, so they are matched to the real names here.
+    const objectByLowerName = new Map(
+      objectsWithColumns.map((entry) => [
+        entry.object.name.toLowerCase(),
+        entry,
+      ]),
+    );
+    const realColumnName = (
+      columns: { name: string }[] | undefined,
+      name: string,
+    ) =>
+      columns?.find(
+        (column) => column.name.toLowerCase() === name.toLowerCase(),
+      )?.name ?? name;
+    // `REFERENCES customers` (no column) points at the target's primary key,
+    // which only a single-column key can name.
+    const referencedColumnName = (table: string, to: string | null) => {
+      const target = objectByLowerName.get(table.toLowerCase());
+      if (to !== null) return realColumnName(target?.columns, to);
+      const primaryKeys = target?.columns.filter((column) => column.pk > 0);
+      return primaryKeys?.length === 1 ? primaryKeys[0].name : null;
+    };
+
+    return objectsWithColumns.map(({ object, columns, foreignKeyRows }) => ({
+      name: object.name,
+      type: object.type.toUpperCase(),
+      schema: 'main',
+      columns: columns.map((column) => ({
+        name: column.name,
+        typeName: column.type || 'UNKNOWN',
+        ordinalPosition: column.cid + 1,
+        primaryKeySequenceId: column.pk,
+        columnDisplaySize: 0,
+        scale: 0,
+        precision: 0,
+        columnProperties: [],
+        autoincrement: false,
+        primaryKey: column.pk > 0,
+        nullable: column.notnull === 0,
+        foreignKeys: foreignKeyRows
+          .filter((fk) => realColumnName(columns, fk.from) === column.name)
+          .flatMap((fk) => {
+            const primaryColumnName = referencedColumnName(fk.table, fk.to);
+            if (!primaryColumnName) return [];
+            return [
+              {
+                name: `fk_${object.name}_${fk.id}`,
+                schema: 'main',
+                tableName: object.name,
+                columnName: column.name,
+                deleteRule: fk.on_delete,
+                primaryTableSchema: 'main',
+                primaryTableName:
+                  objectByLowerName.get(fk.table.toLowerCase())?.object.name ??
+                  fk.table,
+                primaryColumnName,
+              },
+            ];
+          }),
+      })),
+    }));
   } finally {
     database?.close();
   }

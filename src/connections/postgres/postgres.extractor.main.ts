@@ -1,6 +1,6 @@
 /* eslint-disable no-restricted-syntax, no-await-in-loop, consistent-return */
 import { Client } from 'pg';
-import { Column, Table } from '../../types/backend';
+import { Column, ForeignKey, Table } from '../../types/backend';
 
 export default class PGSchemaExtractor {
   private client: Client;
@@ -132,8 +132,68 @@ export default class PGSchemaExtractor {
     });
   }
 
+  /**
+   * Every foreign key in the database in one query, keyed by
+   * `schema\0table\0column`. A key over several columns gives one entry per
+   * column pair. Empty when the query fails, so the schema still loads.
+   */
+  private async getForeignKeys(): Promise<Map<string, ForeignKey[]>> {
+    const byColumn = new Map<string, ForeignKey[]>();
+    try {
+      const res = await this.client.query(`
+        SELECT
+          con.conname AS name,
+          ns.nspname AS schema,
+          cl.relname AS table_name,
+          att.attname AS column_name,
+          CASE con.confdeltype
+            WHEN 'c' THEN 'CASCADE'
+            WHEN 'n' THEN 'SET NULL'
+            WHEN 'd' THEN 'SET DEFAULT'
+            WHEN 'r' THEN 'RESTRICT'
+            ELSE 'NO ACTION'
+          END AS delete_rule,
+          fns.nspname AS primary_schema,
+          fcl.relname AS primary_table,
+          fatt.attname AS primary_column
+        FROM pg_constraint con
+        JOIN pg_class cl ON cl.oid = con.conrelid
+        JOIN pg_namespace ns ON ns.oid = cl.relnamespace
+        JOIN pg_class fcl ON fcl.oid = con.confrelid
+        JOIN pg_namespace fns ON fns.oid = fcl.relnamespace
+        CROSS JOIN LATERAL unnest(con.conkey, con.confkey) AS k(col, fcol)
+        JOIN pg_attribute att
+          ON att.attrelid = con.conrelid AND att.attnum = k.col
+        JOIN pg_attribute fatt
+          ON fatt.attrelid = con.confrelid AND fatt.attnum = k.fcol
+        WHERE con.contype = 'f'
+          AND ns.nspname NOT IN ('pg_catalog', 'information_schema');
+      `);
+      for (const row of res.rows) {
+        const key = `${row.schema}\0${row.table_name}\0${row.column_name}`;
+        const list = byColumn.get(key) ?? [];
+        list.push({
+          name: row.name,
+          schema: row.schema,
+          tableName: row.table_name,
+          columnName: row.column_name,
+          deleteRule: row.delete_rule,
+          primaryTableSchema: row.primary_schema,
+          primaryTableName: row.primary_table,
+          primaryColumnName: row.primary_column,
+        });
+        byColumn.set(key, list);
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.warn('Postgres: could not read foreign keys', error);
+    }
+    return byColumn;
+  }
+
   async extractSchema(): Promise<{ tables: Table[] }> {
     const schemas = await this.getSchemas();
+    const foreignKeys = await this.getForeignKeys();
     const allTables: Table[] = [];
 
     for (const schema of schemas) {
@@ -144,7 +204,11 @@ export default class PGSchemaExtractor {
           name: table,
           type: 'TABLE',
           schema,
-          columns,
+          columns: columns.map((column) => ({
+            ...column,
+            foreignKeys:
+              foreignKeys.get(`${schema}\0${table}\0${column.name}`) ?? [],
+          })),
         });
       }
 
