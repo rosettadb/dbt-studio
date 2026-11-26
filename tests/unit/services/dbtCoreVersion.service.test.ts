@@ -278,7 +278,7 @@ describe('DbtCoreVersionService', () => {
   });
 
   it('lists PyPI versions and installs a pinned version for dbt-kinetica', async () => {
-    axiosGetMock.mockResolvedValue({
+    axiosGetMock.mockResolvedValueOnce({
       data: { releases: { '1.0.1': [{}] } },
     } as any);
 

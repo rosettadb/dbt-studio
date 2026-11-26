@@ -16,6 +16,8 @@ pip install dbt-kinetica
 ```
 
 This pulls `dbt-core>=1.8,<2`, `dbt-adapters`, `dbt-common` and `gpudb>=7.2,<8`.
+It needs Python 3.10 or newer; on the Studio's Python 3.9 option pip finds no
+matching release.
 The Settings screen lists its PyPI versions and offers "Install latest" or a
 specific version. The adapter requires dbt Core 1.x; under the dbt Core v2
 preview it is reported as unsupported and execution is blocked, like Postgres.

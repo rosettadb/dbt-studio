@@ -38,7 +38,7 @@ export const DBT_ADAPTER_PACKAGE_DESCRIPTIONS: Record<
   'dbt-redshift': 'Adapter for Amazon Redshift',
   'dbt-databricks': 'Adapter for Databricks',
   'dbt-duckdb': 'Adapter for DuckDB - embedded analytics database',
-  'dbt-kinetica': 'Adapter for Kinetica (dbt-core 1.8+)',
+  'dbt-kinetica': 'Adapter for Kinetica (dbt-core 1.8+, Python 3.10+)',
 };
 
 export type PackageInstallSource = {
