@@ -13,9 +13,14 @@ import {
   Typography,
   ListSubheader,
 } from '@mui/material';
+import { Storage as DatabaseIcon } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { Project, ConnectionModel } from '../../../../types/backend';
 import { projectTypeOf } from '../../../../shared/projectTypes';
+import {
+  connectionIcon,
+  connectionLabel,
+} from '../../../../connections/registry.renderer';
 import { useDuckLakeInstances } from '../../../controllers';
 import { duckLakeInstanceConnectionId } from '../../../../shared/duckLakeInstanceIds';
 
@@ -27,6 +32,49 @@ interface AddConnectionModalProps {
   onSuccess?: () => void;
   onUpdateProject: (project: Project) => void;
 }
+
+interface ConnectionOption {
+  id: string;
+  name: string;
+  type: string;
+  icon?: string;
+}
+
+const ConnectionOptionContent: React.FC<{ option: ConnectionOption }> = ({
+  option,
+}) => {
+  const typeLabel = connectionLabel(option.type) ?? option.type;
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
+      {option.icon ? (
+        <Box
+          component="img"
+          src={option.icon}
+          alt={typeLabel}
+          sx={{
+            width: 20,
+            height: 20,
+            objectFit: 'contain',
+            flexShrink: 0,
+            mr: 1,
+          }}
+        />
+      ) : (
+        <DatabaseIcon sx={{ fontSize: 20, mr: 1, color: 'text.secondary' }} />
+      )}
+      <Typography variant="body2" noWrap>
+        {option.name}
+      </Typography>
+      <Typography
+        variant="caption"
+        sx={{ ml: 1, color: 'text.secondary', flexShrink: 0 }}
+      >
+        ({typeLabel})
+      </Typography>
+    </Box>
+  );
+};
 
 export const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
   isOpen,
@@ -67,6 +115,27 @@ export const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
     onClose();
   };
 
+  const savedOptions: ConnectionOption[] = connections
+    .filter((connection) =>
+      projectTypeOf(project).acceptsConnection(connection.connection.type),
+    )
+    .map((connection) => ({
+      id: connection.id,
+      name: connection.connection.name,
+      type: connection.connection.type,
+      icon: connectionIcon(connection.connection.type),
+    }));
+  const instanceOptions: ConnectionOption[] = offersInstances
+    ? duckLakeInstances.map((instance) => ({
+        id: duckLakeInstanceConnectionId(instance.id),
+        name: instance.name,
+        type: 'ducklake',
+        icon: connectionIcon('ducklake'),
+      }))
+    : [];
+  const findOption = (id: unknown) =>
+    [...savedOptions, ...instanceOptions].find((option) => option.id === id);
+
   return (
     <Dialog open={isOpen} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle>Add Connection to Project</DialogTitle>
@@ -85,52 +154,31 @@ export const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
             value={selectedConnectionId}
             label="Connection"
             onChange={(e) => setSelectedConnectionId(e.target.value)}
+            sx={{
+              '& .MuiSelect-select': { display: 'flex', alignItems: 'center' },
+            }}
+            renderValue={(value) => {
+              const option = findOption(value);
+              return option ? <ConnectionOptionContent option={option} /> : '';
+            }}
           >
-            {connections
-              .filter((connection) =>
-                projectTypeOf(project).acceptsConnection(
-                  connection.connection.type,
-                ),
-              )
-              .map((connection) => (
-                <MenuItem key={connection.id} value={connection.id}>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <Typography variant="body2">
-                      {connection.connection.name}
-                    </Typography>
-                    <Typography
-                      variant="caption"
-                      sx={{ ml: 1, color: 'text.secondary' }}
-                    >
-                      ({connection.connection.type})
-                    </Typography>
-                  </Box>
-                </MenuItem>
-              ))}
+            {savedOptions.map((option) => (
+              <MenuItem key={option.id} value={option.id}>
+                <ConnectionOptionContent option={option} />
+              </MenuItem>
+            ))}
             {/* Project types linked to a DuckLake instance itself (Analytics)
                 also list the instances, as the SQL Editor does (plan 95) */}
-            {offersInstances && duckLakeInstances.length > 0 && (
+            {instanceOptions.length > 0 && (
               <ListSubheader sx={{ lineHeight: '32px' }}>
                 DuckLake Instances
               </ListSubheader>
             )}
-            {offersInstances &&
-              duckLakeInstances.map((instance) => (
-                <MenuItem
-                  key={instance.id}
-                  value={duckLakeInstanceConnectionId(instance.id)}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <Typography variant="body2">{instance.name}</Typography>
-                    <Typography
-                      variant="caption"
-                      sx={{ ml: 1, color: 'text.secondary' }}
-                    >
-                      (DuckLake)
-                    </Typography>
-                  </Box>
-                </MenuItem>
-              ))}
+            {instanceOptions.map((option) => (
+              <MenuItem key={option.id} value={option.id}>
+                <ConnectionOptionContent option={option} />
+              </MenuItem>
+            ))}
           </Select>
         </FormControl>
       </DialogContent>
