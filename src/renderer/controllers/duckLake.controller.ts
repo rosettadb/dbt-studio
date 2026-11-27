@@ -440,12 +440,12 @@ export function useDuckLakeTables(instanceId: string) {
 }
 
 /** Every schema with its tables and columns, in one call (ER diagram). */
-export function useDuckLakeSchema(instanceId: string, enabled = true) {
+export function useDuckLakeSchema(instanceId: string) {
   return useQuery({
     // Not under `tables`: a table named "schema" would share the key.
     queryKey: [...duckLakeKeys.instance(instanceId), 'erSchema'] as const,
     queryFn: () => DuckLakeService.extractSchema(instanceId),
-    enabled: !!instanceId && enabled,
+    enabled: !!instanceId,
     // Fresh on every open, so table changes always show.
     staleTime: 0,
     retry: 1,

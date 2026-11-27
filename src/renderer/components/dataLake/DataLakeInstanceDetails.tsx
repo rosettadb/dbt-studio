@@ -48,10 +48,12 @@ import {
   Cable,
   History,
   Timeline,
+  AccountTree,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import moment from 'moment';
 import { DataLakeTablesView } from './DataLakeTablesView';
+import { DataLakeInstanceErDiagram } from './DataLakeInstanceErDiagram';
 import {
   DataLakePageHeader,
   DataLakeTableContainer,
@@ -849,6 +851,7 @@ export const DataLakeInstanceDetails: React.FC<
           <Tab icon={<Info />} label="Overview" iconPosition="start" />
           <Tab icon={<History />} label="History" iconPosition="start" />
           <Tab icon={<Timeline />} label="Activity" iconPosition="start" />
+          <Tab icon={<AccountTree />} label="ER Diagram" iconPosition="start" />
         </Tabs>
         <Box>
           {currentTab === 0 && <DataLakeTablesView instanceId={instance.id} />}
@@ -978,6 +981,9 @@ export const DataLakeInstanceDetails: React.FC<
             <Typography variant="body2" color="text.secondary">
               Activity coming soon...
             </Typography>
+          )}
+          {currentTab === 4 && (
+            <DataLakeInstanceErDiagram instanceId={instance.id} />
           )}
         </Box>
       </Box>

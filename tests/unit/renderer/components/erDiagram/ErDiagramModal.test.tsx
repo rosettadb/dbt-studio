@@ -2,7 +2,10 @@ import React from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { ErDiagramModal } from '../../../../../src/renderer/components/erDiagram/ErDiagramModal';
-import type { ErGraph } from '../../../../../src/renderer/components/erDiagram/buildErGraph';
+import type {
+  ErGraph,
+  ErTableInput,
+} from '../../../../../src/renderer/components/erDiagram/buildErGraph';
 
 // React Flow can't lay out in jsdom; the stub shows what it was given.
 jest.mock('../../../../../src/renderer/components/erDiagram/ErDiagram', () => ({
@@ -73,6 +76,61 @@ describe('ErDiagramModal', () => {
     fireEvent.click(screen.getByRole('option', { name: 'audit' }));
 
     expect(screen.getByTestId('diagram')).toHaveTextContent('events');
+  });
+
+  it('shows only the kinds of line the diagram has in the legend', () => {
+    const withRealKey = [
+      {
+        name: 'customers',
+        schema: 'shop',
+        columns: [{ name: 'id', typeName: 'INT' }],
+      },
+      {
+        name: 'orders',
+        schema: 'shop',
+        columns: [
+          {
+            name: 'buyer',
+            typeName: 'INT',
+            foreignKeys: [
+              {
+                primaryTableSchema: 'shop',
+                primaryTableName: 'customers',
+                primaryColumnName: 'id',
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    // customer_id has no key, so it is matched to customers by name.
+    const payments = {
+      name: 'payments',
+      schema: 'shop',
+      columns: [{ name: 'customer_id', typeName: 'INT' }],
+    };
+    const legendFor = (schemaTables: ErTableInput[], schema: string) => {
+      const { unmount } = wrap(
+        <ErDiagramModal
+          isOpen
+          onClose={() => {}}
+          tables={schemaTables}
+          initialSchema={schema}
+        />,
+      );
+      const legend = screen.queryByTestId('er-diagram-legend');
+      const text = legend ? legend.textContent : null;
+      unmount();
+      return text;
+    };
+
+    expect(legendFor(withRealKey, 'shop')).toBe('Foreign key');
+    expect(legendFor(tables, 'sales')).toBe('Matched by column name');
+    expect(legendFor([...withRealKey, payments], 'shop')).toBe(
+      'Foreign keyMatched by column name',
+    );
+    // No lines at all, so no legend.
+    expect(legendFor(tables, 'audit')).toBeNull();
   });
 
   it('starts on the first schema when none is given', () => {

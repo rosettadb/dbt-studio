@@ -249,17 +249,16 @@ test.describe('DataLake', () => {
     ).toBeVisible();
   });
 
-  test('should show an ER diagram of the instance tables', async ({
+  test('should show an ER diagram of the instance tables in its tab', async ({
     electronApp,
     userData,
   }) => {
     const window = await openInstanceWithLinkedTables(electronApp, userData);
 
-    await window.getByTestId('data-lake-er-diagram-button').click();
+    await window.getByRole('tab', { name: 'ER Diagram' }).click();
 
-    const diagram = window.getByTestId('er-diagram-modal');
+    const diagram = window.getByTestId('er-diagram-panel');
     await expect(diagram).toBeVisible();
-    await expect(diagram).toContainText(SEEDED_INSTANCE_NAME);
     await Promise.all(
       ['e2e_customers', 'e2e_orders'].map((table) =>
         expect(
@@ -270,9 +269,6 @@ test.describe('DataLake', () => {
     await expect(diagram).toContainText(
       '2 tables · 1 relationships (1 matched by name)',
     );
-
-    await window.keyboard.press('Escape');
-    await expect(diagram).toBeHidden();
   });
 
   test("should show a table's linked tables in its ER Diagram tab", async ({

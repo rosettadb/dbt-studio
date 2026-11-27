@@ -22,7 +22,6 @@ import {
   TablePagination,
 } from '@mui/material';
 import {
-  AccountTree,
   Add,
   Refresh,
   Delete,
@@ -46,10 +45,8 @@ import {
   useDeleteDuckLakeTable,
   useRenameDuckLakeTable,
   useExecuteDuckLakeQuery,
-  useDuckLakeSchema,
 } from '../../controllers/duckLake.controller';
 import { DuckLakeViewInfo } from '../../../types/duckLake';
-import { ErDiagramModal, duckLakeErTables } from '../erDiagram';
 import {
   DataLakeRowActions,
   DataLakeTableContainer,
@@ -364,14 +361,6 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
   );
   const [newTableName, setNewTableName] = useState('');
 
-  // ER diagram: the schema is loaded only once the diagram is opened.
-  const [erDiagramOpen, setErDiagramOpen] = useState(false);
-  const erSchemaQuery = useDuckLakeSchema(instanceId, erDiagramOpen);
-  const erTables = useMemo(
-    () => duckLakeErTables(erSchemaQuery.data),
-    [erSchemaQuery.data],
-  );
-
   // Pagination state
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
@@ -591,29 +580,16 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
           }}
         />
 
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<AccountTree />}
-            onClick={() => setErDiagramOpen(true)}
-            sx={{ height: '32px' }}
-            data-testid="data-lake-er-diagram-button"
-          >
-            ER Diagram
-          </Button>
-
-          {/* Import button */}
-          <Button
-            variant="contained"
-            size="small"
-            startIcon={<Add />}
-            onClick={() => setImportWizardOpen(true)}
-            sx={{ height: '32px' }}
-          >
-            Import Data
-          </Button>
-        </Box>
+        {/* Import button */}
+        <Button
+          variant="contained"
+          size="small"
+          startIcon={<Add />}
+          onClick={() => setImportWizardOpen(true)}
+          sx={{ height: '32px' }}
+        >
+          Import Data
+        </Button>
       </Box>
 
       {/* Refetching indicator */}
@@ -956,20 +932,6 @@ export const DataLakeTablesView: React.FC<DataLakeTablesViewProps> = ({
           </Button>
         </DialogActions>
       </Dialog>
-
-      <ErDiagramModal
-        isOpen={erDiagramOpen}
-        onClose={() => setErDiagramOpen(false)}
-        sourceName={instanceQuery.data?.name}
-        tables={erTables}
-        isLoading={erSchemaQuery.isLoading}
-        error={
-          erSchemaQuery.isError
-            ? (erSchemaQuery.error as Error | undefined)?.message ||
-              'Failed to load the schema'
-            : null
-        }
-      />
     </Box>
   );
 };
