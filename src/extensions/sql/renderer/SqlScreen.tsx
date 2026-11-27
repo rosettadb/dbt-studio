@@ -862,6 +862,13 @@ const Sql = () => {
 
   // Schema whose ER diagram is open, or null when it is closed.
   const [erDiagramSchema, setErDiagramSchema] = useState<string | null>(null);
+  // Every schema for the diagram's picker, not the tree's filtered list.
+  let erDiagramSchemaNames: string[] | undefined;
+  if (isDuckLakeConnection) {
+    erDiagramSchemaNames = duckLakeSchemaNames;
+  } else if (activeConnectionId) {
+    erDiagramSchemaNames = tabSchemaNames[activeConnectionId];
+  }
 
   const { onContextMenu: handleSchemaContextMenu, menu: schemaContextMenu } =
     useSchemaTreeContextMenu({
@@ -1191,6 +1198,7 @@ const Sql = () => {
             onClose={() => setErDiagramSchema(null)}
             sourceName={activeConnectionName}
             tables={isDuckLakeConnection ? duckLakeTables : activeSchema}
+            schemaNames={erDiagramSchemaNames}
             initialSchema={erDiagramSchema ?? undefined}
           />
         </Box>

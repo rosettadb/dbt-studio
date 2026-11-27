@@ -133,6 +133,30 @@ describe('ErDiagramModal', () => {
     expect(legendFor(tables, 'audit')).toBeNull();
   });
 
+  it('lists schemas without tables too, and says they are empty', () => {
+    wrap(
+      <ErDiagramModal
+        isOpen
+        onClose={() => {}}
+        tables={tables}
+        schemaNames={['sales', 'audit', 'staging']}
+        initialSchema="sales"
+      />,
+    );
+
+    fireEvent.mouseDown(
+      within(screen.getByTestId('er-diagram-schema-select')).getByRole(
+        'combobox',
+      ),
+    );
+    expect(
+      screen.getAllByRole('option').map((option) => option.textContent),
+    ).toEqual(['audit', 'sales', 'staging']);
+
+    fireEvent.click(screen.getByRole('option', { name: 'staging' }));
+    expect(screen.getByText('No tables in this schema.')).toBeInTheDocument();
+  });
+
   it('starts on the first schema when none is given', () => {
     wrap(<ErDiagramModal isOpen onClose={() => {}} tables={tables} />);
 

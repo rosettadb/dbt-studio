@@ -4,7 +4,10 @@ import {
   type ErColumnInput,
   type ErTableInput,
 } from '../../../../../src/renderer/components/erDiagram/buildErGraph';
-import { duckLakeErTables } from '../../../../../src/renderer/components/erDiagram/duckLakeErTables';
+import {
+  duckLakeErTables,
+  duckLakeSchemaNames,
+} from '../../../../../src/renderer/components/erDiagram/duckLakeErTables';
 
 const col = (name: string, extra: Partial<ErColumnInput> = {}) => ({
   name,
@@ -281,5 +284,19 @@ describe('duckLakeErTables', () => {
 
   it('gives no tables before the schema has loaded', () => {
     expect(duckLakeErTables(undefined)).toEqual([]);
+  });
+
+  it('lists every schema name, also the empty ones', () => {
+    expect(
+      duckLakeSchemaNames({
+        schemas: [
+          { name: 'main', tables: [] },
+          { name: 'staging', tables: [] },
+        ],
+        functions: [],
+        systemTables: [],
+      }),
+    ).toEqual(['main', 'staging']);
+    expect(duckLakeSchemaNames(undefined)).toEqual([]);
   });
 });

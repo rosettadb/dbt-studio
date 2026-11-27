@@ -14,6 +14,8 @@ import { buildErGraph, type ErTableInput } from './buildErGraph';
 
 type Props = {
   tables: ErTableInput[];
+  /** Every schema of the connection, also the ones without tables. */
+  schemaNames?: string[];
   /** Schema shown first; defaults to the first schema by name. */
   initialSchema?: string;
   isLoading?: boolean;
@@ -49,19 +51,22 @@ const LegendLine: React.FC<{ dashed?: boolean; label: string }> = ({
  */
 export const ErDiagramPanel: React.FC<Props> = ({
   tables,
+  schemaNames: allSchemaNames,
   initialSchema,
   isLoading,
   error,
   headerStart,
   headerSx,
 }) => {
-  // The schema it was opened for is listed even without tables, so an empty
-  // schema shows "No tables" instead of another schema's diagram.
+  // Empty schemas are listed too, like in the tree, and show "No tables".
   const schemaNames = useMemo(() => {
-    const names = new Set(tables.map((t) => t.schema));
+    const names = new Set([
+      ...(allSchemaNames ?? []),
+      ...tables.map((t) => t.schema),
+    ]);
     if (initialSchema) names.add(initialSchema);
     return Array.from(names).sort();
-  }, [tables, initialSchema]);
+  }, [allSchemaNames, tables, initialSchema]);
   const [schema, setSchema] = useState(initialSchema ?? '');
 
   const shownSchema = schemaNames.includes(schema) ? schema : schemaNames[0];

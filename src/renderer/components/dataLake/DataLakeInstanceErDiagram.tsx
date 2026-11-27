@@ -1,7 +1,11 @@
 import React, { useMemo } from 'react';
 import { Box } from '@mui/material';
 import { useDuckLakeSchema } from '../../controllers/duckLake.controller';
-import { ErDiagramPanel, duckLakeErTables } from '../erDiagram';
+import {
+  ErDiagramPanel,
+  duckLakeErTables,
+  duckLakeSchemaNames,
+} from '../erDiagram';
 
 /**
  * The instance's ER Diagram tab: every schema, one at a time. The schema is
@@ -13,6 +17,10 @@ export const DataLakeInstanceErDiagram: React.FC<{ instanceId: string }> = ({
   const schemaQuery = useDuckLakeSchema(instanceId);
   const tables = useMemo(
     () => duckLakeErTables(schemaQuery.data),
+    [schemaQuery.data],
+  );
+  const schemaNames = useMemo(
+    () => duckLakeSchemaNames(schemaQuery.data),
     [schemaQuery.data],
   );
 
@@ -29,6 +37,7 @@ export const DataLakeInstanceErDiagram: React.FC<{ instanceId: string }> = ({
     >
       <ErDiagramPanel
         tables={tables}
+        schemaNames={schemaNames}
         isLoading={schemaQuery.isLoading}
         error={
           schemaQuery.isError

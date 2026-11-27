@@ -10,6 +10,8 @@ type Props = {
   /** Shown under the title, e.g. the connection or instance name. */
   sourceName?: string;
   tables: ErTableInput[];
+  /** Every schema of the connection, also the ones without tables. */
+  schemaNames?: string[];
   /** Schema shown first; defaults to the first schema by name. */
   initialSchema?: string;
   isLoading?: boolean;
@@ -25,6 +27,7 @@ export const ErDiagramModal: React.FC<Props> = ({
   onClose,
   sourceName,
   tables,
+  schemaNames,
   initialSchema,
   isLoading,
   error,
@@ -40,6 +43,7 @@ export const ErDiagramModal: React.FC<Props> = ({
     <Box sx={{ height: '100%' }} data-testid="er-diagram-modal">
       <ErDiagramPanel
         tables={tables}
+        schemaNames={schemaNames}
         initialSchema={initialSchema}
         isLoading={isLoading}
         error={error}
