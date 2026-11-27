@@ -156,12 +156,14 @@ export const stageInstall = (sourcePath: string): StagedExtension => {
   fs.ensureDirSync(stagingDir);
 
   try {
-    if (fs.statSync(sourcePath).isDirectory()) {
-      fs.copySync(sourcePath, stagingDir);
-    } else if (sourcePath.toLowerCase().endsWith('.zip')) {
-      extractZip(sourcePath, stagingDir);
-    } else {
+    const isDirectory = fs.statSync(sourcePath).isDirectory();
+    if (!isDirectory && !sourcePath.toLowerCase().endsWith('.zip')) {
       throw new Error('An extension is a folder or a .zip file');
+    }
+    if (isDirectory) {
+      fs.copySync(sourcePath, stagingDir);
+    } else {
+      extractZip(sourcePath, stagingDir);
     }
 
     const packageRoot = findPackageRoot(stagingDir);
