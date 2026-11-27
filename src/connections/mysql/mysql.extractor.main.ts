@@ -1,6 +1,6 @@
 /* eslint-disable no-restricted-syntax, no-await-in-loop, consistent-return */
 import mysql from 'mysql2/promise';
-import { Column, Table } from '../../types/backend';
+import { Column, ForeignKey, Table } from '../../types/backend';
 
 export default class MySqlExtractor {
   private connection: mysql.Connection | null = null;
@@ -113,8 +113,57 @@ export default class MySqlExtractor {
     });
   }
 
+  /**
+   * Every foreign key in the server's user schemas in one query, keyed by
+   * `schema\0table\0column`. Empty when the query fails, so the schema still
+   * loads.
+   */
+  private async getForeignKeys(): Promise<Map<string, ForeignKey[]>> {
+    const byColumn = new Map<string, ForeignKey[]>();
+    try {
+      const [rows] = await this.connection!.query(
+        `SELECT
+           k.constraint_name AS name,
+           k.table_schema AS table_schema,
+           k.table_name AS table_name,
+           k.column_name AS column_name,
+           r.delete_rule AS delete_rule,
+           k.referenced_table_schema AS primary_schema,
+           k.referenced_table_name AS primary_table,
+           k.referenced_column_name AS primary_column
+         FROM information_schema.key_column_usage k
+         JOIN information_schema.referential_constraints r
+           ON r.constraint_schema = k.constraint_schema
+          AND r.constraint_name = k.constraint_name
+          AND r.table_name = k.table_name
+         WHERE k.referenced_table_name IS NOT NULL
+           AND k.table_schema NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')`,
+      );
+      for (const row of rows as any[]) {
+        const key = `${row.table_schema}\0${row.table_name}\0${row.column_name}`;
+        const list = byColumn.get(key) ?? [];
+        list.push({
+          name: row.name,
+          schema: row.table_schema,
+          tableName: row.table_name,
+          columnName: row.column_name,
+          deleteRule: row.delete_rule,
+          primaryTableSchema: row.primary_schema,
+          primaryTableName: row.primary_table,
+          primaryColumnName: row.primary_column,
+        });
+        byColumn.set(key, list);
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.warn('MySQL: could not read foreign keys', error);
+    }
+    return byColumn;
+  }
+
   async extractSchema(): Promise<{ tables: Table[] }> {
     const schemas = await this.getSchemas();
+    const foreignKeys = await this.getForeignKeys();
     const allTables: Table[] = [];
 
     for (const schema of schemas) {
@@ -125,7 +174,11 @@ export default class MySqlExtractor {
           name: table,
           type: 'TABLE',
           schema,
-          columns,
+          columns: columns.map((column) => ({
+            ...column,
+            foreignKeys:
+              foreignKeys.get(`${schema}\0${table}\0${column.name}`) ?? [],
+          })),
         });
       }
 

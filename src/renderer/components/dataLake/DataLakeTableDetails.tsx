@@ -16,6 +16,7 @@ import {
   Chip,
 } from '@mui/material';
 import {
+  AccountTree,
   ArrowBack,
   TableChart,
   Info,
@@ -45,6 +46,7 @@ import { TableDataFilesTab } from './tableDetails/TableDataFilesTab';
 import { TablePartitionsTab } from './tableDetails/TablePartitionsTab';
 import { TableHistoryTab } from './tableDetails/TableHistoryTab';
 import { TableTagsTab } from './tableDetails/TableTagsTab';
+import { TableErDiagramTab } from './tableDetails/TableErDiagramTab';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -181,6 +183,7 @@ export const DataLakeTableDetails: React.FC = () => {
         <Tab icon={<Splitscreen />} label="Partitions" iconPosition="start" />
         <Tab icon={<History />} label="History" iconPosition="start" />
         <Tab icon={<Label />} label="Tags" iconPosition="start" />
+        <Tab icon={<AccountTree />} label="ER Diagram" iconPosition="start" />
       </Tabs>
 
       {/* Tab Panels */}
@@ -221,6 +224,14 @@ export const DataLakeTableDetails: React.FC = () => {
 
       <TabPanel value={currentTab} index={7}>
         <TableTagsTab tableDetails={tableDetails} />
+      </TabPanel>
+
+      <TabPanel value={currentTab} index={8}>
+        <TableErDiagramTab
+          instanceId={instanceId || ''}
+          schemaName={tableDetails.schemaName}
+          tableName={tableDetails.tableName}
+        />
       </TabPanel>
     </Box>
   );

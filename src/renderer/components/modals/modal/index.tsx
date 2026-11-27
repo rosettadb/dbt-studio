@@ -39,6 +39,11 @@ export const Modal: React.FC<Props> = ({
       fullWidth
       maxWidth={maxWidth || 'sm'}
       fullScreen={fullScreen}
+      // Without the header there is no DialogTitle to name the dialog; the
+      // paper is the element with the dialog role.
+      slotProps={{
+        paper: { 'aria-label': hideHeader ? title : undefined },
+      }}
     >
       {!hideHeader ? (
         <DialogTitle>

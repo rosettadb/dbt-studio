@@ -5,7 +5,8 @@ import {
   testPostgresConnection,
   executePostgresQuery,
 } from '../../../../src/connections/postgres/postgres.client.main';
-import { PostgresConnection } from '../../../../src/types/backend';
+import PGSchemaExtractor from '../../../../src/connections/postgres/postgres.extractor.main';
+import { PostgresConnection, Table } from '../../../../src/types/backend';
 
 // Mock electron to prevent MainDatabaseService crash on import
 jest.mock('electron', () => ({
@@ -140,5 +141,80 @@ describe('PostgreSQL Connector Integration', () => {
     );
     expect(result.success).toBe(false);
     expect(result.error).toBeDefined();
+  });
+
+  it('reads foreign keys, also across schemas and over two columns', async () => {
+    const statements = [
+      'CREATE SCHEMA fk_shop',
+      'CREATE TABLE fk_shop.customers (id SERIAL PRIMARY KEY, name TEXT)',
+      `CREATE TABLE fk_shop.orders (
+         id SERIAL PRIMARY KEY,
+         customer_id INT REFERENCES fk_shop.customers(id) ON DELETE CASCADE,
+         user_id INT REFERENCES public.test_users(id)
+       )`,
+      `CREATE TABLE fk_shop.order_lines (
+         order_id INT REFERENCES fk_shop.orders(id),
+         line_no INT,
+         PRIMARY KEY (order_id, line_no)
+       )`,
+      `CREATE TABLE fk_shop.returns (
+         order_ref INT,
+         line_ref INT,
+         FOREIGN KEY (order_ref, line_ref)
+           REFERENCES fk_shop.order_lines(order_id, line_no)
+       )`,
+    ];
+    // One after the other: later tables reference earlier ones.
+    const errors = await statements.reduce<Promise<(string | undefined)[]>>(
+      async (previous, statement) => {
+        const done = await previous;
+        const result = await executePostgresQuery(config, statement);
+        return [...done, result.error];
+      },
+      Promise.resolve([]),
+    );
+    expect(errors).toEqual(statements.map(() => undefined));
+
+    const extractor = new PGSchemaExtractor({
+      user: config.username,
+      host: config.host,
+      database: config.database,
+      password: config.password,
+      port: config.port,
+    });
+    await extractor.connect();
+    let tables: Table[];
+    try {
+      ({ tables } = await extractor.extractSchema());
+    } finally {
+      await extractor.disconnect();
+    }
+
+    const keysOf = (table: string, column: string) =>
+      tables
+        .find((t) => t.schema === 'fk_shop' && t.name === table)!
+        .columns.find((c) => c.name === column)!
+        .foreignKeys!.map(
+          (fk) =>
+            `${fk.primaryTableSchema}.${fk.primaryTableName}.${fk.primaryColumnName} ${fk.deleteRule}`,
+        );
+
+    expect(keysOf('orders', 'customer_id')).toEqual([
+      'fk_shop.customers.id CASCADE',
+    ]);
+    expect(keysOf('orders', 'user_id')).toEqual([
+      'public.test_users.id NO ACTION',
+    ]);
+    expect(keysOf('orders', 'id')).toEqual([]);
+    expect(keysOf('order_lines', 'order_id')).toEqual([
+      'fk_shop.orders.id NO ACTION',
+    ]);
+    // Each column of a key over two columns points at its own partner.
+    expect(keysOf('returns', 'order_ref')).toEqual([
+      'fk_shop.order_lines.order_id NO ACTION',
+    ]);
+    expect(keysOf('returns', 'line_ref')).toEqual([
+      'fk_shop.order_lines.line_no NO ACTION',
+    ]);
   });
 });

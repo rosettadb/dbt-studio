@@ -77,6 +77,59 @@ const openDataLakeWithInstance = async (
   return { window, instanceId };
 };
 
+// Runs one statement in the instance through the same IPC call as the SQL
+// screen. DuckLake has no keys, so the diagram matches links by name.
+const runInInstance = async (
+  window: Page,
+  instanceId: string,
+  query: string,
+): Promise<void> => {
+  const result = await window.evaluate(
+    ([id, sql]) =>
+      (window as any).electron.ipcRenderer.invoke('ducklake:query:execute', {
+        instanceId: id,
+        query: sql,
+      }),
+    [instanceId, query],
+  );
+  if (!result?.success) {
+    throw new Error(`DuckLake query failed: ${result?.error ?? 'unknown'}`);
+  }
+};
+
+// Seeds two linked tables and opens the instance page.
+const openInstanceWithLinkedTables = async (
+  electronApp: Parameters<typeof openProject>[0],
+  userData: string,
+): Promise<Page> => {
+  const { window, instanceId } = await openDataLakeWithInstance(
+    electronApp,
+    userData,
+  );
+  await runInInstance(
+    window,
+    instanceId,
+    'CREATE TABLE e2e_customers (id INTEGER, name VARCHAR)',
+  );
+  await runInInstance(
+    window,
+    instanceId,
+    // e2e_customer_id → e2e_customers.id
+    'CREATE TABLE e2e_orders (id INTEGER, e2e_customer_id INTEGER)',
+  );
+
+  await window.getByTestId('datalake-instance-select').click();
+  await window
+    .getByRole('menu')
+    .locator('[role="menuitem"], [role="menuitemradio"]')
+    .filter({ hasText: SEEDED_INSTANCE_NAME })
+    .click();
+  await expect
+    .poll(() => window.url())
+    .toContain(`/app/data-lake/duck-lake/instances/${instanceId}`);
+  return window;
+};
+
 test.describe('DataLake', () => {
   test('should show the empty dashboard', async ({ electronApp }) => {
     const window = await openDataLake(electronApp);
@@ -194,5 +247,52 @@ test.describe('DataLake', () => {
     await expect(
       window.getByRole('heading', { name: 'Apache Hudi', exact: true }),
     ).toBeVisible();
+  });
+
+  test('should show an ER diagram of the instance tables in its tab', async ({
+    electronApp,
+    userData,
+  }) => {
+    const window = await openInstanceWithLinkedTables(electronApp, userData);
+
+    await window.getByRole('tab', { name: 'ER Diagram' }).click();
+
+    const diagram = window.getByTestId('er-diagram-panel');
+    await expect(diagram).toBeVisible();
+    await Promise.all(
+      ['e2e_customers', 'e2e_orders'].map((table) =>
+        expect(
+          diagram.locator('.react-flow__node').filter({ hasText: table }),
+        ).toBeVisible(),
+      ),
+    );
+    await expect(diagram).toContainText(
+      '2 tables · 1 relationships (1 matched by name)',
+    );
+  });
+
+  test("should show a table's linked tables in its ER Diagram tab", async ({
+    electronApp,
+    userData,
+  }) => {
+    const window = await openInstanceWithLinkedTables(electronApp, userData);
+
+    await window.getByRole('row').filter({ hasText: 'e2e_orders' }).click();
+    await expect.poll(() => window.url()).toContain('/tables/e2e_orders');
+
+    await window.getByRole('tab', { name: 'ER Diagram' }).click();
+
+    const diagram = window.getByTestId('table-er-diagram');
+    await expect(diagram).toBeVisible();
+    await expect(
+      window.getByText(/^e2e_orders and the 1 table linked to it\./),
+    ).toBeVisible();
+    await Promise.all(
+      ['e2e_customers', 'e2e_orders'].map((table) =>
+        expect(
+          diagram.locator('.react-flow__node').filter({ hasText: table }),
+        ).toBeVisible(),
+      ),
+    );
   });
 });

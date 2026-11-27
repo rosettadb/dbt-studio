@@ -139,4 +139,50 @@ test.describe('SQL Editor - Data tree interactions', () => {
 
     expect(await sqlEditor.getQueryText()).toContain(`main.${TABLE}`);
   });
+
+  test('right-click a schema → Show ER diagram draws its tables and keys', async ({
+    electronApp,
+  }) => {
+    const mainWindow = await findStableWindow(electronApp);
+    const sqlEditor = new SqlEditorPage(mainWindow);
+    const tree = new SchemaTreeComponent(mainWindow);
+
+    // One real foreign key; the sample table has no link.
+    // runQuery doesn't wait for the query, so each CREATE waits until its
+    // table shows in the tree: the second one references the first.
+    const createTable = async (table: string, statement: string) => {
+      await sqlEditor.setQuery(statement);
+      await sqlEditor.runQuery();
+      await tree.expectTableVisible(table);
+      await sqlEditor.clearQuery();
+    };
+    await tree.expandSchema('main');
+    await tree.expectTableVisible(TABLE);
+    await createTable(
+      'e2e_customers',
+      'CREATE TABLE e2e_customers (id INTEGER PRIMARY KEY, name VARCHAR)',
+    );
+    await createTable(
+      'e2e_invoices',
+      'CREATE TABLE e2e_invoices (id INTEGER, customer_id INTEGER REFERENCES e2e_customers(id))',
+    );
+
+    await tree.runSchemaAction('main', 'er-diagram');
+
+    const diagram = mainWindow.getByTestId('er-diagram-modal');
+    await expect(diagram).toBeVisible();
+    await Promise.all(
+      [TABLE, 'e2e_customers', 'e2e_invoices'].map((table) =>
+        expect(
+          diagram.locator('.react-flow__node').filter({ hasText: table }),
+        ).toBeVisible(),
+      ),
+    );
+    // A real key, so nothing is matched by name.
+    await expect(diagram).toContainText('3 tables · 1 relationships');
+    await expect(diagram).not.toContainText('matched by name');
+
+    await mainWindow.keyboard.press('Escape');
+    await expect(diagram).toBeHidden();
+  });
 });

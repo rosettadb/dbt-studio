@@ -461,7 +461,7 @@ export type CliProcessEnvironment = {
   DBT_ALLOW_EXPERIMENTAL_ADAPTERS?: 'true';
 };
 
-type ForeignKey = {
+export type ForeignKey = {
   name: string;
   schema: string;
   tableName: string;

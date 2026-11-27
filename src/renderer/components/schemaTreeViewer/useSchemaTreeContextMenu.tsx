@@ -43,6 +43,8 @@ export type SchemaTreeContextMenuOptions = {
   describeRename?: (node: SchemaTreeNodeRef) => string | undefined;
   /** Refresh the schema tree. */
   onRefresh?: () => void;
+  /** Show the ER diagram of a schema. */
+  onShowErDiagram?: (schema: string) => void;
   /** Number of rows for generated SELECTs and previews. Defaults to 100. */
   previewLimit?: number;
 };
@@ -150,6 +152,7 @@ export const useSchemaTreeContextMenu = (
     onRename,
     describeRename,
     onRefresh,
+    onShowErDiagram,
     previewLimit = 100,
   } = options;
 
@@ -173,6 +176,9 @@ export const useSchemaTreeContextMenu = (
       switch (action) {
         case 'refresh':
           onRefresh?.();
+          return;
+        case 'er-diagram':
+          if (node.schema) onShowErDiagram?.(node.schema);
           return;
         case 'rename':
           setRenameTarget(node);
@@ -214,7 +220,14 @@ export const useSchemaTreeContextMenu = (
         }
       }
     },
-    [connectionType, onInsertText, onPreviewSql, onRefresh, previewLimit],
+    [
+      connectionType,
+      onInsertText,
+      onPreviewSql,
+      onRefresh,
+      onShowErDiagram,
+      previewLimit,
+    ],
   );
 
   const capabilities = React.useMemo(
@@ -223,8 +236,9 @@ export const useSchemaTreeContextMenu = (
       preview: !!onPreviewSql,
       rename: !!onRename,
       refresh: !!onRefresh,
+      erDiagram: !!onShowErDiagram,
     }),
-    [onInsertText, onPreviewSql, onRename, onRefresh],
+    [onInsertText, onPreviewSql, onRename, onRefresh, onShowErDiagram],
   );
 
   const renameCurrentName = renameTarget

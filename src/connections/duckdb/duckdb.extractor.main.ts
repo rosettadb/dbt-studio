@@ -1,8 +1,23 @@
 /* eslint-disable no-restricted-syntax, no-await-in-loop, consistent-return */
 import { DuckDBInstance } from '@duckdb/node-api';
-import { Column, Table } from '../../types/backend';
+import { Column, ForeignKey, Table } from '../../types/backend';
 
 type TableRef = { schema: string; name: string };
+
+/** Primary and foreign keys, keyed by `schema\0table\0column`. */
+type TableKeys = {
+  /** Position of the column in its table's primary key, from 1. */
+  primaryKeyPosition: Map<string, number>;
+  foreignKeys: Map<string, ForeignKey[]>;
+};
+
+// DuckDB treats "ID" and id as the same name (A–Z only), and a key may spell
+// a column or table differently from how it was declared.
+const asciiLower = (value: string) =>
+  value.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
+
+const columnKey = (schema: string, table: string, column: string) =>
+  [schema, table, column].map(asciiLower).join('\0');
 
 // Schema and object names come from the file, so they are escaped before
 // they go into SQL.
@@ -270,12 +285,96 @@ export default class DuckDBSchemaExtractor {
     }
   }
 
+  /**
+   * Every primary and foreign key in the file (or the one schema) in one
+   * query. DuckDB doesn't record a foreign key's target schema; it is the
+   * table's own schema. Empty when the query fails, so the schema still
+   * loads.
+   */
+  private async getKeys(): Promise<TableKeys> {
+    const keys: TableKeys = {
+      primaryKeyPosition: new Map(),
+      foreignKeys: new Map(),
+    };
+    const schemaFilter = this.schema
+      ? ` AND ${sqlAsciiLower('schema_name')} = ${sqlAsciiLower('current_schema()')}`
+      : '';
+    try {
+      // Two unnests in one SELECT pair up the key's columns in order.
+      const rows = await this.executeQuery(`
+        SELECT schema_name, table_name, constraint_type, constraint_name,
+               unnest(constraint_column_names) AS column_name,
+               NULL AS referenced_table,
+               NULL AS referenced_column
+        FROM duckdb_constraints()
+        WHERE database_name = current_database()
+          AND constraint_type = 'PRIMARY KEY'${schemaFilter}
+        UNION ALL
+        SELECT schema_name, table_name, constraint_type, constraint_name,
+               unnest(constraint_column_names),
+               referenced_table,
+               unnest(referenced_column_names)
+        FROM duckdb_constraints()
+        WHERE database_name = current_database()
+          AND constraint_type = 'FOREIGN KEY'${schemaFilter}
+      `);
+      // Primary key columns counted per table, for their positions.
+      const primaryKeyColumnsSoFar = new Map<string, number>();
+      for (const row of rows) {
+        const [
+          schema,
+          table,
+          type,
+          constraintName,
+          column,
+          referencedTable,
+          referencedColumn,
+        ] = Array.isArray(row)
+          ? row
+          : [
+              row.schema_name,
+              row.table_name,
+              row.constraint_type,
+              row.constraint_name,
+              row.column_name,
+              row.referenced_table,
+              row.referenced_column,
+            ];
+        const key = columnKey(schema, table, column);
+        if (type === 'PRIMARY KEY') {
+          const tableKey = columnKey(schema, table, '');
+          const position = (primaryKeyColumnsSoFar.get(tableKey) ?? 0) + 1;
+          primaryKeyColumnsSoFar.set(tableKey, position);
+          keys.primaryKeyPosition.set(key, position);
+        } else if (referencedTable && referencedColumn) {
+          const list = keys.foreignKeys.get(key) ?? [];
+          list.push({
+            name: constraintName ?? '',
+            schema,
+            tableName: table,
+            columnName: column,
+            deleteRule: '',
+            primaryTableSchema: schema,
+            primaryTableName: referencedTable,
+            primaryColumnName: referencedColumn,
+          });
+          keys.foreignKeys.set(key, list);
+        }
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.warn('DuckDB: could not read keys', error);
+    }
+    return keys;
+  }
+
   async extractSchema(): Promise<{ tables: Table[] }> {
     // Read one after the other: each read opens the file, and on Windows a
     // second open while the first is still open fails on the file lock, so
     // that list came back empty.
     const tableRefsRaw = await this.getTables();
     const viewRefsRaw = await this.getViews();
+    const keys = await this.getKeys();
 
     // Deduplicate defensively against repeated rows.
     const tableRefs = uniqueRefs(tableRefsRaw);
@@ -293,7 +392,21 @@ export default class DuckDBSchemaExtractor {
           name: tableRef.name,
           type: 'TABLE',
           schema: tableRef.schema,
-          columns,
+          columns: columns.map((column) => {
+            const key = columnKey(tableRef.schema, tableRef.name, column.name);
+            const primaryKeyPosition = keys.primaryKeyPosition.get(key) ?? 0;
+            return {
+              ...column,
+              primaryKey: primaryKeyPosition > 0,
+              primaryKeySequenceId: primaryKeyPosition,
+              // The declared spelling, not the one the key was written with.
+              foreignKeys: (keys.foreignKeys.get(key) ?? []).map((fk) => ({
+                ...fk,
+                tableName: tableRef.name,
+                columnName: column.name,
+              })),
+            };
+          }),
         });
       } catch {
         /* empty */
@@ -314,6 +427,43 @@ export default class DuckDBSchemaExtractor {
       }
     }
 
-    return { tables: allTables };
+    return {
+      tables: DuckDBSchemaExtractor.pointKeysAtDeclaredNames(allTables),
+    };
+  }
+
+  /**
+   * `REFERENCES customers(id)` is kept as written, but the table may be
+   * declared as `Customers(ID)`. Point each key at the declared names so
+   * the ER diagram, which matches names exactly, finds it.
+   */
+  private static pointKeysAtDeclaredNames(tables: Table[]): Table[] {
+    const tableByKey = new Map(
+      tables.map((table) => [columnKey(table.schema, table.name, ''), table]),
+    );
+    return tables.map((table) => ({
+      ...table,
+      columns: table.columns.map((column) => {
+        if (!column.foreignKeys?.length) return column;
+        return {
+          ...column,
+          foreignKeys: column.foreignKeys.map((fk) => {
+            const target = tableByKey.get(
+              columnKey(fk.primaryTableSchema, fk.primaryTableName, ''),
+            );
+            if (!target) return fk;
+            const targetColumn = target.columns.find(
+              (c) => asciiLower(c.name) === asciiLower(fk.primaryColumnName),
+            );
+            return {
+              ...fk,
+              primaryTableSchema: target.schema,
+              primaryTableName: target.name,
+              primaryColumnName: targetColumn?.name ?? fk.primaryColumnName,
+            };
+          }),
+        };
+      }),
+    }));
   }
 }
