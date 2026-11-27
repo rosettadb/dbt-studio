@@ -138,6 +138,19 @@ describe('buildErGraph: matching by column name', () => {
     ).toEqual([]);
   });
 
+  it('matches list columns only to the exact same list type', () => {
+    expect(
+      lines([
+        table('customers', [col('id', { typeName: 'INTEGER[]' })]),
+        table('products', [col('id', { typeName: 'INTEGER[]' })]),
+        table('sales', [
+          col('customer_id', { typeName: 'VARCHAR[]' }),
+          col('product_id', { typeName: 'integer []' }),
+        ]),
+      ]),
+    ).toEqual(['main.sales.product_id -> main.products.id (name)']);
+  });
+
   it('draws no line when two tables differ only in case', () => {
     expect(
       lines([

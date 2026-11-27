@@ -120,9 +120,17 @@ const typeKind = (typeName: string): string | null => {
   return null;
 };
 
+const normalizedType = (typeName: string) =>
+  typeName.toLowerCase().replace(/\s+/g, '');
+
 const sameKindOfData = (a: string, b: string) => {
   const kindA = typeKind(a);
   const kindB = typeKind(b);
+  // Lists and records only match the exact same type: INTEGER[] holds
+  // different data than VARCHAR[], and a list id is rare enough to be strict.
+  if (kindA === 'container' || kindB === 'container') {
+    return normalizedType(a) === normalizedType(b);
+  }
   return kindA === null || kindB === null || kindA === kindB;
 };
 
