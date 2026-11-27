@@ -8,6 +8,10 @@
  * (`customers`, `addresses`, `categories`), on that table's primary key,
  * `id`, or a column with the same name. Data lakes like DuckLake have no keys at all,
  * so for them every line is a guess.
+ *
+ * A guess is dropped rather than risk a wrong line when both columns hold
+ * different kinds of data (a number can't point at a text code), or when
+ * two tables fit the name (`customer` and `customers`).
  */
 
 export type ErColumnInput = {
@@ -82,12 +86,36 @@ const candidateTableNames = (base: string): string[] => {
 const findReferencedColumn = (
   target: ErTableInput,
   childColumnName: string,
-): string | null => {
+): ErColumnInput | null => {
   const primaryKeys = target.columns.filter((c) => c.primaryKey);
-  if (primaryKeys.length === 1) return primaryKeys[0].name;
+  if (primaryKeys.length === 1) return primaryKeys[0];
   const byName = (name: string) =>
     target.columns.find((c) => c.name.toLowerCase() === name.toLowerCase());
-  return byName('id')?.name ?? byName(childColumnName)?.name ?? null;
+  return byName('id') ?? byName(childColumnName) ?? null;
+};
+
+/**
+ * The kind of data a column type holds, across databases (`INTEGER`,
+ * `int64`, `bigint`, `NUMBER(10)` are all numbers). Null when the type is
+ * missing or not one of these, which never blocks a guess.
+ */
+const typeKind = (typeName: string): string | null => {
+  const type = typeName.toLowerCase();
+  // Before numbers: "interval" contains "int".
+  if (/date|time|interval/.test(type)) return 'date';
+  if (/uuid|uniqueidentifier/.test(type)) return 'uuid';
+  if (/char|text|string|clob|enum/.test(type)) return 'text';
+  if (/bool/.test(type)) return 'boolean';
+  if (/int|serial|numeric|decimal|number|float|double|real/.test(type)) {
+    return 'number';
+  }
+  return null;
+};
+
+const sameKindOfData = (a: string, b: string) => {
+  const kindA = typeKind(a);
+  const kindB = typeKind(b);
+  return kindA === null || kindB === null || kindA === kindB;
 };
 
 export const buildErGraph = (tables: ErTableInput[]): ErGraph => {
@@ -144,17 +172,21 @@ export const buildErGraph = (tables: ErTableInput[]): ErGraph => {
 
       const base = referencedNameFromColumn(column.name);
       if (!base) return;
-      const target = candidateTableNames(base)
+      const candidates = candidateTableNames(base)
         .map((name) => tableByLowerName.get(name))
-        .find((candidate) => candidate !== undefined);
-      // A table's own `customer_id` key is not a line to itself.
-      if (!target || target === table) return;
+        .filter((candidate): candidate is ErTableInput => !!candidate);
+      // A table's own `customer_id` key is not a line to itself, and with
+      // two tables to choose from (`customer`, `customers`) any pick is a
+      // coin toss.
+      if (candidates.length !== 1 || candidates[0] === table) return;
+      const target = candidates[0];
       const parentColumn = findReferencedColumn(target, column.name);
       if (!parentColumn) return;
+      if (!sameKindOfData(column.typeName, parentColumn.typeName)) return;
 
       addRelationship({
         parentTableId: erTableId(target.schema, target.name),
-        parentColumn,
+        parentColumn: parentColumn.name,
         childTableId,
         childColumn: column.name,
         inferred: true,

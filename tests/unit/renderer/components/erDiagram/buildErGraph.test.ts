@@ -77,6 +77,55 @@ describe('buildErGraph: matching by column name', () => {
     ).toEqual([]);
   });
 
+  it('draws no line between columns holding different kinds of data', () => {
+    expect(
+      lines([
+        table('departments', [
+          col('code', { primaryKey: true, typeName: 'VARCHAR' }),
+        ]),
+        table('countries', [col('id', { typeName: 'INTEGER' })]),
+        table('events', [col('id', { typeName: 'TIMESTAMP' })]),
+        table('people', [
+          col('department_id', { typeName: 'INTEGER' }),
+          col('country_id', { typeName: 'character varying(2)' }),
+          col('event_id', { typeName: 'BIGINT' }),
+        ]),
+      ]),
+    ).toEqual([]);
+  });
+
+  it('matches number types of any size and spelling, and unknown types', () => {
+    expect(
+      lines([
+        table('customers', [col('id', { typeName: 'int32' })]),
+        table('products', [col('id', { typeName: 'NUMBER(38,0)' })]),
+        table('stores', [col('id', { typeName: 'UNKNOWN' })]),
+        table('codes', [col('id', { typeName: 'VARCHAR(10)' })]),
+        table('sales', [
+          col('customer_id', { typeName: 'BIGINT' }),
+          col('product_id', { typeName: 'integer' }),
+          col('store_id', { typeName: 'TEXT' }),
+          col('code_id', { typeName: 'text' }),
+        ]),
+      ]),
+    ).toEqual([
+      'main.sales.customer_id -> main.customers.id (name)',
+      'main.sales.product_id -> main.products.id (name)',
+      'main.sales.store_id -> main.stores.id (name)',
+      'main.sales.code_id -> main.codes.id (name)',
+    ]);
+  });
+
+  it('draws no line when two tables fit the name', () => {
+    expect(
+      lines([
+        table('customer', [col('id')]),
+        table('customers', [col('id')]),
+        table('sales', [col('customer_id')]),
+      ]),
+    ).toEqual([]);
+  });
+
   it('marks only the pointing column as a link', () => {
     const graph = buildErGraph([
       table('customers', [col('id', { primaryKey: true })]),
@@ -113,6 +162,20 @@ describe('buildErGraph: real foreign keys', () => {
         ]),
       ]),
     ).toEqual(['main.orders.customer_id -> main.buyers.id']);
+  });
+
+  it('draws real keys whatever the column types', () => {
+    expect(
+      lines([
+        table('regions', [col('code', { typeName: 'VARCHAR' })]),
+        table('shops', [
+          col('region_ref', {
+            typeName: 'INTEGER',
+            foreignKeys: [fk('regions', 'code')],
+          }),
+        ]),
+      ]),
+    ).toEqual(['main.shops.region_ref -> main.regions.code']);
   });
 
   it('ignores keys to tables or columns not in the diagram', () => {
