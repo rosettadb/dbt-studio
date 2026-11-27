@@ -120,8 +120,19 @@ const typeKind = (typeName: string): string | null => {
   return null;
 };
 
+/**
+ * A type written the same way regardless of spacing and case
+ * (`integer []` = `INTEGER[]`). Quoted parts, like a struct field named
+ * "a b", are kept exactly: their spaces and case are part of the type.
+ */
 const normalizedType = (typeName: string) =>
-  typeName.toLowerCase().replace(/\s+/g, '');
+  typeName
+    .split(/("(?:[^"]|"")*"|'(?:[^']|'')*')/)
+    .map((part, index) =>
+      // Odd parts are the quoted ones the split kept.
+      index % 2 === 1 ? part : part.toLowerCase().replace(/\s+/g, ''),
+    )
+    .join('');
 
 const sameKindOfData = (a: string, b: string) => {
   const kindA = typeKind(a);

@@ -151,6 +151,19 @@ describe('buildErGraph: matching by column name', () => {
     ).toEqual(['main.sales.product_id -> main.products.id (name)']);
   });
 
+  it('keeps spaces inside quoted struct field names when comparing', () => {
+    expect(
+      lines([
+        table('customers', [col('id', { typeName: 'STRUCT("a b" INTEGER)' })]),
+        table('products', [col('id', { typeName: 'STRUCT("a b" INTEGER)' })]),
+        table('sales', [
+          col('customer_id', { typeName: 'STRUCT("a  b" INTEGER)' }),
+          col('product_id', { typeName: 'struct( "a b"  integer )' }),
+        ]),
+      ]),
+    ).toEqual(['main.sales.product_id -> main.products.id (name)']);
+  });
+
   it('draws no line when two tables differ only in case', () => {
     expect(
       lines([
