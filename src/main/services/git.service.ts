@@ -531,7 +531,8 @@ export default class GitService {
 
           // For renamed files, git reset HEAD works on the new filename;
           // Git automatically handles the rename and restores both old and new.
-          await git.reset(['HEAD', ...relativePaths]);
+          // `--` lets this work in a repo with no commits yet (unborn HEAD).
+          await git.reset(['HEAD', '--', ...relativePaths]);
           return { success: true };
         } catch (err: any) {
           // eslint-disable-next-line no-console
@@ -564,7 +565,7 @@ export default class GitService {
         const git = this.getGitInstance(repoPath);
 
         try {
-          await git.reset(['HEAD']);
+          await git.reset(['HEAD', '--']);
           return { success: true };
         } catch (err: any) {
           throw new Error(`Unstage all failed: ${err.message}`);

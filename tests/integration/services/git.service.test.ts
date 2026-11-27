@@ -242,6 +242,47 @@ describe('Git Service Integration', () => {
     });
   });
 
+  // Issue #593: a freshly initialized repo has no HEAD commit yet
+  describe('unstage in a repo with no commits yet', () => {
+    let emptyRepoPath: string;
+
+    beforeEach(async () => {
+      emptyRepoPath = path.join(TEST_DIR, `empty-repo-${Date.now()}`);
+      fs.mkdirSync(emptyRepoPath, { recursive: true });
+      fs.writeFileSync(path.join(emptyRepoPath, 'file1.txt'), 'Content 1');
+      fs.writeFileSync(path.join(emptyRepoPath, 'file2.txt'), 'Content 2');
+
+      const git = simpleGit(emptyRepoPath);
+      await git.init(['--initial-branch=main']);
+      await git.add('.');
+    });
+
+    afterEach(() => {
+      fs.rmSync(emptyRepoPath, { recursive: true, force: true });
+    });
+
+    it('should unstage one file and leave the other staged', async () => {
+      const file1Path = path.join(emptyRepoPath, 'file1.txt');
+      const file2Path = path.join(emptyRepoPath, 'file2.txt');
+
+      await gitService.unstage(emptyRepoPath, [file1Path]);
+
+      const statuses = await gitService.getFileStatusList(emptyRepoPath);
+      expect(statuses.find((s) => s.path === file1Path)?.status).toBe(
+        'untracked',
+      );
+      expect(statuses.find((s) => s.path === file2Path)?.status).toBe('staged');
+    });
+
+    it('should unstage all files', async () => {
+      await gitService.unstageAll(emptyRepoPath);
+
+      const statuses = await gitService.getFileStatusList(emptyRepoPath);
+      expect(statuses).toHaveLength(2);
+      expect(statuses.every((s) => s.status === 'untracked')).toBe(true);
+    });
+  });
+
   describe('commit', () => {
     it('should commit staged changes', async () => {
       // Create and stage a file
