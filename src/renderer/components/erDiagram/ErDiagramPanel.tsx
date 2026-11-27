@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import {
   Alert,
   Box,
+  Button,
   CircularProgress,
   MenuItem,
   TextField,
@@ -46,8 +47,14 @@ const LegendLine: React.FC<{ dashed?: boolean; label: string }> = ({
 );
 
 /**
+ * Above this many tables, laying the diagram out can freeze the app for a
+ * few seconds, so it is drawn only when asked.
+ */
+export const LARGE_SCHEMA_TABLES = 300;
+
+/**
  * The ER diagram of one schema with its legend, counts and schema picker.
- * Fills its parent's height. Starts on `initialSchema` when it mounts.
+ * Fills its parent's height. Shows `initialSchema` until another is picked.
  */
 export const ErDiagramPanel: React.FC<Props> = ({
   tables,
@@ -67,9 +74,16 @@ export const ErDiagramPanel: React.FC<Props> = ({
     if (initialSchema) names.add(initialSchema);
     return Array.from(names).sort();
   }, [allSchemaNames, tables, initialSchema]);
-  const [schema, setSchema] = useState(initialSchema ?? '');
+  // The schema picked in the dropdown; until then `initialSchema`, which can
+  // arrive after the panel mounts (a tab whose data is still loading).
+  const [pickedSchema, setSchema] = useState('');
+  // The large schema the user chose to draw anyway.
+  const [largeSchemaDrawn, setLargeSchemaDrawn] = useState<string | null>(null);
 
-  const shownSchema = schemaNames.includes(schema) ? schema : schemaNames[0];
+  const wantedSchema = pickedSchema || initialSchema || '';
+  const shownSchema = schemaNames.includes(wantedSchema)
+    ? wantedSchema
+    : schemaNames[0];
 
   const graph = useMemo(
     () => buildErGraph(tables.filter((t) => t.schema === shownSchema)),
@@ -104,9 +118,35 @@ export const ErDiagramPanel: React.FC<Props> = ({
         No tables in this schema.
       </Box>
     );
+  } else if (
+    graph.tables.length > LARGE_SCHEMA_TABLES &&
+    largeSchemaDrawn !== shownSchema
+  ) {
+    body = (
+      <Box
+        sx={{
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 2,
+          color: 'text.secondary',
+        }}
+      >
+        This schema has {graph.tables.length} tables. Drawing them all can take
+        a while.
+        <Button
+          variant="outlined"
+          size="small"
+          onClick={() => setLargeSchemaDrawn(shownSchema)}
+        >
+          Draw anyway
+        </Button>
+      </Box>
+    );
   } else {
-    // A new key per schema re-fits the view to the new tables.
-    body = <ErDiagram key={shownSchema} graph={graph} />;
+    body = <ErDiagram graph={graph} />;
   }
 
   return (

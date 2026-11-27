@@ -38,6 +38,8 @@ export const DataLakeInstanceErDiagram: React.FC<{ instanceId: string }> = ({
       <ErDiagramPanel
         tables={tables}
         schemaNames={schemaNames}
+        // DuckLake's default schema, not whichever comes first by name.
+        initialSchema={schemaNames.includes('main') ? 'main' : undefined}
         isLoading={schemaQuery.isLoading}
         error={
           schemaQuery.isError

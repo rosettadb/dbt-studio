@@ -2,6 +2,10 @@ import React from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { ErDiagramModal } from '../../../../../src/renderer/components/erDiagram/ErDiagramModal';
+import {
+  ErDiagramPanel,
+  LARGE_SCHEMA_TABLES,
+} from '../../../../../src/renderer/components/erDiagram/ErDiagramPanel';
 import type {
   ErGraph,
   ErTableInput,
@@ -201,5 +205,41 @@ describe('ErDiagramModal', () => {
     wrap(<ErDiagramModal isOpen={false} onClose={() => {}} tables={tables} />);
 
     expect(screen.queryByTestId('er-diagram-modal')).not.toBeInTheDocument();
+  });
+});
+
+describe('ErDiagramPanel', () => {
+  it('asks before drawing a very large schema', () => {
+    const manyTables = Array.from(
+      { length: LARGE_SCHEMA_TABLES + 1 },
+      (_, index) => ({
+        name: `t${index}`,
+        schema: 'big',
+        columns: [{ name: 'id', typeName: 'INT' }],
+      }),
+    );
+    wrap(<ErDiagramPanel tables={manyTables} />);
+
+    expect(screen.queryByTestId('diagram')).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        new RegExp(`This schema has ${LARGE_SCHEMA_TABLES + 1} tables`),
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Draw anyway' }));
+    expect(screen.getByTestId('diagram')).toBeInTheDocument();
+  });
+
+  it('opens on a starting schema that arrives after the data loads', () => {
+    const { rerender } = wrap(<ErDiagramPanel tables={[]} isLoading />);
+
+    rerender(
+      <ThemeProvider theme={theme}>
+        <ErDiagramPanel tables={tables} initialSchema="sales" />
+      </ThemeProvider>,
+    );
+
+    expect(screen.getByTestId('diagram')).toHaveTextContent('customers,orders');
   });
 });

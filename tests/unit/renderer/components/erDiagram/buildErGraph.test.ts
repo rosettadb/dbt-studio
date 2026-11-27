@@ -88,10 +88,13 @@ describe('buildErGraph: matching by column name', () => {
         ]),
         table('countries', [col('id', { typeName: 'INTEGER' })]),
         table('events', [col('id', { typeName: 'TIMESTAMP' })]),
+        table('locations', [col('id', { typeName: 'INTEGER' })]),
         table('people', [
           col('department_id', { typeName: 'INTEGER' }),
           col('country_id', { typeName: 'character varying(2)' }),
           col('event_id', { typeName: 'BIGINT' }),
+          // "point" contains "int" but is a map point, not a number.
+          col('location_id', { typeName: 'POINT' }),
         ]),
       ]),
     ).toEqual([]);
@@ -165,6 +168,18 @@ describe('buildErGraph: real foreign keys', () => {
         ]),
       ]),
     ).toEqual(['main.orders.customer_id -> main.buyers.id']);
+  });
+
+  it('never guesses for a column whose real key points outside the diagram', () => {
+    expect(
+      lines([
+        // A same-named table here, but the key says auth.users.
+        table('users', [col('id')]),
+        table('orders', [
+          col('user_id', { foreignKeys: [fk('users', 'id', 'auth')] }),
+        ]),
+      ]),
+    ).toEqual([]);
   });
 
   it('draws real keys whatever the column types', () => {

@@ -99,7 +99,7 @@ type Props = {
   focusTableId?: string;
 };
 
-export const ErDiagram: React.FC<Props> = ({ graph, focusTableId }) => {
+const ErDiagramCanvas: React.FC<Props> = ({ graph, focusTableId }) => {
   const theme = useTheme();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -136,10 +136,14 @@ export const ErDiagram: React.FC<Props> = ({ graph, focusTableId }) => {
     });
   }, [graph, theme.palette.primary.main, theme.palette.text.secondary]);
 
+  // Apart, so a theme change recolours the lines without moving tables the
+  // user dragged.
   useEffect(() => {
     setNodes(layoutedNodes);
+  }, [layoutedNodes, setNodes]);
+  useEffect(() => {
     setEdges(flowEdges);
-  }, [layoutedNodes, flowEdges, setNodes, setEdges]);
+  }, [flowEdges, setEdges]);
 
   return (
     <Box sx={{ height: '100%', width: '100%' }}>
@@ -150,7 +154,6 @@ export const ErDiagram: React.FC<Props> = ({ graph, focusTableId }) => {
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
         nodesConnectable={false}
-        onlyRenderVisibleElements
         minZoom={0.05}
         fitView
         fitViewOptions={FIT_VIEW_OPTIONS}
@@ -161,3 +164,16 @@ export const ErDiagram: React.FC<Props> = ({ graph, focusTableId }) => {
     </Box>
   );
 };
+
+/**
+ * React Flow fits the view only when it first shows its tables, so a new set
+ * of tables (another schema, or a refresh that added one) starts a fresh
+ * canvas that fits again.
+ */
+export const ErDiagram: React.FC<Props> = ({ graph, focusTableId }) => (
+  <ErDiagramCanvas
+    key={graph.tables.map((table) => table.id).join('\0')}
+    graph={graph}
+    focusTableId={focusTableId}
+  />
+);

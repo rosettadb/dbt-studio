@@ -101,8 +101,11 @@ const findReferencedColumn = (
  */
 const typeKind = (typeName: string): string | null => {
   const type = typeName.toLowerCase();
-  // Before numbers: "interval" contains "int".
+  // Before numbers: "interval" and "point" contain "int".
   if (/date|time|interval/.test(type)) return 'date';
+  if (/point|geometry|geography|polygon|linestring/.test(type)) {
+    return 'geometry';
+  }
   if (/uuid|uniqueidentifier/.test(type)) return 'uuid';
   if (/char|text|string|clob|enum/.test(type)) return 'text';
   if (/bool/.test(type)) return 'boolean';
@@ -169,6 +172,9 @@ export const buildErGraph = (tables: ErTableInput[]): ErGraph => {
         );
         return;
       }
+      // A real key whose table isn't in this diagram (another schema) still
+      // says where the column points, so a name guess could only contradict it.
+      if ((column.foreignKeys ?? []).length > 0) return;
 
       const base = referencedNameFromColumn(column.name);
       if (!base) return;

@@ -135,6 +135,7 @@ export default class MySqlExtractor {
          JOIN information_schema.referential_constraints r
            ON r.constraint_schema = k.constraint_schema
           AND r.constraint_name = k.constraint_name
+          AND r.table_name = k.table_name
          WHERE k.referenced_table_name IS NOT NULL
            AND k.table_schema NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')`,
       );
