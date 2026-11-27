@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { ErDiagramModal } from '../../../../../src/renderer/components/erDiagram/ErDiagramModal';
 import {
@@ -55,6 +55,9 @@ describe('ErDiagramModal', () => {
       />,
     );
 
+    expect(
+      screen.getByRole('dialog', { name: 'ER Diagram' }),
+    ).toBeInTheDocument();
     expect(screen.getByText('Warehouse')).toBeInTheDocument();
     expect(screen.getByTestId('diagram')).toHaveTextContent('customers,orders');
     expect(
@@ -72,11 +75,7 @@ describe('ErDiagramModal', () => {
       />,
     );
 
-    fireEvent.mouseDown(
-      within(screen.getByTestId('er-diagram-schema-select')).getByRole(
-        'combobox',
-      ),
-    );
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: /Schema/ }));
     fireEvent.click(screen.getByRole('option', { name: 'audit' }));
 
     expect(screen.getByTestId('diagram')).toHaveTextContent('events');
@@ -148,11 +147,7 @@ describe('ErDiagramModal', () => {
       />,
     );
 
-    fireEvent.mouseDown(
-      within(screen.getByTestId('er-diagram-schema-select')).getByRole(
-        'combobox',
-      ),
-    );
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: /Schema/ }));
     expect(
       screen.getAllByRole('option').map((option) => option.textContent),
     ).toEqual(['audit', 'sales', 'staging']);

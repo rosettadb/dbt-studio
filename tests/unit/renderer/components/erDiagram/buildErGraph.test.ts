@@ -122,6 +122,49 @@ describe('buildErGraph: matching by column name', () => {
     ]);
   });
 
+  it('never matches a list or record column to a plain one', () => {
+    expect(
+      lines([
+        table('customers', [col('id', { typeName: 'INTEGER' })]),
+        table('products', [col('id', { typeName: 'INTEGER' })]),
+        table('stores', [col('id', { typeName: 'BIGINT' })]),
+        table('sales', [
+          col('customer_id', { typeName: 'INTEGER[]' }),
+          // Postgres reports every array column as just ARRAY.
+          col('product_id', { typeName: 'ARRAY' }),
+          col('store_id', { typeName: 'STRUCT(id BIGINT)' }),
+        ]),
+      ]),
+    ).toEqual([]);
+  });
+
+  it('draws no line when two tables differ only in case', () => {
+    expect(
+      lines([
+        table('customers', [col('id')]),
+        table('Customers', [col('id')]),
+        table('sales', [col('customer_id')]),
+      ]),
+    ).toEqual([]);
+  });
+
+  it('keeps lines apart when names contain dots', () => {
+    const toParents = [
+      {
+        primaryTableSchema: 'main',
+        primaryTableName: 'parents',
+        primaryColumnName: 'id',
+      },
+    ];
+    expect(
+      buildErGraph([
+        table('parents', [col('id')]),
+        table('a.b', [col('c', { foreignKeys: toParents })]),
+        table('a', [col('b.c', { foreignKeys: toParents })]),
+      ]).relationships,
+    ).toHaveLength(2);
+  });
+
   it('draws no line when two tables fit the name', () => {
     expect(
       lines([

@@ -153,6 +153,8 @@ export function extractSQLiteSchema(config: SQLiteConnection): Table[] {
               .prepare(`PRAGMA foreign_key_list(${quotedName})`)
               .all() as {
               id: number;
+              /** Position of this column within the key, from 0. */
+              seq: number;
               table: string;
               from: string;
               to: string | null;
@@ -163,27 +165,29 @@ export function extractSQLiteSchema(config: SQLiteConnection): Table[] {
     });
 
     // A key names its tables and columns as typed (`REFERENCES Customers(ID)`)
-    // and SQLite ignores case, so they are matched to the real names here.
+    // and SQLite ignores the case of A–Z only (Ä and ä are two names), so
+    // they are matched to the real names here.
+    const asciiLower = (value: string) =>
+      value.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
     const objectByLowerName = new Map(
-      objectsWithColumns.map((entry) => [
-        entry.object.name.toLowerCase(),
-        entry,
-      ]),
+      objectsWithColumns.map((entry) => [asciiLower(entry.object.name), entry]),
     );
     const realColumnName = (
       columns: { name: string }[] | undefined,
       name: string,
     ) =>
-      columns?.find(
-        (column) => column.name.toLowerCase() === name.toLowerCase(),
-      )?.name ?? name;
-    // `REFERENCES customers` (no column) points at the target's primary key,
-    // which only a single-column key can name.
-    const referencedColumnName = (table: string, to: string | null) => {
-      const target = objectByLowerName.get(table.toLowerCase());
+      columns?.find((column) => asciiLower(column.name) === asciiLower(name))
+        ?.name ?? name;
+    // `REFERENCES parent` (no columns) points at the target's primary key:
+    // the key's first column at the primary key's first column, and so on.
+    const referencedColumnName = (
+      table: string,
+      to: string | null,
+      seq: number,
+    ) => {
+      const target = objectByLowerName.get(asciiLower(table));
       if (to !== null) return realColumnName(target?.columns, to);
-      const primaryKeys = target?.columns.filter((column) => column.pk > 0);
-      return primaryKeys?.length === 1 ? primaryKeys[0].name : null;
+      return target?.columns.find((column) => column.pk === seq + 1)?.name;
     };
 
     return objectsWithColumns.map(({ object, columns, foreignKeyRows }) => ({
@@ -205,7 +209,11 @@ export function extractSQLiteSchema(config: SQLiteConnection): Table[] {
         foreignKeys: foreignKeyRows
           .filter((fk) => realColumnName(columns, fk.from) === column.name)
           .flatMap((fk) => {
-            const primaryColumnName = referencedColumnName(fk.table, fk.to);
+            const primaryColumnName = referencedColumnName(
+              fk.table,
+              fk.to,
+              fk.seq,
+            );
             if (!primaryColumnName) return [];
             return [
               {
@@ -216,7 +224,7 @@ export function extractSQLiteSchema(config: SQLiteConnection): Table[] {
                 deleteRule: fk.on_delete,
                 primaryTableSchema: 'main',
                 primaryTableName:
-                  objectByLowerName.get(fk.table.toLowerCase())?.object.name ??
+                  objectByLowerName.get(asciiLower(fk.table))?.object.name ??
                   fk.table,
                 primaryColumnName,
               },

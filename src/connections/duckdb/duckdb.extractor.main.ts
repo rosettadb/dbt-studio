@@ -11,8 +11,13 @@ type TableKeys = {
   foreignKeys: Map<string, ForeignKey[]>;
 };
 
+// DuckDB treats "ID" and id as the same name (A–Z only), and a key may spell
+// a column or table differently from how it was declared.
+const asciiLower = (value: string) =>
+  value.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
+
 const columnKey = (schema: string, table: string, column: string) =>
-  `${schema}\0${table}\0${column}`;
+  [schema, table, column].map(asciiLower).join('\0');
 
 // Schema and object names come from the file, so they are escaped before
 // they go into SQL.
@@ -394,7 +399,12 @@ export default class DuckDBSchemaExtractor {
               ...column,
               primaryKey: primaryKeyPosition > 0,
               primaryKeySequenceId: primaryKeyPosition,
-              foreignKeys: keys.foreignKeys.get(key) ?? [],
+              // The declared spelling, not the one the key was written with.
+              foreignKeys: (keys.foreignKeys.get(key) ?? []).map((fk) => ({
+                ...fk,
+                tableName: tableRef.name,
+                columnName: column.name,
+              })),
             };
           }),
         });
@@ -417,6 +427,43 @@ export default class DuckDBSchemaExtractor {
       }
     }
 
-    return { tables: allTables };
+    return {
+      tables: DuckDBSchemaExtractor.pointKeysAtDeclaredNames(allTables),
+    };
+  }
+
+  /**
+   * `REFERENCES customers(id)` is kept as written, but the table may be
+   * declared as `Customers(ID)`. Point each key at the declared names so
+   * the ER diagram, which matches names exactly, finds it.
+   */
+  private static pointKeysAtDeclaredNames(tables: Table[]): Table[] {
+    const tableByKey = new Map(
+      tables.map((table) => [columnKey(table.schema, table.name, ''), table]),
+    );
+    return tables.map((table) => ({
+      ...table,
+      columns: table.columns.map((column) => {
+        if (!column.foreignKeys?.length) return column;
+        return {
+          ...column,
+          foreignKeys: column.foreignKeys.map((fk) => {
+            const target = tableByKey.get(
+              columnKey(fk.primaryTableSchema, fk.primaryTableName, ''),
+            );
+            if (!target) return fk;
+            const targetColumn = target.columns.find(
+              (c) => asciiLower(c.name) === asciiLower(fk.primaryColumnName),
+            );
+            return {
+              ...fk,
+              primaryTableSchema: target.schema,
+              primaryTableName: target.name,
+              primaryColumnName: targetColumn?.name ?? fk.primaryColumnName,
+            };
+          }),
+        };
+      }),
+    }));
   }
 }

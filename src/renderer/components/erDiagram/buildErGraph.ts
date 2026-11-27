@@ -100,7 +100,12 @@ const findReferencedColumn = (
  * missing or not one of these, which never blocks a guess.
  */
 const typeKind = (typeName: string): string | null => {
-  const type = typeName.toLowerCase();
+  const type = typeName.toLowerCase().trim();
+  // Lists and records first: INTEGER[] holds many numbers, not one, and
+  // Postgres reports any array column as just "ARRAY".
+  if (/\[\]|^(array|list|struct|map|union|object|variant)\b/.test(type)) {
+    return 'container';
+  }
   // Before numbers: "interval" and "point" contain "int".
   if (/date|time|interval/.test(type)) return 'date';
   if (/point|geometry|geography|polygon|linestring/.test(type)) {
@@ -123,13 +128,16 @@ const sameKindOfData = (a: string, b: string) => {
 
 export const buildErGraph = (tables: ErTableInput[]): ErGraph => {
   const tableById = new Map<string, ErTableInput>();
-  // Lower-case name → table, for guessing. First one wins if two schemas
-  // have the same table name.
-  const tableByLowerName = new Map<string, ErTableInput>();
+  // Lower-case name → every table with it, for guessing. Postgres allows
+  // `customers` next to `"Customers"`, and then a guess would be a coin toss.
+  const tablesByLowerName = new Map<string, ErTableInput[]>();
   tables.forEach((table) => {
     tableById.set(erTableId(table.schema, table.name), table);
     const lower = table.name.toLowerCase();
-    if (!tableByLowerName.has(lower)) tableByLowerName.set(lower, table);
+    tablesByLowerName.set(lower, [
+      ...(tablesByLowerName.get(lower) ?? []),
+      table,
+    ]);
   });
 
   const relationships: ErRelationship[] = [];
@@ -138,7 +146,13 @@ export const buildErGraph = (tables: ErTableInput[]): ErGraph => {
   const foreignKeyColumns = new Set<string>();
 
   const addRelationship = (relationship: Omit<ErRelationship, 'id'>) => {
-    const id = `${relationship.childTableId}.${relationship.childColumn}->${relationship.parentTableId}.${relationship.parentColumn}`;
+    // A list, not dots: names can contain dots ("a.b".c vs a."b.c").
+    const id = JSON.stringify([
+      relationship.childTableId,
+      relationship.childColumn,
+      relationship.parentTableId,
+      relationship.parentColumn,
+    ]);
     if (seenRelationshipIds.has(id)) return;
     seenRelationshipIds.add(id);
     relationships.push({ id, ...relationship });
@@ -178,9 +192,9 @@ export const buildErGraph = (tables: ErTableInput[]): ErGraph => {
 
       const base = referencedNameFromColumn(column.name);
       if (!base) return;
-      const candidates = candidateTableNames(base)
-        .map((name) => tableByLowerName.get(name))
-        .filter((candidate): candidate is ErTableInput => !!candidate);
+      const candidates = candidateTableNames(base).flatMap(
+        (name) => tablesByLowerName.get(name) ?? [],
+      );
       // A table's own `customer_id` key is not a line to itself, and with
       // two tables to choose from (`customer`, `customers`) any pick is a
       // coin toss.

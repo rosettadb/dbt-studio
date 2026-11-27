@@ -1,5 +1,5 @@
-import React, { memo } from 'react';
-import { Handle, NodeProps, Position } from 'reactflow';
+import React, { memo, useEffect, useRef } from 'react';
+import { Handle, NodeProps, Position, useUpdateNodeInternals } from 'reactflow';
 import { Box, Paper, Tooltip, Typography, useTheme } from '@mui/material';
 import {
   Key,
@@ -29,8 +29,20 @@ const hiddenHandleStyle: React.CSSProperties = {
 /** `isFocus` marks the table whose page the diagram is on. */
 export type ErTableNodeData = ErTable & { isFocus?: boolean };
 
-export const ErTableNode = memo(({ data }: NodeProps<ErTableNodeData>) => {
+export const ErTableNode = memo(({ id, data }: NodeProps<ErTableNodeData>) => {
   const theme = useTheme();
+  // Lines attach to each row's position. When a refresh reorders the
+  // columns without changing the box size, React Flow has to measure again.
+  // React Flow measures each box when it first appears, so this only runs
+  // when the order later changes.
+  const updateNodeInternals = useUpdateNodeInternals();
+  const columnOrder = data.columns.map((column) => column.name).join('\0');
+  const measuredColumnOrder = useRef(columnOrder);
+  useEffect(() => {
+    if (measuredColumnOrder.current === columnOrder) return;
+    measuredColumnOrder.current = columnOrder;
+    updateNodeInternals(id);
+  }, [id, columnOrder, updateNodeInternals]);
   // Room for two icons only in tables where a column is both a key and a
   // link, so other tables keep their column names where they were.
   const iconSpaceWidth = data.columns.some(

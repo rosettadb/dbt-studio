@@ -117,6 +117,11 @@ describe('DuckDBSchemaExtractor keys', () => {
     await seed(
       'CREATE TABLE sales.shops (id INTEGER, region_code VARCHAR REFERENCES sales.regions(code))',
     );
+    // Keys spelled differently from the declared names.
+    await seed('CREATE TABLE "Accounts" ("ID" INTEGER, PRIMARY KEY ("id"))');
+    await seed(
+      'CREATE TABLE invoices ("Account_Id" INTEGER, FOREIGN KEY (account_id) REFERENCES accounts(id))',
+    );
   });
 
   afterAll(() => {
@@ -159,6 +164,17 @@ describe('DuckDBSchemaExtractor keys', () => {
     expect(describeColumns(tables, 'sales', 'shops')).toEqual([
       'id',
       'region_code->sales.regions.code',
+    ]);
+  });
+
+  it('matches keys spelled differently from the declared names', async () => {
+    const { tables } = await new DuckDBSchemaExtractor({
+      database_path: KEYS_DB_PATH,
+    }).extractSchema();
+
+    expect(describeColumns(tables, 'main', 'Accounts')).toEqual(['ID[1]']);
+    expect(describeColumns(tables, 'main', 'invoices')).toEqual([
+      'Account_Id->main.Accounts.ID',
     ]);
   });
 

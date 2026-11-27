@@ -148,20 +148,25 @@ test.describe('SQL Editor - Data tree interactions', () => {
     const tree = new SchemaTreeComponent(mainWindow);
 
     // One real foreign key; the sample table has no link.
-    const run = async (statement: string) => {
+    // runQuery doesn't wait for the query, so each CREATE waits until its
+    // table shows in the tree: the second one references the first.
+    const createTable = async (table: string, statement: string) => {
       await sqlEditor.setQuery(statement);
       await sqlEditor.runQuery();
+      await tree.expectTableVisible(table);
       await sqlEditor.clearQuery();
     };
-    await run(
+    await tree.expandSchema('main');
+    await tree.expectTableVisible(TABLE);
+    await createTable(
+      'e2e_customers',
       'CREATE TABLE e2e_customers (id INTEGER PRIMARY KEY, name VARCHAR)',
     );
-    await run(
+    await createTable(
+      'e2e_invoices',
       'CREATE TABLE e2e_invoices (id INTEGER, customer_id INTEGER REFERENCES e2e_customers(id))',
     );
 
-    await tree.expandSchema('main');
-    await tree.expectTableVisible('e2e_invoices');
     await tree.runSchemaAction('main', 'er-diagram');
 
     const diagram = mainWindow.getByTestId('er-diagram-modal');
